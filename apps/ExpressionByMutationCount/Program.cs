@@ -108,8 +108,6 @@ namespace ExpressionByMutationCount
                         perCaseASE[x.case_id].tumorASE > overallTumorASEBelowWhichToExcludeCases && perCaseASE[x.case_id].tumorMaxChromosome >= maxChromosomeASEBelowWhichToExcludeCases)) ||
                 (!forAlleleSpecificExpression && x.gene_expression_filename != "")).ToList();
 
-casesToProcess = casesToProcess.Take(1).ToList();    // BJB
-
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
 

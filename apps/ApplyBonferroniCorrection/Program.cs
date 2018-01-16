@@ -298,12 +298,13 @@ namespace ApplyBonferroniCorrection
                 sortableLines.Add(new SortKeyAndLine(pValueStats.significant, pValueStats.bestZeroVsOne, result.hugo_symbol, outputLine));
             }
             var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-            outputFile.WriteLine("Hugo Symbol\tAlt fraction for single mutations\tAlt fraction for multiple mutations\tMin p\tMin p at\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\tSignificant At\tGene Size\t" + ASETools.ExpressionResultsLine.getHeaderString());
+            outputFile.WriteLine("Hugo_Symbol\tAlt fraction for single mutations\tAlt fraction for multiple mutations\tMin p\tMin p at\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\tSignificant At\tGene Size\t" + ASETools.ExpressionResultsLine.getHeaderString());
 
             sortableLines.Sort();
 
             sortableLines.ForEach(x => outputFile.WriteLine(x.outputLine));
 
+            outputFile.WriteLine("**done**");
             outputFile.Close();
             Console.WriteLine("input file " + filename + " has " + nSignificantReuslts + " significant results.");
 

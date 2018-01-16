@@ -1857,7 +1857,7 @@ namespace ASEProcessManager
                 nWaitingForPrerequisites = 0;
                 filesToDownload = null;
 
-                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionByMutationCount.txt"))
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount.txt"))
                 {
                     nDone = 1;
                     return;

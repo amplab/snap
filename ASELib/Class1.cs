@@ -1560,6 +1560,8 @@ namespace ASELib
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
 			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs450.txt";
 
+            public const string zero_one_two_directory = defaultBaseDirectory + @"012graphs\";
+
             public int minRNAReadCoverage = 10;
             public int minDNAReadCoverage = 10;
 
@@ -7799,7 +7801,7 @@ namespace ASELib
             double increment;
             int nBuckets;
             HistogramResultLine[] buckets;
-            string name;
+            public readonly string name;
 
             double minSeenValue = double.MaxValue;
             double maxSeenValue = double.MinValue;
@@ -10155,6 +10157,162 @@ namespace ASELib
             int nItemsProcessed = 0;
         } // WorkerThreadHelper
 
+        public class ASVThreadingHelper<TPerThreadState>  where TPerThreadState : new()
+        {
+
+            public delegate void HandleOneCase(Case case_, TPerThreadState state, List<AnnotatedVariant> variantsForThisCase, ASECorrection aseCorrection, Dictionary<bool, List<CopyNumberVariation>> copyNumber);
+            public delegate bool ASVDecider(AnnotatedVariant asv, Dictionary<bool, List<CopyNumberVariation>> copyNumber);
+            public ASVThreadingHelper(List<Case> casesToProcess, ASECorrection aseCorrection_, ASVDecider asvDecider_, HandleOneCase handleOneCase_, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp_, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued_, 
+                int nItemsPerDot = 0)
+            {
+                aseCorrection = aseCorrection_;
+                asvDecider = asvDecider_;
+                handleOneCase = handleOneCase_;
+                finishUp = finishUp_;
+                itemDequeued = itemDequeued_;
+
+                workerThreadHelper = new WorkerThreadHelper<Case, TPerThreadState>(casesToProcess,
+                            (x, y) => this.HandleOneItem(x, y),
+                            x => this.FinishUp(x),
+                            () => this.ItemDequeued(),
+                            nItemsPerDot);
+            }
+            public static ASVThreadingHelper<TPerThreadState> create(List<Case> casesToProcess, bool useSomatic, bool useGermline, bool tumor, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap,
+                GeneMap geneMap, ASECorrection aseCorrection,
+                HandleOneCase handleOneCase, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued, 
+                int inputMinRNACoverage = -1, int inputMinDNACoverage = -1, 
+                int nItemsPerDot = 0)
+            {
+                return new ASVThreadingHelper<TPerThreadState>(casesToProcess, aseCorrection,
+                    (v,c) => ((v.somaticMutation && useSomatic) || (!v.somaticMutation && useGermline)) &&
+                        v.IsASECandidate(tumor, c, configuration, perGeneASEMap, geneMap, inputMinRNACoverage, inputMinDNACoverage),
+                    handleOneCase, finishUp, itemDequeued, nItemsPerDot);
+            }
+
+            static bool loadState(Configuration configuration, out Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, out GeneMap geneMap, out ASECorrection aseCorrection, out GeneLocationsByNameAndChromosome geneLocationInformation)
+            {
+                aseCorrection = null;
+                geneLocationInformation = null;
+                geneMap = null;
+
+                perGeneASEMap = ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+                if (null == perGeneASEMap)
+                {
+                    Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                    return false;
+                }
+
+                aseCorrection = ASECorrection.LoadFromFile(configuration.finalResultsDirectory + ASETools.ASECorrectionFilename);
+                if (null == aseCorrection)
+                {
+                    Console.WriteLine("Unable to load ASE correction");
+                    return false;
+                }
+
+                geneLocationInformation = new GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+                geneMap = new GeneMap(geneLocationInformation.genesByName);
+
+                return true;
+            }
+
+            public static ASVThreadingHelper<TPerThreadState> create(List<Case> casesToProcess, bool useSomatic, bool useGermline, bool tumor, Configuration configuration,
+                 HandleOneCase handleOneCase, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued,
+                int inputMinRNACoverage = -1, int inputMinDNACoverage = -1,
+                int nItemsPerDot = 0)
+            {
+                Dictionary<string, ASEMapPerGeneLine> perGeneASEMap;
+                GeneMap geneMap;
+                ASECorrection aseCorrection;
+                GeneLocationsByNameAndChromosome geneLocationInformation;
+
+                if (!loadState(configuration, out perGeneASEMap, out geneMap, out aseCorrection, out geneLocationInformation))
+                {
+                    return null;
+                }
+
+                return ASVThreadingHelper<TPerThreadState>.create(casesToProcess, useSomatic, useGermline, tumor, configuration, perGeneASEMap, geneMap, aseCorrection, handleOneCase, finishUp, itemDequeued, inputMinRNACoverage, inputMinDNACoverage, nItemsPerDot);
+            }
+
+            public static ASVThreadingHelper<TPerThreadState> create(List<Case> casesToProcess, Configuration configuration, ASVDecider asvDecider, 
+                HandleOneCase handleOneCase, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued, int nItemsPerDot = 0)
+            {
+                Dictionary<string, ASEMapPerGeneLine> perGeneASEMap;
+                GeneMap geneMap;
+                ASECorrection aseCorrection;
+                GeneLocationsByNameAndChromosome geneLocationInformation;
+
+                if (!loadState(configuration, out perGeneASEMap, out geneMap, out aseCorrection, out geneLocationInformation))
+                {
+                    return null;
+                }
+
+                return new ASVThreadingHelper<TPerThreadState>(casesToProcess, aseCorrection, asvDecider, handleOneCase, finishUp, itemDequeued, nItemsPerDot);
+            }
+
+            public void run()
+            {
+                workerThreadHelper.run(Environment.ProcessorCount);
+            }
+
+            public void run(int nThreads)
+            {
+                workerThreadHelper.run(nThreads);
+            }
+
+            void HandleOneItem(Case case_, TPerThreadState perThreadState)
+            {
+                if (case_.annotated_selected_variants_filename == "" || case_.tumor_copy_number_filename == "")
+                {
+                    Console.WriteLine("ASV Threading Helper: case " + case_.case_id + " is missing annotated selected variants and/or copy numbers.  Skipping it.");
+                    return;
+                }
+
+                var asv = AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
+                if (null == asv)
+                {
+                    Console.WriteLine("ASV Threading Helper: case unable to read ASV from " + case_.annotated_selected_variants_filename + " Skipping case.");
+                    return;
+                }
+
+                var copyNumber = CopyNumberVariation.ReadBothFiles(case_);
+                if (null == copyNumber)
+                {
+                    Console.WriteLine("ASV Threading Helper: case unable to read ASV from " + case_.annotated_selected_variants_filename + " Skipping case.");
+                    return;
+                }
+
+                var variantsToProcess = asv.Where(x => asvDecider(x, copyNumber)).ToList();
+
+                handleOneCase(case_, perThreadState, variantsToProcess, aseCorrection, copyNumber);
+            }
+
+            void FinishUp(TPerThreadState perThreadState)
+            {
+                if (null != finishUp)
+                {
+                    finishUp(perThreadState);
+                }
+             }
+
+            void ItemDequeued()
+            {
+                if (null != itemDequeued)
+                {
+                    itemDequeued();
+                }
+            }
+
+            WorkerThreadHelper<Case, TPerThreadState> workerThreadHelper;
+            HandleOneCase handleOneCase;
+            WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp;
+            WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued;
+            ASVDecider asvDecider;
+
+
+            ASECorrection aseCorrection;
+        }
+
         public class ASECorrection
         {
             public static ASECorrection LoadFromFile(string filename)
@@ -10430,6 +10588,136 @@ namespace ASELib
                 return retVal;
 
             }
+        } // MeasuredASEMatrix
+
+        public class BonferroniCorrectedASEDistributionLine // This class doesn't contain all of the actual measurements, just the metadata.  Feel free to add the measurements if you need them.
+        {
+            public static List<BonferroniCorrectedASEDistributionLine> readFromFile(string filename)
+            {
+                string[] wantedFields =
+                {
+                    "Hugo Symbol",
+                    "Alt fraction for single mutations",
+                    "Alt fraction for multiple mutations",
+                    "Min p",
+                    "Significant@.01",
+                    "Best 0 vs. 1 ratio for significant results",
+                    "Best 0 vs. 1 ratio at",
+                    "Significant At",
+                    "Gene Size",
+                    "nTumorsExcluded",
+                    "nZero",
+                    "nOne",
+                    "nMore",
+                    "nSingleContibutingToAltFraction",
+                    "nMultipleContributingToAltFraction",
+                };
+
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("Unable to open " + filename);
+                    return null;
+                }
+
+                var headerizedFile = new HeaderizedFile<BonferroniCorrectedASEDistributionLine>(inputFile, false, true, "", wantedFields.ToList());
+                List<BonferroniCorrectedASEDistributionLine> retval;
+
+                if (!headerizedFile.ParseFile(parser, out retval))
+                {
+                    inputFile.Close();
+                    Console.WriteLine("BonferroniCorrectedASEDistributionLine: failed to parse file " + filename);
+                    return null;
+                }
+
+                inputFile.Close();
+
+                return retval;
+            } // readFromFile
+
+            static BonferroniCorrectedASEDistributionLine parser(HeaderizedFile<BonferroniCorrectedASEDistributionLine>.FieldGrabber fieldGrabber)
+            {
+                return new BonferroniCorrectedASEDistributionLine(
+                    fieldGrabber.AsString("Hugo Symbol"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Alt fraction for single mutations"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Alt fraction for multiple mutations"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Min p"), fieldGrabber.AsBool("Significant@.01"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Best 0 vs. 1 ratio for significant results"),
+                    fieldGrabber.AsString("Best 0 vs. 1 ratio at"), fieldGrabber.AsString("Significant At"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("Gene Size"), fieldGrabber.AsInt("nTumorsExcluded"), fieldGrabber.AsInt("nZero"),
+                    fieldGrabber.AsInt("nOne"), fieldGrabber.AsInt("nMore"), fieldGrabber.AsInt("nSingleContibutingToAltFraction"), fieldGrabber.AsInt("nMultipleContributingToAltFraction"));
+            }
+
+            BonferroniCorrectedASEDistributionLine(string hugo_symbol_, double altFractionForSingleMutations_, double altFractionForMultipleMutations_, double minP_, bool significant01_, double best0vs1Ratio_, string best0vs1RatioAt_,
+                string significantAt_, int geneSize_, int nTumorsExcluded_, int nZero_, int nOne_, int nMore_, int nSingleContributingToAltFraction_, int nMultipleContributingToAltFraction_)
+            {
+                hugo_symbol = hugo_symbol_;
+                altFractionForSingleMutations = altFractionForSingleMutations_;
+                altFractionForMultipleMutations = altFractionForMultipleMutations_;
+                minP = minP_;
+                significant01 = significant01_;
+                best0vs1Ratio = best0vs1Ratio_;
+                best0vs1RatioAt = best0vs1RatioAt_;
+                significantAt = significantAt_;
+                significantAtArray = significantAt.Split(',');
+                geneSize = geneSize_;
+                nTumorsExcluded = nTumorsExcluded_;
+                nZero = nZero_;
+                nOne = nOne_;
+                nMore = nMore_;
+                nSingleContributingToAltFraction = nSingleContributingToAltFraction_;
+                nMultipleContributingToAltFraction = nMultipleContributingToAltFraction_;
+            }
+
+            public readonly string hugo_symbol;
+            public readonly double altFractionForSingleMutations;
+            public readonly double altFractionForMultipleMutations;
+            public readonly double minP;
+            public readonly bool significant01;
+            public readonly double best0vs1Ratio;
+            public readonly string best0vs1RatioAt;
+            public readonly string significantAt;
+            public readonly string[] significantAtArray;
+            public readonly int geneSize;
+            public readonly int nTumorsExcluded;
+            public readonly int nZero;
+            public readonly int nOne;
+            public readonly int nMore;
+            public readonly int nSingleContributingToAltFraction;
+            public readonly int nMultipleContributingToAltFraction;
+        } // BonferroniCorrectedASEDistributionLine
+
+        static public string RangeToDescriptiveString(string rangeString)
+        {
+            if ("0" == rangeString)
+            {
+                return "In gene";
+            }
+
+            bool exclusiveRange = rangeString.EndsWith("E");
+            int numericRange;
+            if (exclusiveRange)
+            {
+                numericRange = Convert.ToInt32(rangeString.Substring(0, rangeString.Length - 1));
+            } else
+            {
+                numericRange = Convert.ToInt32(rangeString);
+            }
+
+            int rangeInBases = 1000 * (1 << numericRange);
+
+            if (exclusiveRange)
+            {
+                return "" + SizeToUnits(((ulong)rangeInBases / 2)) + "bp-" + SizeToUnits((ulong)rangeInBases) + "bp";
+            }
+
+            return "<= " + SizeToUnits((ulong)rangeInBases) + "bp";
+        } // RangeToDescriptiveString
+
+        public static int RangeValueFromRange(string range)
+        {
+            if (range.EndsWith("E"))
+            {
+                return Convert.ToInt32(range.Substring(0, range.Count() - 1));
+            }
+
+            return Convert.ToInt32(range);
         }
 
 
