@@ -159,7 +159,7 @@ namespace AVLTest
                     //
 
                     CheckBoolResult(true, !array[checkIteration].inTree || tree.FindFirstLessThanOrEqualTo(array[checkIteration], out returnedValue) && returnedValue.value == array[checkIteration].value, "FindFirstLessThanOrEqualTo didn't find the correct result");
-                    CheckBoolResult(true, checkIteration <= smallestValueAt || smallestValueAt == -1 || tree.findFirstLessThan(array[checkIteration], out returnedValue) && returnedValue.key < checkIteration, "FindFirstLessThan didn't work properly.");
+                    CheckBoolResult(true, checkIteration <= smallestValueAt || smallestValueAt == -1 || tree.FindFirstLessThan(array[checkIteration], out returnedValue) && returnedValue.key < checkIteration, "FindFirstLessThan didn't work properly.");
                     CheckBoolResult(true, checkIteration <= smallestValueAt || array[returnedValue.key].inTree, "FindFirstLessThan returned an element not in the tree.");
                     if (checkIteration > smallestValueAt)
                     {
@@ -170,7 +170,7 @@ namespace AVLTest
                     }
 
                     CheckBoolResult(true, !array[checkIteration].inTree || tree.FindFirstGreaterThanOrEqualTo(array[checkIteration], out returnedValue) && returnedValue.value == array[checkIteration].value, "FindFirstGreaterThanOrEqualTo didn't find the correct result");
-                    CheckBoolResult(true, checkIteration >= greatestValueAt || greatestValueAt == -1 || tree.findFirstGreaterThan(array[checkIteration], out returnedValue) && returnedValue.key > checkIteration, "findFirstGreaterThan didn't work properly.");
+                    CheckBoolResult(true, checkIteration >= greatestValueAt || greatestValueAt == -1 || tree.FindFirstGreaterThan(array[checkIteration], out returnedValue) && returnedValue.key > checkIteration, "findFirstGreaterThan didn't work properly.");
                     CheckBoolResult(true, checkIteration >= greatestValueAt || array[returnedValue.key].inTree, "FindFirstLessThan returned an element not in the tree.");
                     if (checkIteration < greatestValueAt)
                     {

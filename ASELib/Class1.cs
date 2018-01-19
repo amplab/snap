@@ -3569,6 +3569,15 @@ namespace ASELib
                 return Start_Position.CompareTo(peer.Start_Position);
             }
 
+            public bool IsNonsenseMediatedDecayCausing()
+            {
+                Console.WriteLine("MAFLine.IsNonsenseMediatedDecayCausing: check the types!!!");
+                return Variant_Classification == "Splice_Site" ||
+                       Variant_Classification == "Nonsense" ||
+                       Variant_Classification == "Frame_Shift_Del" ||
+                       Variant_Classification == "Frame_Shift_Ins";
+            }
+
             MAFLine(string Hugo_Symbol_, 
              string NCBI_Build_,
              string Chromosome_,
@@ -8436,7 +8445,49 @@ namespace ASELib
                 return true;
             } // FindFirstLessThanOrEqualTo
 
-            public bool findFirstLessThan(TValue key, out TValue retVal)
+            public TValue FindFirstLessThan(TValue key)
+            {
+                TValue retVal;
+                if (!FindFirstLessThan(key, out retVal))
+                {
+                    return default(TValue);
+                }
+                return retVal;
+            } // FindFirstLessThan
+
+            public TValue FindFirstLessThanOrEqualTo(TValue key)
+            {
+                TValue retVal;
+                if (!FindFirstLessThanOrEqualTo(key, out retVal))
+                {
+                    return default(TValue);
+                }
+                return retVal;
+            } // FindFirstLessThanOrEqualTo
+
+            public TValue FindFirstGreaterThan(TValue key)
+            {
+                TValue retVal;
+                if (!FindFirstGreaterThan(key, out retVal))
+                {
+                    return default(TValue);
+                }
+                return retVal;
+            } // FindFirstGreaterThan
+
+            public TValue FindNextGreaterThanOrEqualTo(TValue key)
+            {
+                TValue retVal;
+                if (!FindFirstGreaterThanOrEqualTo(key, out retVal))
+                {
+                    return default(TValue);
+                }
+
+                return retVal;
+            } // FindNextGreaterThanOrEqualTo
+
+
+            public bool FindFirstLessThan(TValue key, out TValue retVal)
             { 
                 Node currentNode = root;
                 Node lastLessThan = null;
@@ -8464,7 +8515,7 @@ namespace ASELib
                 return false;
             }
 
-            public bool findFirstGreaterThan(TValue key, out TValue retVal)
+            public bool FindFirstGreaterThan(TValue key, out TValue retVal)
             {
                 Node currentNode = root;
                 Node lastGreaterThan = null;

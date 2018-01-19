@@ -177,8 +177,6 @@ namespace MakeSignificant012Graphs
             var somaticVariants = annotatedSelectedVariants.Where(x => x.somaticMutation).ToList();
             var germlineVariants = annotatedSelectedVariants.Where(x => x.somaticMutation == false && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).ToList();
 
-var badTP53Variants = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == "TP53" &&
-            (x.variantClassification == "Frame_Shift_Del" || x.variantClassification == "Frame_Shift_Ins" || x.variantClassification == "Splice_Site" || x.variantClassification == "Nonsense_Mutation")).ToList();
 
             for (int i = 0; i < nSignificantResults; i++)
             {
@@ -188,11 +186,6 @@ var badTP53Variants = annotatedSelectedVariants.Where(x => x.somaticMutation && 
 
                 foreach (var variant in germlineVariants)
                 {
-if (variant.contig == "chr17" && variant.locus > 7665000 && variant.locus < 7690000 && badTP53Variants.Count() != 0)
-{
-    continue;
-}
-
                     var inRange = variant.contig == result.chromosome && (variant.locus >= result.minLocus[0] && variant.locus <= result.maxLocus[0] || variant.locus >= result.minLocus[1] && variant.locus <= result.maxLocus[1]);
 
                     if (inRange == result.countsIfInRange)

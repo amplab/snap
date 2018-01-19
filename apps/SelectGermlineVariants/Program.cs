@@ -222,7 +222,7 @@ namespace SelectGermlineVariants
                     int alleleNumber = 0;
                     double odds = 0;
                     string cigar = info["CIGAR"];
-                    long locus = 0;
+                    int locus = 0;
 
                     try
                     {
@@ -238,7 +238,7 @@ namespace SelectGermlineVariants
                             alleleNumber = Convert.ToInt32(info["AN"]);
                             odds = Convert.ToDouble(info["ODDS"]);
                         }
-                        locus = Convert.ToInt64(fields[1]);
+                        locus = Convert.ToInt32(fields[1]);
 
                     }
                     catch (FormatException)
@@ -274,6 +274,45 @@ namespace SelectGermlineVariants
                     {
                         goodCandidate = false;
                     }
+
+                    //
+                    // Eliminate any variant in a gene that also contains a somatic mutation that might cause nonsense mediated decay.
+                    // We're a little over cautious here, but since we're just eliminating potential germline variant ASE measurement
+                    // sites it's not a problem.
+                    //
+                    var genesMappedHere = geneMap.getGenesMappedTo(fields[0], locus).ToList();
+                    if (nextLowestMAFLine != null)
+                    {
+                        int minRange = genesMappedHere.Select(x => x.minLocus).Min();
+                        for (var mafLine = nextLowestMAFLine; 
+                            mafLine != null &&
+                            mafLine.Chromosome == fields[0] && mafLine.Start_Position >= minRange; 
+                            mafLine = mafLines.FindFirstLessThan(mafLine))
+                        {
+                            if (mafLine.IsNonsenseMediatedDecayCausing())
+                            {
+                                goodCandidate = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (goodCandidate && nextHighestMAFLine != null)
+                    {
+                        int maxRange = genesMappedHere.Select(x => x.maxLocus).Max();
+                        for (var mafLine = nextHighestMAFLine; 
+                            mafLine != null &&
+                            mafLine.Chromosome == fields[0] && mafLine.End_Positon <= maxRange;
+                            mafLine = mafLines.FindFirstGreaterThan(mafLine))
+                        {
+                            if (mafLine.IsNonsenseMediatedDecayCausing())
+                            {
+                                goodCandidate = false;
+                                break;
+                            }
+                        }
+                    }
+                    
 
                     //
                     // Figure out if we've moved into another grain, in which case we save the candidates we have from previous grains
@@ -426,6 +465,8 @@ namespace SelectGermlineVariants
         static bool computeDistribution;
         static ASETools.Configuration configuration;
         static ASETools.ASERepetitiveRegionMap repetitiveRegionMap;
+        static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
+        static ASETools.GeneMap geneMap;
 
         static void Main(string[] args)
         {
@@ -436,6 +477,9 @@ namespace SelectGermlineVariants
                 Console.WriteLine("Giving up because we were unable to load configuration.");
                 return;
             }
+
+            geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+            geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
 
             var caseIds = configuration.commandLineArgs.Where(x => x != "-d").ToList();
 
