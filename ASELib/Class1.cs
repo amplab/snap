@@ -3571,11 +3571,7 @@ namespace ASELib
 
             public bool IsNonsenseMediatedDecayCausing()
             {
-                Console.WriteLine("MAFLine.IsNonsenseMediatedDecayCausing: check the types!!!");
-                return Variant_Classification == "Splice_Site" ||
-                       Variant_Classification == "Nonsense" ||
-                       Variant_Classification == "Frame_Shift_Del" ||
-                       Variant_Classification == "Frame_Shift_Ins";
+                return NonsenseMediatedDecayCausingVariantClassifications.Contains(Variant_Classification);
             }
 
             MAFLine(string Hugo_Symbol_, 
@@ -6704,6 +6700,8 @@ namespace ASELib
 			}
         } // Region
 
+        public readonly static string[] NonsenseMediatedDecayCausingVariantClassifications = { "Splice_Site", "Nonsense_Mutation", "Frame_Shift_Del", "Frame_Shift_Ins" };
+
         public class AnnotatedVariant : IComparable
         {
 			public AnnotatedVariant(){}
@@ -6723,6 +6721,12 @@ namespace ASELib
 
 				return str;
 			}
+            
+
+            public bool CausesNonsenseMediatedDecay()
+            {
+                return NonsenseMediatedDecayCausingVariantClassifications.Contains(variantClassification);
+            }
 
 			public double GetTumorAlleleSpecificExpression(ASECorrection aseCorrection = null)
 			{

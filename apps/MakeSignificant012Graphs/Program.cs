@@ -218,6 +218,7 @@ namespace MakeSignificant012Graphs
             if (null == configuration)
             {
                 Console.WriteLine("Unable to load configuration.");
+                return;
             }
 
             perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
@@ -239,7 +240,7 @@ namespace MakeSignificant012Graphs
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
 
 
-            var bonferroniLines = ASETools.BonferroniCorrectedASEDistributionLine.readFromFile(configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount_bonferroni.txt").Where(x => x.significant01 || x.hugo_symbol.Contains("BRCA"));
+            var bonferroniLines = ASETools.BonferroniCorrectedASEDistributionLine.readFromFile(configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount_bonferroni.txt").Where(x => x.significant01);
 
 
             if (null == bonferroniLines)
@@ -257,11 +258,6 @@ namespace MakeSignificant012Graphs
                     }
                 }
 
-if (bonferroniLine.hugo_symbol.Contains("BRCA"))
-{
-    significantResults.Add(new SignificantResult(bonferroniLine, geneLocationInformation, 10, "10E"));
-    significantResults.Add(new SignificantResult(bonferroniLine, geneLocationInformation, 0, "0"));
-}
             }
 
             significantResults.Sort();

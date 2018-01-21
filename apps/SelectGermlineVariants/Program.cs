@@ -281,7 +281,7 @@ namespace SelectGermlineVariants
                     // sites it's not a problem.
                     //
                     var genesMappedHere = geneMap.getGenesMappedTo(fields[0], locus).ToList();
-                    if (nextLowestMAFLine != null)
+                    if (nextLowestMAFLine != null && genesMappedHere.Count() != 0)
                     {
                         int minRange = genesMappedHere.Select(x => x.minLocus).Min();
                         for (var mafLine = nextLowestMAFLine; 
@@ -297,7 +297,7 @@ namespace SelectGermlineVariants
                         }
                     }
 
-                    if (goodCandidate && nextHighestMAFLine != null)
+                    if (goodCandidate && nextHighestMAFLine != null && genesMappedHere.Count() != 0)
                     {
                         int maxRange = genesMappedHere.Select(x => x.maxLocus).Max();
                         for (var mafLine = nextHighestMAFLine; 
