@@ -1077,7 +1077,9 @@ namespace ASEProcessManager
 
                 var currentCommandLine = "";
 
-                if (forAlleleSpecificExpression && !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))
+                if (forAlleleSpecificExpression && 
+                    (!File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename) ||
+                    !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename)))
                 {
                     nWaitingForPrerequisites++;
                     return;
@@ -1743,7 +1745,9 @@ namespace ASEProcessManager
                 if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename))
                 {
                     nDone++;
-                } else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "" && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == "")))
+                } else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "" && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == ""
+                           || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename)
+                           || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))))
                 {
                     nWaitingForPrerequisites++;
                 } else
@@ -1893,19 +1897,20 @@ namespace ASEProcessManager
                 nWaitingForPrerequisites = 0;
                 filesToDownload = null;
 
-                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionByMutationCount_bonferroni.txt"))
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount_bonferroni.txt"))
                 {
                     nDone = 1;
                     return;
                 }
 
-                if (!File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionByMutationCount.txt"))
+                if (!File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount.txt"))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
                 }
 
                 script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ApplyBonferroniCorrection.exe");
+                nAddedToScript = 1;
             }
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
@@ -1947,7 +1952,78 @@ namespace ASEProcessManager
 
         } // ASEConsistencyProcessingStage
 
+        class ASEMapProcessingStage : ProcessingStage
+        {
+            public ASEMapProcessingStage() { }
+            public string GetStageName() { return "ASE Map"; }
+            public bool NeedsCases() { return true; }
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
 
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename) && 
+                    File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASEMapFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Select(x => x.Value).
+                    Any(c => c.annotated_selected_variants_filename == "" || c.tumor_rna_mapped_base_count_filename == ""
+                    || c.normal_rna_file_id != "" && c.normal_rna_mapped_base_count_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ASEMap.exe");
+                nAddedToScript = 1;
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+        } // ASEMapProcessingStage
+
+        class ZeroOneTwoProcessingStage : ProcessingStage
+        {
+            public ZeroOneTwoProcessingStage() { }
+
+            public string GetStageName() { return "Make 012 Graphs"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(ASETools.Configuration.zero_one_two_directory + "TP53-0.txt")) // NB: Assumes p53 in gene is significant
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.annotated_selected_variants_filename == "") ||
+                    !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount_bonferroni.txt"))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                nAddedToScript = 1;
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MakeSignificant012Graphs.exe");
+
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+
+        } // ZeroOneTwoProcessingStage
 
         class FPKMProcessingStage : ProcessingStage
 		{
@@ -2482,6 +2558,8 @@ namespace ASEProcessManager
             processingStages.Add(new ExpressionByMutationCountProcessingStage());
             processingStages.Add(new BonferroniProcessingStage());
             processingStages.Add(new ASEConsistencyProcessingStage());
+            processingStages.Add(new ASEMapProcessingStage());
+            processingStages.Add(new ZeroOneTwoProcessingStage());
 
             if (checkDependencies)
             {

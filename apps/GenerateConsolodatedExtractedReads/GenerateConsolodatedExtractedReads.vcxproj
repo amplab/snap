@@ -22,7 +22,7 @@
     <ProjectGuid>{784CA826-F61A-4E50-978E-E3D5641E28EF}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>GenerateConsolodatedExtractedReads</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

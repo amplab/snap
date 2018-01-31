@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27004.2005
+VisualStudioVersion = 15.0.26430.6
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{76E127A5-2247-4A10-9DC8-59518C7C6636}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -94,8 +94,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateScatterGraphs", "ap
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DumpSubfile", "apps\DumpSubfile\DumpSubfile.csproj", "{1A87AD40-F9BD-48AD-8B55-B4A4996252E3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FixASV", "apps\FixASV\FixASV.csproj", "{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MannWhitney", "apps\MannWhitney\MannWhitney.csproj", "{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CountVariantsInGenes", "apps\CountVariantsInGenes\CountVariantsInGenes.csproj", "{2D69CEB5-A892-44F8-869B-46FED6721EF6}"
@@ -153,6 +151,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MakeSignificant012Graphs", "apps\MakeSignificant012Graphs\MakeSignificant012Graphs.csproj", "{431D1CFC-60EA-4307-A86F-CCE560861FC4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QnDFindCase", "apps\QnDFindCase\QnDFindCase.csproj", "{F2E306FE-AB44-4635-A8A5-21EB5B6FB6BD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckASV", "CheckASV\CheckASV.csproj", "{E0235064-D813-4171-B708-A80C60062459}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -592,20 +592,6 @@ Global
 		{1A87AD40-F9BD-48AD-8B55-B4A4996252E3}.Release|Win32.Build.0 = Release|Any CPU
 		{1A87AD40-F9BD-48AD-8B55-B4A4996252E3}.Release|x64.ActiveCfg = Release|x64
 		{1A87AD40-F9BD-48AD-8B55-B4A4996252E3}.Release|x64.Build.0 = Release|x64
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Debug|Win32.ActiveCfg = Debug|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Debug|Win32.Build.0 = Debug|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Debug|x64.ActiveCfg = Debug|x64
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Release|Mixed Platforms.Build.0 = Release|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Release|Win32.ActiveCfg = Release|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Release|Win32.Build.0 = Release|Any CPU
-		{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}.Release|x64.ActiveCfg = Release|x64
 		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
@@ -1070,6 +1056,22 @@ Global
 		{F2E306FE-AB44-4635-A8A5-21EB5B6FB6BD}.Release|Win32.Build.0 = Release|Any CPU
 		{F2E306FE-AB44-4635-A8A5-21EB5B6FB6BD}.Release|x64.ActiveCfg = Release|x64
 		{F2E306FE-AB44-4635-A8A5-21EB5B6FB6BD}.Release|x64.Build.0 = Release|x64
+		{E0235064-D813-4171-B708-A80C60062459}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Debug|Win32.Build.0 = Debug|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Debug|x64.ActiveCfg = Debug|x64
+		{E0235064-D813-4171-B708-A80C60062459}.Debug|x64.Build.0 = Debug|x64
+		{E0235064-D813-4171-B708-A80C60062459}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Release|Win32.ActiveCfg = Release|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Release|Win32.Build.0 = Release|Any CPU
+		{E0235064-D813-4171-B708-A80C60062459}.Release|x64.ActiveCfg = Release|x64
+		{E0235064-D813-4171-B708-A80C60062459}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

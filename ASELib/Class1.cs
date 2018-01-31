@@ -5994,7 +5994,7 @@ namespace ASELib
 					}
 					catch (FormatException)
 					{
-						Console.WriteLine("Unable to parse sam line in extracted reads subfile " + subfileName + ": " + line);
+						Console.WriteLine("Unable to parse sam line in extracted reads main file " + selectedReadsFilename + " subfile " + subfileName + ": " + line);
 						subfileReader.Close();
 						return null;
 					}
@@ -6248,7 +6248,7 @@ namespace ASELib
 					}
 					catch (Exception e)
 					{
-						Console.WriteLine("Unable to parse sam line in extracted reads subfile " + subfileName + ": " + line);
+						Console.WriteLine("Unable to parse sam line in extracted reads main file + " + selectedReadsFilename + " subfile " + subfileName + ": " + line);
                         throw e;
 					}
 

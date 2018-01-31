@@ -22,7 +22,7 @@
     <ProjectGuid>{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>SNAPLib</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
