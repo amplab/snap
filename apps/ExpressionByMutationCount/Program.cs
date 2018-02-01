@@ -869,7 +869,8 @@ namespace ExpressionByMutationCount
                         } else if (mutationCount == 1)
                         {
                             var asv = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).ToList()[0];
-                            if (asv.IsASECandidate(true, copyNumber, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
+                            if (asv.IsASECandidate(true, copyNumber, configuration, null, null) && // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
+                                !asv.CausesNonsenseMediatedDecay())
                             {
                                 geneToProcess.countsByDisease[disease].nTumorFractionSingle++;
                                 geneToProcess.countsByDisease[disease].totalTumorAltAlleleFractionSingle += asv.GetTumorAltAlleleFraction();
@@ -882,16 +883,18 @@ namespace ExpressionByMutationCount
                         {
                             int nValidASE = 0;
                             double totalFraction = 0;
-                            foreach (var asv in annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol))
+                            bool anyNonsense = false;
+                            foreach (var asv in annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).ToList())
                             {
                                 if (asv.IsASECandidate(true, copyNumber, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
                                 {
                                     nValidASE++;
                                     totalFraction += asv.GetTumorAltAlleleFraction();
                                 }
+                                anyNonsense |= asv.CausesNonsenseMediatedDecay();
                             }
 
-                            if (nValidASE > 0)
+                            if (nValidASE > 0 && !anyNonsense)
                             {
                                 geneToProcess.countsByDisease[disease].nTumorFractionMultiple++;
                                 geneToProcess.countsByDisease[disease].totalTumorAltAlleleFractionMultiple += totalFraction / nValidASE;
