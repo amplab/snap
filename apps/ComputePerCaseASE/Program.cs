@@ -209,7 +209,7 @@ namespace ComputePerCaseASE
                     }
                 } // lock
 
-                var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
+                var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename).Where(x => !x.CausesNonsenseMediatedDecay()).ToList();
 
                 var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
  

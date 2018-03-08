@@ -10,7 +10,10 @@ using System.Threading;
 
 namespace ExtractMAFLines
 {
-    class Program { 
+    class Program {
+        static int nSelected = 0;
+        static int nTotal = 0;
+        static int nSilent = 0;
 
         static void WorkerThread(List<List<ASETools.Case>> workQueue, ASETools.Configuration configuration)
         {
@@ -37,6 +40,8 @@ namespace ExtractMAFLines
                 var mafLines = ASETools.MAFLine.ReadFile(casesForThisMAF[0].maf_filename, casesForThisMAF[0].maf_file_id, true);
 
                 int nSelectedThisDisease = 0;
+                int nTotalThisDisease = 0;
+                int nSilentThisDisease = 0;
 
                 foreach (var case_ in casesForThisMAF)
                 {
@@ -54,7 +59,7 @@ namespace ExtractMAFLines
                           x.Variant_Classification == "5'Flank" ||
                           x.Variant_Classification == "IGR" ||
                           x.Variant_Classification == "Intron" ||
-                          x.Variant_Classification == "Silent" ||
+                          // we now keep silent mutations to use as a control.  x.Variant_Classification == "Silent" ||
                           x.Variant_Classification == "3'UTR" ||
                           x.Variant_Classification == "5'UTR" ||
                           x.t_alt_count * 5 < x.t_depth ||
@@ -63,6 +68,8 @@ namespace ExtractMAFLines
                         ).ToList();    // The second half of the condition rejects MAF lines that look like germline variants (or pseudogenes that are mismapped), or are in uninteresting regions (IGRs, Introns, etc.) and minor subclones (< 20%) and mitochondrial genes
 
                         nSelectedThisDisease += selectedLines.Count();
+                        nTotalThisDisease += mafLines.Count();
+                        nSilentThisDisease += selectedLines.Where(x => x.Variant_Classification == "Silent").Count();
 
                         if (selectedLines.Count() == 0)
                         {
@@ -79,7 +86,13 @@ namespace ExtractMAFLines
                     }
                 }
 
-                Console.WriteLine("selected " + nSelectedThisDisease + " of " + mafLines.Count() + " for " + mafFilename + " in " + ASETools.ElapsedTimeInSeconds(timer));
+                lock (workQueue)
+                {
+                    nTotal += nTotalThisDisease;
+                    nSelected += nSelectedThisDisease;
+                    nSilent += nSilentThisDisease;
+                }
+                Console.WriteLine("selected " + nSelectedThisDisease + " (of which " + nSilentThisDisease + " were silent) of " + mafLines.Count() + " for " + mafFilename + " in " + ASETools.ElapsedTimeInSeconds(timer));
             }
         }
 
@@ -96,7 +109,7 @@ namespace ExtractMAFLines
             if (configuration.commandLineArgs.Count() >1 || 
                     configuration.commandLineArgs.Count() == 1 && configuration.commandLineArgs[0] != "-a" && configuration.commandLineArgs[0] != "-e") {
                 Console.WriteLine("usage: ExtractMAFLines {-configuration configurationFileName} {-a|-e}");
-                Console.WriteLine("-a means only to crerate the all maf line file, while -e means only to create the extracted maf line file.");
+                Console.WriteLine("-a means only to create the all maf line file, while -e means only to create the extracted maf line file.");
                 return;
             }
 
@@ -149,8 +162,6 @@ namespace ExtractMAFLines
 
             Console.WriteLine("Processing " + nCasesToProcess + " cases with " + casesByMAF.Count() + " MAF files.");
 
-            int nSelected = 0;
-            int nTotal = 0;
 
             var workQueue = new List<List<ASETools.Case>>();
 
@@ -170,7 +181,7 @@ namespace ExtractMAFLines
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
 
-            Console.WriteLine("Processed " + nCasesToProcess + " cases in " + casesByMAF.Count() + " MAFs, selecting" + nSelected + " of " + nTotal + " in " + ASETools.ElapsedTimeInSeconds(stopwatch));
+            Console.WriteLine("Processed " + nCasesToProcess + " cases in " + casesByMAF.Count() + " MAFs, selecting " + nSelected + " (of which " + nSilent + " were silent) of " + nTotal + " in " + ASETools.ElapsedTimeInSeconds(stopwatch));
         }
     }
 }

@@ -12,17 +12,19 @@ namespace MakeSignificant012Graphs
     class Program
     {
 
-        static List<SignificantResult> significantResults = new List<SignificantResult>();
+        static List<ResultToReport> resultsToReport = new List<ResultToReport>();
         static int nSignificantResults;
 
-        const int nHistogramsPerResult = 3; // 0, 1, > 1.  Constant is to make code clearer, it doesn't ever make sense to change it.
+        const int nHistogramsPerResult = 4; // 0, 1, > 1, 1 silent.  
         const double rangeStep = 0.01;
 
-        class SignificantResult : IComparable
+        class ResultToReport : IComparable<ResultToReport>
         {
-            public SignificantResult(ASETools.BonferroniCorrectedASEDistributionLine line_, ASETools.GeneLocationsByNameAndChromosome geneLocationInformation, int whichResult, string overrideRange = "")
+            public ResultToReport(ASETools.BonferroniCorrectedASEDistributionLine line_, ASETools.GeneLocationsByNameAndChromosome geneLocationInformation, int whichResult, bool significant_, string overrideRange = "")
             {
                 line = line_;
+                significant = significant_;
+
                 if (overrideRange != "")
                 {
                     range = overrideRange;  // This is a hack to allow looking at genes/ranges that aren't significant
@@ -38,7 +40,7 @@ namespace MakeSignificant012Graphs
 
                 for (int i = 0; i < nHistogramsPerResult; i++)
                 {
-                    histograms[i] = new ASETools.PreBucketedHistogram(0, 1, rangeStep, "" + ((i < 2) ? i.ToString() : ">1") + histogramNameTrailer);
+                    histograms[i] = new ASETools.PreBucketedHistogram(0, 1, rangeStep, "" + ((i < 2) ? i.ToString() : ((i == 2) ? ">1" : "1 silent")) + histogramNameTrailer);
                 }
 
                 var gene = geneLocationInformation.genesByName[line.hugo_symbol];
@@ -107,10 +109,8 @@ namespace MakeSignificant012Graphs
                 }
             } // SignificantResult ctor
 
-            public int CompareTo(object oPeer)
+            public int CompareTo(ResultToReport peer)
             {
-                SignificantResult peer = (SignificantResult)oPeer;
-
                 if (peer.line.hugo_symbol != line.hugo_symbol)
                 {
                     return line.hugo_symbol.CompareTo(peer.line.hugo_symbol);
@@ -138,6 +138,7 @@ namespace MakeSignificant012Graphs
             public readonly int[] maxLocus = new int [2];
             public readonly bool countsIfInRange = true;
             public readonly string range;
+            public readonly bool significant;
 
             public ASETools.PreBucketedHistogram[] histograms = new ASETools.PreBucketedHistogram[nHistogramsPerResult];
         }
@@ -159,13 +160,13 @@ namespace MakeSignificant012Graphs
 
         static void FinishUp(PerThreadState state)
         {
-            lock (significantResults)
+            lock (resultsToReport)
             {
                 for (int i = 0; i < nSignificantResults; i++)
                 {
                     for (int j = 0; j < nHistogramsPerResult; j++)
                     {
-                        significantResults[i].histograms[j].merge(state.histograms[i, j]);
+                        resultsToReport[i].histograms[j].merge(state.histograms[i, j]);
                     }
                 }
             }
@@ -174,13 +175,12 @@ namespace MakeSignificant012Graphs
         static void HandleOneCase(ASETools.Case case_, PerThreadState state, List<ASETools.AnnotatedVariant> annotatedSelectedVariants, ASETools.ASECorrection ASECorrection, Dictionary<bool, List<ASETools.CopyNumberVariation>> copyNumber)
         {
 
-            var somaticVariants = annotatedSelectedVariants.Where(x => x.somaticMutation).ToList();
+            var somaticVariants = annotatedSelectedVariants.Where(x => x.somaticMutation && !x.isSilent()).ToList();
             var germlineVariants = annotatedSelectedVariants.Where(x => x.somaticMutation == false && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).ToList();
-
 
             for (int i = 0; i < nSignificantResults; i++)
             {
-                var result = significantResults[i];
+                var result = resultsToReport[i];
                 int nValid = 0;
                 double totalASE = 0;
 
@@ -199,6 +199,12 @@ namespace MakeSignificant012Graphs
                 {
                     int mutationCountIndex = ASETools.ZeroOneMany(somaticVariants.Where(x => x.Hugo_symbol == result.line.hugo_symbol).Count());
                     result.histograms[mutationCountIndex].addValue(totalASE / nValid);
+
+                    // Handle the one silent mutation count case.
+                    if (annotatedSelectedVariants.Where(x => x.somaticMutation && x.isSilent() && x.Hugo_symbol == result.line.hugo_symbol).Count() == 1)
+                    {
+                        result.histograms[3].addValue(totalASE / nValid);
+                    }
                 }
             } // for each significant result
         } // HandleOneCase
@@ -240,7 +246,7 @@ namespace MakeSignificant012Graphs
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
 
 
-            var bonferroniLines = ASETools.BonferroniCorrectedASEDistributionLine.readFromFile(configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount_bonferroni.txt").Where(x => x.significant01);
+            var bonferroniLines = ASETools.BonferroniCorrectedASEDistributionLine.readFromFile(configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount_bonferroni.txt");
 
 
             if (null == bonferroniLines)
@@ -249,20 +255,51 @@ namespace MakeSignificant012Graphs
                 return;
             }
 
+            string[] genesAlwaysToReport = { "APC", "BRCA1", "BRCA2", "CD95", "ST5", "YPEL3", "ST7", "ST14",    // Tumor suppressors
+                "EGFR", "VEGFR", "MYC", "HER2", "PDGF", "IDH1", "IDH2", // Oncogenes 
+                "ATCB", "HK1"                                  // controls
+            };
+
             foreach (var bonferroniLine in bonferroniLines)
             {
-                for (int i = 0; i < bonferroniLine.significantAtArray.Count(); i++) {
-                    if (bonferroniLine.significantAtArray[i] != "" && (i == 0 || bonferroniLine.significantAtArray[i-1] != bonferroniLine.significantAtArray[i])) // The equality check is because there can be duplicates if 1 vs. not 1 and 1 vs. many are both significant
+                if (bonferroniLine.significantAtArray.Count() > 0 && bonferroniLine.significant01 || genesAlwaysToReport.Contains(bonferroniLine.hugo_symbol))
+                {
+                    bool saw5 = false;
+                    bool saw11 = false;
+                    bool saw0 = false;
+
+                    for (int i = 0; i < bonferroniLine.significantAtArray.Count(); i++)
                     {
-                        significantResults.Add(new SignificantResult(bonferroniLine, geneLocationInformation, i));
+                        if (bonferroniLine.significantAtArray[i] != "" && (i == 0 || bonferroniLine.significantAtArray[i - 1] != bonferroniLine.significantAtArray[i])) // The equality check is because there can be duplicates if 1 vs. not 1 and 1 vs. many are both significant
+                        {
+                            saw5 |= bonferroniLine.significantAtArray[i] == "5";
+                            saw11 |= bonferroniLine.significantAtArray[i] == "11";
+                            saw0 |= bonferroniLine.significantAtArray[i] == "0";
+                            resultsToReport.Add(new ResultToReport(bonferroniLine, geneLocationInformation, i, true));
+                        }
                     }
-                }
+
+                    if (!saw5)
+                    {
+                        resultsToReport.Add(new ResultToReport(bonferroniLine, geneLocationInformation, 0, false, "5"));
+                    }
+
+                    if (!saw11)
+                    {
+                        resultsToReport.Add(new ResultToReport(bonferroniLine, geneLocationInformation, 0, false, "11"));
+                    }
+
+                    if (!saw0)
+                    {
+                        resultsToReport.Add(new ResultToReport(bonferroniLine, geneLocationInformation, 0, false, "0"));
+                    }
+                } // If there are any significant results for this gene.
 
             }
 
-            significantResults.Sort();
+            resultsToReport.Sort();
 
-            nSignificantResults = significantResults.Count();
+            nSignificantResults = resultsToReport.Count();
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -274,30 +311,31 @@ namespace MakeSignificant012Graphs
 
             var casesToProcess = cases.Select(x => x.Value).Where(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "").ToList();
 
-            Console.Write("Processing " + casesToProcess.Count() + " of " + cases.Count() + " cases and " + significantResults.Count() + " significant results, 1 dot/100 cases: ");
+            Console.Write("Processing " + casesToProcess.Count() + " of " + cases.Count() + " cases and " + resultsToReport.Count() + " significant results, 1 dot/100 cases: ");
 
             var threading = new ASETools.ASVThreadingHelper<PerThreadState>(casesToProcess, aseCorrection, (x, y) => true, HandleOneCase, FinishUp, null, 100);
             threading.run();
 
             Console.WriteLine("Took " + ASETools.ElapsedTimeInSeconds(timer));
 
-            var nLinesPerHistogram = significantResults[0].histograms[0].ComputeHistogram().Count();
+            var nLinesPerHistogram = resultsToReport[0].histograms[0].ComputeHistogram().Count();
 
-            foreach (var significantResult in significantResults)
+            foreach (var resultToReport in resultsToReport)
             {
-                var outputFile = ASETools.CreateStreamWriterWithRetry(ASETools.Configuration.zero_one_two_directory + significantResult.line.hugo_symbol + "-" + significantResult.range + ".txt");
+                var outputFile = ASETools.CreateStreamWriterWithRetry(ASETools.Configuration.zero_one_two_directory + resultToReport.line.hugo_symbol + "-" + resultToReport.range + (resultToReport.significant ? "" : "I") + ".txt");
 
                 //
                 // Pull the three CDF columns at the top of the file next to one another, since that's what we make into graphs.
                 //
-                outputFile.WriteLine("CDFs for 0, 1 and >1 mutations.");
+                outputFile.WriteLine("CDFs for 0, 1 and >1 mutations and 1 silent mutation.");
                 ASETools.HistogramResultLine[][] histogramLines = new ASETools.HistogramResultLine[nHistogramsPerResult][];
                 for (int i = 0; i < nHistogramsPerResult; i++)
                 {
-                    histogramLines[i] = significantResult.histograms[i].ComputeHistogram();
+                    histogramLines[i] = resultToReport.histograms[i].ComputeHistogram();
                 }
 
-                outputFile.WriteLine("minValue\t0 mutations (n = " + histogramLines[0].Select(x => x.count).Sum() + ")\t1 mutation (n = " + histogramLines[1].Select(x => x.count).Sum() + ")\t> 1 mutation (n = " + histogramLines[2].Select(x => x.count).Sum() + ")");
+                outputFile.WriteLine("minValue\t0 mutations (n = " + histogramLines[0].Select(x => x.count).Sum() + ")\t1 mutation (n = " + histogramLines[1].Select(x => x.count).Sum() + ")\t> 1 mutation (n = " + histogramLines[2].Select(x => x.count).Sum() + ")" +
+                    "\t1 silent mutation (n = " + histogramLines[3].Select(x => x.count).Sum() + ")");
                 for (int whichLine = 0; whichLine < nLinesPerHistogram; whichLine++)
                 {
                     if (whichLine == nLinesPerHistogram - 1)
@@ -319,9 +357,9 @@ namespace MakeSignificant012Graphs
 
                 for (int i = 0; i < nHistogramsPerResult; i++)
                 {
-                    outputFile.WriteLine(significantResult.histograms[i].name);
+                    outputFile.WriteLine(resultToReport.histograms[i].name);
                     outputFile.WriteLine(ASETools.HistogramResultLine.Header());
-                    significantResult.histograms[i].ComputeHistogram().ToList().ForEach(x => outputFile.WriteLine(x));
+                    resultToReport.histograms[i].ComputeHistogram().ToList().ForEach(x => outputFile.WriteLine(x));
                     outputFile.WriteLine();
                 }
                 outputFile.WriteLine("**done**");
@@ -332,7 +370,7 @@ namespace MakeSignificant012Graphs
             //
             // Now do per-gene files for genes with more than one significant result other than whole autosome.  CountsIfInRange is false iff whole autosome.
             //
-            var multipleResults = significantResults.Where(x => x.countsIfInRange).GroupByToDict(x => x.line.hugo_symbol).Where(x => x.Value.Count() > 1);
+            var multipleResults = resultsToReport.Where(x => x.countsIfInRange).GroupByToDict(x => x.line.hugo_symbol).Where(x => x.Value.Count() > 1);
 
             foreach (var gene in multipleResults)
             {

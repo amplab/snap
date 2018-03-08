@@ -116,10 +116,17 @@ DWORD __stdcall
                 offsetInOutputFile += thisRun->size;
                 dataSeen += thisRun->size;
 
+				size_t bytesInThisRun = 0;
                 for (ReadsBuffer *thisBuffer = thisRun->readsBuffers; NULL != thisBuffer; thisBuffer = thisBuffer->next) {
                     memcpy(consolodatedOutputBuffer + offsetInConsolodatedOutputBuffer, thisBuffer->buffer, thisBuffer->size);
                     offsetInConsolodatedOutputBuffer += thisBuffer->size;
+					bytesInThisRun += thisBuffer->size;
                 }
+
+				if (bytesInThisRun != thisRun->size) {
+					fprintf(stderr, "Incorrectly sized run buffer chain: %lld != %lld\n", bytesInThisRun, thisRun->size);
+					exit(1);
+				}
             }
 
             if (dataSeen != sizeOfRunsToWrite) {
@@ -227,6 +234,7 @@ ProcessorThreadMain(void *param)
             printf(".");
             fflush(stdout);
         }
+
         if (WAIT_OBJECT_0 != WaitForSingleObject(runsReadyToWriteNotTooFullEvent, INFINITE)) {
             fprintf(stderr, "Waiting for write queue not to be overfull failed, %d\n", GetLastError());
             exit(1);
@@ -308,10 +316,12 @@ ProcessorThreadMain(void *param)
 
                 Sleep(4 << retryCount); // when retryCount is 20, this is a little more than an hour.
             }
+
             if (!createProcessWorked) {
                 fprintf(stderr, "Too many retries on CreateProcess(%s...), giving up.\n", line);
                 exit(1);
             }
+
             CloseHandle(piProcInfo.hThread);    // Don't need this one.
             piProcInfo.hThread = NULL;
 

@@ -523,6 +523,11 @@ namespace ASELib
 
 				return isoform;
 			}
+
+            public int codingSize()
+            {
+                return exons.Select(x => x.end - x.start).Sum();
+            }
         } // Isoform
 
 
@@ -552,6 +557,16 @@ namespace ASELib
             public int size()
             {
                 return maxLocus - minLocus;
+            }
+
+            public int codingSize() // The sum of the exons of the largest coding isoform
+            {
+                if (isoforms.Count() == 0)
+                {
+                    return 0;
+                }
+
+                return isoforms.Select(x => x.codingSize()).Max();
             }
 
 			public List<Isoform> isoforms = new List<Isoform>();
@@ -1559,6 +1574,8 @@ namespace ASELib
 			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"gene_mutations_with_counts\";
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
 			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs450.txt";
+
+            public const string geneCategorizationFilename = "GeneCategorization.txt";
 
             public const string zero_one_two_directory = defaultBaseDirectory + @"012graphs\";
 
@@ -4644,7 +4661,8 @@ namespace ASELib
 			public ASETools.RegionalExpressionState[] exclusiveRegionalExpressionState = new ASETools.RegionalExpressionState[nRegionSizes];  // Expression in this region but not closer, so from log2(regionSize - 1) to log2(regionSize) - 1.  The zero element is the same as regionalExpressionState
 
 			public ASETools.GeneLocationInfo geneLocationInfo;
-			public int mutationCount = 0;
+			public int nonSilentMutationCount = 0;
+            public int silentMutationCount = 0;
 			public static StringComparer comparer;
         } // GeneExpression
 
@@ -4727,7 +4745,7 @@ namespace ASELib
 				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
 
 				outputFile.WriteLine(fileHeader);
-				outputFile.Write("Gene name\tnon-silent mutation count");
+				outputFile.Write("Gene name\tnon-silent mutation count\tsilent mutation count");
 
 				writeRow(outputFile, allExpressions[0], printMu, minExamplesPerRegion, true, columnSuffix, isTumor);
 
@@ -4735,7 +4753,7 @@ namespace ASELib
 
 				for (int i = 0; i < allExpressions.Count(); i++)
 				{
-					outputFile.Write(ASETools.ConvertToExcelString(allExpressions[i].geneLocationInfo.hugoSymbol) + "\t" + allExpressions[i].mutationCount);
+					outputFile.Write(ASETools.ConvertToExcelString(allExpressions[i].geneLocationInfo.hugoSymbol) + "\t" + allExpressions[i].nonSilentMutationCount + "\t" + allExpressions[i].silentMutationCount);
 
 					writeRow(outputFile, allExpressions[i], printMu, minExamplesPerRegion, false, "", isTumor);
 
@@ -5152,7 +5170,7 @@ namespace ASELib
 					var hugoSymbol = ConvertToNonExcelString(fields[0]);
 
 					// get rid of gene name and optionally mutation count
-					fields = fields.Skip(includeMutationCount ? 1 : 2).ToArray();
+					fields = fields.Skip(includeMutationCount ? 1 : 3).ToArray();
 
 					// the rest of the fields match the index fields
 
@@ -5244,7 +5262,8 @@ namespace ASELib
         public class AlleleSpecificSignal
         {
             public readonly string Hugo_Symbol;
-            public readonly int mutationCount;
+            public readonly int nNonSilentMutations;
+            public readonly int nSilentMutations;
             public readonly double[] nonExclusive = new double[nRegions];
             public readonly double[] exclusive = new double[nRegions];
             public readonly double[] chromosomes = new double[nHumanNuclearChromosomes];
@@ -5252,13 +5271,16 @@ namespace ASELib
             public AlleleSpecificSignal(string Hugo_Symbol_, double[] numericValues)
             {
                 Hugo_Symbol = Hugo_Symbol_;
-                if (numericValues.Count() != 2 * nRegions + nHumanNuclearChromosomes + 1)
+                if (numericValues.Count() != 2 * nRegions + nHumanNuclearChromosomes + 2)
                 {
                     throw new FormatException();
                 }
 
                 int nextValueIndex = 0;
-                mutationCount = (int)numericValues[nextValueIndex];
+                nNonSilentMutations = (int)numericValues[nextValueIndex];
+                nextValueIndex++;
+
+                nSilentMutations = (int)numericValues[nextValueIndex];
                 nextValueIndex++;
 
                 for (int i = 0; i < nRegions; i++)
@@ -5293,7 +5315,7 @@ namespace ASELib
 
             public string OutputString()
             {
-                string retVal =  Hugo_Symbol + "\t" + mutationCount;
+                string retVal =  Hugo_Symbol + "\t" + nNonSilentMutations + "\t" + nSilentMutations;
                 for (int i = 0; i < nRegions; i++)
                 {
                     retVal += "\t" + RegionalSignalFile.stringForDouble(nonExclusive[i]);
@@ -5417,7 +5439,8 @@ namespace ASELib
             {
             }
 
-            public bool open(string filename) {
+            public bool open(string filename_) {
+                filename = filename_;
                 filestream = File.OpenRead(filename);
 
                 var indexReader = CreateStreamReaderWithRetry(filename + ".index");
@@ -5485,6 +5508,11 @@ namespace ASELib
                 filestream.Seek(subfiles[subfileName].offset, SeekOrigin.Begin);
 
                 long totalToRead = subfiles[subfileName].size;
+                if (totalToRead > int.MaxValue)
+                {
+                    Console.WriteLine("ConsolodatedFileReader.GetSubfile: Unable to create subfile because the stream is too big: " + totalToRead + " > " + int.MaxValue + ".  File " + filename + " subfile " + subfileName + ".");
+                    return null;
+                }
                 var buffer = new byte[totalToRead];
                 long amountRead = 0;
                 int maxReadSize = 2146435072;   // 2 GiB - 1MiB
@@ -5547,7 +5575,8 @@ namespace ASELib
 
             FileStream filestream;
             Dictionary<string, SubFile> subfiles = new Dictionary<string, SubFile>();
-        }
+            string filename;
+        } // ConsolodatedFileReader
 
         public class Genome
         {
@@ -6152,6 +6181,16 @@ namespace ASELib
 				return ((double)Math.Abs(nMatchingReference - nMatchingAlt)) / (nMatchingReference + nMatchingAlt);
 			}
 
+            public double AltFraction()
+            {
+                if (nMatchingAlt + nMatchingReference == 0)
+                {
+                    return 0.5; // Whatever
+                }
+
+                return (double)nMatchingAlt / (nMatchingReference + nMatchingAlt);
+            }
+
 			public static ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig, 
 				int start_position, 
 				string reference_allele, 
@@ -6721,6 +6760,11 @@ namespace ASELib
 
 				return str;
 			}
+
+            public bool isSilent()
+            {
+                return variantClassification == "Silent";
+            }
             
 
             public bool CausesNonsenseMediatedDecay()
@@ -7516,6 +7560,18 @@ namespace ASELib
             return 2;
         }
 
+        public static string ZeroOneManyString(int value)
+        {
+            switch (ZeroOneMany(value))
+            {
+                case 0: return "0";
+                case 1: return "1";
+                case 2: return ">1";
+            }
+
+            return "DANGER, WILL ROBINSON!  ASETools.ZeroOneMany() returned an unexpected value.";    // Just to make it compile
+        }
+
 
 		public class BisulfateCase
 		{
@@ -7954,6 +8010,10 @@ namespace ASELib
             {
                 return (n == -1 ? "*" : Convert.ToString(n)) + "\t" + (mean == double.NegativeInfinity ? "*" : Convert.ToString(mean)) + "\t" + (stdDev == double.NegativeInfinity ? "*" : Convert.ToString(stdDev));
             }
+            public bool valid()
+            {
+                return n != -1 && mean != double.NegativeInfinity && stdDev != double.NegativeInfinity;
+            }
         }
 
         public class SingleExpressionResult
@@ -7966,12 +8026,15 @@ namespace ASELib
             //
             public double oneVsMany;
             public double oneVsNotOne;
+            public double oneSilentVsNone;
 
             public readonly NMeandAndStdDev zeroMutationStats;
             public readonly NMeandAndStdDev oneMutationStats;
             public readonly NMeandAndStdDev moreThanOneMutationStats;
+            public readonly NMeandAndStdDev onlyOneSilentMutationStats;
+            public readonly NMeandAndStdDev zeroNoSilent;
 
-        public static List<string> getHeaders(bool mu, bool exclusive, string range)
+            public static List<string> getHeaders(bool mu, bool exclusive, string range)
             {
                 //
                 // This is pretty much a match for the code that generates the headers in the first place, which results in strange double spaces in some places.
@@ -7980,8 +8043,9 @@ namespace ASELib
                 string muString = ((!mu) ? "" : " mu") + (!exclusive? "" : " exclusive");
                 result.Add(range + " 1 vs. many" + muString);
                 result.Add(range + " 1 vs. not 1" + muString);
+                result.Add(range + " 1 silent vs. no mutations at all" + muString);
 
-                string[] mutationSets = { "0", "1", ">1" };
+                string[] mutationSets = { "0", "1", ">1", "1 Silent", "0, no Silent" };
 
                 for (int i = 0; i < mutationSets.Count(); i++)
                 {
@@ -7998,12 +8062,15 @@ namespace ASELib
                 var regionString = regionIndexToString(rangeIndex) + (exclusive ? " exclusive " : " ");
                 return regionString + "1 vs. many\t" +
                        regionString + "1 vs. not 1\t" +
+                       regionString + "1 silent vs. no mutations at all\t" +
                        NMeandAndStdDev.getHeaderString(regionString + "0 mutation ") + "\t" +
                        NMeandAndStdDev.getHeaderString(regionString + "1 mutation ") + "\t" +
-                       NMeandAndStdDev.getHeaderString(regionString + ">1 mutation ");
+                       NMeandAndStdDev.getHeaderString(regionString + ">1 mutation ") + "\t" +
+                       NMeandAndStdDev.getHeaderString(regionString + "1 Silent") + "\t" +
+                       NMeandAndStdDev.getHeaderString(regionString + "0, no Silent");
             }
 
-            public SingleExpressionResult(int rangeIndex_, double oneVsMany_, double oneVsNotOne_, NMeandAndStdDev zeroMutationStats_, NMeandAndStdDev oneMutationStats_, NMeandAndStdDev moreThanOneMutationStats_)
+            public SingleExpressionResult(int rangeIndex_, double oneVsMany_, double oneVsNotOne_, double oneSilentVsNone_, NMeandAndStdDev zeroMutationStats_, NMeandAndStdDev oneMutationStats_, NMeandAndStdDev moreThanOneMutationStats_, NMeandAndStdDev onlyOneSilentMutationStats_, NMeandAndStdDev zeroNoSilent_)
             {
                 rangeIndex = rangeIndex_;
                 if (rangeIndex == 0)
@@ -8019,9 +8086,12 @@ namespace ASELib
 
                 oneVsMany = oneVsMany_;
                 oneVsNotOne = oneVsNotOne_;
+                oneSilentVsNone = oneSilentVsNone_;
                 zeroMutationStats = zeroMutationStats_;
                 oneMutationStats = oneMutationStats_;
                 moreThanOneMutationStats = moreThanOneMutationStats_;
+                onlyOneSilentMutationStats = onlyOneSilentMutationStats_;
+                zeroNoSilent = zeroNoSilent_;
             }
 
             public static SingleExpressionResult Parse(int rangeIndex, HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber, bool mu, bool exclusive)
@@ -8036,9 +8106,12 @@ namespace ASELib
                     rangeIndex,
                     fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 vs. many" + muString),
                     fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 vs. not 1" + muString),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 silent vs. no mutations at all" + muString),
                     new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 0 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0 mutation " + muString + " stdDev")),
                     new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 mutation " + muString + " stdDev")),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " >1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " stdDev"))
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " >1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " stdDev")),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 1 Silent mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 Silent mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 Silent mutation " + muString + " stdDev")),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 0, no Silent mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0, no Silent mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0, no Silent mutation " + muString + " stdDev"))
                     );
             }
 
@@ -8046,6 +8119,23 @@ namespace ASELib
             {
                 outputLine += (oneVsMany == double.NegativeInfinity ? "*" : Convert.ToString(oneVsMany)) + "\t" + (oneVsNotOne == double.NegativeInfinity ? "*" : Convert.ToString(oneVsNotOne)) + "\t" +
                     zeroMutationStats.outputString() + "\t" + oneMutationStats.outputString() + "\t" + moreThanOneMutationStats.outputString();
+            }
+
+            public bool anyValid()
+            {
+                return oneVsMany != double.NegativeInfinity || oneVsNotOne != double.NegativeInfinity || zeroMutationStats.valid() || oneMutationStats.valid() || moreThanOneMutationStats.valid();
+            }
+
+            public string nMutationMean(int n)  // n is 0, 1 or 2 (which means >=2)
+            {
+                NMeandAndStdDev stats = (n == 0) ? zeroMutationStats : ((n == 1) ? oneMutationStats : moreThanOneMutationStats);
+
+                if (stats.n < 10 || stats.mean == double.NegativeInfinity)
+                {
+                    return "";      // Empty string rather than the usual *, because the * just confuses Excel when it's trying to make graphs
+                }
+
+                return Convert.ToString(stats.mean);
             }
         } // SingleExpressionResult
 
@@ -8133,6 +8223,17 @@ namespace ASELib
                     for (int i = 0; i < nRegions; i++)
                     {
                         result += "\t" + SingleExpressionResult.getHeaderString(inclusive == 0, i);
+                    }
+                }
+
+                foreach (bool inclusive in BothBools)
+                {
+                    for (int zeroOneMany = 0; zeroOneMany < 3; zeroOneMany++)
+                    {
+                        for (int i = 0; i < nRegions; i++)
+                        {
+                            result += "\t" + ZeroOneManyString(zeroOneMany) + " mutation " + regionIndexToString(i) + (inclusive ? "" : " exclusive");
+                        }
                     }
                 }
 
@@ -10239,7 +10340,7 @@ namespace ASELib
                 int nItemsPerDot = 0)
             {
                 return new ASVThreadingHelper<TPerThreadState>(casesToProcess, aseCorrection,
-                    (v,c) => ((v.somaticMutation && useSomatic) || (!v.somaticMutation && useGermline)) &&
+                    (v,c) => ((v.somaticMutation && useSomatic && !v.isSilent()) || (!v.somaticMutation && useGermline)) &&
                         v.IsASECandidate(tumor, c, configuration, perGeneASEMap, geneMap, inputMinRNACoverage, inputMinDNACoverage),
                     handleOneCase, finishUp, itemDequeued, nItemsPerDot);
             }
@@ -10804,4 +10905,27 @@ namespace ASELib
             return retVal;
         }
     } // GroupByExtension
+
+    public static class EnumerableMedian    // There's certainly a way to do this for generic numeric types rather than just double, but I haven't bothered to figure out how.
+    {
+        public static double Median(this IEnumerable<double> input) 
+        {
+            var list = input.ToList();
+            var n = list.Count();
+            if (n == 0)
+            {
+                return 0;
+            }
+            
+            list.Sort();
+
+            if (n % 2 == 1)
+            {
+                return list[n / 2];
+            } else
+            {
+                return (list[n / 2] + list[n / 2 - 1]) / 2;
+            }
+        }
+    }
 }

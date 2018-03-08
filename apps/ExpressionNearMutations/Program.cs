@@ -139,10 +139,7 @@ namespace ExpressionNearMutations
 				var geneExpressions = new Dictionary<string, ASETools.GeneExpression>();
 				foreach (var mafLine in mafLines)
 				{
-					if (mafLine.Variant_Classification == "Silent")
-					{
-						continue;
-					}
+
 
 					if (!geneLocationInformation.genesByName.ContainsKey(mafLine.Hugo_Symbol))
 					{
@@ -158,8 +155,15 @@ namespace ExpressionNearMutations
 						geneExpressions.Add(mafLine.Hugo_Symbol, new ASETools.GeneExpression(geneLocationInformation.genesByName[mafLine.Hugo_Symbol]));
 					}
 
-					// Increment the muation count by 1
-					geneExpressions[mafLine.Hugo_Symbol].mutationCount++;
+                    // Increment the appropriate muation count by 1
+                    if (mafLine.Variant_Classification == "Silent")
+                    {
+                        geneExpressions[mafLine.Hugo_Symbol].silentMutationCount++;
+                    }
+                    else
+                    {
+                        geneExpressions[mafLine.Hugo_Symbol].nonSilentMutationCount++;
+                    }
 				} // foreach maf line
 
 				List<ASETools.AnnotatedVariant> annotatedVariants = null;

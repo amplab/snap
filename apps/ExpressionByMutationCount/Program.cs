@@ -106,7 +106,7 @@ namespace ExpressionByMutationCount
                     (perCaseASE == null || 
                         perCaseASE.ContainsKey(x.case_id) && perCaseASE[x.case_id].tumorASE != double.NegativeInfinity && perCaseASE[x.case_id].tumorASE < overallTumorASEAboveWhichToExcludeCases && 
                         perCaseASE[x.case_id].tumorASE > overallTumorASEBelowWhichToExcludeCases && perCaseASE[x.case_id].tumorMaxChromosome >= maxChromosomeASEBelowWhichToExcludeCases)) ||
-                (!forAlleleSpecificExpression && x.gene_expression_filename != "")).ToList();
+                (!forAlleleSpecificExpression && x.gene_expression_filename != "")).Take(100) /*BJB*/ .ToList();
 
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
@@ -296,15 +296,17 @@ namespace ExpressionByMutationCount
         } // Main
         class ExpressionInstance : IComparer<ExpressionInstance>
         {
-            public ExpressionInstance(string tumorType_, int nMutations_, double z_, string case_id_)
+            public ExpressionInstance(string tumorType_, int nMutations_, int nSilentMutations_, double z_, string case_id_)
             {
                 tumorType = tumorType_;
-                nMutations = nMutations_;
+                nNonSilentMutations = nMutations_;
+                nSilentMutations = nSilentMutations_;
                 z = z_;
                 case_id = case_id_;
             }
 
-            public readonly int nMutations;
+            public readonly int nNonSilentMutations;
+            public readonly int nSilentMutations;
             public readonly double z;       // Or mu, as appropriate
             public readonly string tumorType;
             public readonly string case_id;
@@ -388,7 +390,7 @@ namespace ExpressionByMutationCount
                     perGeneLinesFile = new StreamWriter(Stream.Null);
                 }
 
-                perGeneLinesFile.Write("Case ID\tdisease abbr.\tHugo Symbol\tMutation Count");
+                perGeneLinesFile.Write("Case ID\tdisease abbr.\tHugo Symbol\tMutation Count\tSilent Mutation Count");
 
                 foreach (var inclusive in ASETools.BothBools)
                 {
@@ -437,7 +439,7 @@ namespace ExpressionByMutationCount
                 }
 
                 //
-                // Now the headers for the columns that are only filled in for genes with exactly one somatic mutation
+                // Now the headers for the columns that are only filled in for genes with exactly one non-silent somatic mutation
                 //
                 perGeneLinesFile.Write("\tRef Allele\tAlt Allele\tContig\tLocus");
                 perGeneLinesFile.Write("\tNormal DNA nMatchingReference\tNormal DNA nMatchingAlt\tNormal DNA nMatchingNeither\tNormal DNA nMatchingBoth");
@@ -446,7 +448,7 @@ namespace ExpressionByMutationCount
                 perGeneLinesFile.WriteLine("Variant Class\tVariant Type");
             } // GeneState ctor
 
-            public void AddExpression(string tumorType, int range, int nMutations, double z /* or mu, as approproate*/, string case_id, bool usingMu, bool exclusive)
+            public void AddExpression(string tumorType, int range, int nNonSilentMutations, int nSilentMutations, double z /* or mu, as approproate*/, string case_id, bool usingMu, bool exclusive)
             {
                 bool wholeAutosome = range == ASETools.nRegions - 1;
 
@@ -455,17 +457,17 @@ namespace ExpressionByMutationCount
                     expressionByRange[wholeAutosome][usingMu][exclusive].Add(range, new List<ExpressionInstance>());
                 }
 
-                expressionByRange[wholeAutosome][usingMu][exclusive][range].Add(new ExpressionInstance(tumorType, nMutations, z, case_id));
+                expressionByRange[wholeAutosome][usingMu][exclusive][range].Add(new ExpressionInstance(tumorType, nNonSilentMutations, nSilentMutations, z, case_id));
             }
 
-            public void AddWholeAutosomeExpression(string tumorType, int nMutations, double z /* or mu, as approproate*/, string case_id, bool usingMu, bool exclusive)
+            public void AddWholeAutosomeExpression(string tumorType, int nNonSilentMutations, int nSilentMutations, double z /* or mu, as approproate*/, string case_id, bool usingMu, bool exclusive)
             {
-                AddExpression(tumorType, ASETools.nRegions - 1, nMutations, z, case_id, usingMu, exclusive);
+                AddExpression(tumorType, ASETools.nRegions - 1, nNonSilentMutations, nSilentMutations, z, case_id, usingMu, exclusive);
             }
 
-            public void AddPerChromosomeExpression(string tumorType, int nMutations, double z /*or mu as appropriate*/, string case_id, bool usingMu, int whichChromosome)
+            public void AddPerChromosomeExpression(string tumorType, int nNonSilentMutations, int nSilentMutations, double z /*or mu as appropriate*/, string case_id, bool usingMu, int whichChromosome)
             {
-                perChromosomeExpression[usingMu][whichChromosome].Add(new ExpressionInstance(tumorType, nMutations, z, case_id));
+                perChromosomeExpression[usingMu][whichChromosome].Add(new ExpressionInstance(tumorType, nNonSilentMutations, nSilentMutations, z, case_id));
             }
 
             public bool loadPerCaseState(Dictionary<string, string> sampleToParticipantIDMap, Dictionary<string, ASETools.Case> experimentsByRNAAnalysisID)
@@ -519,12 +521,16 @@ namespace ExpressionByMutationCount
             public int nZero = 0;
             public int nSingle = 0;
             public int nMultiple = 0;
+            public int nOneSilent = 0;
 
             public double totalTumorAltAlleleFractionSingle = 0;
             public int nTumorFractionSingle = 0;   // Different from nSingle because not all of the sites qualify, becuase of copy number, DNA ratio, etc.
 
             public double totalTumorAltAlleleFractionMultiple = 0;  // This has one value per tumor added, which is the mean for that tumor.
             public int nTumorFractionMultiple = 0;
+
+            public double totalTumorAltAlleleFractionSingleSilent = 0;
+            public int nTumorFractionSingleSilent = 0;
         }
 
         static List<ExpressionInstance> FilterUnusualMutantsIfRequested(List<ExpressionInstance> instances, GeneState geneState, bool excludeUnusualMutants)
@@ -607,8 +613,8 @@ namespace ExpressionByMutationCount
 
         static void WriteHeaderGroup(string regionName, StreamWriter outputFile, string muString) // Writes out the header for the complete set of measurements for one region
         {
-            outputFile.Write(/*"\t" + groupId + " 0 vs. 1" + muString + "\t" + groupId + " 0 vs. not zero" + muString +*/ "\t" + regionName + " 1 vs. many" + muString + "\t" + regionName + " 1 vs. not 1" + muString);
-            string[] mutationSets = { "0", "1", ">1" };
+            outputFile.Write(/*"\t" + groupId + " 0 vs. 1" + muString + "\t" + groupId + " 0 vs. not zero" + muString +*/ "\t" + regionName + " 1 vs. many" + muString + "\t" + regionName + " 1 vs. not 1" + muString + "\t" + regionName + " 1 silent vs. no mutations at all" + muString);
+            string[] mutationSets = { "0", "1", ">1", "1 Silent", "0, no Silent" };
 
             for (int i = 0; i < mutationSets.Count(); i++)
             {
@@ -697,10 +703,11 @@ namespace ExpressionByMutationCount
             }
         } // WriteCounts
 
-        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isZero = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 0);
-        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 1);
-        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isNotOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations != 1);
-        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isMoreThanOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations > 1);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isZero = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nNonSilentMutations == 0);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nNonSilentMutations == 1);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isNotOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nNonSilentMutations != 1);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isMoreThanOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nNonSilentMutations > 1);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isOneSilent = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nSilentMutations == 1 && x.nNonSilentMutations == 0);
 
         static double ExtractZFromExpressionInstance(ExpressionInstance expressionInstance)
         {
@@ -719,30 +726,36 @@ namespace ExpressionByMutationCount
 
                     //ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nMutations < 2 && x.tumorType == disease).ToList(), isZero, true, geneToProcess, true);
                     //ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.tumorType == disease).ToList(), isZero, true, geneToProcess, true);
-                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nMutations != 0 && x.tumorType == disease).ToList(), isOne, true, geneToProcess, true);
+                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nNonSilentMutations != 0 && x.tumorType == disease).ToList(), isOne, true, geneToProcess, true);
                     ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.tumorType == disease).ToList(), isOne, false, geneToProcess, true);
+                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.tumorType == disease && x.nNonSilentMutations == 0).ToList(), isOneSilent, true, geneToProcess, true);
 
-                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nMutations == 0 && x.tumorType == disease).ToList(), geneToProcess, true);
-                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nMutations == 1 && x.tumorType == disease).ToList(), geneToProcess, true);
-                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nMutations >1 && x.tumorType == disease).ToList(), geneToProcess, true);
+                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 0 && x.tumorType == disease).ToList(), geneToProcess, true);
+                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 1 && x.tumorType == disease).ToList(), geneToProcess, true);
+                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nNonSilentMutations >1 && x.tumorType == disease).ToList(), geneToProcess, true);
+                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nSilentMutations == 1 && x.nNonSilentMutations == 0 && x.tumorType == disease).ToList(), geneToProcess, true);
+                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nSilentMutations == 0 && x.nNonSilentMutations == 0 && x.tumorType == disease).ToList(), geneToProcess, true);
                 }
 
                 //ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nMutations < 2).ToList(), isZero, true, geneToProcess, true);
                 //ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances, isZero, true, geneToProcess, true);
-                ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nMutations != 0).ToList(), isOne, false, geneToProcess, true);
+                ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations != 0).ToList(), isOne, false, geneToProcess, true);
                 ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances, isOne, false, geneToProcess, true);
+                ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 0).ToList(), isOneSilent, true, geneToProcess, true);
 
-                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nMutations == 0).ToList(), geneToProcess, true);
-                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nMutations == 1).ToList(), geneToProcess, true);
-                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nMutations > 1).ToList(), geneToProcess, true);
+                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 0).ToList(), geneToProcess, true);
+                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 1).ToList(), geneToProcess, true);
+                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations > 1).ToList(), geneToProcess, true);
+                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nSilentMutations == 1 && x.nNonSilentMutations == 0).ToList(), geneToProcess, true);
+                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nSilentMutations == 0 && x.nNonSilentMutations == 0).ToList(), geneToProcess, true);
             }
             else
             {
                 foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
                 {
-                    perDiseaseOutputFileEntry.Value.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
+                    perDiseaseOutputFileEntry.Value.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
                 }
-                panCancerOutputFile.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
+                panCancerOutputFile.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
             }
         } // WriteMannWhitneyToFiles
 
@@ -821,7 +834,7 @@ namespace ExpressionByMutationCount
                 //
                 if (dependOnTP53)
                 {
-                    int tp53MutationCount = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == "TP53").Count();
+                    int tp53MutationCount = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == "TP53" && !x.isSilent()).Count();
 
                     if ((tp53MutationCount != 0) == excludeTP53Mutants)
                     {
@@ -861,14 +874,18 @@ namespace ExpressionByMutationCount
                             continue;
                         }
 
-                        int mutationCount = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).Count();
-                        if (mutationCount == 0)
+                        int nonSilentMutationCount = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol && !x.isSilent()).Count();
+                        int silentMutationCount = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol && x.isSilent()).Count();
+
+
+                        if (nonSilentMutationCount == 0)
                         {
                             geneToProcess.countsByDisease[disease].nZero++;
                             geneToProcess.overallCounts.nZero++;
-                        } else if (mutationCount == 1)
+                        }
+                        else if (nonSilentMutationCount == 1)
                         {
-                            var asv = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).ToList()[0];
+                            var asv = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol && !x.isSilent()).ToList()[0];
                             if (asv.IsASECandidate(true, copyNumber, configuration, null, null) && // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
                                 !asv.CausesNonsenseMediatedDecay())
                             {
@@ -879,12 +896,13 @@ namespace ExpressionByMutationCount
                             }
                             geneToProcess.countsByDisease[disease].nSingle++;
                             geneToProcess.overallCounts.nSingle++;
-                        } else
+                        }
+                        else
                         {
                             int nValidASE = 0;
                             double totalFraction = 0;
                             bool anyNonsense = false;
-                            foreach (var asv in annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).ToList())
+                            foreach (var asv in annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol && !x.isSilent()).ToList())
                             {
                                 if (asv.IsASECandidate(true, copyNumber, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
                                 {
@@ -906,15 +924,32 @@ namespace ExpressionByMutationCount
                             geneToProcess.overallCounts.nMultiple++;
                         }
 
+                        if (silentMutationCount == 1 && nonSilentMutationCount == 0)
+                        {
+                            var asv = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).ToList()[0];
+                            if (asv.IsASECandidate(true, copyNumber, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
+                            {
+                                geneToProcess.countsByDisease[disease].nTumorFractionSingleSilent++;
+                                geneToProcess.countsByDisease[disease].totalTumorAltAlleleFractionSingleSilent += asv.GetTumorAltAlleleFraction();
+                                geneToProcess.overallCounts.nTumorFractionSingleSilent++;
+                                geneToProcess.overallCounts.totalTumorAltAlleleFractionSingle += asv.GetTumorAlleleSpecificExpression();
+                            }
+
+                            geneToProcess.countsByDisease[disease].nOneSilent++;
+                            geneToProcess.overallCounts.nOneSilent++;
+                        }
+
+
+
                         var thisExpression = expressionForThisCase[geneToProcess.hugo_symbol];
 
                         processTimer.Start();
 
                         process1Timer.Start();
                         geneToProcess.perGeneLinesFile.Write(case_.case_id + "\t" + disease + "\t" + thisExpression.OutputString());
-                        if (thisExpression.mutationCount == 1)
+                        if (thisExpression.nNonSilentMutations == 1)
                         {
-                            var mutations = annotatedSelectedVariants.Where(x => x.Hugo_symbol == geneToProcess.hugo_symbol && x.somaticMutation).ToList();
+                            var mutations = annotatedSelectedVariants.Where(x => x.Hugo_symbol == geneToProcess.hugo_symbol && x.somaticMutation && !x.isSilent()).ToList();
                             if (mutations.Count() != 1)
                             {
                                 Console.WriteLine("Found wrong number of somatic mutations for gene " + geneToProcess.hugo_symbol + " in case " + case_.case_id + ": " + mutations.Count() + " != 1");
@@ -939,14 +974,14 @@ namespace ExpressionByMutationCount
                             process2Timer.Start();
                             if (thisExpression.nonExclusive[i] != double.NegativeInfinity)
                             {
-                                geneToProcess.AddExpression(disease, i, thisExpression.mutationCount, thisExpression.nonExclusive[i], case_.case_id, false, false);
+                                geneToProcess.AddExpression(disease, i, thisExpression.nNonSilentMutations, thisExpression.nSilentMutations, thisExpression.nonExclusive[i], case_.case_id, false, false);
                             }
                             process2Timer.Stop();
 
                             process3Timer.Start();
                             if (thisExpression.exclusive[i] != double.NegativeInfinity && i != 0) // Exclude i = 0, since exclusive in-gene is the same as inclusive in-gene, so it only serves to increase the Bonferroni factor without doing anything
                             {
-                                geneToProcess.AddExpression(disease, i, thisExpression.mutationCount, thisExpression.exclusive[i], case_.case_id, false, true);
+                                geneToProcess.AddExpression(disease, i, thisExpression.nNonSilentMutations, thisExpression.nSilentMutations, thisExpression.exclusive[i], case_.case_id, false, true);
                             }
                             process3Timer.Stop();
                         }

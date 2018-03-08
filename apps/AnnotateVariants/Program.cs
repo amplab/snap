@@ -22,6 +22,8 @@ namespace AnnotateVariants
         static ASETools.Genome genome = new ASETools.Genome();
 
         static int failedCases = 0;
+        static int nCasesProcessed = 0;
+        static int nCasesToProcess;
 
         static void ProcessCases(List<ASETools.Case> casesToProcess, ASETools.Configuration configuration, VariantType variantType)
         {
@@ -66,9 +68,30 @@ namespace AnnotateVariants
 
                         foreach (var mafLine in mafLines)
                         {
-                            annotatedVariants.Add(AnnotateVariant(mafLine.Hugo_Symbol, true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, mafLine.Variant_Classification, mafLine.getExtractedReadsExtension()));
+                            try
+                            {
+                                annotatedVariants.Add(AnnotateVariant(mafLine.Hugo_Symbol, true, case_, mafLine.Chromosome, 
+                                                                        mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, 
+                                                                        mafLine.Variant_Type, mafLine.Variant_Classification, mafLine.getExtractedReadsExtension()));
+                            } catch (FileNotFoundException f)
+                            {
+                                //
+                                // This can happen when there are so many reads that it's > 2GB.  We just skip annotating those variants.  Unfortunately, it can also happen
+                                // when the file actually doesn't exist.  So, check to see if it's the first one.
+                                //
+                                if (annotatedVariants.Count() == 0)
+                                {
+                                    throw f;
+                                } else
+                                {
+                                    Console.WriteLine("Skipping annotating somatic variant that had too many reads.  Case " + case_.case_id + ", hugo symbol " + mafLine.Hugo_Symbol + ", chrom " + mafLine.Chromosome + " start " + mafLine.Start_Position);
+                                    continue;
+                                }
+                            }
                         }
                     } // somatic variants
+
+                    int nSomaticVariants = annotatedVariants.Count();
 
                     if (!variantType.Equals(VariantType.somatic))
                     {
@@ -81,11 +104,29 @@ namespace AnnotateVariants
 
                         foreach (var selectedVariant in selectedVariants)
                         {
-                            annotatedVariants.Add(AnnotateVariant("", false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP", "",
-                                selectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
+                            try
+                            {
+                                annotatedVariants.Add(AnnotateVariant("", false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP", "",
+                                    selectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
+                            } catch (FileNotFoundException f)
+                            {
+                                //
+                                // This can happen when there are so many reads that it's > 2GB.  We just skip annotating those variants.  Unfortunately, it can also happen
+                                // when the file actually doesn't exist.  So, check to see if it's the first one.
+                                //
+                                if (annotatedVariants.Count() == nSomaticVariants)
+                                {
+                                    throw f;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Skipping annotating germline variant that had too many reads.  Case " + case_.case_id + ", chrom " + selectedVariant.contig + " start " + selectedVariant.locus);
+                                    continue;
+                                }
+                            }
                         }
                     } // germline variants
-                } catch (FileNotFoundException) {
+                } catch {
                     Console.WriteLine("Error handling case " + case_.case_id + ".  Skipping it.");
                     Interlocked.Increment(ref failedCases);
                     continue;
@@ -94,7 +135,11 @@ namespace AnnotateVariants
 				// write out annotated selected variants
                 string outputFilename = ASETools.GetDirectoryFromPathname(case_.selected_variants_filename) + @"\" + case_.case_id + ASETools.annotatedSelectedVariantsExtension;
 
-				Console.WriteLine("Writing " + annotatedVariants.Count() + " annotated variants to file " + outputFilename + ", it took " + ASETools.ElapsedTimeInSeconds(timer) + " to compute.");
+                lock (casesToProcess)
+                {
+                    nCasesProcessed++;
+                    Console.WriteLine("Writing " + annotatedVariants.Count() + " annotated variants to file " + outputFilename + ", it took " + ASETools.ElapsedTimeInSeconds(timer) + " to compute. " + nCasesProcessed + "/" + nCasesToProcess);
+                }
 				ASETools.AnnotatedVariant.writeFile(outputFilename, annotatedVariants);
 
 			} // while true (grabbing cases from the work queue)
@@ -173,7 +218,7 @@ namespace AnnotateVariants
                 }
             }
 
-			int nCasesToProcess = casesToProcess.Count();
+			nCasesToProcess = casesToProcess.Count();
 
 			// get reference 
 			genome.load(configuration.indexDirectory);

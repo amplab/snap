@@ -516,6 +516,7 @@ namespace ASEProcessManager
 				filesToDownload = null;
 
                 string casesToProcess = "";
+                int nCasesToProcess = 0;
 
 				foreach (var caseEntry in stateOfTheWorld.cases)
 				{
@@ -538,11 +539,13 @@ namespace ASEProcessManager
 					}
 
                     casesToProcess += case_.case_id + " ";  // Batch them both to allow for thread paralleleism within the program and also to reduce the number of (slow) job add commands to set up the script.
+                    nCasesToProcess++;
 
-                    if (casesToProcess.Count() > 1000)
+                    if (nCasesToProcess >= 80)
                     {
                         AddCasesToScripts(stateOfTheWorld, casesToProcess, script, hpcScript);
                         casesToProcess = "";
+                        nCasesToProcess = 0;
                     }
 				} // foreach case
 
@@ -2025,6 +2028,73 @@ namespace ASEProcessManager
 
         } // ZeroOneTwoProcessingStage
 
+        class MannWhitneyProcessingStage : ProcessingStage
+        {
+            public MannWhitneyProcessingStage() { }
+
+            public string GetStageName() { return "Mann-Whitney"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.geneScatterGraphsDirectory + ASETools.mannWhitneyFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.scatterGraphsSummaryFile == "")
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MannWhitney.exe");
+                nAddedToScript = 1;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+        } // MannWhitneyProcessingStage
+
+        class PerCaseASEProcessingStage : ProcessingStage
+        {
+            public PerCaseASEProcessingStage() { }
+            public string GetStageName() { return "Per-case ASE"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerCaseASEFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.annotated_selected_variants_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ComputePerCaseASE.exe");
+                nAddedToScript = 1;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+        } // PerCaseASEProcessingStage
+
         class FPKMProcessingStage : ProcessingStage
 		{
 			public FPKMProcessingStage() { }
@@ -2560,6 +2630,8 @@ namespace ASEProcessManager
             processingStages.Add(new ASEConsistencyProcessingStage());
             processingStages.Add(new ASEMapProcessingStage());
             processingStages.Add(new ZeroOneTwoProcessingStage());
+            processingStages.Add(new MannWhitneyProcessingStage());
+            processingStages.Add(new PerCaseASEProcessingStage());
 
             if (checkDependencies)
             {

@@ -17,6 +17,8 @@ namespace MannWhitney
         {
             public bool isSingle;
             public double RatioOfRatios;    // (RNAMut / RNANormal) / (DNAMut / DNANormal), or...how far above the main diagonal it is
+            public bool nonsenseMediatedDecayCausing;
+            public double VAF; // RNAMut / RNANormal
             public int Compare(Mutation a, Mutation b)
             {
                 return xCompare(a, b);
@@ -101,6 +103,8 @@ namespace MannWhitney
                     var mutation = new Mutation();
                     mutation.isSingle = !scatterGraphLine.MultipleMutationsInThisGene;
                     mutation.RatioOfRatios = scatterGraphLine.ratioOfRatios;
+                    mutation.VAF = scatterGraphLine.tumorRNAReadCounts.AltFraction();
+                    mutation.nonsenseMediatedDecayCausing = ASETools.NonsenseMediatedDecayCausingVariantClassifications.Contains(scatterGraphLine.Variant_Classification);
                     allRatioOfRatios.Add(mutation.RatioOfRatios);
 
                     mutations.Add(mutation);
@@ -128,7 +132,17 @@ namespace MannWhitney
                 allRatioOfRatios.Sort();
 
                 var outputLine = new OutputLine();
-                outputLine.line = ASETools.ConvertToExcelString(hugoSymbol) + "\t" + nSingle + "\t" + nMultiple + "\t" + U + "\t" + z + "\t" + reversed + "\t" + p + "\t" + allRatioOfRatios[allRatioOfRatios.Count() / 2] + "\t" + sexGenes.Contains(hugoSymbol.ToLower());
+                outputLine.line = ASETools.ConvertToExcelString(hugoSymbol) + "\t" + nSingle + "\t" + nMultiple + "\t" + U + "\t" + z + "\t" + reversed + "\t" + p + "\t" + allRatioOfRatios[allRatioOfRatios.Count() / 2];
+                if (mutations.Where(x => x.isSingle && !x.nonsenseMediatedDecayCausing).Count() != 0 && mutations.Where(x => !x.isSingle && !x.nonsenseMediatedDecayCausing).Count() != 0)
+                {
+                    outputLine.line += "\t" + mutations.Where(x => x.isSingle && !x.nonsenseMediatedDecayCausing).Select(x => x.VAF).Average() / mutations.Where(x => !x.isSingle && !x.nonsenseMediatedDecayCausing).Select(x => x.VAF).Average();
+                    outputLine.line += "\t" + mutations.Where(x => x.isSingle && !x.nonsenseMediatedDecayCausing).Select(x => x.VAF).Median() / mutations.Where(x => !x.isSingle && !x.nonsenseMediatedDecayCausing).Select(x => x.VAF).Median();
+                }
+                else
+                {
+                    outputLine.line += "\t*\t*";
+                }
+                outputLine.line +=  "\t" + sexGenes.Contains(hugoSymbol.ToLower());
                 outputLine.p = p;
                 outputLines.Add(outputLine);
                 // Probably should tweak median for even-sized distributions
@@ -136,7 +150,7 @@ namespace MannWhitney
             } // foreach hugo symhol
 
             var output = ASETools.CreateStreamWriterWithRetry(configuration.geneScatterGraphsDirectory + ASETools.mannWhitneyFilename);
-            output.WriteLine("HugoSymbol\tnSingle\tnMultiple\tU\tz\treversed\tp (Pre-Bonferroni)\tmedian ratio-of-ratios\tsex\tp (post-Bonferroni)");
+            output.WriteLine("HugoSymbol\tnSingle\tnMultiple\tU\tz\treversed\tp (Pre-Bonferroni)\tmedian ratio-of-ratios\tmean(single)/mean(multiple)\tmedian(single)/median(multiple)\tsex\tp (post-Bonferroni)");
 
             foreach (var outputLine in outputLines)
             {

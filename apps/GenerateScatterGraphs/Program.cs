@@ -14,6 +14,52 @@ namespace GenerateScatterGraphs
     class Program
     {
 
+        public class SortableOutputLine : IComparable
+        {
+            public SortableOutputLine(string outputLine_, bool multiple_, bool nonsense_mediated_decay_causing_, string disease_, string chromosome_, int start_position_)
+            {
+                outputLine = outputLine_;
+                multiple = multiple_;
+                nonsense_mediated_decay_causing = nonsense_mediated_decay_causing_;
+                disease = disease_;
+                chromosome = chromosome_;
+                start_position = start_position_;
+            }
+
+            public int CompareTo(object peerObject)
+            {
+                SortableOutputLine peer = (SortableOutputLine)peerObject;
+
+                if (multiple != peer.multiple)
+                {
+                    return multiple ? 1 : -1;
+                }
+
+                if (nonsense_mediated_decay_causing != peer.nonsense_mediated_decay_causing)
+                {
+                    return nonsense_mediated_decay_causing ? 1 : -1;
+                }
+
+                if (disease != peer.disease)
+                {
+                    return disease.CompareTo(peer.disease);
+                }
+
+                if (chromosome != peer.chromosome)
+                {
+                    return chromosome.CompareTo(peer.chromosome);
+                }
+
+                return start_position.CompareTo(peer.start_position);
+            }
+
+            public readonly string outputLine;
+            public readonly bool multiple;
+            public readonly bool nonsense_mediated_decay_causing;
+            public readonly string disease;
+            public readonly string chromosome;
+            public readonly int start_position;
+        }
 
         class GeneState
         {
@@ -23,7 +69,7 @@ namespace GenerateScatterGraphs
             }
 
             public string hugo_symbol;
-            public List<string> output = new List<string>();
+            public List<SortableOutputLine> output = new List<SortableOutputLine>();
             public List<string> outputUnfiltered = new List<string>();
 
             public Dictionary<string, int> countByDisease = new Dictionary<string, int>();
@@ -503,15 +549,16 @@ if (false)
                     "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
 
                 file.WriteLine(headerLine + histogramLines[0] + "\t" + histogram2Lines[0]);
+                geneState.output.Sort();
                 for (int i = 0; i < geneState.output.Count(); i++)
                 {
                     if (i < histogramLines.Count()-1)
                     {
-                        file.WriteLine(geneState.output[i] + "\t" + histogramLines[i+1] + "\t" + histogram2Lines[i+1]);
+                        file.WriteLine(geneState.output[i].outputLine + "\t" + histogramLines[i+1] + "\t" + histogram2Lines[i+1]);
                     }
                     else
                     {
-                        file.WriteLine(geneState.output[i]);
+                        file.WriteLine(geneState.output[i].outputLine);
                     }
                 }
 
@@ -568,7 +615,7 @@ if (false)
 
 
                 string[] excludedGenes = { "Y_RNA", "SNORA70", "SNORA75" };    // These don't correspond to just one genome location, so exclude them.
-                var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename).Where(x => x.somaticMutation && !excludedGenes.Contains(x.Hugo_symbol) && selectedGeneNames.Contains(x.Hugo_symbol.ToLower())).ToList();
+                var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename).Where(x => x.somaticMutation && !x.isSilent() && !excludedGenes.Contains(x.Hugo_symbol) && selectedGeneNames.Contains(x.Hugo_symbol.ToLower())).ToList();
                 var mappedBaseCount = ASETools.MappedBaseCount.readFromFile(case_.tumor_rna_mapped_base_count_filename);
 
                 foreach (var annotatedVariant in annotatedVariants)
@@ -704,7 +751,7 @@ if (false)
                         outputLine += "\t\t\t\t\t\t";
                     }
 
-                    localGeneState.output.Add(outputLine);
+                    localGeneState.output.Add(new SortableOutputLine(outputLine, nMutationsThisGene > 1, annotatedVariant.CausesNonsenseMediatedDecay(), disease, annotatedVariant.contig, annotatedVariant.locus));
 
                     if (tumorDNAFraction < .6 && tumorDNAFraction > .1 && tumorRNAFraction >= .67 && tumorRNAFraction < .999)
                     {

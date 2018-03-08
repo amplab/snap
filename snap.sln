@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26430.6
+VisualStudioVersion = 15.0.27004.2005
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{76E127A5-2247-4A10-9DC8-59518C7C6636}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -153,6 +153,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QnDFindCase", "apps\QnDFindCase\QnDFindCase.csproj", "{F2E306FE-AB44-4635-A8A5-21EB5B6FB6BD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckASV", "CheckASV\CheckASV.csproj", "{E0235064-D813-4171-B708-A80C60062459}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CategorizeTumors", "apps\CategorizeTumors\CategorizeTumors.csproj", "{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -1072,6 +1074,22 @@ Global
 		{E0235064-D813-4171-B708-A80C60062459}.Release|Win32.Build.0 = Release|Any CPU
 		{E0235064-D813-4171-B708-A80C60062459}.Release|x64.ActiveCfg = Release|x64
 		{E0235064-D813-4171-B708-A80C60062459}.Release|x64.Build.0 = Release|x64
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Debug|Win32.Build.0 = Debug|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Debug|x64.ActiveCfg = Debug|x64
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Debug|x64.Build.0 = Debug|x64
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Release|Win32.ActiveCfg = Release|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Release|Win32.Build.0 = Release|Any CPU
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Release|x64.ActiveCfg = Release|x64
+		{36B41CE9-DAD5-483C-9F1E-DF1DBA698C5A}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

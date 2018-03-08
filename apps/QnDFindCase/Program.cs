@@ -56,7 +56,7 @@ namespace QnDFindCase
         }  // Main
         static void handleOneCase(ASETools.Case case_, int state, List<ASETools.AnnotatedVariant> variantsForThisCase, ASETools.ASECorrection aseCorrection, Dictionary<bool, List<ASETools.CopyNumberVariation>> copyNumber)
         {
-            if (variantsForThisCase.Where(x => x.somaticMutation && x.Hugo_symbol == "TP53" && x.CausesNonsenseMediatedDecay()).Count() == 0)
+            if (variantsForThisCase.Where(x => x.somaticMutation && x.Hugo_symbol == "TP53" && x.CausesNonsenseMediatedDecay() && !x.isSilent()).Count() == 0)
             {
                 return;
             }

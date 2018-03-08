@@ -143,7 +143,7 @@ namespace MutationDistributions
 				}
 
 				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
-				var somaticVariants = annotatedVariants.Where(r => r.somaticMutation);
+				var somaticVariants = annotatedVariants.Where(r => r.somaticMutation && !r.isSilent());
 
                 var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
 
@@ -159,7 +159,7 @@ namespace MutationDistributions
 
 					// bin value by disease and gene. 
 					// keep track of whether it is germline or somatic
-					if (annotatedVariant.somaticMutation)
+					if (annotatedVariant.somaticMutation && !annotatedVariant.isSilent())
 					{
 						int bin = binValue(rnaAltFraction, binCount);
 

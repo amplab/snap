@@ -135,11 +135,12 @@ namespace CountVariantsInGenes
                     continue;
                 }
 
-                outputFile.WriteLine("Hugo_Symbol\tnVariantsInGene\tnSomaticMutations");
+                outputFile.WriteLine("Hugo_Symbol\tnVariantsInGene\tnSomaticMutations\tSilentSomaticMutations");
 
                 foreach (var geneEntry in countsByGene)
                 {
-                    outputFile.WriteLine(geneEntry.Key + "\t" + geneEntry.Value + "\t" + annotatedSelectedVariants.Where(x => x.Hugo_symbol == geneEntry.Key && x.somaticMutation).Count());
+                    outputFile.WriteLine(geneEntry.Key + "\t" + geneEntry.Value + "\t" + annotatedSelectedVariants.Where(x => x.Hugo_symbol == geneEntry.Key && x.somaticMutation && !x.isSilent()).Count() + "\t" +
+                        annotatedSelectedVariants.Where(x => x.Hugo_symbol == geneEntry.Key && x.somaticMutation && x.isSilent()).Count());
                 }
 
                 outputFile.WriteLine("**done**");

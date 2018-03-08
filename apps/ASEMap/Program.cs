@@ -144,14 +144,14 @@ namespace ASEMap
                         continue;   // Only use germline variants for the map.
                     }
 
-                    if (!annotatedVariant.somaticMutation && annotatedVariant.IsASECandidate(false, copyNumber, configuration, null, geneMap))  // null out the per-gene ASE, since we're where it comes from
+                    if (annotatedVariant.IsASECandidate(false, copyNumber, configuration, null, geneMap))  // null out the per-gene ASE, since we're where it comes from
                     {
                         normalMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetNormalAlleleSpecificExpression());
                         thisThreadMeasurements.Add(new ASEMeasurement(annotatedVariant.GetNormalAlleleSpecificExpression(), false));
                         normalPerGeneASEThisCase.recordSample(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetNormalAlleleSpecificExpression(), annotatedVariant.normalRNAReadCounts.totalReads() / normalMappedBaseCount);
                     }
 
-                    if (!annotatedVariant.somaticMutation && annotatedVariant.IsASECandidate(true, copyNumber, configuration, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
+                    if (annotatedVariant.IsASECandidate(true, copyNumber, configuration, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
                     {
  
                         tumorMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression());

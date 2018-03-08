@@ -82,7 +82,7 @@ namespace OverallDistribution
                     {
                         foreach (var somatic in ASETools.BothBools)
                         {
-                            if (!variant.somaticMutation == somatic)
+                            if (!variant.somaticMutation == somatic || variant.isSilent())
                             {
                                 continue;
                             }
