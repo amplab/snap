@@ -327,14 +327,15 @@ namespace MakeSignificant012Graphs
                 //
                 // Pull the three CDF columns at the top of the file next to one another, since that's what we make into graphs.
                 //
-                outputFile.WriteLine("CDFs for 0, 1 and >1 mutations and 1 silent mutation.");
+                outputFile.WriteLine("CDFs for 0, 1 and >1 mutations and 1 silent mutation.\tDistribution of ASE " + ASETools.RangeToDescriptiveString(resultToReport.range) + " of " + resultToReport.line.hugo_symbol + " by " + resultToReport.line.hugo_symbol + 
+                    " mutation count\tFraction of cohort with this ASE or less (cdf)");
                 ASETools.HistogramResultLine[][] histogramLines = new ASETools.HistogramResultLine[nHistogramsPerResult][];
                 for (int i = 0; i < nHistogramsPerResult; i++)
                 {
                     histogramLines[i] = resultToReport.histograms[i].ComputeHistogram();
                 }
 
-                outputFile.WriteLine("minValue\t0 mutations (n = " + histogramLines[0].Select(x => x.count).Sum() + ")\t1 mutation (n = " + histogramLines[1].Select(x => x.count).Sum() + ")\t> 1 mutation (n = " + histogramLines[2].Select(x => x.count).Sum() + ")" +
+                outputFile.WriteLine("minValue\t0 mutations (n = " + histogramLines[0].Select(x => x.count).Sum() + ")\t1 non-silent mutation (n = " + histogramLines[1].Select(x => x.count).Sum() + ")\t> 1 mutation (n = " + histogramLines[2].Select(x => x.count).Sum() + ")" +
                     "\t1 silent mutation (n = " + histogramLines[3].Select(x => x.count).Sum() + ")");
                 for (int whichLine = 0; whichLine < nLinesPerHistogram; whichLine++)
                 {

@@ -19,11 +19,16 @@ namespace ASEMap
             public int nCases = 0;
             public double totalASE = 0;
             public double totalASESquared = 0;
+
+            public double mean()
+            {
+                return totalASE / nCases;
+            }
         }
 
         class ASEMap
         {
-            Dictionary<string, Dictionary<int, MapEntry>> map = new Dictionary<string, Dictionary<int, MapEntry>>();
+            public Dictionary<string, Dictionary<int, MapEntry>> map = new Dictionary<string, Dictionary<int, MapEntry>>();
 
             public void addASE(string chromosome, int locus, double ase)
             {
@@ -429,6 +434,27 @@ namespace ASEMap
                 Console.WriteLine((int)(nFirstGroup + nSecondGroup) + " total ASE measurements between tumor and normal.  Distributions differ with p = " + p + ".  Mean for tumor is " +
                     allMeasurements.Where(x => x.tumor).Select(x => x.ase).Average() + " mean for normal is " + allMeasurements.Where(x => !x.tumor).Select(x => x.ase).Average());
             }
+
+            var differenceMapOutputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.ASEDifferenceMapFilename);
+            differenceMapOutputFile.WriteLine("Chromosome\tlocus\tnormal ASE\ttumor ASE\tdifference");
+            foreach (var normalMapEntry in normalMap.map)
+            {
+                var chromosome = normalMapEntry.Key;
+                var normalChromosomeMap = normalMapEntry.Value;
+
+                foreach (var normalChromosomeMapEntry in normalChromosomeMap)
+                {
+                    var locus = normalChromosomeMapEntry.Key;
+                    var normalData = normalChromosomeMapEntry.Value;
+
+                    if (tumorMap.map[chromosome].ContainsKey(locus))
+                    {
+                        differenceMapOutputFile.WriteLine(chromosome + "\t" + locus + "\t" + normalMap.map[chromosome][locus].mean() + "\t" + tumorMap.map[chromosome][locus].mean() + "\t" + (tumorMap.map[chromosome][locus].mean() - normalMap.map[chromosome][locus].mean()));
+                    }
+                }
+            }
+
+            differenceMapOutputFile.Close();
             Console.Write("Took " + ASETools.ElapsedTimeInSeconds(timer));
 
         }

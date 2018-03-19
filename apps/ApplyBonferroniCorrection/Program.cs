@@ -33,8 +33,10 @@ namespace ApplyBonferroniCorrection
                 {
                     if (result.nonExclusiveResultsByRange[i].oneVsMany != double.NegativeInfinity) overallValidCount++;
                     if (result.nonExclusiveResultsByRange[i].oneVsNotOne != double.NegativeInfinity) overallValidCount++;
+                    if (result.nonExclusiveResultsByRange[i].oneSilentVsOneNotSilent != double.NegativeInfinity) overallValidCount++;
                     if (result.exclusiveResultsByRange[i].oneVsMany != double.NegativeInfinity) overallValidCount++;
                     if (result.exclusiveResultsByRange[i].oneVsNotOne != double.NegativeInfinity) overallValidCount++;
+                    if (result.exclusiveResultsByRange[i].oneSilentVsOneNotSilent != double.NegativeInfinity) overallValidCount++;
                 }
             }
 
@@ -63,11 +65,22 @@ namespace ApplyBonferroniCorrection
             public bool minPIsOneVsNotOne = false;
         }
 
+        public static string histogramSetToName(int whichHistogramSet)
+        {
+            switch(whichHistogramSet)
+            {
+                case 0: return "1 vs. not 1";
+                case 1: return "1 vs. many";
+                case 2: return "1 silent vs. 1 not silent";
+                default: throw new IndexOutOfRangeException();
+            }
+        }
+
         //
         // Apply the bonferroni correction and update our stats.
         //
         static int ProcessSinglePValue(string hugoSymbol, int nOne, int nOther, double ASE, double ASENotOne, string inputFilename, ref double p, int bonferroniCorrection, 
-            bool exclusive, int whichHistogramSet /* 0 - one v. not 1, 1 - 1 v many, 2 - one silent v. none at all*/, int regionIndex, PValueStats pValueStats, HistogramSet histogramSet, StreamWriter allSignificantResultsFile)
+            bool exclusive, int whichHistogramSet /* 0 - one v. not 1, 1 - 1 v many, 2 - one silent v. one not silent*/, int regionIndex, PValueStats pValueStats, HistogramSet histogramSet, StreamWriter allSignificantResultsFile)
         {
             if (p == double.NegativeInfinity)   // Not a p-value because not enough data
             {
@@ -84,7 +97,7 @@ namespace ApplyBonferroniCorrection
                 histogramSet.oneVsMany.addValue(p);
             } else
             {
-                histogramSet.oneSilentVsNoneAtAll.addValue(p);
+                histogramSet.oneSilentVsOneNotSilent.addValue(p);
             }
 
             if (ASETools.GetFileNameFromPathname(inputFilename).Contains("_"))
@@ -133,10 +146,15 @@ namespace ApplyBonferroniCorrection
 
             if (p <= configuration.significanceLevel)
             {
-                pValueStats.significantAt.Add(Convert.ToString(regionIndex) + (exclusive ? "E" : ""));
+                pValueStats.significantAt.Add(Convert.ToString(regionIndex) + (exclusive ? "E" : "") + ((whichHistogramSet == 2) ? "S" : ""));
+
+if (ASE == double.NegativeInfinity)
+{
+    Console.WriteLine("Here!");
+}
 
                 allSignificantResultsFile.WriteLine(hugoSymbol + "\t" + ASE + "\t" + (ASENotOne == double.NegativeInfinity ? "*" : Convert.ToString(ASENotOne)) + "\t" + 
-                    ASETools.GetFileNameFromPathname(inputFilename) + "\t" + exclusive + "\t" + whichHistogramSet + "\t" + regionIndex + "\t" + ASETools.regionIndexToString(regionIndex) + "\t" + p);
+                    ASETools.GetFileNameFromPathname(inputFilename) + "\t" + exclusive + "\t" + histogramSetToName(whichHistogramSet) + "\t" + regionIndex + "\t" + ASETools.regionIndexToString(regionIndex) + "\t" + p);
                 return 1;
             } else
             {
@@ -160,7 +178,7 @@ namespace ApplyBonferroniCorrection
 
             nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.oneMutationStats.n, singleResult.moreThanOneMutationStats.n, singleResult.oneMutationStats.mean, singleResult.moreThanOneMutationStats.mean, inputFilename, ref singleResult.oneVsMany, bonferroniCorrection, exclusive, 1, regionIndex, pValueStats, histogramSet, allSignificantResultsFile);
             nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.oneMutationStats.n, singleResult.moreThanOneMutationStats.n + singleResult.zeroMutationStats.n, singleResult.oneMutationStats.mean, ASENotOne, inputFilename, ref singleResult.oneVsNotOne, bonferroniCorrection, exclusive, 0, regionIndex, pValueStats, histogramSet, allSignificantResultsFile);
-            nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.onlyOneSilentMutationStats.n, singleResult.zeroNoSilent.n, singleResult.onlyOneSilentMutationStats.mean, singleResult.zeroNoSilent.mean, inputFilename, ref singleResult.oneSilentVsNone, bonferroniCorrection, exclusive, 2, regionIndex, pValueStats, histogramSet, allSignificantResultsFile);
+            nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.onlyOneSilentMutationStats.n, singleResult.oneMutationStats.n, singleResult.onlyOneSilentMutationStats.mean, singleResult.oneMutationStats.mean, inputFilename, ref singleResult.oneSilentVsOneNotSilent, bonferroniCorrection, exclusive, 2, regionIndex, pValueStats, histogramSet, allSignificantResultsFile);
 
             if (singleResult.oneMutationStats.n > 0 && singleResult.zeroMutationStats.n > 0 && singleResult.oneMutationStats.mean != 0 && 
                 (singleResult.oneVsNotOne <= configuration.significanceLevel && singleResult.oneVsNotOne != double.NegativeInfinity|| singleResult.oneVsMany <= configuration.significanceLevel && singleResult.oneVsMany != double.NegativeInfinity))
@@ -314,11 +332,11 @@ namespace ApplyBonferroniCorrection
 
                 foreach (bool inclusive in ASETools.BothBools)
                 {
-                    for (int zeroOneMany = 0; zeroOneMany < 3; zeroOneMany++)
+                    for (int zeroOneManySilent = 0; zeroOneManySilent < 4; zeroOneManySilent++)
                     {
                        for (int region = 0; region < ASETools.nRegions; region++)
                         {
-                            outputLine += "\t" + result.resultsByRange[inclusive][region].nMutationMean(zeroOneMany);
+                            outputLine += "\t" + result.resultsByRange[inclusive][region].nMutationMean(zeroOneManySilent);
                         } // region
                     } // zeroOneMany
                 } // exclusive
@@ -375,7 +393,7 @@ namespace ApplyBonferroniCorrection
                 allResults = new ASETools.Histogram(namePrefix + " all results");
                 oneVsMany = new ASETools.Histogram(namePrefix + " one vs. many");
                 oneVsNotOne = new ASETools.Histogram(namePrefix + " one vs. not one");
-                oneSilentVsNoneAtAll = new ASETools.Histogram(namePrefix + " one silent vs. none at all");
+                oneSilentVsOneNotSilent = new ASETools.Histogram(namePrefix + " one silent vs. none at all");
                 panCancer = new ASETools.Histogram(namePrefix + " pan cancer");
                 singleDisease = new ASETools.Histogram(namePrefix + " single disease");
                 nGreaterThan20 = new ASETools.Histogram(namePrefix + " n > 20");
@@ -388,7 +406,7 @@ namespace ApplyBonferroniCorrection
                 allHistograms.Add(allResults);
                 allHistograms.Add(oneVsMany);
                 allHistograms.Add(oneVsNotOne);
-                allHistograms.Add(oneSilentVsNoneAtAll);
+                allHistograms.Add(oneSilentVsOneNotSilent);
                 allHistograms.Add(panCancer);
                 allHistograms.Add(singleDisease);
                 allHistograms.Add(nGreaterThan20);
@@ -401,7 +419,7 @@ namespace ApplyBonferroniCorrection
             public ASETools.Histogram allResults;
             public ASETools.Histogram oneVsMany;
             public ASETools.Histogram oneVsNotOne;
-            public ASETools.Histogram oneSilentVsNoneAtAll;
+            public ASETools.Histogram oneSilentVsOneNotSilent;
             public ASETools.Histogram panCancer;
             public ASETools.Histogram singleDisease;
             public ASETools.Histogram nGreaterThan20;

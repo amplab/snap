@@ -2373,6 +2373,7 @@ namespace ASELib
         public const string HistogramsForSignficantResultsFilename = "HistogramsForSignificantResults.txt";
         public const string PerGeneRNARatioFilename = "PerGeneRNARatio.txt";
         public const string ASEMapFilename = "ASEMap.txt";
+        public const string ASEDifferenceMapFilename = "ASEDifferenceMap.txt";
         public const string PerGeneASEMapFilename = "ASEMap-PerGene.txt";
         public const string PerCaseASEFilename = "PerCaseASE.txt";
         public const string UncorrectedOverallASEFilename = "UncorrectedOverallASE.txt";
@@ -6739,7 +6740,7 @@ namespace ASELib
 			}
         } // Region
 
-        public readonly static string[] NonsenseMediatedDecayCausingVariantClassifications = { "Splice_Site", "Nonsense_Mutation", "Frame_Shift_Del", "Frame_Shift_Ins" };
+        public readonly static string[] NonsenseMediatedDecayCausingVariantClassifications = { "Splice_Site", "Nonsense_Mutation", "Frame_Shift_Del", "Frame_Shift_Ins", "Nonstop_Mutation", "Splice_Region" };
 
         public class AnnotatedVariant : IComparable
         {
@@ -8026,13 +8027,12 @@ namespace ASELib
             //
             public double oneVsMany;
             public double oneVsNotOne;
-            public double oneSilentVsNone;
+            public double oneSilentVsOneNotSilent;
 
             public readonly NMeandAndStdDev zeroMutationStats;
             public readonly NMeandAndStdDev oneMutationStats;
             public readonly NMeandAndStdDev moreThanOneMutationStats;
             public readonly NMeandAndStdDev onlyOneSilentMutationStats;
-            public readonly NMeandAndStdDev zeroNoSilent;
 
             public static List<string> getHeaders(bool mu, bool exclusive, string range)
             {
@@ -8043,9 +8043,9 @@ namespace ASELib
                 string muString = ((!mu) ? "" : " mu") + (!exclusive? "" : " exclusive");
                 result.Add(range + " 1 vs. many" + muString);
                 result.Add(range + " 1 vs. not 1" + muString);
-                result.Add(range + " 1 silent vs. no mutations at all" + muString);
+                result.Add(range + " 1 silent vs. 1 not silent" + muString);
 
-                string[] mutationSets = { "0", "1", ">1", "1 Silent", "0, no Silent" };
+                string[] mutationSets = { "0", "1", ">1", "1 Silent" };
 
                 for (int i = 0; i < mutationSets.Count(); i++)
                 {
@@ -8062,15 +8062,14 @@ namespace ASELib
                 var regionString = regionIndexToString(rangeIndex) + (exclusive ? " exclusive " : " ");
                 return regionString + "1 vs. many\t" +
                        regionString + "1 vs. not 1\t" +
-                       regionString + "1 silent vs. no mutations at all\t" +
+                       regionString + "1 silent vs. 1 not silent\t" +
                        NMeandAndStdDev.getHeaderString(regionString + "0 mutation ") + "\t" +
                        NMeandAndStdDev.getHeaderString(regionString + "1 mutation ") + "\t" +
                        NMeandAndStdDev.getHeaderString(regionString + ">1 mutation ") + "\t" +
-                       NMeandAndStdDev.getHeaderString(regionString + "1 Silent") + "\t" +
-                       NMeandAndStdDev.getHeaderString(regionString + "0, no Silent");
+                       NMeandAndStdDev.getHeaderString(regionString + "1 Silent");
             }
 
-            public SingleExpressionResult(int rangeIndex_, double oneVsMany_, double oneVsNotOne_, double oneSilentVsNone_, NMeandAndStdDev zeroMutationStats_, NMeandAndStdDev oneMutationStats_, NMeandAndStdDev moreThanOneMutationStats_, NMeandAndStdDev onlyOneSilentMutationStats_, NMeandAndStdDev zeroNoSilent_)
+            public SingleExpressionResult(int rangeIndex_, double oneVsMany_, double oneVsNotOne_, double oneSilentVsOneNotSilent_, NMeandAndStdDev zeroMutationStats_, NMeandAndStdDev oneMutationStats_, NMeandAndStdDev moreThanOneMutationStats_, NMeandAndStdDev onlyOneSilentMutationStats_)
             {
                 rangeIndex = rangeIndex_;
                 if (rangeIndex == 0)
@@ -8086,12 +8085,11 @@ namespace ASELib
 
                 oneVsMany = oneVsMany_;
                 oneVsNotOne = oneVsNotOne_;
-                oneSilentVsNone = oneSilentVsNone_;
+                oneSilentVsOneNotSilent = oneSilentVsOneNotSilent_;
                 zeroMutationStats = zeroMutationStats_;
                 oneMutationStats = oneMutationStats_;
                 moreThanOneMutationStats = moreThanOneMutationStats_;
                 onlyOneSilentMutationStats = onlyOneSilentMutationStats_;
-                zeroNoSilent = zeroNoSilent_;
             }
 
             public static SingleExpressionResult Parse(int rangeIndex, HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber, bool mu, bool exclusive)
@@ -8106,29 +8104,28 @@ namespace ASELib
                     rangeIndex,
                     fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 vs. many" + muString),
                     fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 vs. not 1" + muString),
-                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 silent vs. no mutations at all" + muString),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 silent vs. 1 not silent" + muString),
                     new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 0 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0 mutation " + muString + " stdDev")),
                     new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 mutation " + muString + " stdDev")),
                     new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " >1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " stdDev")),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 1 Silent mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 Silent mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 Silent mutation " + muString + " stdDev")),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 0, no Silent mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0, no Silent mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0, no Silent mutation " + muString + " stdDev"))
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 1 Silent mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 Silent mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 Silent mutation " + muString + " stdDev"))
                     );
             }
 
             public void appendToString(ref string outputLine)
             {
-                outputLine += (oneVsMany == double.NegativeInfinity ? "*" : Convert.ToString(oneVsMany)) + "\t" + (oneVsNotOne == double.NegativeInfinity ? "*" : Convert.ToString(oneVsNotOne)) + "\t" +
-                    zeroMutationStats.outputString() + "\t" + oneMutationStats.outputString() + "\t" + moreThanOneMutationStats.outputString();
+                outputLine += ASETools.stringForDouble(oneVsMany) + "\t" + ASETools.stringForDouble(oneVsNotOne) + "\t" + ASETools.stringForDouble(oneSilentVsOneNotSilent) + "\t" +
+                    zeroMutationStats.outputString() + "\t" + oneMutationStats.outputString() + "\t" + moreThanOneMutationStats.outputString() + "\t" + onlyOneSilentMutationStats.outputString();
             }
 
             public bool anyValid()
             {
-                return oneVsMany != double.NegativeInfinity || oneVsNotOne != double.NegativeInfinity || zeroMutationStats.valid() || oneMutationStats.valid() || moreThanOneMutationStats.valid();
+                return oneVsMany != double.NegativeInfinity || oneVsNotOne != double.NegativeInfinity || oneSilentVsOneNotSilent != double.NegativeInfinity || zeroMutationStats.valid() || oneMutationStats.valid() || moreThanOneMutationStats.valid() || onlyOneSilentMutationStats.valid();
             }
 
-            public string nMutationMean(int n)  // n is 0, 1 or 2 (which means >=2)
+            public string nMutationMean(int n)  // n is 0, 1, 2 (which means >=2) or 3 (which means 1 silent)
             {
-                NMeandAndStdDev stats = (n == 0) ? zeroMutationStats : ((n == 1) ? oneMutationStats : moreThanOneMutationStats);
+                NMeandAndStdDev stats = (n == 0) ? zeroMutationStats : ((n == 1) ? oneMutationStats : ((n == 2) ? moreThanOneMutationStats : onlyOneSilentMutationStats));
 
                 if (stats.n < 10 || stats.mean == double.NegativeInfinity)
                 {
@@ -8228,11 +8225,11 @@ namespace ASELib
 
                 foreach (bool inclusive in BothBools)
                 {
-                    for (int zeroOneMany = 0; zeroOneMany < 3; zeroOneMany++)
+                    for (int zeroOneManySilent = 0; zeroOneManySilent < 4; zeroOneManySilent++)
                     {
                         for (int i = 0; i < nRegions; i++)
                         {
-                            result += "\t" + ZeroOneManyString(zeroOneMany) + " mutation " + regionIndexToString(i) + (inclusive ? "" : " exclusive");
+                            result += "\t" + ((zeroOneManySilent == 3) ? "one silent" :   ZeroOneManyString(zeroOneManySilent)) + " mutation " + regionIndexToString(i) + (inclusive ? "" : " exclusive");
                         }
                     }
                 }

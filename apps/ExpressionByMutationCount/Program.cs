@@ -106,7 +106,7 @@ namespace ExpressionByMutationCount
                     (perCaseASE == null || 
                         perCaseASE.ContainsKey(x.case_id) && perCaseASE[x.case_id].tumorASE != double.NegativeInfinity && perCaseASE[x.case_id].tumorASE < overallTumorASEAboveWhichToExcludeCases && 
                         perCaseASE[x.case_id].tumorASE > overallTumorASEBelowWhichToExcludeCases && perCaseASE[x.case_id].tumorMaxChromosome >= maxChromosomeASEBelowWhichToExcludeCases)) ||
-                (!forAlleleSpecificExpression && x.gene_expression_filename != "")).Take(100) /*BJB*/ .ToList();
+                (!forAlleleSpecificExpression && x.gene_expression_filename != "")).ToList();
 
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
@@ -613,8 +613,8 @@ namespace ExpressionByMutationCount
 
         static void WriteHeaderGroup(string regionName, StreamWriter outputFile, string muString) // Writes out the header for the complete set of measurements for one region
         {
-            outputFile.Write(/*"\t" + groupId + " 0 vs. 1" + muString + "\t" + groupId + " 0 vs. not zero" + muString +*/ "\t" + regionName + " 1 vs. many" + muString + "\t" + regionName + " 1 vs. not 1" + muString + "\t" + regionName + " 1 silent vs. no mutations at all" + muString);
-            string[] mutationSets = { "0", "1", ">1", "1 Silent", "0, no Silent" };
+            outputFile.Write(/*"\t" + groupId + " 0 vs. 1" + muString + "\t" + groupId + " 0 vs. not zero" + muString +*/ "\t" + regionName + " 1 vs. many" + muString + "\t" + regionName + " 1 vs. not 1" + muString + "\t" + regionName + " 1 silent vs. 1 not silent" + muString);
+            string[] mutationSets = { "0", "1", ">1", "1 Silent" };
 
             for (int i = 0; i < mutationSets.Count(); i++)
             {
@@ -728,34 +728,32 @@ namespace ExpressionByMutationCount
                     //ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.tumorType == disease).ToList(), isZero, true, geneToProcess, true);
                     ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nNonSilentMutations != 0 && x.tumorType == disease).ToList(), isOne, true, geneToProcess, true);
                     ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.tumorType == disease).ToList(), isOne, false, geneToProcess, true);
-                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.tumorType == disease && x.nNonSilentMutations == 0).ToList(), isOneSilent, true, geneToProcess, true);
+                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.tumorType == disease && (x.nNonSilentMutations == 1 && x.nSilentMutations == 0 || x.nSilentMutations == 1 && x.nNonSilentMutations == 0)).ToList(), isOneSilent, true, geneToProcess, true);
 
                     ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 0 && x.tumorType == disease).ToList(), geneToProcess, true);
                     ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 1 && x.tumorType == disease).ToList(), geneToProcess, true);
                     ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nNonSilentMutations >1 && x.tumorType == disease).ToList(), geneToProcess, true);
                     ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nSilentMutations == 1 && x.nNonSilentMutations == 0 && x.tumorType == disease).ToList(), geneToProcess, true);
-                    ComputeNMeanAndStandardDeviationAndPrint(perDiseaseOutputFile, expressionInstances.Where(x => x.nSilentMutations == 0 && x.nNonSilentMutations == 0 && x.tumorType == disease).ToList(), geneToProcess, true);
                 }
 
                 //ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nMutations < 2).ToList(), isZero, true, geneToProcess, true);
                 //ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances, isZero, true, geneToProcess, true);
                 ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations != 0).ToList(), isOne, false, geneToProcess, true);
                 ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances, isOne, false, geneToProcess, true);
-                ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 0).ToList(), isOneSilent, true, geneToProcess, true);
+                ComputeMannWhitneyAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 1 && x.nSilentMutations == 0 || x.nSilentMutations == 1 && x.nNonSilentMutations == 0).ToList(), isOneSilent, true, geneToProcess, true);
 
                 ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 0).ToList(), geneToProcess, true);
                 ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations == 1).ToList(), geneToProcess, true);
                 ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nNonSilentMutations > 1).ToList(), geneToProcess, true);
                 ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nSilentMutations == 1 && x.nNonSilentMutations == 0).ToList(), geneToProcess, true);
-                ComputeNMeanAndStandardDeviationAndPrint(panCancerOutputFile, expressionInstances.Where(x => x.nSilentMutations == 0 && x.nNonSilentMutations == 0).ToList(), geneToProcess, true);
             }
             else
             {
                 foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
                 {
-                    perDiseaseOutputFileEntry.Value.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
+                    perDiseaseOutputFileEntry.Value.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
                 }
-                panCancerOutputFile.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
+                panCancerOutputFile.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
             }
         } // WriteMannWhitneyToFiles
 

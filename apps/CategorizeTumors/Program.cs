@@ -25,17 +25,18 @@ namespace CategorizeTumors
             public int nOnePlusASE = 0;
             public int nOnePlusReverseASE = 0;
             public int nMinorSubclone = 0;
+            public int nNonsenseMediatedDecay = 0;
             public int nSingle = 0;
             public int nTooFewReads = 0;
 
             public int totalEvaluated()
             {
-                return nZero + nMultiple + nLossOfHeterozygosity + nOnePlusASE + nOnePlusReverseASE + nMinorSubclone + nSingle;
+                return nZero + nMultiple + nLossOfHeterozygosity + nOnePlusASE + nOnePlusReverseASE + nMinorSubclone + nNonsenseMediatedDecay + nSingle;
             }
 
             public int totalMutant()    // Excluding minor subclones
             {
-                return nMultiple + nLossOfHeterozygosity + nOnePlusASE + nOnePlusReverseASE + nSingle;
+                return nMultiple + nLossOfHeterozygosity + nOnePlusASE + nOnePlusReverseASE + nSingle + nNonsenseMediatedDecay;
             }
 
             string frac(int numerator)
@@ -45,7 +46,7 @@ namespace CategorizeTumors
                     return "*";
                 }
 
-                return Convert.ToString((double) numerator / totalEvaluated());
+                return Convert.ToString((double)numerator / totalEvaluated());
             }
 
             string fracOfAllMutant(int numerator)
@@ -57,12 +58,13 @@ namespace CategorizeTumors
 
                 return Convert.ToString((double)numerator / totalMutant());
             }
-            public string fracZero()  { return frac(nZero); }
+            public string fracZero() { return frac(nZero); }
             public string fracMultiple() { return frac(nMultiple); }
             public string fracLossOfHeterozygosity() { return frac(nLossOfHeterozygosity); }
             public string fracOnePlusASE() { return frac(nOnePlusASE); }
             public string fracOnePlusReverseASE() { return frac(nOnePlusReverseASE); }
             public string fracMinorSubclone() { return frac(nMinorSubclone); }
+            public string fracNonsenseMediatedDecay() { return frac(nNonsenseMediatedDecay); }
             public string fracSingle() { return frac(nSingle); }
 
             public string fracOfAllMutantMultiple() { return fracOfAllMutant(nMultiple); }
@@ -70,6 +72,7 @@ namespace CategorizeTumors
             public string fracOfAllMutantOnePlusASE() { return fracOfAllMutant(nOnePlusASE); }
             public string fracOfAllMutantOnePlusReverseASE() { return fracOfAllMutant(nOnePlusReverseASE); }
             public string fracOfAllMutantSingle() { return fracOfAllMutant(nSingle); }
+            public string fracOfAllMutantNonsenseMediatedDecay() { return fracOfAllMutant(nNonsenseMediatedDecay); }
 
             public int CompareTo(Result peer)
             {
@@ -158,6 +161,12 @@ namespace CategorizeTumors
                         continue;
                     }
 
+                    if (ASETools.NonsenseMediatedDecayCausingVariantClassifications.Contains(line.Variant_Classification))
+                    {
+                        result.nNonsenseMediatedDecay++;
+                        continue;
+                    }
+
                     if (line.tumorRNAReadCounts.AltFraction() > 0.6)
                     {
                         result.nOnePlusASE++;
@@ -190,7 +199,8 @@ namespace CategorizeTumors
 
             outputFile.WriteLine("Hugo Symbol\tn Too Few Reads\tn Evaluated\tn Mutant (ignoring minor subclones)\tn No Mutations\tfrac No Mutations\tn Minor Subclone\tfrac Minor Subclone\tn Multiple Mutations\tfrac Multiple Mutations\tfrac of all mutant multiple mutations"
                 + "\tn Loss of Heterozygosity\tfrac Loss of Heterozygosity\tfrac of all mutant loss of heterozygosity"
-                + "\tn Reverse ASE\tfrac Reverse ASE\tfrac of all mutant reverse ASE\tn ASE\tfrac ASE\tfrac of all mutant ASE\tn Single\tfrac Single\tfrac of all mutant single");
+                + "\tn nonsense mediated decay\tfrac nonsense mediated decay\tfrac of all mutant nonsense medidated decay"
+                + "\tn Reverse ASE\tfrac Reverse ASE\tfrac of all mutant reverse ASE\tn ASE\tfrac ASE\tfrac of all mutant ASE\tn Single\tfrac Single\tfrac of all mutant single\tgraph title\theading1\theading2\theading3\theading4\theading5\theading6\theading7\theading8");
 
             foreach (var result in results)
             {
@@ -199,9 +209,11 @@ namespace CategorizeTumors
                     + "\t" + result.nMinorSubclone + "\t" + result.fracMinorSubclone()
                     + "\t" + result.nMultiple + "\t" + result.fracMultiple() + "\t" + result.fracOfAllMutantMultiple()
                     + "\t" + result.nLossOfHeterozygosity + "\t" + result.fracLossOfHeterozygosity() +"\t" + result.fracOfAllMutantLossOfHeterozygosity()
+                    + "\t" + result.nNonsenseMediatedDecay + "\t" + result.fracNonsenseMediatedDecay() + "\t" + result.fracOfAllMutantNonsenseMediatedDecay()
                     + "\t" + result.nOnePlusReverseASE + "\t" + result.fracOnePlusReverseASE() + "\t" + result.fracOfAllMutantOnePlusReverseASE()
                     + "\t" + result.nOnePlusASE + "\t" + result.fracOnePlusASE() + "\t" + result.fracOfAllMutantOnePlusASE()
                     + "\t" + result.nSingle + "\t" + result.fracSingle() + "\t" + result.fracOfAllMutantSingle()
+                    + "\tBreakdown of " + result.hugo_symbol + " mutant tumors excluding minor subclones\tNo mutations\tMinor subclone\tMultiple mutations\tLoss of heterozygosity\tNonsense mediated decay\t> 60% Wild type\t> 60% Mutant\tEven expression"
                     );
             }
 
