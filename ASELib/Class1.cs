@@ -10872,9 +10872,6 @@ namespace ASELib
 
             return Convert.ToInt32(range);
         }
-
-
-
     } // ASETools
 
     //

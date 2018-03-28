@@ -173,6 +173,15 @@ namespace AnnotateVariants
             return new ASETools.AnnotatedVariant(Hugo_symbol, somatic, contig, start_position, reference_allele, alt_allele, variantType, variantClassification, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
         }
 
+        //
+        // The backward comparison is so the biggest ones go first.
+        //
+        static int CompareCasesBySelectedReadsFileSizesBackwards(ASETools.Case one, ASETools.Case two)
+        {
+            return (two.normal_dna_reads_at_selected_variants_size + two.tumor_dna_reads_at_selected_variants_size + two.normal_rna_reads_at_selected_variants_size + two.tumor_rna_reads_at_selected_variants_size).CompareTo(
+                one.normal_dna_reads_at_selected_variants_size + one.tumor_dna_reads_at_selected_variants_size + one.normal_rna_reads_at_selected_variants_size + one.tumor_rna_reads_at_selected_variants_size);
+        }
+
         static int Main(string[] args)
         {
             var timer = new Stopwatch();
@@ -232,7 +241,13 @@ namespace AnnotateVariants
 
 			var threads = new List<Thread>();
 
-			for (int i = 0; i < Environment.ProcessorCount; i++)
+            // Sort the cases to process in reverse order of total selected reads file size, so the slower ones go first in order to avoid 
+            // sitting around waiting for one long run at the end.
+
+            casesToProcess.Sort(CompareCasesBySelectedReadsFileSizesBackwards);
+
+
+            for (int i = 0; i < Environment.ProcessorCount; i++)
 			{
 				threads.Add(new Thread(() => ProcessCases(casesToProcess, configuration, variantType)));
 			}

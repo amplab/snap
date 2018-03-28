@@ -213,7 +213,7 @@ namespace CategorizeTumors
                     + "\t" + result.nOnePlusReverseASE + "\t" + result.fracOnePlusReverseASE() + "\t" + result.fracOfAllMutantOnePlusReverseASE()
                     + "\t" + result.nOnePlusASE + "\t" + result.fracOnePlusASE() + "\t" + result.fracOfAllMutantOnePlusASE()
                     + "\t" + result.nSingle + "\t" + result.fracSingle() + "\t" + result.fracOfAllMutantSingle()
-                    + "\tBreakdown of " + result.hugo_symbol + " mutant tumors excluding minor subclones\tNo mutations\tMinor subclone\tMultiple mutations\tLoss of heterozygosity\tNonsense mediated decay\t> 60% Wild type\t> 60% Mutant\tEven expression"
+                    + "\tBreakdown of " + result.hugo_symbol + " mutant tumors excluding minor subclones\tNo mutations\tMinor subclone\tMultiple mutations\tLoss of heterozygosity\tNonsense mediated decay\tVAF < 0.4\tVAF > 0.6\t0.4 <= VAF <= 0.6"
                     );
             }
 

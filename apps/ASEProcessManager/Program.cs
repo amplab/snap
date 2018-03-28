@@ -1749,8 +1749,7 @@ namespace ASEProcessManager
                 {
                     nDone++;
                 } else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "" && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == ""
-                           || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename)
-                           || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))))
+                           || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename) || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename))))
                 {
                     nWaitingForPrerequisites++;
                 } else
@@ -1764,7 +1763,9 @@ namespace ASEProcessManager
                     nDone++;
                 }
                 else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "" && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == "")) ||
-                    !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename))
+                    !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename)
+                    || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename)
+                    || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename))
                 { 
                     nWaitingForPrerequisites++;
                 }
@@ -2082,7 +2083,8 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.annotated_selected_variants_filename == ""))
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.annotated_selected_variants_filename == "") || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename)
+                    || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
