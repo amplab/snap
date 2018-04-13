@@ -14,6 +14,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using MathNet.Numerics;
 using System.Globalization;
+using System.Runtime;
 
 namespace ASELib
 {
@@ -226,11 +227,36 @@ namespace ASELib
 
 			public readonly bool fromUnfilteredFile; // If this is true, then the fields after the read counts are uninitialized and invalid.
 
+            public readonly string rawInputLine;
+
+            public const string unfilteredHeaderLine = "Hugo_Symbol\tChromosome\tStart_Position\tVariant_Classification\tVariant_Type\tReference_Allele\tAlt_Allele\tdisease\t" +
+                    "Case Id\tTumor DNA File ID\tTumor RNA File ID\tNormal DNA File ID\tNormal RNA File ID\t" +
+                    "n_normal_DNA_Matching_Reference\tn_normal_DNA_Matching_Alt\tn_normal_DNA_Matching_Neither\tn_normal_DNA_Matching_Both\t" +
+                    "n_tumor_DNA_Matching_Reference\tn_tumor_DNA_Matching_Alt\tn_tumor_DNA_Matching_Neither\tn_tumor_DNA_Matching_Both\t" +
+                    "n_normal_RNA_Matching_Reference\tn_normal_RNA_Matching_Alt\tn_normal_RNA_Matching_Neither\tn_normal_RNA_Matching_Both\t" +
+                    "n_tumor_RNA_Matching_Reference\tn_tumor_RNA_Matching_Alt\tn_tumor_RNA_Matching_Neither\tn_tumor_RNA_Matching_Both\t" +
+                    "Multiple Mutations in this Gene\tn Mutations in this gene";
+
+            public const string filteredHeaderLine = unfilteredHeaderLine +
+                    "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
+
+            public const string annotatedHeaderLine = filteredHeaderLine +
+                "frac min ref\tfrac 10th %ile ref\tfrac 20th %ile ref\tfrac 30th %ile ref\tfrac 40th %ile ref\tfrac 50th %ile ref\tfrac 60th %ile ref\tfrac 70th %ile ref\tfrac 80th %ile ref\tfrac 90th %ile ref\tfrac max ref\t" +
+                "frac min alt\tfrac 10th %ile alt\tfrac 20th %ile alt\tfrac 30th %ile alt\tfrac 40th %ile alt\tfrac 50th %ile alt\tfrac 60th %ile alt\tfrac 70th %ile alt\tfrac 80th %ile alt\tfrac 90th %ile alt\tfrac max alt\t" +
+                "frac min all\tfrac 10th %ile all\tfrac 20th %ile all\tfrac 30th %ile all\tfrac 40th %ile all\tfrac 50th %ile all\tfrac 60th %ile all\tfrac 70th %ile all\tfrac 80th %ile all\tfrac 90th %ile all\tfrac max all";
+
+            //
+            // This is only filled in in the annotated version.
+            //
+            public double[] tumorRNAFracAltPercentile = null;  // min, 10th%ile, 20th%ile...90th%ile, max
+            public double[] tumorRNAFracRefPercentile = null;
+            public double[] tumorRNAFracAllPercentile = null;
+
             GeneScatterGraphLine(string Hugo_Symbol_, string Chromosome_, int Start_Position_, string Variant_Classification_, string Variant_Type_, string Reference_Allele_, string Alt_Allele_, string disease_,
                 string case_id_, string normal_dna_file_id_, string tumor_dna_file_id_, string normal_rna_file_id_, string tumor_rna_file_id_, ReadCounts normalDNAReadCounts_, ReadCounts tumorDNAReadCounts_,
                 ReadCounts normalRNAReadCounts_, ReadCounts tumorRNAReadCounts_, bool MultipleMutationsInThisGene_, int nMutationsThisGene_, double tumorDNAFraction_, double tumorRNAFraction_, double tumorDNAMultiple_, double tumorRNAMultiple_, double tumorDNARatio_,
                 double tumorRNARatio_, double ratioOfRatios_,  bool zKnown_, double zTumor_, double zNormal_, double z2Tumor_, double z2Normal_, double percentMeanTumor_,
-                double percentMeanNormal_, bool fromUnfilteredFile_)
+                double percentMeanNormal_, bool fromUnfilteredFile_, string rawInputLine_)
             {
                 Hugo_Symbol = Hugo_Symbol_;
                 Chromosome = Chromosome_;
@@ -266,8 +292,8 @@ namespace ASELib
                 percentMeanTumor = percentMeanTumor_;
                 percentMeanNormal = percentMeanNormal_;
                 fromUnfilteredFile = fromUnfilteredFile_;
+                rawInputLine = rawInputLine_;
             }
-
 
 
 			public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphLines(string directoryName, bool fromUnfiltered, string hugoSymbol /* this may be * to load all*/)
@@ -334,6 +360,11 @@ namespace ASELib
 
 				foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? Configuration.unfilteredCountsExtention : ".txt")))
 				{
+                    if (filename.Contains(ASETools.annotated_scatter_graph_filename_extension) || filename.Contains(annotated_scatter_graphs_histogram_filename))
+                    {
+                        continue;    // Skip the annotated ones for now.
+                    }
+
 					if (filename.Count() == 0 || GetFileNameFromPathname(filename)[0] == '_')
 					{
 						continue;   // Summary file like _MannWhitney rather than a gene file
@@ -354,7 +385,7 @@ namespace ASELib
 
                     List<GeneScatterGraphLine> linesFromThisFile;
 
-                    headerizedFile.ParseFile(ParseLine, out linesFromThisFile);
+                    headerizedFile.ParseFile(x => ParseLine(x, fromUnfiltered), out linesFromThisFile);
 
                     geneScatterGraphEntries.AddRange(linesFromThisFile);
 				}
@@ -362,14 +393,14 @@ namespace ASELib
 				return geneScatterGraphEntries;
 			}
 
-            static GeneScatterGraphLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+            static GeneScatterGraphLine ParseLine(ASETools.HeaderizedFile<GeneScatterGraphLine>.FieldGrabber fieldGrabber, bool fromUnfilteredFile)
             {
                 ReadCounts normalRNAReadCounts;
 
-                if (fields[fieldMappings["n_normal_RNA_Matching_Reference"]] != "")
+                if (fieldGrabber.AsString("n_normal_RNA_Matching_Reference") != "")
                 {
-                    normalRNAReadCounts = new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_normal_RNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_normal_RNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_normal_RNA_Matching_Neither"]]),
-                        Convert.ToInt32(fields[fieldMappings["n_normal_RNA_Matching_Both"]]));
+                    normalRNAReadCounts = new ReadCounts(fieldGrabber.AsInt("n_normal_RNA_Matching_Reference"), fieldGrabber.AsInt("n_normal_RNA_Matching_Alt"), fieldGrabber.AsInt("n_normal_RNA_Matching_Neither"),
+                        fieldGrabber.AsInt("n_normal_RNA_Matching_Both"));
                 }
                 else
                 {
@@ -377,41 +408,40 @@ namespace ASELib
                 }
 
                 double tumorDNAFraction = -1, tumorRNAFraction = -1, tumorDNAMultiple = -1, tumorRNAMultiple = -1, tumorDNARatio = -1, tumorRNARatio = -1, ratioOfRatios = -1, zTumor = -1, zNormal = -1, z2Tumor = -1, z2Normal = -1, percentMeanTumor = -1, percentMeanNormal = -1;
-                bool fromUnfilteredFile = !fieldMappings.ContainsKey("tumorDNAFraction");
                 bool zKnown = false;
                 if (!fromUnfilteredFile) {
-                    tumorDNAFraction = Convert.ToDouble(fields[fieldMappings["tumorDNAFraction"]]);
-                    tumorRNAFraction = Convert.ToDouble(fields[fieldMappings["tumorRNAFraction"]]);
-                    tumorDNAMultiple = Convert.ToDouble(fields[fieldMappings["tumorDNAMultiple"]]);
-                    tumorRNAMultiple = Convert.ToDouble(fields[fieldMappings["tumorRNAMultiple"]]);
-                    tumorDNARatio = Convert.ToDouble(fields[fieldMappings["tumorDNARatio"]]);
-                    tumorRNARatio = Convert.ToDouble(fields[fieldMappings["tumorRNARatio"]]);
-                    ratioOfRatios = Convert.ToDouble(fields[fieldMappings["RatioOfRatios"]]);
-                    if (fields[fieldMappings["zTumor"]] != "")
+                    tumorDNAFraction = fieldGrabber.AsDouble("tumorDNAFraction");
+                    tumorRNAFraction = fieldGrabber.AsDouble("tumorRNAFraction");
+                    tumorDNAMultiple = fieldGrabber.AsDouble("tumorDNAMultiple");
+                    tumorRNAMultiple = fieldGrabber.AsDouble("tumorRNAMultiple");
+                    tumorDNARatio = fieldGrabber.AsDouble("tumorDNARatio");
+                    tumorRNARatio = fieldGrabber.AsDouble("tumorRNARatio");
+                    ratioOfRatios = fieldGrabber.AsDouble("RatioOfRatios");
+                    if (fieldGrabber.AsString("zTumor") != "")
                     {
                         zKnown = true;
-                        zTumor = Convert.ToDouble(fields[fieldMappings["zTumor"]]);
-                        zNormal = Convert.ToDouble(fields[fieldMappings["zNormal"]]);
-                        z2Tumor = Convert.ToDouble(fields[fieldMappings["z2Tumor"]]);
-                        z2Normal = Convert.ToDouble(fields[fieldMappings["z2Normal"]]);
-                        percentMeanTumor = Convert.ToDouble(fields[fieldMappings["%MeanTumor"]]);
-                        percentMeanNormal = Convert.ToDouble(fields[fieldMappings["%MeanNormal"]]);
+                        zTumor = fieldGrabber.AsDouble("zTumor");
+                        zNormal = fieldGrabber.AsDouble("zNormal");
+                        z2Tumor = fieldGrabber.AsDouble("z2Tumor");
+                        z2Normal = fieldGrabber.AsDouble("z2Normal");
+                        percentMeanTumor = fieldGrabber.AsDouble("%MeanTumor");
+                        percentMeanNormal = fieldGrabber.AsDouble("%MeanNormal");
                     }
                 }
 
                 return new GeneScatterGraphLine(
-                  ConvertToNonExcelString(fields[fieldMappings["Hugo_Symbol"]]), fields[fieldMappings["Chromosome"]], Convert.ToInt32(fields[fieldMappings["Start_Position"]]), fields[fieldMappings["Variant_Classification"]], fields[fieldMappings["Variant_Type"]],
-                    fields[fieldMappings["Reference_Allele"]], fields[fieldMappings["Reference_Allele"]], fields[fieldMappings["disease"]], fields[fieldMappings["Case Id"]], fields[fieldMappings["Normal DNA File ID"]], fields[fieldMappings["Tumor DNA File ID"]],
-                    fields[fieldMappings["Normal RNA File ID"]], fields[fieldMappings["Tumor RNA File ID"]],
-                    new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Neither"]]),
-                        Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Both"]])),
-                    new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_tumor_DNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_tumor_DNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_tumor_DNA_Matching_Neither"]]),
-                        Convert.ToInt32(fields[fieldMappings["n_tumor_DNA_Matching_Both"]])),
+                  fieldGrabber.AsString("Hugo_Symbol"), fieldGrabber.AsString("Chromosome"), fieldGrabber.AsInt("Start_Position"), fieldGrabber.AsString("Variant_Classification"), fieldGrabber.AsString("Variant_Type"),
+                    fieldGrabber.AsString("Reference_Allele"), fieldGrabber.AsString("Alt_Allele"), fieldGrabber.AsString("disease"), fieldGrabber.AsString("Case Id"), fieldGrabber.AsString("Normal DNA File ID"), fieldGrabber.AsString("Tumor DNA File ID"),
+                    fieldGrabber.AsString("Normal RNA File ID"), fieldGrabber.AsString("Tumor RNA File ID"),
+                    new ReadCounts(fieldGrabber.AsInt("n_normal_DNA_Matching_Reference"), fieldGrabber.AsInt("n_normal_DNA_Matching_Alt"), fieldGrabber.AsInt("n_normal_DNA_Matching_Neither"),
+                        fieldGrabber.AsInt("n_normal_DNA_Matching_Both")),
+                    new ReadCounts(fieldGrabber.AsInt("n_tumor_DNA_Matching_Reference"), fieldGrabber.AsInt("n_tumor_DNA_Matching_Alt"), fieldGrabber.AsInt("n_tumor_DNA_Matching_Neither"),
+                        fieldGrabber.AsInt("n_tumor_DNA_Matching_Both")),
                     normalRNAReadCounts,
-                    new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_tumor_RNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_tumor_RNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_tumor_RNA_Matching_Neither"]]),
-                        Convert.ToInt32(fields[fieldMappings["n_tumor_RNA_Matching_Both"]])),
-                    Convert.ToBoolean(fields[fieldMappings["Multiple Mutations in this Gene"]]), Convert.ToInt32(fields[fieldMappings["n Mutations in this gene"]]), tumorDNAFraction, tumorRNAFraction, tumorDNAMultiple, tumorRNAMultiple, tumorDNARatio, tumorRNARatio,
-                    ratioOfRatios, zKnown, zTumor, zNormal, z2Tumor, z2Normal, percentMeanTumor, percentMeanNormal, fromUnfilteredFile);
+                    new ReadCounts(fieldGrabber.AsInt("n_tumor_RNA_Matching_Reference"), fieldGrabber.AsInt("n_tumor_RNA_Matching_Alt"), fieldGrabber.AsInt("n_tumor_RNA_Matching_Neither"),
+                        fieldGrabber.AsInt("n_tumor_RNA_Matching_Both")),
+                    fieldGrabber.AsBool("Multiple Mutations in this Gene"), fieldGrabber.AsInt("n Mutations in this gene"), tumorDNAFraction, tumorRNAFraction, tumorDNAMultiple, tumorRNAMultiple, tumorDNARatio, tumorRNARatio,
+                    ratioOfRatios, zKnown, zTumor, zNormal, z2Tumor, z2Normal, percentMeanTumor, percentMeanNormal, fromUnfilteredFile, fieldGrabber.rawLine());
             }
         } // GeneScatterGraphLine
 
@@ -1578,6 +1608,7 @@ namespace ASELib
             public const string geneCategorizationFilename = "GeneCategorization.txt";
 
             public const string zero_one_two_directory = defaultBaseDirectory + @"012graphs\";
+            public const string expression_distribution_directory = defaultBaseDirectory + @"expression_distribution\";
 
             public int minRNAReadCoverage = 10;
             public int minDNAReadCoverage = 10;
@@ -2384,6 +2415,10 @@ namespace ASELib
         public const string allLociExtension = "-all-loci.sam";
         public const string allLociAlignedExtension = "-all-loci-aligned.sam";
         public const string AllSitesReadDepthFilename = "AllSitesReadDepth.txt";
+        public const string Expression_distribution_filename_base = "expression_distribution_";
+        public const string annotated_scatter_graph_filename_extension = "_annotated_scatter_lines.txt";
+        public const string annotated_scatter_graphs_histogram_filename = "_annotated_scatter_graphs_histograms.txt";
+
 
 
         public class DerivedFile
@@ -3010,7 +3045,7 @@ namespace ASELib
                         result.Add(parser(fieldMappings, fields));
                     } else
                     {
-                        result.Add(fieldGrabbingParser(new FieldGrabber(fieldMappings, fields)));
+                        result.Add(fieldGrabbingParser(new FieldGrabber(fieldMappings, fields, inputLine)));
                     }
                 }
 
@@ -3034,10 +3069,11 @@ namespace ASELib
 
             public class FieldGrabber
             {
-                public FieldGrabber(Dictionary<string, int> fieldMappings_, string[] fields_)
+                public FieldGrabber(Dictionary<string, int> fieldMappings_, string[] fields_, string rawInputLine_)
                 {
                     fieldMappings = fieldMappings_;
                     fields = fields_;
+                    rawInputLine = rawInputLine_;
                 }
 
                 public string AsString(string fieldName)
@@ -3172,6 +3208,7 @@ namespace ASELib
 
                 Dictionary<string, int> fieldMappings;
                 string[] fields;
+                readonly string rawInputLine;
 
             } // FieldGrabber
 
@@ -10872,6 +10909,123 @@ namespace ASELib
 
             return Convert.ToInt32(range);
         }
+
+        public class ExpressionDistribution
+        {
+            public static List<ExpressionDistribution> ReadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (null == inputFile)
+                {
+                    Console.WriteLine("ExpressionDistribution: unable to open input file " + filename);
+                    return null;
+                }
+
+                string[] wantedFieldsArray = { "Chromosome", "Locus", "min", "max" };
+                var wantedFields = wantedFieldsArray.ToList();
+                for (int i = 10; i < 100; i+= 10)
+                {
+                    wantedFields.Add(i + "th %ile");
+                }
+                var headerizedFile = new HeaderizedFile<ExpressionDistribution>(inputFile, false, true, "", wantedFields);
+
+                List<ExpressionDistribution> result;
+                headerizedFile.ParseFile(Parse, out result);
+
+                return result;
+            }
+
+            static ExpressionDistribution Parse(HeaderizedFile<ExpressionDistribution>.FieldGrabber fieldGrabber)
+            {
+                var retVal = new ExpressionDistribution(fieldGrabber.AsString("Chromosome"), fieldGrabber.AsInt("Locus"), fieldGrabber.AsDouble("min"), fieldGrabber.AsDouble("max"));
+
+                for (int i = 10; i < 100; i+= 10)
+                {
+                    retVal.percentiles[i / 10 - 1] = fieldGrabber.AsDouble(i + "th %ile");
+                }
+
+                return retVal;
+            }
+
+            ExpressionDistribution(string chr_, int locus_, double min_, double max_)
+            {
+                chr = chr_;
+                locus = locus_;
+                min = min_;
+                max = max_;
+            }
+
+            public readonly string chr;
+            public readonly int locus;
+            public readonly double min;
+            public readonly double max;
+            double[] percentiles = new double[9];
+
+            public double getPercentile(int whichPercentile)
+            {
+                if (whichPercentile == 0)
+                {
+                    return min;
+                }
+
+                if (whichPercentile == 100)
+                {
+                    return max;
+                }
+
+                if (whichPercentile % 10 != 0 || whichPercentile < 10 || whichPercentile > 90)
+                {
+                    throw new InvalidParameterException();
+                }
+
+                return percentiles[whichPercentile / 10 - 1];
+            }
+
+        } // ExpressionDistribution
+
+        public class ExpressionDistributionMap
+        {
+            public ExpressionDistributionMap(string filename_)
+            {
+                filename = filename_;
+
+                var lines = ExpressionDistribution.ReadFromFile(filename);
+                if (lines == null)
+                {
+                    throw new FileNotFoundException(filename);
+                }
+
+                foreach (var line in lines)
+                {
+                    if (!map.ContainsKey(line.chr))
+                    {
+                        map.Add(line.chr, new Dictionary<int, ExpressionDistribution>());
+                    }
+
+                    map[line.chr].Add(line.locus, line);    // Assumes that each locus occurs at most once in the input.
+                }
+            }
+
+            public readonly string filename;
+            public readonly Dictionary<string, Dictionary<int, ExpressionDistribution>> map = new Dictionary<string, Dictionary<int, ExpressionDistribution>>();
+        } // ExpressionDistributionMap
+
+        public class ExpressionDistributionMaps
+        {
+            public ExpressionDistributionMaps(Dictionary<string, Case> cases)
+            {
+                foreach (var disease in cases.Select(x => x.Value.disease()))
+                {
+                    if (!maps.ContainsKey(disease))
+                    {
+                        maps.Add(disease, new ExpressionDistributionMap(Configuration.expression_distribution_directory + Expression_distribution_filename_base + disease));
+                    }
+                }
+            }
+
+            public readonly Dictionary<string, ExpressionDistributionMap> maps = new Dictionary<string, ExpressionDistributionMap>();   // Maps disease -> ExpressionDistributionMap
+        } // ExpressionDistributionMaps
     } // ASETools
 
     //

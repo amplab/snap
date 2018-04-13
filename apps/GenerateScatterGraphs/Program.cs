@@ -537,22 +537,20 @@ if (false)
                 {
                     file = new StreamWriter(Stream.Null);   // We're only writing the unfiltered file, so just send the filtered one to /dev/null
                 }
-                string unfilteredHeaderLine =
-                    "Hugo_Symbol\tChromosome\tStart_Position\tVariant_Classification\tVariant_Type\tReference_Allele\tAlt_Allele\tdisease\t" +
-                    "Case Id\tTumor DNA File ID\tTumor RNA File ID\tNormal DNA File ID\tNormal RNA File ID\t" +
-                    "n_normal_DNA_Matching_Reference\tn_normal_DNA_Matching_Alt\tn_normal_DNA_Matching_Neither\tn_normal_DNA_Matching_Both\t" +
-                    "n_tumor_DNA_Matching_Reference\tn_tumor_DNA_Matching_Alt\tn_tumor_DNA_Matching_Neither\tn_tumor_DNA_Matching_Both\t" +
-                    "n_normal_RNA_Matching_Reference\tn_normal_RNA_Matching_Alt\tn_normal_RNA_Matching_Neither\tn_normal_RNA_Matching_Both\t" +
-                    "n_tumor_RNA_Matching_Reference\tn_tumor_RNA_Matching_Alt\tn_tumor_RNA_Matching_Neither\tn_tumor_RNA_Matching_Both\t" +
-                    "Multiple Mutations in this Gene\tn Mutations in this gene";
-                string headerLine = unfilteredHeaderLine + 
-                    "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
 
-                file.WriteLine(headerLine + histogramLines[0] + "\t" + histogram2Lines[0]);
+
+                bool writeHistograms = false;   // Off because they confuse the annotated scatter graph line code, and really, tagging them on the end is just icky.
+
+                file.Write(ASETools.GeneScatterGraphLine.filteredHeaderLine);
+                if (writeHistograms) { 
+                    file.Write(histogramLines[0] + "\t" + histogram2Lines[0]);
+                }
+                file.WriteLine();
+
                 geneState.output.Sort();
                 for (int i = 0; i < geneState.output.Count(); i++)
                 {
-                    if (i < histogramLines.Count()-1)
+                    if (i < histogramLines.Count()-1 && writeHistograms)
                     {
                         file.WriteLine(geneState.output[i].outputLine + "\t" + histogramLines[i+1] + "\t" + histogram2Lines[i+1]);
                     }
@@ -566,7 +564,7 @@ if (false)
                 file.Close();
 
                 var unfilteredFile = ASETools.CreateStreamWriterWithRetry(configuration.geneScatterGraphsDirectory + geneState.hugo_symbol + ASETools.Configuration.unfilteredCountsExtention);
-                unfilteredFile.WriteLine(unfilteredHeaderLine);
+                unfilteredFile.WriteLine(ASETools.GeneScatterGraphLine.unfilteredHeaderLine);
                 foreach (var line in geneState.outputUnfiltered)
                 {
                     unfilteredFile.WriteLine(line);

@@ -15,6 +15,9 @@ namespace ExpressionByMutationCount
 
         static void Main(string[] args)
         {
+            var endToEndTimer = new Stopwatch();
+            endToEndTimer.Start();
+
             var timer = new Stopwatch();
             timer.Start();
 
@@ -132,6 +135,12 @@ namespace ExpressionByMutationCount
 
                 genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines, 
                     !(overallTumorASEAboveWhichToExcludeCases <= 1.0 || overallTumorASEBelowWhichToExcludeCases >= 0 || maxChromosomeASEBelowWhichToExcludeCases >= 0 || dependOnTP53)));
+            }
+
+            if (genesToProcess.Count() == 0)
+            {
+                Console.WriteLine("Found no genes to process.  Have you created the scatter graphs?");
+                return;
             }
 
             Console.WriteLine("Loaded " + cases.Count() + " cases, of which " + missingCount + " are missing gene expression, processing " + casesToProcess.Count() + " of them, and loaded " + genesToProcess.Count() + " genes in " + ASETools.ElapsedTimeInSeconds(timer));
@@ -293,6 +302,8 @@ namespace ExpressionByMutationCount
             {
                 geneToProcessEntry.Value.perGeneLinesFile.Close();
             }
+
+            Console.WriteLine("Total run time " + ASETools.ElapsedTimeInSeconds(endToEndTimer));
         } // Main
         class ExpressionInstance : IComparer<ExpressionInstance>
         {

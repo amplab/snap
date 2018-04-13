@@ -1871,7 +1871,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.tumor_allele_specific_gene_expression_filename == ""))
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.tumor_allele_specific_gene_expression_filename == "") || stateOfTheWorld.scatterGraphsSummaryFile == "")
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -2091,6 +2091,39 @@ namespace ASEProcessManager
                 }
 
                 script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ComputePerCaseASE.exe");
+                nAddedToScript = 1;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+        } // PerCaseASEProcessingStage
+
+        class CategorizeTumorsProcessingStage : ProcessingStage
+        {
+            public CategorizeTumorsProcessingStage() { }
+            public string GetStageName() { return "Categorize tumors"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.Configuration.geneCategorizationFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.scatterGraphsSummaryFile == "")
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "CategorizeTumors.exe");
                 nAddedToScript = 1;
             }
 
@@ -2634,6 +2667,7 @@ namespace ASEProcessManager
             processingStages.Add(new ZeroOneTwoProcessingStage());
             processingStages.Add(new MannWhitneyProcessingStage());
             processingStages.Add(new PerCaseASEProcessingStage());
+            processingStages.Add(new CategorizeTumorsProcessingStage());
 
             if (checkDependencies)
             {

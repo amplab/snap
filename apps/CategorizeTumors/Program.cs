@@ -80,10 +80,16 @@ namespace CategorizeTumors
             }
         }
 
+
+
         static void Main(string[] args)
         {
             var stopwatch = new Stopwatch();
             stopwatch.Start();
+
+            var tp53SingleHistogram = new ASETools.PreBucketedHistogram(0, 1, 0.01);
+            var tp53MultipleHistogram = new ASETools.PreBucketedHistogram(0, 1, 0.01);
+            var tp53LossOfHetHistogram = new ASETools.PreBucketedHistogram(0, 1, 0.01);
 
             var configuration = ASETools.Configuration.loadFromFile(args);
             if (null == configuration)
@@ -131,6 +137,24 @@ namespace CategorizeTumors
 
                     if (linesForThisCase.Count() > 1)
                     {
+                        if (hugo_symbol.ToLower() == "tp53")
+                        {
+                            double totalVAF = 0;
+                            int n = 0;
+                            foreach (var oneLine in linesForThisCase)
+                            {
+                                if (oneLine.tumorRNAReadCounts.usefulReads() >= configuration.minRNAReadCoverage && oneLine.tumorDNAReadCounts.usefulReads() >= configuration.minDNAReadCoverage)
+                                {
+                                    totalVAF += oneLine.tumorRNAReadCounts.AltFraction();
+                                    n++;
+                                }
+                            }
+
+                            if (n > 0)
+                            {
+                                tp53MultipleHistogram.addValue(totalVAF / n);
+                            }
+                        }
                         result.nMultiple++;
                         continue;
                     }
@@ -151,6 +175,10 @@ namespace CategorizeTumors
 
                     if (line.tumorDNAReadCounts.AltFraction() > 0.6)
                     {
+                        if (hugo_symbol.ToLower() == "tp53" && line.tumorRNAReadCounts.usefulReads() > configuration.minRNAReadCoverage)
+                        {
+                            tp53LossOfHetHistogram.addValue(line.tumorRNAReadCounts.AltFraction());
+                        }
                         result.nLossOfHeterozygosity++;
                         continue;
                     }
@@ -165,6 +193,11 @@ namespace CategorizeTumors
                     {
                         result.nNonsenseMediatedDecay++;
                         continue;
+                    }
+
+                    if (line.Hugo_Symbol.ToLower() == "tp53")
+                    {
+                        tp53SingleHistogram.addValue(line.tumorRNAReadCounts.AltFraction());
                     }
 
                     if (line.tumorRNAReadCounts.AltFraction() > 0.6)
@@ -192,6 +225,23 @@ namespace CategorizeTumors
             } // foreach gene
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(stopwatch));
+
+            var tp53File = ASETools.CreateStreamWriterWithRetry(@"\temp\tp53_histograms.txt");
+            tp53File.WriteLine("Exactly one mutation (n = " + tp53SingleHistogram.count() + ")");
+            tp53File.WriteLine(ASETools.HistogramResultLine.Header());
+            tp53SingleHistogram.ComputeHistogram().ToList().ForEach(x => tp53File.WriteLine(x));
+            tp53File.WriteLine();
+
+            tp53File.WriteLine("Multiple mutations (n = " + tp53MultipleHistogram.count() + ")");
+            tp53File.WriteLine(ASETools.HistogramResultLine.Header());
+            tp53MultipleHistogram.ComputeHistogram().ToList().ForEach(x => tp53File.WriteLine(x));
+            tp53File.WriteLine();
+
+            tp53File.WriteLine("Loss of heterozygosity (n = " + tp53LossOfHetHistogram.count() + ")");
+            tp53File.WriteLine(ASETools.HistogramResultLine.Header());
+            tp53LossOfHetHistogram.ComputeHistogram().ToList().ForEach(x => tp53File.WriteLine(x));
+
+            tp53File.Close();
 
             results.Sort();
 
