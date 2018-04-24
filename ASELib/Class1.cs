@@ -2498,6 +2498,7 @@ namespace ASELib
         public const string annotated_scatter_graph_filename_extension = "_annotated_scatter_lines.txt";
         public const string annotated_scatter_graphs_histogram_filename = "_annotated_scatter_graphs_histograms.txt";
         public const string vaf_histogram_filename = "VAFHistograms.txt";
+        public const string simulatedResultsFilename = "SimulatedASEError.txt";
 
 
 

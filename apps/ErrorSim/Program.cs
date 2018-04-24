@@ -678,7 +678,9 @@ namespace ErrorSim
         static int maxMin = 250;
         static void Main(string[] args)
         {
-            var outputFile = ASETools.CreateStreamWriterWithRetry(@"f:\temp\SimulatedASEDistribution.txt");
+            var configuration = ASETools.Configuration.loadFromFile(args);
+
+            var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.simulatedResultsFilename);
             var random = new System.Random();
 
             for (int readCount = 5; readCount <= maxMin; readCount += 5)
@@ -721,7 +723,7 @@ namespace ErrorSim
                     var readCount2 = generateTumorGermlineRNAReadDepth(random, minReadCount);
                     double realASE = generateASE(random);
 
-                    var measuredASE1 = aseCorrection.getCorrectedASE( generateMeasuredASE(random, realASE, readCount1), readCount1);
+                    var measuredASE1 = aseCorrection.getCorrectedASE(generateMeasuredASE(random, realASE, readCount1), readCount1);
                     var measuredASE2 = aseCorrection.getCorrectedASE(generateMeasuredASE(random, realASE, readCount2), readCount2);
 
                     errorHistogram.addValue(measuredASE1 - realASE);
