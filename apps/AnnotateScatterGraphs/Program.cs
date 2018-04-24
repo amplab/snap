@@ -13,6 +13,22 @@ namespace AnnotateScatterGraphs
     {
         static ASETools.Configuration configuration;
 
+        class DataPoint : IComparer<DataPoint>
+        {
+            public readonly double value;
+            public readonly bool alt;   // Or else ref
+            public DataPoint(double value_, bool alt_)
+            {
+                value = value_;
+                alt = alt_;
+            }
+
+            public int Compare(DataPoint x, DataPoint y)
+            {
+                return x.value.CompareTo(y.value);
+            }
+        }
+
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
@@ -51,6 +67,40 @@ namespace AnnotateScatterGraphs
             }
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
+            subTimer.Stop();
+            subTimer.Reset();
+            subTimer.Start();
+            Console.Write("Loading gene and per-gene ASE maps...");
+
+            var perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+            if (null == perGeneASEMap)
+            {
+                Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                return;
+            }
+
+            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+            var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+            Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
+
+            subTimer.Stop();
+            subTimer.Reset();
+            subTimer.Start();
+            Console.Write("Loading copy number files...");
+            var copyNumberByCase = new Dictionary<string, List<ASETools.CopyNumberVariation>>();
+            foreach (var case_ in cases)
+            {
+                copyNumberByCase.Add(case_.case_id, ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename));
+            }
+            Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
+
+            subTimer.Stop();
+            subTimer.Reset();
+            subTimer.Start();
+            Console.Write("Loading repetitive region map...");
+            var repetitiveRegionMap = ASETools.ASERepetitiveRegionMap.loadFromFile(configuration.redundantChromosomeRegionFilename);
+            Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
 
             subTimer.Stop();
@@ -79,7 +129,7 @@ namespace AnnotateScatterGraphs
                 if (scatterGraphLine.disease != loadedDisease)
                 {
                     var filename = ASETools.Configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + scatterGraphLine.disease;
-                    Console.Write("Loading expression map for " + scatterGraphLine.disease + " from " + filename + "...");
+                    Console.Write("Loading expression map for " + scatterGraphLine.disease + "...");
                     var loadTimer = new Stopwatch();
                     loadTimer.Start();
 
@@ -106,8 +156,8 @@ namespace AnnotateScatterGraphs
                                 scatterGraphLine.tumorRNAFracAllPercentile[j] = double.NegativeInfinity;
                             } else
                             {
-                                scatterGraphLine.tumorRNAFracAltPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingAlt / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
-                                scatterGraphLine.tumorRNAFracRefPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingReference / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
+                                scatterGraphLine.tumorRNAFracAltPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingAlt * 2 / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
+                                scatterGraphLine.tumorRNAFracRefPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingReference * 2 / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
                                 scatterGraphLine.tumorRNAFracAllPercentile[j] = (((double)scatterGraphLine.tumorRNAReadCounts.totalReads()) / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
                             }
                         }
@@ -134,21 +184,27 @@ namespace AnnotateScatterGraphs
 
             genesWithData.Sort();   // So they're in alphabetical order in the histograms file.
 
+            int nCandidates = 0;
+
+
             foreach (var hugo_symbol in genesWithData) {
                 var lines = scatterGraphLinesByGene[hugo_symbol];
                 StreamWriter outputFile = null;
 
-                lines.Sort((x, y) => (x.tumorRNAFracRefPercentile == null) || y.tumorRNAFracRefPercentile == null ? 0 : ((x.MultipleMutationsInThisGene == y.MultipleMutationsInThisGene) ? x.tumorRNAFracRefPercentile[5].CompareTo(y.tumorRNAFracRefPercentile[5]) : x.MultipleMutationsInThisGene.CompareTo(y.MultipleMutationsInThisGene)));
+                lines.Sort((x, y) => CompareScatterGraphLines(x, y, perGeneASEMap, geneMap, copyNumberByCase, repetitiveRegionMap));                
 
                 var refHistograms = new Dictionary<bool, ASETools.PreBucketedHistogram>();
                 var altHistograms = new Dictionary<bool, ASETools.PreBucketedHistogram>();
                 var allHistograms = new Dictionary<bool, ASETools.PreBucketedHistogram>();
+
+                var singleMutationDataPoints = new List<DataPoint>();
 
                 foreach (var multiple in ASETools.BothBools)
                 {
                     refHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 2.02, 0.02));
                     altHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 2.02, 0.02));
                     allHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 2.02, 0.02));
+
                 }
 
                 foreach (var line in lines)
@@ -171,6 +227,10 @@ namespace AnnotateScatterGraphs
                     }
 
                     outputFile.Write(line.rawInputLine);
+
+                    var aseCandidate = line.isASECandidate(copyNumberByCase[line.case_id], configuration, perGeneASEMap, geneMap, repetitiveRegionMap);
+
+                    outputFile.Write("\t" + aseCandidate);
                     for (int i = 0; i < 11; i++)
                     {
                         if (line.tumorRNAFracAltPercentile[i] == double.NegativeInfinity)
@@ -180,12 +240,16 @@ namespace AnnotateScatterGraphs
                         else
                         {
                             outputFile.Write("\t" + line.tumorRNAFracRefPercentile[i]);
-                            if (5 == i)
+                            if (5 == i && aseCandidate)
                             {
-                                refHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracRefPercentile[5] * 2);
+                                refHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracRefPercentile[5]);
+                                if (!line.MultipleMutationsInThisGene)
+                                {
+                                    singleMutationDataPoints.Add(new DataPoint(line.tumorRNAFracRefPercentile[5], false));
+                                }
                             }
                         }
-                    }
+                    };
                     for (int i = 0; i < 11; i++)
                     {
                         if (line.tumorRNAFracAltPercentile[i] == double.NegativeInfinity)
@@ -195,9 +259,13 @@ namespace AnnotateScatterGraphs
                         else
                         {
                             outputFile.Write("\t" + line.tumorRNAFracAltPercentile[i]);
-                            if (5 == i)
+                            if (5 == i && aseCandidate)
                             {
-                                altHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracAltPercentile[5] * 2);
+                                altHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracAltPercentile[5]);
+                                if (!line.MultipleMutationsInThisGene)
+                                {
+                                    singleMutationDataPoints.Add(new DataPoint(line.tumorRNAFracAltPercentile[5], true));
+                                }
                             }
                         }
                     }
@@ -210,7 +278,7 @@ namespace AnnotateScatterGraphs
                         else
                         {
                             outputFile.Write("\t" + line.tumorRNAFracAllPercentile[i]);
-                            if (5 == i)
+                            if (5 == i && aseCandidate)
                             {
                                 allHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracAllPercentile[5]);
                             }
@@ -219,9 +287,26 @@ namespace AnnotateScatterGraphs
                     outputFile.WriteLine();
                 } // foreach line
 
-                if (refHistograms[true].count() != 0 || refHistograms[false].count() != 0) 
+
+                if (refHistograms[true].count() >= 10 || refHistograms[false].count() >= 10) 
                 {
-                    combinedHistogramsFile.WriteLine(hugo_symbol + "\twild-type one mutation (n = " + refHistograms[false].count() + ")\tmutant one mutation (n = " + altHistograms[false].count() + ")\tall one mutation (n = " + allHistograms[false].count() + ")\twild-type > 1 mutation (n = " +
+                    bool enoughData, reversed;
+                    double nFirstGroup, nSecondGroup, U, z;
+                    var mw = ASETools.MannWhitney<DataPoint>.ComputeMannWhitney(singleMutationDataPoints, singleMutationDataPoints[0], x => x.alt, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z);
+
+                    combinedHistogramsFile.Write(hugo_symbol);
+                    if (enoughData)
+                    {
+                        combinedHistogramsFile.Write(" uncorrected p = " + mw);
+                        nCandidates++;
+
+                        if (mw < 0.01)
+                        {
+                            Console.WriteLine(hugo_symbol + " has uncorrected p of " + mw);
+                        }
+                    }
+
+                    combinedHistogramsFile.WriteLine("\twild-type one mutation (n = " + refHistograms[false].count() + ")\tmutant one mutation (n = " + altHistograms[false].count() + ")\tall one mutation (n = " + allHistograms[false].count() + ")\twild-type > 1 mutation (n = " +
                         refHistograms[true].count() + ")\tmutant > 1 mutation (n = " + altHistograms[true].count() + ")\tall > 1 mutation (n = " + allHistograms[true].count() + ")");
 
                     var cdfs = new List<double>[6];
@@ -265,7 +350,35 @@ namespace AnnotateScatterGraphs
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
+            Console.WriteLine("nNonsenseMediatedDecay = " + ASETools.nNonsenseMediatedDecay + ", nNoReadCounts = " + ASETools.nNoReadCounts + ", nBadReadCounts = " + ASETools.nBadReadCounts + ", nBadGene = " + ASETools.nBadGene + ", nNoCopyNumber = " + ASETools.nNoCopyNumber + 
+                ", nBadCopyNumber = " + ASETools.nBadCopyNumber + ", nRepetitive = " + ASETools.nRepetitive + ", nCandidate = " + ASETools.nCandidate);
+            Console.WriteLine("Total of " + nCandidates + " Mann-Whitney computations by this program");
+
             Console.WriteLine("Overall run time " + ASETools.ElapsedTimeInSeconds(timer));
+        } // Main
+
+        static int CompareScatterGraphLines(ASETools.GeneScatterGraphLine a, ASETools.GeneScatterGraphLine b, Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap, ASETools.GeneMap geneMap, 
+            Dictionary<string, List<ASETools.CopyNumberVariation>> copyNumberByCase, ASETools.ASERepetitiveRegionMap repetitiveRegionMap)
+        {
+            var aIsASECanddiate = a.isASECandidate(copyNumberByCase[a.case_id], configuration, perGeneASEMap, geneMap, repetitiveRegionMap);
+            var bIsASECanddiate = b.isASECandidate(copyNumberByCase[b.case_id], configuration, perGeneASEMap, geneMap, repetitiveRegionMap);
+
+            if (aIsASECanddiate != bIsASECanddiate)
+            {
+                return aIsASECanddiate ? -1 : 1;
+            }
+
+            if (a.tumorRNAFracAllPercentile == null || b.tumorRNAFracAllPercentile == null)
+            {
+                return 0;
+            }
+
+            if (a.MultipleMutationsInThisGene != b.MultipleMutationsInThisGene)
+            {
+                return a.MultipleMutationsInThisGene.CompareTo(b.MultipleMutationsInThisGene);
+            }
+
+            return a.tumorRNAFracAllPercentile[5].CompareTo(b.tumorRNAFracAllPercentile[5]);
         }
     }
 }

@@ -240,7 +240,7 @@ namespace ASELib
             public const string filteredHeaderLine = unfilteredHeaderLine +
                     "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
 
-            public const string annotatedHeaderLine = filteredHeaderLine +
+            public const string annotatedHeaderLine = filteredHeaderLine + "ase candidate?\t" +
                 "frac min ref\tfrac 10th %ile ref\tfrac 20th %ile ref\tfrac 30th %ile ref\tfrac 40th %ile ref\tfrac 50th %ile ref\tfrac 60th %ile ref\tfrac 70th %ile ref\tfrac 80th %ile ref\tfrac 90th %ile ref\tfrac max ref\t" +
                 "frac min alt\tfrac 10th %ile alt\tfrac 20th %ile alt\tfrac 30th %ile alt\tfrac 40th %ile alt\tfrac 50th %ile alt\tfrac 60th %ile alt\tfrac 70th %ile alt\tfrac 80th %ile alt\tfrac 90th %ile alt\tfrac max alt\t" +
                 "frac min all\tfrac 10th %ile all\tfrac 20th %ile all\tfrac 30th %ile all\tfrac 40th %ile all\tfrac 50th %ile all\tfrac 60th %ile all\tfrac 70th %ile all\tfrac 80th %ile all\tfrac 90th %ile all\tfrac max all";
@@ -442,9 +442,88 @@ namespace ASELib
                         fieldGrabber.AsInt("n_tumor_RNA_Matching_Both")),
                     fieldGrabber.AsBool("Multiple Mutations in this Gene"), fieldGrabber.AsInt("n Mutations in this gene"), tumorDNAFraction, tumorRNAFraction, tumorDNAMultiple, tumorRNAMultiple, tumorDNARatio, tumorRNARatio,
                     ratioOfRatios, zKnown, zTumor, zNormal, z2Tumor, z2Normal, percentMeanTumor, percentMeanNormal, fromUnfilteredFile, fieldGrabber.rawLine());
+            } // ParseLine
+
+            public bool isASECandidate(List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, ASERepetitiveRegionMap repetitiveRegionMap)
+            {
+                if (NonsenseMediatedDecayCausingVariantClassifications.Contains(Variant_Classification))
+                {
+                    nNonsenseMediatedDecay++;
+                    return false;
+                }
+                if (tumorDNAReadCounts == null || tumorRNAReadCounts == null)
+                {
+                    nNoReadCounts++;
+                    return false;
+                }
+
+                if (!checkReadCountsForASECandidacy(tumorDNAReadCounts, tumorRNAReadCounts, configuration.minRNAReadCoverage, configuration.minDNAReadCoverage))
+                {
+                    nBadReadCounts++;
+                    return false;
+                }
+
+                //
+                // If this is in a gene that has too much ASE in the matched normals, then it's not an ASE candidate.
+                //
+                if (perGeneASEMap != null)
+                {
+                    //
+                    // If any genes that contain this locus have ASE > 0.5, then reject this place.
+                    //
+                    foreach (var gene in geneMap.getGenesMappedTo(Chromosome, Start_Position))
+                    {
+                        if (perGeneASEMap.ContainsKey(gene.hugoSymbol) && perGeneASEMap[gene.hugoSymbol].sampleData[false].meanASE >= configuration.ASEInNormalAtWhichToExcludeGenes)
+                        {
+                            nBadGene++;
+                            return false;
+                        }
+                    }
+                }
+
+                if (repetitiveRegionMap.isCloseToRepetitiveRegion(ChromosomeNameToIndex(Chromosome), Start_Position, 150))
+                {
+                    nRepetitive++;
+                    return false;
+                }
+
+                if (copyNumber == null)
+                {
+                    nCandidate++;
+                    return true;
+                }
+
+                var overlappingCNV = copyNumber.Where(cnv =>
+                    cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(Chromosome),
+                    Start_Position, Start_Position + 1)).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+
+                if (overlappingCNV.Count() == 0)
+                {
+                    nCandidate++;
+                    return true;
+                } else
+                {
+                    nBadCopyNumber++;
+                    return false;
+                }
             }
         } // GeneScatterGraphLine
 
+        public static int nNonsenseMediatedDecay = 0, nNoReadCounts = 0, nBadReadCounts = 0, nBadGene = 0, nNoCopyNumber = 0, nBadCopyNumber = 0, nRepetitive = 0, nCandidate = 0; // BJB
+
+
+        static bool checkReadCountsForASECandidacy(ReadCounts DNAReadCounts, ReadCounts RNAReadCounts, int minDNACoverage, int minRNACoverage)
+        {
+            // check there is sufficient coverage for DNA and RNA
+            // check annotated variant is not a possible minor subclone
+
+            return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= minDNACoverage &&
+                        RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= minRNACoverage &&
+                        DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
+                        DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2 &&
+                        (DNAReadCounts.nMatchingNeither + DNAReadCounts.nMatchingBoth) * 20 < DNAReadCounts.totalReads() &&
+                        (RNAReadCounts.nMatchingNeither + RNAReadCounts.nMatchingBoth) * 20 < RNAReadCounts.totalReads());
+        }
 
 		public static double MeanOfList(List<double> values)
 		{
@@ -2418,6 +2497,7 @@ namespace ASELib
         public const string Expression_distribution_filename_base = "expression_distribution_";
         public const string annotated_scatter_graph_filename_extension = "_annotated_scatter_lines.txt";
         public const string annotated_scatter_graphs_histogram_filename = "_annotated_scatter_graphs_histograms.txt";
+        public const string vaf_histogram_filename = "VAFHistograms.txt";
 
 
 
@@ -6922,18 +7002,16 @@ namespace ASELib
 
                 ReadCounts normalRNAReadCounts = null;
                 // check if normal RNA is present
-                try
-                {
+                if (fields[fieldMappings["normalRNAmatchingRef"]] != "") {
                     var nMatchingNormalReferenceRNA = Convert.ToInt32(fields[fieldMappings["normalRNAmatchingRef"]]);
                     var nMatchingNormalAltRNA = Convert.ToInt32(fields[fieldMappings["normalRNAmatchingAlt"]]);
                     var nMatchingNormalNeitherRNA = Convert.ToInt32(fields[fieldMappings["normalRNAmatchingNeither"]]);
                     var nMatchingNormalBothRNA = Convert.ToInt32(fields[fieldMappings["normalRNAmatchingBoth"]]);
 
                     normalRNAReadCounts = new ReadCounts(nMatchingNormalReferenceRNA, nMatchingNormalAltRNA, nMatchingNormalNeitherRNA, nMatchingNormalBothRNA);
-                }
-                catch (Exception)
+                } else
                 {
-                    // no op. No normal RNA
+                    normalRNAReadCounts = null;
                 }
 
                 return new AnnotatedVariant(Hugo_symbol, isSomatic, contig, loc, Ref, alt, variantType, variantClassification, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
@@ -7051,14 +7129,8 @@ namespace ASELib
 					throw new Exception(isTumor ? "tumor " : "normal " + "read counts are null");
 				}
 
-				// check there is sufficient coverage for DNA and RNA
-				// check annotated variant is not a possible minor subclone
-				return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= minDNACoverage &&
-						RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= minRNACoverage &&
-						DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
-						DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2 && 
-                        (DNAReadCounts.nMatchingNeither + DNAReadCounts.nMatchingBoth) * 20 < DNAReadCounts.totalReads() &&
-                        (RNAReadCounts.nMatchingNeither + RNAReadCounts.nMatchingBoth) * 20 < RNAReadCounts.totalReads());
+
+                return checkReadCountsForASECandidacy(DNAReadCounts, RNAReadCounts, minDNACoverage, minRNACoverage);
 			}
 
             //
@@ -7106,7 +7178,7 @@ namespace ASELib
 
                 var overlappingCNV = copyNumber[isTumor].Where(cnv =>
                     cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(contig),
-                    locus, locus + 1));
+                    locus, locus + 1)).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
                 return overlappingCNV.Count() == 0;
             }
 
@@ -7932,20 +8004,17 @@ namespace ASELib
 
             public void addValue(double value)
             {
-                if (value < minBucket)
+                if (value < minBucket || value == double.NaN)
                 {
-                    throw new FormatException("PreBucketedHistogram " + name + " : value (" + value + ") smaller than minBucket (" + minBucket + ")");
+                    throw new FormatException("PreBucketedHistogram " + name + " : value (" + value + ") smaller than minBucket (" + minBucket + ") or NaN");
                 }
 
-                int whichBucket;
-                if (value > maxBucket)
-                {
-                    whichBucket = nBuckets - 1;
-                } else
-                {
-                    whichBucket = (int)((value - minBucket) / increment);
-                }
+                int whichBucket = bucketForValue(value);
 
+                /*BJB*/ if (whichBucket >= nBuckets || whichBucket < 0)
+                {
+                    Console.WriteLine(whichBucket + " >= " + nBuckets + " value = " + value);
+                }
 
                 buckets[whichBucket].count++;
                 buckets[whichBucket].total += value;
@@ -7993,6 +8062,31 @@ namespace ASELib
             public long count()
             {
                 return nValues;
+
+            }
+
+            int bucketForValue(double value)
+            {
+                if (value > maxBucket)
+                {
+                    return nBuckets - 1;
+                }
+                else
+                {
+                    return (int)((value - minBucket) / increment);
+                }
+            }
+
+            public long nLessThan(double value)
+            {
+                long retVal = 0;
+
+                for (int i = 0; i < bucketForValue(value); i++)
+                {
+                    retVal += buckets[i].count;
+                }
+
+                return retVal;
             }
 
             public HistogramResultLine[] ComputeHistogram(string format = "G")
@@ -11026,54 +11120,176 @@ namespace ASELib
 
             public readonly Dictionary<string, ExpressionDistributionMap> maps = new Dictionary<string, ExpressionDistributionMap>();   // Maps disease -> ExpressionDistributionMap
         } // ExpressionDistributionMaps
+
+        public enum BinomalTestType
+        {
+            Less,
+            Greater,
+            TwoSided
+        }
+
+
+        //
+        // binomialTest is adapted from the R binom.test code at https://github.com/SurajGupta/r-source/blob/master/src/library/stats/R/binom.test.R
+        // which is under GPL2 or later. Copyright notice from that code follows:
+        //
+
+        /*
+        #  File src/library/stats/R/binom.test.R
+        #  Part of the R package, https://www.R-project.org
+        #
+        #  Copyright (C) 1995-2012 The R Core Team
+        #
+        #  This program is free software; you can redistribute it and/or modify
+        #  it under the terms of the GNU General Public License as published by
+        #  the Free Software Foundation; either version 2 of the License, or
+        #  (at your option) any later version.
+        #
+        #  This program is distributed in the hope that it will be useful,
+        #  but WITHOUT ANY WARRANTY; without even the implied warranty of
+        #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        #  GNU General Public License for more details.
+        #
+        #  A copy of the GNU General Public License is available at
+        #  https://www.R-project.org/Licenses/
+         */ 
+
+        public static double binomialTest(int x, int n, double p, BinomalTestType alternative)
+        {
+            if (x < 0 || n < 1 || x > n || p < 0 || p > 1)
+            {
+                throw new InvalidParameterException();
+            }
+
+            switch (alternative)
+            {
+                case BinomalTestType.Less:
+                    return MathNet.Numerics.Distributions.Binomial.CDF(p, n, x);
+
+                case BinomalTestType.Greater:
+                    return 1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, x - 1);
+
+                case BinomalTestType.TwoSided:
+                    if (p == 0)
+                    {
+                        if (x == 0)
+                        {
+                            return 1;
+                        } else
+                        {
+                            return 0;
+                        }
+                    }
+
+                    if (p == 1)
+                    {
+                        if (x == n)
+                        {
+                            return 1;
+                        } else
+                        {
+                            return 0;
+                        }
+                    }
+
+                    /*
+                        ## Do
+                        ##   d <- dbinom(0 : n, n, p)
+                        ##   sum(d[d <= dbinom(x, n, p)])
+                        ## a bit more efficiently ...
+
+                        ## Note that we need a little fuzz.
+                     */
+
+                    double d = MathNet.Numerics.Distributions.Binomial.PMF(p, n, x);
+                    double m = n * p;
+                    if (x == m) // As if floating point multiplication will ever do this
+                    {
+                        return 1;
+                    }
+
+                    double relErr = 1 + 1e-7;
+
+                    if (x < m)
+                    {
+                        int y = 0;
+                        for (int i = (int)Math.Ceiling(m); i <= n; i++)
+                        {
+                            if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
+                            {
+                                y++;
+                            }
+                        }
+
+                        return MathNet.Numerics.Distributions.Binomial.CDF(p, n, x) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, n - y));
+                    } else
+                    {
+                        int y = 0;
+                        for (int i = 0; i <= Math.Floor(m); i++)
+                        {
+                            if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
+                            {
+                                y++;
+                            }
+                        }
+
+                        return MathNet.Numerics.Distributions.Binomial.CDF(p, n, y - 1) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, x - 1));
+                    }
+
+                default:
+                    throw new InvalidParameterException();
+            }  // switch
+        } // binomialTest
+
+
     } // ASETools
 
-    //
-    // I love that C# lets you do stuff like this.  This is a simple groupBy method that takes an IEnumerable and a key extractor function, and returns a dictionary indexed on keys of lists 
-    // of elements in the enumerable.  This is a slight tweak on the existing GroupBy methods that fits my needs a little better.
-    //
-    public static class GroupByExtension
+//
+// I love that C# lets you do stuff like this.  This is a simple groupBy method that takes an IEnumerable and a key extractor function, and returns a dictionary indexed on keys of lists 
+// of elements in the enumerable.  This is a slight tweak on the existing GroupBy methods that fits my needs a little better.
+//
+public static class GroupByExtension
+{
+public static Dictionary<TKey, List<TSource>> GroupByToDict<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keyExtractor)
+{
+var retVal = new Dictionary<TKey, List<TSource>>();
+
+foreach (var element in source)
+{
+    var key = keyExtractor(element);
+
+    if (!retVal.ContainsKey(key))
     {
-        public static Dictionary<TKey, List<TSource>> GroupByToDict<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keyExtractor)
-        {
-            var retVal = new Dictionary<TKey, List<TSource>>();
-
-            foreach (var element in source)
-            {
-                var key = keyExtractor(element);
-
-                if (!retVal.ContainsKey(key))
-                {
-                    retVal.Add(key, new List<TSource>());
-                }
-
-                retVal[key].Add(element);
-            }
-
-            return retVal;
-        }
-    } // GroupByExtension
-
-    public static class EnumerableMedian    // There's certainly a way to do this for generic numeric types rather than just double, but I haven't bothered to figure out how.
-    {
-        public static double Median(this IEnumerable<double> input) 
-        {
-            var list = input.ToList();
-            var n = list.Count();
-            if (n == 0)
-            {
-                return 0;
-            }
-            
-            list.Sort();
-
-            if (n % 2 == 1)
-            {
-                return list[n / 2];
-            } else
-            {
-                return (list[n / 2] + list[n / 2 - 1]) / 2;
-            }
-        }
+        retVal.Add(key, new List<TSource>());
     }
+
+    retVal[key].Add(element);
+}
+
+return retVal;
+}
+} // GroupByExtension
+
+public static class EnumerableMedian    // There's certainly a way to do this for generic numeric types rather than just double, but I haven't bothered to figure out how.
+{
+public static double Median(this IEnumerable<double> input) 
+{
+var list = input.ToList();
+var n = list.Count();
+if (n == 0)
+{
+    return 0;
+}
+
+list.Sort();
+
+if (n % 2 == 1)
+{
+    return list[n / 2];
+} else
+{
+    return (list[n / 2] + list[n / 2 - 1]) / 2;
+}
+}
+}
 }
