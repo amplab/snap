@@ -1449,20 +1449,29 @@ namespace ASEProcessManager
                 nWaitingForPrerequisites = 0;
                 filesToDownload = null;
 
+                int nOnCurrentCommandLine = 0;
+
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
-                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_allcount_filename, case_.normal_dna_mapped_base_count_filename, ASETools.normalDNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_dna_allcount_filename, case_.tumor_dna_mapped_base_count_filename, ASETools.tumorDNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_allcount_filename, case_.normal_dna_mapped_base_count_filename, ASETools.normalDNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites, ref nOnCurrentCommandLine);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_dna_allcount_filename, case_.tumor_dna_mapped_base_count_filename, ASETools.tumorDNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites, ref nOnCurrentCommandLine);
                     if (case_.normal_rna_file_id != "" && case_.normal_rna_file_id != null)
                     {
-                        HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_allcount_filename, case_.normal_rna_mapped_base_count_filename, ASETools.normalRNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                        HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_allcount_filename, case_.normal_rna_mapped_base_count_filename, ASETools.normalRNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites, ref nOnCurrentCommandLine);
                     }
-                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_rna_allcount_filename, case_.tumor_rna_mapped_base_count_filename, ASETools.tumorRNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_rna_allcount_filename, case_.tumor_rna_mapped_base_count_filename, ASETools.tumorRNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites, ref nOnCurrentCommandLine);
                 } // foreach case
+
+                if (nOnCurrentCommandLine != 0)
+                {
+                    script.WriteLine();
+                    hpcScript.WriteLine();
+                }
             } // EvaluateStage
 
-            void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string inputFilename, string existingOutputFilename, string outputExtension, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
+            void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string inputFilename, string existingOutputFilename, string outputExtension, 
+                ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites, ref int nOnCurrentCommandLine)
             {
                 if (existingOutputFilename != "")
                 {
@@ -1476,8 +1485,22 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "CountMappedBases.exe " + inputFilename + " " + ASETools.GetDirectoryFromPathname(inputFilename) + @"\" + ASETools.GetFileIdFromPathname(inputFilename) + outputExtension);
-                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "CountMappedBases.exe " + inputFilename + " " + ASETools.GetDirectoryFromPathname(inputFilename) + @"\" + ASETools.GetFileIdFromPathname(inputFilename) + outputExtension);
+                if (nOnCurrentCommandLine == 0)
+                {
+                    script.Write(stateOfTheWorld.configuration.binariesDirectory + "CountMappedBases.exe");
+                    hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "CountMappedBases.exe");
+                }
+
+                script.Write(" " + inputFilename + " " + ASETools.GetDirectoryFromPathname(inputFilename) + @"\" + ASETools.GetFileIdFromPathname(inputFilename) + outputExtension);
+                hpcScript.Write(" " + inputFilename + " " + ASETools.GetDirectoryFromPathname(inputFilename) + @"\" + ASETools.GetFileIdFromPathname(inputFilename) + outputExtension);
+
+                nOnCurrentCommandLine++;
+                if (nOnCurrentCommandLine >= 30)    // Much more than this generates too long command lines, with resulting unhappiness
+                {
+                    script.WriteLine();
+                    hpcScript.WriteLine();
+                    nOnCurrentCommandLine = 0;
+                }
 
                 nAddedToScript++;
             } // HandleFile
@@ -2006,7 +2029,7 @@ namespace ASEProcessManager
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
 
-                if (File.Exists(ASETools.Configuration.zero_one_two_directory + "TP53-0.txt")) // NB: Assumes p53 in gene is significant
+                if (File.Exists(stateOfTheWorld.configuration.zero_one_two_directory + "TP53-0.txt")) // NB: Assumes p53 in gene is significant
                 {
                     nDone = 1;
                     return;
@@ -2129,6 +2152,132 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
         } // PerCaseASEProcessingStage
+
+        class SelectRegulatoryMAFLinesProcessingStage : ProcessingStage
+        {
+            public SelectRegulatoryMAFLinesProcessingStage() { }
+            public string GetStageName() { return "Select Regulatory MAF Lines"; }
+            public bool NeedsCases() { return true; }
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                nDone = stateOfTheWorld.cases.Where(x => x.Value.selected_regulatory_maf_filename != "").Count();
+                nWaitingForPrerequisites = stateOfTheWorld.cases.Where(x => x.Value.selected_regulatory_maf_filename == "" && x.Value.all_maf_lines_filename == "").Count();
+
+                var toDo = stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.selected_regulatory_maf_filename == "" && x.all_maf_lines_filename != "").ToList();
+                nAddedToScript = toDo.Count();
+
+                const int nPerLine = 100;
+                for (int i = 0; i < nAddedToScript; i++)
+                {
+                    if (i % nPerLine == 0)
+                    {
+                        if (i != 0)
+                        {
+                            script.WriteLine();
+                        }
+
+                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "SelectMutationsInReglatoryRegions.exe"); // Yes, it's spelled wrong.  It's a giant pain to fix a typo in an app name, so I'm just leaving it.
+                    }
+
+                    script.Write(" " + toDo[i].case_id);
+                }
+
+                if (nAddedToScript != 0)
+                {
+                    script.WriteLine();
+                }
+
+            }
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+        } // SelectRegulatoryMAFLinesProcessingStage
+
+        class MappedBaseCountDistributionProcessingStage : ProcessingStage
+        {
+            public MappedBaseCountDistributionProcessingStage() { }
+            public string GetStageName() { return "Mapped base count distruibution"; }
+            public bool NeedsCases() { return true; }
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.mappedBaseCountDistributionFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.tumor_dna_mapped_base_count_filename == "" || x.tumor_rna_mapped_base_count_filename == "" || x.normal_dna_mapped_base_count_filename == "" || x.normal_rna_file_id != "" && x.normal_rna_mapped_base_count_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MappedBaseCountDistribution");
+                nAddedToScript = 1;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+        } // MappedBaseCountDistributionProcessingStage
+
+        class AnnotateRegulatoryRegionsProcessingStage : ProcessingStage
+        {
+            public AnnotateRegulatoryRegionsProcessingStage() { }
+            public string GetStageName() { return "Annotate Regulatory Regions"; }
+
+            public bool NeedsCases() { return true; }
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                nDone = stateOfTheWorld.cases.Where(x => x.Value.annotated_regulatory_regions_filename != "").Count();
+                if (stateOfTheWorld.configuration.encodeBEDFile == "")
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+                nWaitingForPrerequisites = stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename == "" && (x.tumor_dna_allcount_filename == "" || x.selected_regulatory_maf_filename == "")).Count();
+
+                int nOnCurrentLine = 0;
+                foreach (var case_ in stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename == "" && x.tumor_dna_allcount_filename != "" && x.selected_regulatory_maf_filename != ""))
+                {
+                    if (nOnCurrentLine == 0)
+                    {
+                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "AnnotateRegulatoryRegions.exe");
+                    }
+
+                    script.Write(" " + case_.case_id);
+                    nOnCurrentLine++;
+
+                    if (nOnCurrentLine >= 60)
+                    {
+                        script.WriteLine();
+                        nOnCurrentLine = 0;
+                    }
+
+                    nAddedToScript++;
+                }
+
+                if (nOnCurrentLine != 0)
+                {
+                    script.WriteLine();
+                }
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+        } // AnnotateRegulatoryRegionsProcessingStage
+
 
         class FPKMProcessingStage : ProcessingStage
 		{
@@ -2668,6 +2817,9 @@ namespace ASEProcessManager
             processingStages.Add(new MannWhitneyProcessingStage());
             processingStages.Add(new PerCaseASEProcessingStage());
             processingStages.Add(new CategorizeTumorsProcessingStage());
+            processingStages.Add(new SelectRegulatoryMAFLinesProcessingStage());
+            processingStages.Add(new MappedBaseCountDistributionProcessingStage());
+            processingStages.Add(new AnnotateRegulatoryRegionsProcessingStage());
 
             if (checkDependencies)
             {

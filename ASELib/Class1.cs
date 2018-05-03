@@ -30,172 +30,172 @@ namespace ASELib
 
         public const int GuidStringLength = 36;
 
-		public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
+        public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
         public const int nHumanAutosomes = 22;
 
-		// Used for writing out Bonferroni corrected p values in Mann Whitney tests
-		public class OutputLine
-		{
-			public string line;
-			public double p;
-		}
+        // Used for writing out Bonferroni corrected p values in Mann Whitney tests
+        public class OutputLine
+        {
+            public string line;
+            public double p;
+        }
 
-		static public bool isChromosomeMitochondrial(string chromosome)
-		{
-			string lowerChromosome = chromosome.ToLower();
-			return lowerChromosome == "m" || lowerChromosome == "mt" || lowerChromosome == "chrm" || lowerChromosome == "chrmt";
-		}
-		static public bool isChromosomeSex(string chromosome)
-		{
-			string lowerChromosome = chromosome.ToLower();
-			return lowerChromosome == "x" || lowerChromosome == "chrx" || lowerChromosome == "y" || lowerChromosome == "chry";
-		}
+        static public bool isChromosomeMitochondrial(string chromosome)
+        {
+            string lowerChromosome = chromosome.ToLower();
+            return lowerChromosome == "m" || lowerChromosome == "mt" || lowerChromosome == "chrm" || lowerChromosome == "chrmt";
+        }
+        static public bool isChromosomeSex(string chromosome)
+        {
+            string lowerChromosome = chromosome.ToLower();
+            return lowerChromosome == "x" || lowerChromosome == "chrx" || lowerChromosome == "y" || lowerChromosome == "chry";
+        }
 
-		static public bool isChromosomeAutosomal(string chromosome)
-		{
-			return !isChromosomeSex(chromosome) && !isChromosomeMitochondrial(chromosome);
-		}
+        static public bool isChromosomeAutosomal(string chromosome)
+        {
+            return !isChromosomeSex(chromosome) && !isChromosomeMitochondrial(chromosome);
+        }
 
-		public static int ChromosomeNameToIndex(string chromosomeName)
-		{
-			var name = chromosomeName.ToLower();
+        public static int ChromosomeNameToIndex(string chromosomeName)
+        {
+            var name = chromosomeName.ToLower();
 
-			for (int i = 1; i <= 22; i++)
-			{
-				var comp = Convert.ToString(i);
-				if (name == comp || name == "chr" + comp) return i;
-			}
+            for (int i = 1; i <= 22; i++)
+            {
+                var comp = Convert.ToString(i);
+                if (name == comp || name == "chr" + comp) return i;
+            }
 
-			//
-			// Use 0 and 23 for the sex chromosomes, so the array indices correspond to the chromosome names.
-			//
-			if (name == "chrx" || name == "x") return 0;
-			if (name == "chry" || name == "y") return 23;
+            //
+            // Use 0 and 23 for the sex chromosomes, so the array indices correspond to the chromosome names.
+            //
+            if (name == "chrx" || name == "x") return 0;
+            if (name == "chry" || name == "y") return 23;
 
-			return -1;
-		}
-
-
-		public static string ChromosomeIndexToName(int index, bool useChr = false)
-		{
-			if (index >= 1 && index <= 22)
-			{
-				return (useChr ? "chr" : "") + index;
-			}
-
-			if (index == 0) return (useChr ? "chr" : "") + "X";
-
-			if (index == 23) return (useChr ? "chr" : "") + "Y";
-
-			return "Invalid chromosome index: " + index;
-		}
-
-		public static string chromosomeNameToNonChrForm(string rawName)
-		{
-			if (rawName.Count() < 4 || rawName.Substring(0, 3).ToLower() != "chr")
-			{
-				return rawName.ToLower();
-			}
-
-			return rawName.Substring(3).ToLower();
-		}
+            return -1;
+        }
 
 
-		public class MannWhitney<T>
-		{
-			public delegate bool WhichGroup(T element);
-			public delegate double GetValue(T element);
-			public static double ComputeMannWhitney(List<T> elements, IComparer<T> comparer, WhichGroup whichGroup, GetValue getValue, out bool enoughData, out bool reversed,
-				out double nFirstGroup, out double nSecondGroup, out double U, out double z, bool twoTailed = true, int minGroupSize = 1)
-			{
-				elements.Sort(comparer);
+        public static string ChromosomeIndexToName(int index, bool useChr = false)
+        {
+            if (index >= 1 && index <= 22)
+            {
+                return (useChr ? "chr" : "") + index;
+            }
 
-				reversed = false;
+            if (index == 0) return (useChr ? "chr" : "") + "X";
 
-				double RfirstGroup = 0; // The rank sum for the first group
-				nFirstGroup = 0;
-				nSecondGroup = 0;
-				U = 0;
-				z = 0;
-				int n = elements.Count();
+            if (index == 23) return (useChr ? "chr" : "") + "Y";
 
-				for (int i = 0; i < n; i++)
-				{
-					if (whichGroup(elements[i]))
-					{
-						int cumulativeR = n - i;
-						int nTied = 1;
-						//
-						// Now add in adjascent indices if there's a tie.  For ties, we use the mean of all the indices in the tied region for each of them (regardless of whether they're single or multiple).
-						//
-						for (int j = i - 1; j >= 0 && getValue(elements[j]) == getValue(elements[i]); j--)
-						{
-							cumulativeR += n - j;
-							nTied++;
-						}
+            return "Invalid chromosome index: " + index;
+        }
 
-						for (int j = i + 1; j < elements.Count() && getValue(elements[j]) == getValue(elements[i]); j++)
-						{
-							cumulativeR += n - j;
-							nTied++;
-						}
+        public static string chromosomeNameToNonChrForm(string rawName)
+        {
+            if (rawName.Count() < 4 || rawName.Substring(0, 3).ToLower() != "chr")
+            {
+                return rawName.ToLower();
+            }
+
+            return rawName.Substring(3).ToLower();
+        }
 
 
-						RfirstGroup += cumulativeR / nTied;
-						nFirstGroup++;
-					}
-					else
-					{
-						nSecondGroup++;
-					}
-				}
+        public class MannWhitney<T>
+        {
+            public delegate bool WhichGroup(T element);
+            public delegate double GetValue(T element);
+            public static double ComputeMannWhitney(List<T> elements, IComparer<T> comparer, WhichGroup whichGroup, GetValue getValue, out bool enoughData, out bool reversed,
+                out double nFirstGroup, out double nSecondGroup, out double U, out double z, bool twoTailed = true, int minGroupSize = 1)
+            {
+                elements.Sort(comparer);
 
-				if (nFirstGroup < minGroupSize || nSecondGroup < minGroupSize)
-				{
-					//
-					// Not enough data, reject this gene
-					//
-					enoughData = false;
-					return -1;
-				}
+                reversed = false;
 
-				U = (double)RfirstGroup - (double)nFirstGroup * (nFirstGroup + 1.0) / 2.0;
+                double RfirstGroup = 0; // The rank sum for the first group
+                nFirstGroup = 0;
+                nSecondGroup = 0;
+                U = 0;
+                z = 0;
+                int n = elements.Count();
 
-				z = (U - nFirstGroup * nSecondGroup / 2) / Math.Sqrt(nSecondGroup * nFirstGroup * (nSecondGroup + nFirstGroup + 1) / 12);
+                for (int i = 0; i < n; i++)
+                {
+                    if (whichGroup(elements[i]))
+                    {
+                        int cumulativeR = n - i;
+                        int nTied = 1;
+                        //
+                        // Now add in adjascent indices if there's a tie.  For ties, we use the mean of all the indices in the tied region for each of them (regardless of whether they're single or multiple).
+                        //
+                        for (int j = i - 1; j >= 0 && getValue(elements[j]) == getValue(elements[i]); j--)
+                        {
+                            cumulativeR += n - j;
+                            nTied++;
+                        }
 
-				double p = MathNet.Numerics.Distributions.Normal.CDF(0, 1.0, z);
+                        for (int j = i + 1; j < elements.Count() && getValue(elements[j]) == getValue(elements[i]); j++)
+                        {
+                            cumulativeR += n - j;
+                            nTied++;
+                        }
 
 
-				if (twoTailed)
-				{
-					//
-					// We're doing two-tailed, so we need to see if this is on the other end
-					if (p > 0.5)
-					{
-						p = 1.0 - p;
-						reversed = true;
-					}
+                        RfirstGroup += cumulativeR / nTied;
+                        nFirstGroup++;
+                    }
+                    else
+                    {
+                        nSecondGroup++;
+                    }
+                }
 
-					//
-					// And then multiply by two (because this is a two-tailed test).
-					//
-					p *= 2.0;
-				}
+                if (nFirstGroup < minGroupSize || nSecondGroup < minGroupSize)
+                {
+                    //
+                    // Not enough data, reject this gene
+                    //
+                    enoughData = false;
+                    return -1;
+                }
 
-				enoughData = true;
-				return p;
-			}
+                U = (double)RfirstGroup - (double)nFirstGroup * (nFirstGroup + 1.0) / 2.0;
+
+                z = (U - nFirstGroup * nSecondGroup / 2) / Math.Sqrt(nSecondGroup * nFirstGroup * (nSecondGroup + nFirstGroup + 1) / 12);
+
+                double p = MathNet.Numerics.Distributions.Normal.CDF(0, 1.0, z);
+
+
+                if (twoTailed)
+                {
+                    //
+                    // We're doing two-tailed, so we need to see if this is on the other end
+                    if (p > 0.5)
+                    {
+                        p = 1.0 - p;
+                        reversed = true;
+                    }
+
+                    //
+                    // And then multiply by two (because this is a two-tailed test).
+                    //
+                    p *= 2.0;
+                }
+
+                enoughData = true;
+                return p;
+            }
         } // MannWhitney
 
         public class GeneScatterGraphLine
-		{
-			public readonly string Hugo_Symbol;
-			public readonly string Chromosome;
-			public readonly int Start_Position;
-			public readonly string Variant_Classification;
-			public readonly string Variant_Type;
-			public readonly string Reference_Allele;
-			public readonly string Alt_Allele;
+        {
+            public readonly string Hugo_Symbol;
+            public readonly string Chromosome;
+            public readonly int Start_Position;
+            public readonly string Variant_Classification;
+            public readonly string Variant_Type;
+            public readonly string Reference_Allele;
+            public readonly string Alt_Allele;
             public readonly string disease;
             public readonly string case_id;
             public readonly string tumor_dna_file_id;
@@ -208,24 +208,24 @@ namespace ASELib
             public readonly ReadCounts tumorRNAReadCounts;
             public readonly int nMutationsThisGene; // In this tumor, of course
             public readonly double tumorDNAFraction;
-			public readonly double tumorRNAFraction;
-			public readonly double tumorDNAMultiple;
-			public readonly double tumorRNAMultiple;
-			public readonly double tumorDNARatio;
-			public readonly double tumorRNARatio;
+            public readonly double tumorRNAFraction;
+            public readonly double tumorDNAMultiple;
+            public readonly double tumorRNAMultiple;
+            public readonly double tumorDNARatio;
+            public readonly double tumorRNARatio;
             public readonly double ratioOfRatios;
             public readonly bool MultipleMutationsInThisGene;
 
-			public readonly bool zKnown; // The next 6 fields are valid iff zKnown.
+            public readonly bool zKnown; // The next 6 fields are valid iff zKnown.
 
-			public readonly double zTumor;
-			public readonly double zNormal;
-			public readonly double z2Tumor;
-			public readonly double z2Normal;
-			public readonly double percentMeanTumor; // Expressed as a fraction (i.e., 100% -> 1.0)
-			public readonly double percentMeanNormal;// Expressed as a fraction (i.e., 100% -> 1.0)
+            public readonly double zTumor;
+            public readonly double zNormal;
+            public readonly double z2Tumor;
+            public readonly double z2Normal;
+            public readonly double percentMeanTumor; // Expressed as a fraction (i.e., 100% -> 1.0)
+            public readonly double percentMeanNormal;// Expressed as a fraction (i.e., 100% -> 1.0)
 
-			public readonly bool fromUnfilteredFile; // If this is true, then the fields after the read counts are uninitialized and invalid.
+            public readonly bool fromUnfilteredFile; // If this is true, then the fields after the read counts are uninitialized and invalid.
 
             public readonly string rawInputLine;
 
@@ -255,7 +255,7 @@ namespace ASELib
             GeneScatterGraphLine(string Hugo_Symbol_, string Chromosome_, int Start_Position_, string Variant_Classification_, string Variant_Type_, string Reference_Allele_, string Alt_Allele_, string disease_,
                 string case_id_, string normal_dna_file_id_, string tumor_dna_file_id_, string normal_rna_file_id_, string tumor_rna_file_id_, ReadCounts normalDNAReadCounts_, ReadCounts tumorDNAReadCounts_,
                 ReadCounts normalRNAReadCounts_, ReadCounts tumorRNAReadCounts_, bool MultipleMutationsInThisGene_, int nMutationsThisGene_, double tumorDNAFraction_, double tumorRNAFraction_, double tumorDNAMultiple_, double tumorRNAMultiple_, double tumorDNARatio_,
-                double tumorRNARatio_, double ratioOfRatios_,  bool zKnown_, double zTumor_, double zNormal_, double z2Tumor_, double z2Normal_, double percentMeanTumor_,
+                double tumorRNARatio_, double ratioOfRatios_, bool zKnown_, double zTumor_, double zNormal_, double z2Tumor_, double z2Normal_, double percentMeanTumor_,
                 double percentMeanNormal_, bool fromUnfilteredFile_, string rawInputLine_)
             {
                 Hugo_Symbol = Hugo_Symbol_;
@@ -296,9 +296,9 @@ namespace ASELib
             }
 
 
-			public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphLines(string directoryName, bool fromUnfiltered, string hugoSymbol /* this may be * to load all*/)
-			{
-				var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
+            public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphLines(string directoryName, bool fromUnfiltered, string hugoSymbol /* this may be * to load all*/)
+            {
+                var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
 
                 string[] wantedFieldsArrayUnfilteredVersion =
                 {
@@ -358,17 +358,17 @@ namespace ASELib
 
                 var wantedFields = fromUnfiltered ? wantedFieldsArrayUnfilteredVersion.ToList() : wantedFieldsFullVersion;
 
-				foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? Configuration.unfilteredCountsExtention : ".txt")))
-				{
+                foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? Configuration.unfilteredCountsExtention : ".txt")))
+                {
                     if (filename.Contains(ASETools.annotated_scatter_graph_filename_extension) || filename.Contains(annotated_scatter_graphs_histogram_filename))
                     {
                         continue;    // Skip the annotated ones for now.
                     }
 
-					if (filename.Count() == 0 || GetFileNameFromPathname(filename)[0] == '_')
-					{
-						continue;   // Summary file like _MannWhitney rather than a gene file
-					}
+                    if (filename.Count() == 0 || GetFileNameFromPathname(filename)[0] == '_')
+                    {
+                        continue;   // Summary file like _MannWhitney rather than a gene file
+                    }
 
                     if (!fromUnfiltered && filename.Contains(Configuration.unfilteredCountsExtention))
                     {
@@ -388,10 +388,10 @@ namespace ASELib
                     headerizedFile.ParseFile(x => ParseLine(x, fromUnfiltered), out linesFromThisFile);
 
                     geneScatterGraphEntries.AddRange(linesFromThisFile);
-				}
+                }
 
-				return geneScatterGraphEntries;
-			}
+                return geneScatterGraphEntries;
+            }
 
             static GeneScatterGraphLine ParseLine(ASETools.HeaderizedFile<GeneScatterGraphLine>.FieldGrabber fieldGrabber, bool fromUnfilteredFile)
             {
@@ -525,113 +525,113 @@ namespace ASELib
                         (RNAReadCounts.nMatchingNeither + RNAReadCounts.nMatchingBoth) * 20 < RNAReadCounts.totalReads());
         }
 
-		public static double MeanOfList(List<double> values)
-		{
-			return values.Sum() / values.Count();
-		}
+        public static double MeanOfList(List<double> values)
+        {
+            return values.Sum() / values.Count();
+        }
 
-		public static double StandardDeviationOfList(List<double> values)
-		{
-			var mean = MeanOfList(values);
+        public static double StandardDeviationOfList(List<double> values)
+        {
+            var mean = MeanOfList(values);
 
-			double variance = 0;
-			foreach (var value in values)
-			{
-				var difference = value - mean;
-				variance = difference * difference;
-			}
+            double variance = 0;
+            foreach (var value in values)
+            {
+                var difference = value - mean;
+                variance = difference * difference;
+            }
 
-			return Math.Sqrt(variance);
-		}
-
-
-		public class Exon
-		{
-			public Exon(string startString, string endString)
-			{
-				start = Convert.ToInt32(startString);
-				end = Convert.ToInt32(endString);
-			}
-
-			public int start;
-			public int end;
-		}
-
-		public class Isoform    // These come from the knownGene file
-		{
-			public string ucscId;
-			public string chromosome;   // The non-chr version
-			public string strand;
-			public int txStart;
-			public int txEnd;
-			public int cdsStart;
-			public int cdsEnd;
-			public string proteinId;
-			public string alignId;
-			public Exon[] exons;
-
-			public static Isoform fromFileLine(string fileLine)
-			{
-				var fields = fileLine.Split('\t');
-				if (fields.Count() < 12)
-				{
-					Console.WriteLine("Isoform.fromFileLine: line had wrong number of fields, " + fields.Count() + " != 12");
-					return null;
-				}
-
-				var isoform = new Isoform();
-
-				isoform.ucscId = ConvertToNonExcelString(fields[0]);
-				isoform.chromosome = ConvertToNonExcelString(fields[1]);
-				isoform.strand = ConvertToNonExcelString(fields[2]);
-
-				int exonCount;
-				try
-				{
-					isoform.txStart = Convert.ToInt32(ConvertToNonExcelString(fields[3]));
-					isoform.txEnd = Convert.ToInt32(ConvertToNonExcelString(fields[4]));
-
-					if (isoform.txEnd <= isoform.txStart)
-					{
-						Console.WriteLine("Isoform.fromFileLine: warning: isoform " + isoform.ucscId + " has empty or negative transcription region " + fileLine);
-					}
-
-					isoform.cdsStart = Convert.ToInt32(ConvertToNonExcelString(fields[5]));
-					isoform.cdsEnd = Convert.ToInt32(ConvertToNonExcelString(fields[6]));
-					exonCount = Convert.ToInt32(ConvertToNonExcelString(fields[7]));
+            return Math.Sqrt(variance);
+        }
 
 
-					var exonStartStrings = ConvertToNonExcelString(fields[8]).Split(',');
-					var exonEndStrings = ConvertToNonExcelString(fields[9]).Split(',');
+        public class Exon
+        {
+            public Exon(string startString, string endString)
+            {
+                start = Convert.ToInt32(startString);
+                end = Convert.ToInt32(endString);
+            }
 
-					//
-					// They have trailing commas, so they should have one more field than there are exons, and also should have an empty string
-					// as their last element.
-					//
-					if (exonStartStrings.Count() != exonCount + 1 || exonEndStrings.Count() != exonCount + 1 || exonStartStrings[exonCount] != "" || exonEndStrings[exonCount] != "")
-					{
-						Console.WriteLine("Isoform.fromFileLine: Bad exon start/end: " + fileLine);
-					}
+            public int start;
+            public int end;
+        }
 
-					isoform.exons = new Exon[exonCount];
-					for (int i = 0; i < exonCount; i++)
-					{
-						isoform.exons[i] = new Exon(exonStartStrings[i], exonEndStrings[i]);
-					}
+        public class Isoform    // These come from the knownGene file
+        {
+            public string ucscId;
+            public string chromosome;   // The non-chr version
+            public string strand;
+            public int txStart;
+            public int txEnd;
+            public int cdsStart;
+            public int cdsEnd;
+            public string proteinId;
+            public string alignId;
+            public Exon[] exons;
+
+            public static Isoform fromFileLine(string fileLine)
+            {
+                var fields = fileLine.Split('\t');
+                if (fields.Count() < 12)
+                {
+                    Console.WriteLine("Isoform.fromFileLine: line had wrong number of fields, " + fields.Count() + " != 12");
+                    return null;
+                }
+
+                var isoform = new Isoform();
+
+                isoform.ucscId = ConvertToNonExcelString(fields[0]);
+                isoform.chromosome = ConvertToNonExcelString(fields[1]);
+                isoform.strand = ConvertToNonExcelString(fields[2]);
+
+                int exonCount;
+                try
+                {
+                    isoform.txStart = Convert.ToInt32(ConvertToNonExcelString(fields[3]));
+                    isoform.txEnd = Convert.ToInt32(ConvertToNonExcelString(fields[4]));
+
+                    if (isoform.txEnd <= isoform.txStart)
+                    {
+                        Console.WriteLine("Isoform.fromFileLine: warning: isoform " + isoform.ucscId + " has empty or negative transcription region " + fileLine);
+                    }
+
+                    isoform.cdsStart = Convert.ToInt32(ConvertToNonExcelString(fields[5]));
+                    isoform.cdsEnd = Convert.ToInt32(ConvertToNonExcelString(fields[6]));
+                    exonCount = Convert.ToInt32(ConvertToNonExcelString(fields[7]));
 
 
-				}
-				catch (FormatException)
-				{
-					Console.WriteLine("Isoform.fromFileLine: Format exception parsing a numeric field in line: " + fileLine);
-					return null;
-				}
+                    var exonStartStrings = ConvertToNonExcelString(fields[8]).Split(',');
+                    var exonEndStrings = ConvertToNonExcelString(fields[9]).Split(',');
 
-				isoform.proteinId = fields[10];
-				isoform.alignId = fields[11];
+                    //
+                    // They have trailing commas, so they should have one more field than there are exons, and also should have an empty string
+                    // as their last element.
+                    //
+                    if (exonStartStrings.Count() != exonCount + 1 || exonEndStrings.Count() != exonCount + 1 || exonStartStrings[exonCount] != "" || exonEndStrings[exonCount] != "")
+                    {
+                        Console.WriteLine("Isoform.fromFileLine: Bad exon start/end: " + fileLine);
+                    }
 
-				return isoform;
-			}
+                    isoform.exons = new Exon[exonCount];
+                    for (int i = 0; i < exonCount; i++)
+                    {
+                        isoform.exons[i] = new Exon(exonStartStrings[i], exonEndStrings[i]);
+                    }
+
+
+                }
+                catch (FormatException)
+                {
+                    Console.WriteLine("Isoform.fromFileLine: Format exception parsing a numeric field in line: " + fileLine);
+                    return null;
+                }
+
+                isoform.proteinId = fields[10];
+                isoform.alignId = fields[11];
+
+                return isoform;
+            }
 
             public int codingSize()
             {
@@ -642,21 +642,21 @@ namespace ASELib
 
         // Holds Gene location and isoform information
         public class GeneLocationInfo
-		{
-			public string hugoSymbol;
-			public string chromosome;   // in non-chr form
-			public int minLocus;
-			public int maxLocus;
+        {
+            public string hugoSymbol;
+            public string chromosome;   // in non-chr form
+            public int minLocus;
+            public int maxLocus;
 
-			public bool inconsistent = false;
+            public bool inconsistent = false;
 
-			public bool overlapsRange(string locusChromosome, int start, int end)
-			{
-				if (start < maxLocus && end > minLocus)
-					return true;
-				else
-					return false;
-			}
+            public bool overlapsRange(string locusChromosome, int start, int end)
+            {
+                if (start < maxLocus && end > minLocus)
+                    return true;
+                else
+                    return false;
+            }
 
             public bool containsLocus(string locusChromosome, int locus)
             {
@@ -678,30 +678,30 @@ namespace ASELib
                 return isoforms.Select(x => x.codingSize()).Max();
             }
 
-			public List<Isoform> isoforms = new List<Isoform>();
+            public List<Isoform> isoforms = new List<Isoform>();
         } // GeneLocationInfo
 
         // Stores a dictionary of genes for each chromosome
         public class GeneLocationsByNameAndChromosome
-		{
-			public GeneLocationsByNameAndChromosome(Dictionary<string, GeneLocationInfo> genesByName_)
-			{
-				genesByName = genesByName_;
+        {
+            public GeneLocationsByNameAndChromosome(Dictionary<string, GeneLocationInfo> genesByName_)
+            {
+                genesByName = genesByName_;
 
-				foreach (var geneEntry in genesByName)
-				{
-					var gene = geneEntry.Value;
-					if (!genesByChromosome.ContainsKey(gene.chromosome))
-					{
-						genesByChromosome.Add(gene.chromosome, new List<GeneLocationInfo>());
-					}
+                foreach (var geneEntry in genesByName)
+                {
+                    var gene = geneEntry.Value;
+                    if (!genesByChromosome.ContainsKey(gene.chromosome))
+                    {
+                        genesByChromosome.Add(gene.chromosome, new List<GeneLocationInfo>());
+                    }
 
-					genesByChromosome[gene.chromosome].Add(gene);
-				}
-			}
+                    genesByChromosome[gene.chromosome].Add(gene);
+                }
+            }
 
-			public Dictionary<string, GeneLocationInfo> genesByName;
-			public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
+            public Dictionary<string, GeneLocationInfo> genesByName;
+            public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
         } // GeneLocationsByNameAndChromosome
 
         public class GeneMap
@@ -730,7 +730,7 @@ namespace ASELib
                     int handledUpTo = gene.minLocus;
 
                     Range overlapRange;
-                    if (map.FindFirstLessThanOrEqualTo(key, out overlapRange) &&  overlapRange.chromosome == gene.chromosome && overlapRange.minLocus < gene.minLocus && overlapRange.maxLocus >= gene.minLocus)
+                    if (map.FindFirstLessThanOrEqualTo(key, out overlapRange) && overlapRange.chromosome == gene.chromosome && overlapRange.minLocus < gene.minLocus && overlapRange.maxLocus >= gene.minLocus)
                     {
                         //
                         // We overlap at the beginning.  Delete the existing range and split it in two, with the first half not containing us and the second half containing us.
@@ -901,17 +901,17 @@ namespace ASELib
             //
             public string case_id;
             public string normal_dna_file_id;
-            public string tumor_dna_file_id; 
+            public string tumor_dna_file_id;
             public string normal_rna_file_id = "";    // This is optional
             public string tumor_rna_file_id;
             public string maf_file_id;
             public string tumor_methylation_file_id = "";
-			public string normal_methylation_file_id = "";
-			public string tumor_copy_number_file_id = "";
-			public string normal_copy_number_file_id = "";
-			public string tumor_fpkm_file_id = "";
-			public string normal_fpkm_file_id = "";
-			public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
+            public string normal_methylation_file_id = "";
+            public string tumor_copy_number_file_id = "";
+            public string normal_copy_number_file_id = "";
+            public string tumor_fpkm_file_id = "";
+            public string normal_fpkm_file_id = "";
+            public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
             public List<string> sample_ids = new List<string>();
 
             //
@@ -921,32 +921,32 @@ namespace ASELib
             public string tumor_dna_filename = "";
             public string normal_rna_filename = "";
             public string tumor_rna_filename = "";
-	        public string maf_filename = "";
+            public string maf_filename = "";
             public string tumor_methylation_filename = "";
-			public string normal_methylation_filename = "";
-			public string tumor_copy_number_filename = "";
-			public string normal_copy_number_filename = "";
-			public string tumor_fpkm_filename = "";
-			public string normal_fpkm_filename = "";
+            public string normal_methylation_filename = "";
+            public string tumor_copy_number_filename = "";
+            public string normal_copy_number_filename = "";
+            public string tumor_fpkm_filename = "";
+            public string normal_fpkm_filename = "";
 
-			//
-			// Sizes for downloaded files.
-			//
-			public long normal_dna_size = 0;
+            //
+            // Sizes for downloaded files.
+            //
+            public long normal_dna_size = 0;
             public long tumor_dna_size = 0;
             public long normal_rna_size = 0;
             public long tumor_rna_size = 0;
             public long tumor_methylation_size = 0;
-			public long normal_methylation_size = 0;
-			public long tumor_copy_number_size = 0;
-			public long normal_copy_number_size = 0;
-			public long tumor_fpkm_size = 0;
-			public long normal_fpkm_size = 0;
+            public long normal_methylation_size = 0;
+            public long tumor_copy_number_size = 0;
+            public long normal_copy_number_size = 0;
+            public long tumor_fpkm_size = 0;
+            public long normal_fpkm_size = 0;
 
-			//
-			// Pathnames for derived files.
-			//
-			public string normal_dna_allcount_filename = "";
+            //
+            // Pathnames for derived files.
+            //
+            public string normal_dna_allcount_filename = "";
             public string tumor_dna_allcount_filename = "";
             public string normal_rna_allcount_filename = "";
             public string tumor_rna_allcount_filename = "";
@@ -963,8 +963,8 @@ namespace ASELib
             public string normal_dna_reads_at_selected_variants_index_filename = "";
             public string annotated_selected_variants_filename = "";
             public string tumor_allele_specific_gene_expression_filename = "";
-			public string normal_allele_specific_gene_expression_filename = "";
-			public string tumor_dna_gene_coverage_filname = "";
+            public string normal_allele_specific_gene_expression_filename = "";
+            public string tumor_dna_gene_coverage_filname = "";
             public string vcf_filename = "";
             public string extracted_maf_lines_filename = "";
             public string all_maf_lines_filename = "";
@@ -973,6 +973,8 @@ namespace ASELib
             public string normal_rna_mapped_base_count_filename = "";
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
+            public string selected_regulatory_maf_filename = "";
+            public string annotated_regulatory_regions_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -990,11 +992,11 @@ namespace ASELib
             public string tumor_dna_file_bam_md5 = "";
             public string tumor_dna_file_bai_md5 = "";
             public string tumor_methylation_file_md5 = "";
-			public string normal_methylation_file_md5 = "";
-			public string tumor_copy_number_file_md5 = "";
-			public string normal_copy_number_file_md5 = "";
-			public string tumor_fpkm_file_md5 = "";
-			public string normal_fpkm_file_md5 = "";
+            public string normal_methylation_file_md5 = "";
+            public string tumor_copy_number_file_md5 = "";
+            public string normal_copy_number_file_md5 = "";
+            public string tumor_fpkm_file_md5 = "";
+            public string normal_fpkm_file_md5 = "";
 
             //
             // Sizes for derived files.
@@ -1028,6 +1030,8 @@ namespace ASELib
             public long selected_variant_counts_by_gene_size = 0;
             public long tumor_regional_methylation_size = 0;
             public long normal_regional_methylation_size = 0;
+            public long selected_regulatory_maf_lines_size = 0;
+            public long annotated_regulatory_regions_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1091,7 +1095,7 @@ namespace ASELib
                 foreach (var case_ in listOfCases) {
                     cases.Add(case_.case_id, case_);
                 }
- 
+
                 return cases;
             } // LoadCases
 
@@ -1150,7 +1154,7 @@ namespace ASELib
                 {
                     return idGetter(case_);
                 }
- 
+
                 public readonly string columnName;
                 ColumnGetter getter;
                 ColumnSetter setter;
@@ -1162,7 +1166,7 @@ namespace ASELib
                 SizeColumnSetter sizeColumnSetter;
             } // FieldInformation 
 
-			public static FieldInformation[] AllFields = 
+            public static FieldInformation[] AllFields =
             {
                 new FieldInformation("Case ID",                                             c => c.case_id, (c, v) => c.case_id = v),
                 new FieldInformation("Normal DNA File ID",                                  c => c.normal_dna_file_id, (c, v) => c.normal_dna_file_id = v),
@@ -1171,12 +1175,12 @@ namespace ASELib
                 new FieldInformation("Tumor RNA File ID",                                   c => c.tumor_rna_file_id, (c,v) => c.tumor_rna_file_id = v),
                 new FieldInformation("MAF File ID",                                         c => c.maf_file_id, (c,v) => c.maf_file_id = v),
                 new FieldInformation("Tumor Methylation File ID",                           c => c.tumor_methylation_file_id, (c,v) => c.tumor_methylation_file_id = v),
-				new FieldInformation("Normal Methylation File ID",                          c => c.normal_methylation_file_id, (c,v) => c.normal_methylation_file_id = v),
-				new FieldInformation("Tumor Copy Number File ID",                           c => c.tumor_copy_number_file_id, (c,v) => c.tumor_copy_number_file_id = v),
-				new FieldInformation("Normal Copy Number File ID",                          c => c.normal_copy_number_file_id, (c,v) => c.normal_copy_number_file_id = v),
-				new FieldInformation("Tumor FPKM File ID",									c => c.tumor_fpkm_file_id, (c,v) => c.tumor_fpkm_file_id = v),
-				new FieldInformation("Normal FPKM File ID",									c => c.normal_fpkm_file_id, (c,v) => c.normal_fpkm_file_id = v),
-				new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
+                new FieldInformation("Normal Methylation File ID",                          c => c.normal_methylation_file_id, (c,v) => c.normal_methylation_file_id = v),
+                new FieldInformation("Tumor Copy Number File ID",                           c => c.tumor_copy_number_file_id, (c,v) => c.tumor_copy_number_file_id = v),
+                new FieldInformation("Normal Copy Number File ID",                          c => c.normal_copy_number_file_id, (c,v) => c.normal_copy_number_file_id = v),
+                new FieldInformation("Tumor FPKM File ID",                                  c => c.tumor_fpkm_file_id, (c,v) => c.tumor_fpkm_file_id = v),
+                new FieldInformation("Normal FPKM File ID",                                 c => c.normal_fpkm_file_id, (c,v) => c.normal_fpkm_file_id = v),
+                new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
                 new FieldInformation("Sample IDs",                                          c => c.sampleIdsInCommaSeparatedList(), (c,v) => c.sample_ids = v.Split(',').ToList()),
 
                 new FieldInformation("Normal DNA Filename",                                 c => c.normal_dna_filename, (c,v) => c.normal_dna_filename = v),
@@ -1184,54 +1188,56 @@ namespace ASELib
                 new FieldInformation("Normal RNA Filename",                                 c => c.normal_rna_filename, (c,v) => c.normal_rna_filename = v),
                 new FieldInformation("Tumor RNA Filename",                                  c => c.tumor_rna_filename, (c,v) => c.tumor_rna_filename = v),
                 new FieldInformation("Tumor Methylation Filename",                          c => c.tumor_methylation_filename, (c,v) => c.tumor_methylation_filename = v),
-				new FieldInformation("Normal Methylation Filename",                         c => c.normal_methylation_filename, (c,v) => c.normal_methylation_filename = v),
-				new FieldInformation("Tumor Copy Number Filename",                          c => c.tumor_copy_number_filename, (c,v) => c.tumor_copy_number_filename = v),
-				new FieldInformation("Normal Copy Number Filename",                         c => c.normal_copy_number_filename, (c,v) => c.normal_copy_number_filename = v),
-				new FieldInformation("Tumor FPKM Filename",									c => c.tumor_fpkm_filename, (c,v) => c.tumor_fpkm_filename = v),
-				new FieldInformation("Normal FPKM Filename",								c => c.normal_fpkm_filename, (c,v) => c.normal_fpkm_filename = v),
-				new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
+                new FieldInformation("Normal Methylation Filename",                         c => c.normal_methylation_filename, (c,v) => c.normal_methylation_filename = v),
+                new FieldInformation("Tumor Copy Number Filename",                          c => c.tumor_copy_number_filename, (c,v) => c.tumor_copy_number_filename = v),
+                new FieldInformation("Normal Copy Number Filename",                         c => c.normal_copy_number_filename, (c,v) => c.normal_copy_number_filename = v),
+                new FieldInformation("Tumor FPKM Filename",                                 c => c.tumor_fpkm_filename, (c,v) => c.tumor_fpkm_filename = v),
+                new FieldInformation("Normal FPKM Filename",                                c => c.normal_fpkm_filename, (c,v) => c.normal_fpkm_filename = v),
+                new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
 
                 new FieldInformation("Normal DNA Size",                                     c => Convert.ToString(c.normal_dna_size), (c,v) => c.normal_dna_size = LongFromString(v)),
                 new FieldInformation("Tumor DNA Size",                                      c => Convert.ToString(c.tumor_dna_size), (c,v) => c.tumor_dna_size = LongFromString(v)),
                 new FieldInformation("Normal RNA Size",                                     c => Convert.ToString(c.normal_rna_size), (c,v) => c.normal_rna_size = LongFromString(v)),
                 new FieldInformation("Tumor RNA Size",                                      c => Convert.ToString(c.tumor_rna_size), (c,v) => c.tumor_rna_size = LongFromString(v)),
                 new FieldInformation("Tumor Methylation Size",                              c => Convert.ToString(c.tumor_methylation_size), (c,v) => c.tumor_methylation_size = LongFromString(v)),
-				new FieldInformation("Normal Methylation Size",                             c => Convert.ToString(c.normal_methylation_size), (c,v) => c.normal_methylation_size = LongFromString(v)),
-				new FieldInformation("Tumor Copy Number Size",                              c => Convert.ToString(c.tumor_copy_number_size), (c,v) => c.tumor_copy_number_size = LongFromString(v)),
-				new FieldInformation("Normal Copy Number Size",                             c => Convert.ToString(c.normal_copy_number_size), (c,v) => c.normal_copy_number_size = LongFromString(v)),
-				new FieldInformation("Tumor FPKM Size",										c => Convert.ToString(c.tumor_fpkm_size), (c,v) => c.tumor_fpkm_size = LongFromString(v)),
-				new FieldInformation("Normal FPKM Size",									c => Convert.ToString(c.normal_fpkm_size), (c,v) => c.normal_fpkm_size = LongFromString(v)),
+                new FieldInformation("Normal Methylation Size",                             c => Convert.ToString(c.normal_methylation_size), (c,v) => c.normal_methylation_size = LongFromString(v)),
+                new FieldInformation("Tumor Copy Number Size",                              c => Convert.ToString(c.tumor_copy_number_size), (c,v) => c.tumor_copy_number_size = LongFromString(v)),
+                new FieldInformation("Normal Copy Number Size",                             c => Convert.ToString(c.normal_copy_number_size), (c,v) => c.normal_copy_number_size = LongFromString(v)),
+                new FieldInformation("Tumor FPKM Size",                                     c => Convert.ToString(c.tumor_fpkm_size), (c,v) => c.tumor_fpkm_size = LongFromString(v)),
+                new FieldInformation("Normal FPKM Size",                                    c => Convert.ToString(c.normal_fpkm_size), (c,v) => c.normal_fpkm_size = LongFromString(v)),
 
-				new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, "Normal DNA Allcount File Size", c => c.normal_dna_allcount_size, (c,v) => c.normal_dna_allcount_size = v),
-				new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, "Tumor DNA Allcount File Size", c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v),
-				new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id, "Normal RNA Allcount File Size", c => c.normal_rna_allcount_size, (c, v) => c.normal_rna_allcount_size = v),
-				new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id, "Tumor RNA Allcount File Size", c => c.tumor_rna_allcount_size, (c, v) => c.tumor_rna_allcount_size = v),
-				new FieldInformation("Regional Expression Filename",                        c => c.regional_expression_filename, (c,v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id, "Regional Expression File Size", c => c.regional_expression_size, (c, v) => c.regional_expression_size = v),
-				new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id, "Gene Expression File Size", c => c.gene_expression_size, (c, v) => c.gene_expression_size = v),
-				new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id, "Selected Variants File Size", c=> c.selected_variants_size, (c, v) => c.selected_variants_size = v),
-				new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_selected_variants_filename, (c,v) => c.normal_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtSelectedVariantsExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants File Size", c => c.normal_dna_reads_at_selected_variants_size, (c, v) => c.normal_dna_reads_at_selected_variants_size = v),
-				new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtSelectedVariantsIndexExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants Index File Size", c => c.normal_dna_reads_at_selected_variants_index_size, (c, v) => c.normal_dna_reads_at_selected_variants_index_size = v),
-				new FieldInformation("Tumor DNA Reads At Selected Variants Filename",       c => c.tumor_dna_reads_at_selected_variants_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtSelectedVariantsExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants File Size", c => c.tumor_dna_reads_at_selected_variants_size, (c, v) => c.tumor_dna_reads_at_selected_variants_size = v),
-				new FieldInformation("Tumor DNA Reads At Selected Variants Index Filename", c => c.tumor_dna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariantsIndex, tumorDNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants Index File Size", c => c.tumor_dna_reads_at_selected_variants_index_size, (c, v) => c.tumor_dna_reads_at_selected_variants_index_size = v),
-				new FieldInformation("Normal RNA Reads At Selected Variants Filename",      c => c.normal_rna_reads_at_selected_variants_filename, (c,v) => c.normal_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariants, normalRNAReadsAtSelectedVariantsExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants File Size", c => c.normal_rna_reads_at_selected_variants_size, (c, v) => c.normal_rna_reads_at_selected_variants_size = v),
-				new FieldInformation("Normal RNA Reads At Selected Variants Index Filename",c => c.normal_rna_reads_at_selected_variants_index_filename, (c,v) => c.normal_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariantsIndex, normalRNAReadsAtSelectedVariantsIndexExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants Index File Size", c => c.normal_rna_reads_at_selected_variants_index_size, (c, v) => c.normal_rna_reads_at_selected_variants_index_size = v),
-				new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtSelectedVariantsExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants File Size", c => c.tumor_rna_reads_at_selected_variants_size, (c, v) => c.tumor_rna_reads_at_selected_variants_size = v),
-				new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants Index File Size", c => c.tumor_rna_reads_at_selected_variants_index_size, (c, v) => c.tumor_rna_reads_at_selected_variants_index_size = v),
-				new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id, "Annotated Selected Variants File Size", c => c.annotated_selected_variants_size, (c, v) => c.annotated_selected_variants_size = v),
-				new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id, "Normal Allele Specific Gene Expression File Size", c => c.normal_allele_specific_gene_expression_size, (c, v) => c.normal_allele_specific_gene_expression_size = v),
-				new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id, "Tumor Allele Specific Gene Expression File Size", c => c.tumor_allele_specific_gene_expression_size, (c, v) => c.tumor_allele_specific_gene_expression_size = v),
-				new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id, "Tumor DNA Gene Coverage File Size", c => c.tumor_dna_gene_coverage_size, (c, v) => c.tumor_dna_gene_coverage_size = v),
-				new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id, "VCF File Size", c => c.vcf_size, (c, v) => c.vcf_size = v),
+                new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, "Normal DNA Allcount File Size", c => c.normal_dna_allcount_size, (c,v) => c.normal_dna_allcount_size = v),
+                new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, "Tumor DNA Allcount File Size", c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v),
+                new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id, "Normal RNA Allcount File Size", c => c.normal_rna_allcount_size, (c, v) => c.normal_rna_allcount_size = v),
+                new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id, "Tumor RNA Allcount File Size", c => c.tumor_rna_allcount_size, (c, v) => c.tumor_rna_allcount_size = v),
+                new FieldInformation("Regional Expression Filename",                        c => c.regional_expression_filename, (c,v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id, "Regional Expression File Size", c => c.regional_expression_size, (c, v) => c.regional_expression_size = v),
+                new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id, "Gene Expression File Size", c => c.gene_expression_size, (c, v) => c.gene_expression_size = v),
+                new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id, "Selected Variants File Size", c=> c.selected_variants_size, (c, v) => c.selected_variants_size = v),
+                new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_selected_variants_filename, (c,v) => c.normal_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtSelectedVariantsExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants File Size", c => c.normal_dna_reads_at_selected_variants_size, (c, v) => c.normal_dna_reads_at_selected_variants_size = v),
+                new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtSelectedVariantsIndexExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants Index File Size", c => c.normal_dna_reads_at_selected_variants_index_size, (c, v) => c.normal_dna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Tumor DNA Reads At Selected Variants Filename",       c => c.tumor_dna_reads_at_selected_variants_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtSelectedVariantsExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants File Size", c => c.tumor_dna_reads_at_selected_variants_size, (c, v) => c.tumor_dna_reads_at_selected_variants_size = v),
+                new FieldInformation("Tumor DNA Reads At Selected Variants Index Filename", c => c.tumor_dna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariantsIndex, tumorDNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants Index File Size", c => c.tumor_dna_reads_at_selected_variants_index_size, (c, v) => c.tumor_dna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Normal RNA Reads At Selected Variants Filename",      c => c.normal_rna_reads_at_selected_variants_filename, (c,v) => c.normal_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariants, normalRNAReadsAtSelectedVariantsExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants File Size", c => c.normal_rna_reads_at_selected_variants_size, (c, v) => c.normal_rna_reads_at_selected_variants_size = v),
+                new FieldInformation("Normal RNA Reads At Selected Variants Index Filename",c => c.normal_rna_reads_at_selected_variants_index_filename, (c,v) => c.normal_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariantsIndex, normalRNAReadsAtSelectedVariantsIndexExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants Index File Size", c => c.normal_rna_reads_at_selected_variants_index_size, (c, v) => c.normal_rna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtSelectedVariantsExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants File Size", c => c.tumor_rna_reads_at_selected_variants_size, (c, v) => c.tumor_rna_reads_at_selected_variants_size = v),
+                new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants Index File Size", c => c.tumor_rna_reads_at_selected_variants_index_size, (c, v) => c.tumor_rna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id, "Annotated Selected Variants File Size", c => c.annotated_selected_variants_size, (c, v) => c.annotated_selected_variants_size = v),
+                new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id, "Normal Allele Specific Gene Expression File Size", c => c.normal_allele_specific_gene_expression_size, (c, v) => c.normal_allele_specific_gene_expression_size = v),
+                new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id, "Tumor Allele Specific Gene Expression File Size", c => c.tumor_allele_specific_gene_expression_size, (c, v) => c.tumor_allele_specific_gene_expression_size = v),
+                new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id, "Tumor DNA Gene Coverage File Size", c => c.tumor_dna_gene_coverage_size, (c, v) => c.tumor_dna_gene_coverage_size = v),
+                new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id, "VCF File Size", c => c.vcf_size, (c, v) => c.vcf_size = v),
                 new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id, "Extracted MAF Lines File Size", c => c.extracted_maf_lines_size, (c, v) => c.extracted_maf_lines_size = v),
                 new FieldInformation("All MAF Lines Filename",                              c => c.all_maf_lines_filename, (c,v) => c.all_maf_lines_filename = v, DerivedFile.Type.AllMAFLines, allMAFLinesExtension, c => c.case_id, "All MAF Lines File Size", c => c.all_maf_lines_size, (c, v) => c.all_maf_lines_size = v),
                 new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id, "Normal DNA Mapped Base Count File Size", c => c.normal_dna_mapped_base_count_size, (c, v) => c.normal_dna_mapped_base_count_size = v),
-				new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id, "Tumor DNA Mapped Base Count File Size", c => c.tumor_dna_mapped_base_count_size, (c, v) => c.tumor_dna_mapped_base_count_size = v),
-				new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id, "Normal RNA Mapped Base Count File Size", c => c.normal_rna_mapped_base_count_size, (c, v) => c.normal_rna_mapped_base_count_size = v),
-				new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id, "Tumor RNA Mapped Base Count File Size", c => c.tumor_rna_mapped_base_count_size, (c, v) => c.tumor_rna_mapped_base_count_size = v),
-				new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, "Selected Variant Counts By Gene File Size", c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v),
+                new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id, "Tumor DNA Mapped Base Count File Size", c => c.tumor_dna_mapped_base_count_size, (c, v) => c.tumor_dna_mapped_base_count_size = v),
+                new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id, "Normal RNA Mapped Base Count File Size", c => c.normal_rna_mapped_base_count_size, (c, v) => c.normal_rna_mapped_base_count_size = v),
+                new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id, "Tumor RNA Mapped Base Count File Size", c => c.tumor_rna_mapped_base_count_size, (c, v) => c.tumor_rna_mapped_base_count_size = v),
+                new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, "Selected Variant Counts By Gene File Size", c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v),
+                new FieldInformation("Selected Regulatory MAF Lines Filename",              c => c.selected_regulatory_maf_filename, (c, v) => c.selected_regulatory_maf_filename = v, DerivedFile.Type.SelectedRegulatoryMAFLines, selectedRegulatoryMAFLinesExtension, c => c.case_id, "Selected Regulatory MAF Lines Size", c => c.selected_regulatory_maf_lines_size, (c, v) => c.selected_regulatory_maf_lines_size = v),
+                new FieldInformation("Annotated Regulatory Regions Filename",               c => c.annotated_regulatory_regions_filename, (c, v) => c.annotated_regulatory_regions_filename = v, DerivedFile.Type.AnnotatedRegulatoryRegions, annotatedBEDLinesExtension, c => c.case_id, "Annotated Regulatory Regions Size", c => c.annotated_regulatory_regions_size, (c, v) => c.annotated_regulatory_regions_size = v),
 
-				new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
-				new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
+                new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
+                new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
                 new FieldInformation("Tumor RNA BAM MD5",                                   c => c.tumor_rna_file_bam_md5, (c,v) => c.tumor_rna_file_bam_md5 = v),
                 new FieldInformation("Tumor RNA BAI MD5",                                   c => c.tumor_rna_file_bai_md5, (c,v) => c.tumor_rna_file_bai_md5 = v),
                 new FieldInformation("Normal DNA BAM MD5",                                  c => c.normal_dna_file_bam_md5, (c,v) => c.normal_dna_file_bam_md5 = v),
@@ -1239,16 +1245,16 @@ namespace ASELib
                 new FieldInformation("Tumor DNA BAM MD5",                                   c => c.tumor_dna_file_bam_md5, (c,v) => c.tumor_dna_file_bam_md5 = v),
                 new FieldInformation("Tumor DNA BAI MD5",                                   c => c.tumor_dna_file_bai_md5, (c,v) => c.tumor_dna_file_bai_md5 = v),
                 new FieldInformation("Tumor Methylation MD5",                               c => c.tumor_methylation_file_md5, (c,v) => c.tumor_methylation_file_md5 = v),
-				new FieldInformation("Normal Methylation MD5",                              c => c.normal_methylation_file_md5, (c,v) => c.normal_methylation_file_md5 = v),
-				new FieldInformation("Tumor Copy Number MD5",                               c => c.tumor_copy_number_file_md5, (c,v) => c.tumor_copy_number_file_md5 = v),
-				new FieldInformation("Normal Copy Number MD5",                              c => c.normal_copy_number_file_md5, (c,v) => c.normal_copy_number_file_md5 = v),
-				new FieldInformation("Tumor FPKM MD5",                                      c => c.tumor_fpkm_file_md5, (c,v) => c.tumor_fpkm_file_md5 = v),
-				new FieldInformation("Normal FPKM MD5",                                     c => c.normal_fpkm_file_md5, (c,v) => c.normal_fpkm_file_md5 = v),
+                new FieldInformation("Normal Methylation MD5",                              c => c.normal_methylation_file_md5, (c,v) => c.normal_methylation_file_md5 = v),
+                new FieldInformation("Tumor Copy Number MD5",                               c => c.tumor_copy_number_file_md5, (c,v) => c.tumor_copy_number_file_md5 = v),
+                new FieldInformation("Normal Copy Number MD5",                              c => c.normal_copy_number_file_md5, (c,v) => c.normal_copy_number_file_md5 = v),
+                new FieldInformation("Tumor FPKM MD5",                                      c => c.tumor_fpkm_file_md5, (c,v) => c.tumor_fpkm_file_md5 = v),
+                new FieldInformation("Normal FPKM MD5",                                     c => c.normal_fpkm_file_md5, (c,v) => c.normal_fpkm_file_md5 = v),
 
-			}; // fieldInformation
+            }; // fieldInformation
 
-  
-            static public Case fromSaveFileLine(Dictionary<string, int> fieldMappings, string[] fields) 
+
+            static public Case fromSaveFileLine(Dictionary<string, int> fieldMappings, string[] fields)
             {
                 var case_ = new Case();
 
@@ -1256,7 +1262,7 @@ namespace ASELib
                 {
                     info.setValue(case_, fields[fieldMappings[info.columnName]]);
                 }
- 
+
                 return case_;
             } // fromSaveFile
 
@@ -1266,7 +1272,7 @@ namespace ASELib
                     return "";
                 }
 
-                 var retVal = sample_ids[0];
+                var retVal = sample_ids[0];
 
                 for (int i = 1; i < sample_ids.Count(); i++) {
                     retVal += "," + sample_ids[i];
@@ -1358,7 +1364,7 @@ namespace ASELib
 
                 if (downloadedFiles.ContainsKey(tumor_dna_file_id))
                 {
-                  tumor_dna_filename = downloadedFiles[tumor_dna_file_id].fileInfo.FullName;
+                    tumor_dna_filename = downloadedFiles[tumor_dna_file_id].fileInfo.FullName;
                 }
                 else
                 {
@@ -1367,7 +1373,7 @@ namespace ASELib
 
                 if (normal_rna_file_id != "" && downloadedFiles.ContainsKey(normal_rna_file_id))
                 {
-                  normal_rna_filename = downloadedFiles[normal_rna_file_id].fileInfo.FullName;
+                    normal_rna_filename = downloadedFiles[normal_rna_file_id].fileInfo.FullName;
                 }
                 else
                 {
@@ -1376,7 +1382,7 @@ namespace ASELib
 
                 if (downloadedFiles.ContainsKey(tumor_rna_file_id))
                 {
-                  tumor_rna_filename = downloadedFiles[tumor_rna_file_id].fileInfo.FullName;
+                    tumor_rna_filename = downloadedFiles[tumor_rna_file_id].fileInfo.FullName;
                 }
                 else
                 {
@@ -1385,7 +1391,7 @@ namespace ASELib
 
                 if (downloadedFiles.ContainsKey(maf_file_id))
                 {
-                  maf_filename  = downloadedFiles[maf_file_id].fileInfo.FullName;
+                    maf_filename = downloadedFiles[maf_file_id].fileInfo.FullName;
                 }
                 else
                 {
@@ -1394,23 +1400,23 @@ namespace ASELib
 
                 if (tumor_methylation_file_id != "" && downloadedFiles.ContainsKey(tumor_methylation_file_id))
                 {
-                  tumor_methylation_filename  = downloadedFiles[tumor_methylation_file_id].fileInfo.FullName;
+                    tumor_methylation_filename = downloadedFiles[tumor_methylation_file_id].fileInfo.FullName;
                 }
                 else
                 {
                     tumor_methylation_filename = "";
                 }
 
-				if (normal_methylation_file_id != "" && downloadedFiles.ContainsKey(normal_methylation_file_id))
-				{
-					normal_methylation_filename = downloadedFiles[normal_methylation_file_id].fileInfo.FullName;
-				}
-				else
-				{
-					normal_methylation_filename = "";
-				}
+                if (normal_methylation_file_id != "" && downloadedFiles.ContainsKey(normal_methylation_file_id))
+                {
+                    normal_methylation_filename = downloadedFiles[normal_methylation_file_id].fileInfo.FullName;
+                }
+                else
+                {
+                    normal_methylation_filename = "";
+                }
 
-				if (tumor_copy_number_file_id != "" && downloadedFiles.ContainsKey(tumor_copy_number_file_id))
+                if (tumor_copy_number_file_id != "" && downloadedFiles.ContainsKey(tumor_copy_number_file_id))
                 {
                     tumor_copy_number_filename = downloadedFiles[tumor_copy_number_file_id].fileInfo.FullName;
                 }
@@ -1419,39 +1425,39 @@ namespace ASELib
                     tumor_copy_number_filename = "";
                 }
 
-				if (normal_copy_number_file_id != "" && downloadedFiles.ContainsKey(normal_copy_number_file_id))
-				{
-					normal_copy_number_filename = downloadedFiles[normal_copy_number_file_id].fileInfo.FullName;
-				}
-				else
-				{
-					normal_copy_number_filename = "";
-				}
+                if (normal_copy_number_file_id != "" && downloadedFiles.ContainsKey(normal_copy_number_file_id))
+                {
+                    normal_copy_number_filename = downloadedFiles[normal_copy_number_file_id].fileInfo.FullName;
+                }
+                else
+                {
+                    normal_copy_number_filename = "";
+                }
 
-				if (tumor_fpkm_file_id != "" && downloadedFiles.ContainsKey(tumor_fpkm_file_id))
-				{
-					tumor_fpkm_filename = downloadedFiles[tumor_fpkm_file_id].fileInfo.FullName;
-				}
-				else
-				{
-					tumor_fpkm_filename = "";
-				}
+                if (tumor_fpkm_file_id != "" && downloadedFiles.ContainsKey(tumor_fpkm_file_id))
+                {
+                    tumor_fpkm_filename = downloadedFiles[tumor_fpkm_file_id].fileInfo.FullName;
+                }
+                else
+                {
+                    tumor_fpkm_filename = "";
+                }
 
-				if (normal_fpkm_file_id != "" && downloadedFiles.ContainsKey(normal_fpkm_file_id))
-				{
-					normal_fpkm_filename = downloadedFiles[normal_fpkm_file_id].fileInfo.FullName;
-				}
-				else
-				{
-					normal_fpkm_filename = "";
-				}
+                if (normal_fpkm_file_id != "" && downloadedFiles.ContainsKey(normal_fpkm_file_id))
+                {
+                    normal_fpkm_filename = downloadedFiles[normal_fpkm_file_id].fileInfo.FullName;
+                }
+                else
+                {
+                    normal_fpkm_filename = "";
+                }
 
-				if (!derivedFiles.ContainsKey(case_id))
+                if (!derivedFiles.ContainsKey(case_id))
                 {
                     tumor_rna_allcount_filename = "";
                     tumor_allele_specific_gene_expression_filename = "";
-					normal_allele_specific_gene_expression_filename = "";
-					annotated_selected_variants_filename = "";
+                    normal_allele_specific_gene_expression_filename = "";
+                    annotated_selected_variants_filename = "";
                     tumor_dna_reads_at_selected_variants_filename = "";
                     tumor_dna_reads_at_selected_variants_index_filename = "";
                     gene_expression_filename = "";
@@ -1464,7 +1470,7 @@ namespace ASELib
                     return;
                 }
 
-                Dictionary<DerivedFile.Type, List<DerivedFile>> derivedFilesByType = new Dictionary<DerivedFile.Type,List<DerivedFile>>();
+                Dictionary<DerivedFile.Type, List<DerivedFile>> derivedFilesByType = new Dictionary<DerivedFile.Type, List<DerivedFile>>();
                 var derivedFilesForThisCase = derivedFiles[case_id];
                 foreach (var type in (DerivedFile.Type[])Enum.GetValues(typeof(DerivedFile.Type))) {
                     derivedFilesByType.Add(type, derivedFilesForThisCase.Where(x => x.type == type).ToList());
@@ -1623,20 +1629,24 @@ namespace ASELib
             }
         }
 
-		public class Configuration
+        public class Configuration
         {
+            // If you add anything that references defaultBaseDirectory, be sure to add it to
+            // reinitializeWithBaseDirectory()
+
             public const string defaultBaseDirectory = @"\\msr-genomics-0\d$\gdc\";
             public const string defaultConfigurationFilePathame = defaultBaseDirectory + "configuration.txt";
 
-            public string accessTokenPathname = defaultBaseDirectory +  @"access_token.txt";
+            public string baseDirectory = defaultBaseDirectory;
 
-			public const string defaultGenomeBuild = "hg38";
-			public const string defaultGeneLocationInformationFilename = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
-			public const string defaultEnsemblToGeneFilename = @"\\msr-genomics-0\d$\gdc\ensemblGeneNames.txt"; 
+            public string accessTokenPathname = defaultBaseDirectory + @"access_token.txt";
 
-			public const string hg19GeneLocationInformation = defaultBaseDirectory + "knownGene-hg19.txt";
+            public const string defaultGenomeBuild = "hg38";
+            public string ensemblToGeneFilename = defaultBaseDirectory + @"ensemblGeneNames.txt";
 
-			public List<string> dataDirectories = new List<string>();
+            public string hg19GeneLocationInformation = defaultBaseDirectory + "knownGene-hg19.txt";
+
+            public List<string> dataDirectories = new List<string>();
             public string mafManifestPathname = defaultBaseDirectory + "mafManifest.txt";
             public string mutationCaller = "mutect";
             public List<string> programNames = new List<string>();
@@ -1644,53 +1654,90 @@ namespace ASELib
             public string configuationFilePathname = defaultConfigurationFilePathame;
             public string casesFilePathname = defaultBaseDirectory + "cases.txt";
 
-			public string indexDirectory = defaultBaseDirectory + @"indices\hg38-16";
-			public string indexDirectoryHg19 = defaultBaseDirectory + @"indices\hg19";
+            public string indexDirectory = defaultBaseDirectory + @"indices\hg38-16";
             public string localIndexDirectory = @"d:\gdc\indices\hg38-16";
-			public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
+            public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
             public string hpcBinariesDirectory = @"\\gcr\scratch\b99\bolosky\";
-            public string hpcIndexDirectory = @"\\msr-genomics-0\d$\gdc\indices\hg38-16";
+            public string hpcIndexDirectory = defaultBaseDirectory + @"indices\hg38-16";
             public string azureScriptFilename = ""; // The empty string says to black hole this script
-            public string expressionFilesDirectory = @"\\msr-genomics-0\d$\gdc\expression\";
+            public string expressionFilesDirectory = defaultBaseDirectory + @"expression\";
             public string completedVCFsDirectory = "";  // Where completed VCFs from Azure are dropped
             public List<string> excludedFileIDs = new List<string>();
             public int regionalExpressionRegionSize = 1000;
             public int nTumorsToIncludeGene = 30;   // How many tumors must have at least one mutation in a gene in order to include it.
             public int nReadsToIncludeVariant = 30; // How much coverage do we need of a mutation or somatic variant to consider it?
-            public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
+            public string selectedGenesFilename = defaultBaseDirectory + @"seleted_genes.txt";
             public string scriptOutputDirectory = @"\temp\";
-            public string finalResultsDirectory = @"\\msr-genomics-0\d$\gdc\final_results\";
+            public string finalResultsDirectory = defaultBaseDirectory + @"final_results\";
             public double significanceLevel = 0.01;
-            public string geneLocationInformationFilename = defaultGeneLocationInformationFilename;
+            public string geneLocationInformationFilename = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
             public int minSampleCountForHeatMap = 100;
             public double ASEInNormalAtWhichToExcludeGenes = 0.5;  // If there's at least this much ASE overall in the matched normal for a gene, then don't use selected variants for it.
 
-			public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
-			// items used in bisulfite analysis
-			public const string bisulfiteDirectory = defaultBaseDirectory  + @"bisulfate\";
-			public const string bisulfiteCasesFilePathname = bisulfiteDirectory + "cases_bisulfite.txt";
+            public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
+            public string encodeBEDFile = defaultBaseDirectory + @"encode\ENCFF621SFC_hg38.bed";
+            // items used in bisulfite analysis
+            public string bisulfiteDirectory = defaultBaseDirectory + @"bisulfate\";
+            public string bisulfiteCasesFilePathname = defaultBaseDirectory + @"bisulfite\cases_bisulfite.txt";
 
             public string chromosomeMapsDirectory = defaultBaseDirectory + @"chromosome_maps\";
             public string redundantChromosomeRegionFilename = defaultBaseDirectory + "redundantRegions.txt";
 
             // chain files
-            public const string hg38Tohg19ChainFile = defaultBaseDirectory + @"chain\hg38ToHg19.over.chain";
-			public const string hg19Tohg38ChainFile = defaultBaseDirectory + @"chain\hg19ToHg38.over.chain";
+            public string hg38Tohg19ChainFile = defaultBaseDirectory + @"chain\hg38ToHg19.over.chain";
+            public string hg19Tohg38ChainFile = defaultBaseDirectory + @"chain\hg19ToHg38.over.chain";
+
             public string regionalExpressionDirectory = defaultBaseDirectory + @"regional_expression\";
 
-			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"gene_mutations_with_counts\";
-			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
-			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs450.txt";
+            public string unfilteredCountsDirectory = defaultBaseDirectory + @"gene_mutations_with_counts\";
+            public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
+            public string methylationREFsFilename = defaultBaseDirectory + "compositeREFs450.txt";
 
             public const string geneCategorizationFilename = "GeneCategorization.txt";
 
-            public const string zero_one_two_directory = defaultBaseDirectory + @"012graphs\";
-            public const string expression_distribution_directory = defaultBaseDirectory + @"expression_distribution\";
+            public string zero_one_two_directory = defaultBaseDirectory + @"012graphs\";
+            public string expression_distribution_directory = defaultBaseDirectory + @"expression_distribution\";
 
             public int minRNAReadCoverage = 10;
             public int minDNAReadCoverage = 10;
+
+            public bool isBeatAML = false;
+
+            void reinitialzeWithBaseDirectory()
+            {
+                accessTokenPathname = baseDirectory + @"access_token.txt";
+                ensemblToGeneFilename = baseDirectory + @"ensemblGeneNames.txt";
+                binariesDirectory = baseDirectory + @"bin\";
+                hg19GeneLocationInformation = baseDirectory + "knownGene-hg19.txt";
+                mafManifestPathname = baseDirectory + "mafManifest.txt";
+                binariesDirectory = baseDirectory + @"bin\";
+                casesFilePathname = baseDirectory + "cases.txt";
+                indexDirectory = baseDirectory + @"indices\hg38-16";
+                hpcIndexDirectory = baseDirectory + @"indices\hg38-16";
+                expressionFilesDirectory = baseDirectory + @"expression\";
+                selectedGenesFilename = baseDirectory + @"seleted_genes.txt";
+                finalResultsDirectory = baseDirectory + @"final_results\";
+                geneLocationInformationFilename = baseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
+                geneScatterGraphsDirectory = baseDirectory + @"gene_scatter_graphs\";
+                encodeBEDFile = baseDirectory + @"encode\ENCFF621SFC_hg38.bed";
+                bisulfiteDirectory = baseDirectory + @"bisulfate\";
+                bisulfiteCasesFilePathname = baseDirectory + @"bisulfite\cases_bisulfite.txt";
+                chromosomeMapsDirectory = baseDirectory + @"chromosome_maps\";
+                redundantChromosomeRegionFilename = baseDirectory + "redundantRegions.txt";
+                hg38Tohg19ChainFile = baseDirectory + @"chain\hg38ToHg19.over.chain";
+                hg19Tohg38ChainFile = baseDirectory + @"chain\hg19ToHg38.over.chain";
+                regionalExpressionDirectory = baseDirectory + @"regional_expression\";
+                unfilteredCountsDirectory = baseDirectory + @"gene_mutations_with_counts\";
+                methylationREFsFilename = baseDirectory + "compositeREFs450.txt";
+                zero_one_two_directory = baseDirectory + @"012graphs\";
+                expression_distribution_directory = baseDirectory + @"expression_distribution\";
+
+
+                dataDirectories = new List<string>();
+                dataDirectories.Add(baseDirectory + @"downloaded_files\");
+            }
 
             public int getMinReadCoverage(bool dna)
             {
@@ -1699,7 +1746,7 @@ namespace ASELib
             }
 
 
-			public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
+            public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
 
             Configuration()
             {
@@ -1710,7 +1757,7 @@ namespace ASELib
             //
             // Parse the args to find the configuration file pathname, and then load from that path (or the default if it's not present).
             //
-            public static Configuration loadFromFile(string [] args) 
+            public static Configuration loadFromFile(string[] args)
             {
                 string pathname = @"\\msr-genomics-0\d$\gdc\configuration.txt";
 
@@ -1721,7 +1768,7 @@ namespace ASELib
                         if (i >= args.Count() - 1) {
                             Console.WriteLine("-configuation can't be the last parameter, it needs to be followed by a file path.  Ignoring.");
                         } else {
-                            pathname = args[i+1];
+                            pathname = args[i + 1];
                             i++;
                             fromCommandLine = true;
                         }
@@ -1753,8 +1800,9 @@ namespace ASELib
                 var lines = ReadAllLinesWithRetry(pathname);
                 bool seenProgramNames = false;
                 bool seenDataDirectories = false;
+                bool firstLine = false; // This is used because we can only reset the base directory in the first line, since resetting it changes lots of other fields.
 
-                foreach (var line in lines) 
+                foreach (var line in lines)
                 {
                     var fields = line.Split('\t');
                     if (fields.Count() != 2) {
@@ -1840,11 +1888,31 @@ namespace ASELib
                         retVal.minRNAReadCoverage = Convert.ToInt32(fields[1]);
                     } else if (type == "min dna read coverage") {
                         retVal.minDNAReadCoverage = Convert.ToInt32(fields[1]);
+                    } else if (type == "encode bed file") {
+                        retVal.encodeBEDFile = fields[1];
+                    } else if (type == "beat aml") {
+                        if (fields[1].ToLower() == "true")
+                        {
+                            retVal.isBeatAML = true;
+                        } else
+                        {
+                            retVal.isBeatAML = false;
+                        }
+                    } else if (type == "base directory") {
+                        if (!firstLine)
+                        {
+                            Console.WriteLine("You can only change the base directory as the first line of the configuration file.");
+                            return null;
+                        }
+                        retVal.baseDirectory = fields[1];
+                        retVal.reinitialzeWithBaseDirectory();
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
                     }
-                }
+
+                    firstLine = false;
+                } // foreach (var line in lines) 
 
                 return retVal;
             }
@@ -1896,7 +1964,7 @@ namespace ASELib
             {
                 var writer = CreateStreamWriterWithRetry(filename);
 
-                 writer.WriteLine("Hugo_Symbol\tnTumors\tnMutations\tnFlankingMutations\tnRNAMutations\tnTumorsWithOneMutation\tnTumorsWithMoreThanOneMutation\tTumorsByMutationCount");
+                writer.WriteLine("Hugo_Symbol\tnTumors\tnMutations\tnFlankingMutations\tnRNAMutations\tnTumorsWithOneMutation\tnTumorsWithMoreThanOneMutation\tTumorsByMutationCount");
 
 
                 foreach (var selectedGene in selectedGenes)
@@ -1960,7 +2028,7 @@ namespace ASELib
             public readonly int nTumors;
             public readonly int nFlankingMutations;
             public readonly int nRNAMutations;
-            public readonly int []tumorsByCountOfNonSilentMutations;
+            public readonly int[] tumorsByCountOfNonSilentMutations;
         } // SelectedGene
 
         public static System.Net.WebClient getWebClient()
@@ -2104,17 +2172,17 @@ namespace ASELib
             [DataMember]
             public string created_datetime = "";
 
-//            [DataMember]
-//            public string[] submitter_aliquot_ids = { };
+            //            [DataMember]
+            //            public string[] submitter_aliquot_ids = { };
 
-//            [DataMember]
-//            public string[] submitter_portion_ids = { };
+            //            [DataMember]
+            //            public string[] submitter_portion_ids = { };
 
-//            [DataMember]
-//            public string[] submitter_analyte_ids = { };
+            //            [DataMember]
+            //            public string[] submitter_analyte_ids = { };
 
-//            [DataMember]
-//            public string[] analyte_ids = { };
+            //            [DataMember]
+            //            public string[] analyte_ids = { };
 
             [DataMember]
             public string submitter_id = "";
@@ -2125,17 +2193,17 @@ namespace ASELib
             [DataMember]
             public string state = "";
 
-//            [DataMember]
-//            public string[] aliquot_ids = { };
+            //            [DataMember]
+            //            public string[] aliquot_ids = { };
 
-//            [DataMember]
-//            public string[] slide_ids = { };
+            //            [DataMember]
+            //            public string[] slide_ids = { };
 
-//            [DataMember]
-//            public string[] submitter_sample_ids = { };
+            //            [DataMember]
+            //            public string[] submitter_sample_ids = { };
 
-//            [DataMember]
-//            public string[] submitter_slide_ids = { };
+            //            [DataMember]
+            //            public string[] submitter_slide_ids = { };
 
             [DataMember]
             public GDCCaseProject project = null;
@@ -2170,7 +2238,7 @@ namespace ASELib
             public GDCHits<containedClass> data = null;
         }
 
-         [DataContract]
+        [DataContract]
         public class GDCSamples
         {
             [DataMember]
@@ -2354,7 +2422,7 @@ namespace ASELib
             return pathname.Substring(0, pathname.LastIndexOf('\\'));
         }
 
-        public static string GetFileIdFromPathname(string pathname) 
+        public static string GetFileIdFromPathname(string pathname)
         {
             string filename = GetFileNameFromPathname(pathname);
 
@@ -2367,47 +2435,47 @@ namespace ASELib
         }
 
         static readonly int FileIdLength = "01c5f902-ec3c-4eb7-9e38-1d29ae6ab959".Count();
-		//
-		// For filenames of the from ...\analysis-id\filename
-		//
-		static public string GetAnalysisIdFromPathname(string pathname)
-		{
-			if (!pathname.Contains('\\'))
-			{
-				Console.WriteLine("ASETools.GetAnalysisIdFromPathname: invalid pathname input " + pathname);
-				return "";
-			}
+        //
+        // For filenames of the from ...\analysis-id\filename
+        //
+        static public string GetAnalysisIdFromPathname(string pathname)
+        {
+            if (!pathname.Contains('\\'))
+            {
+                Console.WriteLine("ASETools.GetAnalysisIdFromPathname: invalid pathname input " + pathname);
+                return "";
+            }
 
-			string directoryName;
-			if (pathname.LastIndexOf('\\') != pathname.Count())
-			{
-				//
-				// Does not end in a trailing \.
-				//
-				directoryName = pathname.Substring(0, pathname.LastIndexOf('\\'));
-			}
-			else
-			{
-				//
-				// Ends in a trailing backslash, just trim it off.
-				//
-				directoryName = pathname.Substring(0, pathname.Count() - 1);
-			}
+            string directoryName;
+            if (pathname.LastIndexOf('\\') != pathname.Count())
+            {
+                //
+                // Does not end in a trailing \.
+                //
+                directoryName = pathname.Substring(0, pathname.LastIndexOf('\\'));
+            }
+            else
+            {
+                //
+                // Ends in a trailing backslash, just trim it off.
+                //
+                directoryName = pathname.Substring(0, pathname.Count() - 1);
+            }
 
-			if (directoryName.Contains('\\'))
-			{
-				directoryName = directoryName.Substring(directoryName.LastIndexOf('\\') + 1);
-			}
+            if (directoryName.Contains('\\'))
+            {
+                directoryName = directoryName.Substring(directoryName.LastIndexOf('\\') + 1);
+            }
 
-			if (directoryName.Count() != 36)
-			{
-				Console.WriteLine("ASETools.GetAnalysisIdFromPathname: invalid pathname input does not include analysis id as last directory " + pathname);
-				return "";
-			}
+            if (directoryName.Count() != 36)
+            {
+                Console.WriteLine("ASETools.GetAnalysisIdFromPathname: invalid pathname input does not include analysis id as last directory " + pathname);
+                return "";
+            }
 
 
-			return directoryName;
-		}
+            return directoryName;
+        }
 
         public class DownloadedFile
         {
@@ -2443,9 +2511,9 @@ namespace ASELib
         public const string annotatedSelectedVariantsExtension = ".annotatedSeletedVariants";
         public const string regionalExpressionExtension = ".regional_expression.txt";
         public const string geneExpressionExtension = ".gene_expression.txt";
-		public const string tumorAlleleSpecificGeneExpressionExtension = ".tumor-allele-specific_gene_expression.txt";
-		public const string normalAlleleSpecificGeneExpressionExtension = ".normal-allele-specific_gene_expression.txt";
-		public const string tumorRNAReadsAtSelectedVariantsExtension = ".tumor-rna-reads-at-selected-variants.txt";
+        public const string tumorAlleleSpecificGeneExpressionExtension = ".tumor-allele-specific_gene_expression.txt";
+        public const string normalAlleleSpecificGeneExpressionExtension = ".normal-allele-specific_gene_expression.txt";
+        public const string tumorRNAReadsAtSelectedVariantsExtension = ".tumor-rna-reads-at-selected-variants.txt";
         public const string tumorRNAReadsAtSelectedVariantsIndexExtension = ".tumor-rna-reads-at-selected-variants.txt.index";
         public const string normalRNAReadsAtSelectedVariantsExtension = ".normal-rna-reads-at-selected-variants.txt";
         public const string normalRNAReadsAtSelectedVariantsIndexExtension = ".normal-rna-reads-at-selected-variants.txt.index";
@@ -2464,13 +2532,15 @@ namespace ASELib
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
         public const string bonferroniExtension = "_bonferroni.txt";
 
-		public const string scatterGraphsSummaryFilename = "_summary.txt";
+        public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
         public const string genesWithSelectedVariantsFilename = "GenesWithSelectedVariantCounts.txt";
         public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
-		public const string regionalMethylationExtension = ".regional_methylation.txt";
+        public const string regionalMethylationExtension = ".regional_methylation.txt";
 
-		public const string tumorHeatMapFilename = "TumorAlleleSpecificExpressionHeatMap.txt";
+        public const string selectedRegulatoryMAFLinesExtension = ".regulatory_maf_lines";
+
+        public const string tumorHeatMapFilename = "TumorAlleleSpecificExpressionHeatMap.txt";
         public const string normalHeatMapFilename = "NormalAlleleSpecificExpressionHeatMap.txt";
         public const string tumorHeatMapHistogramFilename = "TumorAlleleSpecificExpressionHeatMapHistograms.txt";
         public const string normalHeatMapHistogramFilename = "NormalAlleleSpecificExpressionHeatMapHistograms.txt";
@@ -2499,6 +2569,8 @@ namespace ASELib
         public const string annotated_scatter_graphs_histogram_filename = "_annotated_scatter_graphs_histograms.txt";
         public const string vaf_histogram_filename = "VAFHistograms.txt";
         public const string simulatedResultsFilename = "SimulatedASEError.txt";
+        public const string mappedBaseCountDistributionFilename = "MappedBaseCountDistribution.txt";
+        public const string annotatedBEDLinesExtension = "_annotated_bed_lines.txt";
 
 
 
@@ -2523,7 +2595,7 @@ namespace ASELib
                     return;
                 }
 
-                derived_from_file_id = filename.Substring(0,FileIdLength);
+                derived_from_file_id = filename.Substring(0, FileIdLength);
 
                 var extension = filename.Substring(FileIdLength).ToLower();
 
@@ -2545,7 +2617,7 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, 
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, 
             };
         } // DerivedFile
 
@@ -2562,7 +2634,7 @@ namespace ASELib
             public List<DerivedFile> derivedFiles = new List<DerivedFile>();
         }
 
-        static void ScanOneFilesystem(Configuration configuration, string downloadedFilesDirectory, ScanFilesystemState state, Stopwatch stopwatch, int directoryFieldLength) 
+        static void ScanOneFilesystem(Configuration configuration, string downloadedFilesDirectory, ScanFilesystemState state, Stopwatch stopwatch, int directoryFieldLength)
         {
             if (!Directory.Exists(downloadedFilesDirectory))
             {
@@ -2706,7 +2778,7 @@ namespace ASELib
                     }
                     continue;
                 }
- 
+
                 foreach (var derivedFilePathname in Directory.EnumerateFiles(derivedCase))
                 {
                     var derivedFile = new DerivedFile(derivedFilePathname, caseId);
@@ -2722,7 +2794,7 @@ namespace ASELib
             lock (state)
             {
                 Console.WriteLine(String.Format("{0," + directoryFieldLength + "}", downloadedFilesDirectory) + " " + String.Format("{0,16}", "" + nDownloadedFiles + " (" + SizeToUnits(totalBytesInDownloadedFiles) + "B)") + " " +
-                    String.Format("{0,13}", "" + nDerivedFiles + " (" + SizeToUnits(totalBytesInDerivedFiles) + "B)") + " " + String.Format("{0,10}", SizeToUnits(freeBytesAvailable) +"B") + " " +
+                    String.Format("{0,13}", "" + nDerivedFiles + " (" + SizeToUnits(totalBytesInDerivedFiles) + "B)") + " " + String.Format("{0,10}", SizeToUnits(freeBytesAvailable) + "B") + " " +
                     String.Format("{0,9}", ElapsedTimeInSeconds(stopwatch)));
 
                 state.nDownloadedFiles += nDownloadedFiles;
@@ -2761,7 +2833,7 @@ namespace ASELib
             }
 
             Console.WriteLine(" Downloaded Files Derived Files Free Size Scan Time");
-            for (int i = 0; i < directoryHeader.Count() + paddingLength; i++ )
+            for (int i = 0; i < directoryHeader.Count() + paddingLength; i++)
             {
                 Console.Write("-");
             }
@@ -2842,14 +2914,14 @@ namespace ASELib
                 }
 
                 var headerPrefix = "MAF Manifest v1.0 generated at ";
-                if (lines[0].Count() < headerPrefix.Count() || lines[0].Substring(0,headerPrefix.Count()) != headerPrefix) {
+                if (lines[0].Count() < headerPrefix.Count() || lines[0].Substring(0, headerPrefix.Count()) != headerPrefix) {
                     Console.WriteLine("Corrupt or unrecognized version in maf manifest header, ignoring: " + lines[0]);
                     return null;
                 }
 
                 var retVal = new Dictionary<string, MAFInfo>();
 
-                if (lines[lines.Count() -1] != "**done**") {
+                if (lines[lines.Count() - 1] != "**done**") {
                     Console.WriteLine("maf manifest file " + filename + " does not end with **done**, and so is probably truncated.  Ignoring.");
                     return null;
                 }
@@ -2945,8 +3017,8 @@ namespace ASELib
             public delegate outputType Parse(Dictionary<string, int> fieldMappings, string[] fields);
             public delegate outputType FieldGrabberParser(FieldGrabber fieldGrabber);
 
-            public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_, 
-				bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0, bool allowMissingRowsInData_ = false, 
+            public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_,
+                bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0, bool allowMissingRowsInData_ = false,
                 char separator_ = '\t', bool stopAtBlankLine_ = false)
             {
                 inputFile = inputFile_;
@@ -2956,8 +3028,8 @@ namespace ASELib
                 wantedFields = wantedFields_;
                 skipHash = skipHash_;
                 allowMissingColumnsInData = allowMissingColumnsInData_;
-				skippedRows = skippedRows_;
-				allowMissingRowsInData = allowMissingRowsInData_;
+                skippedRows = skippedRows_;
+                allowMissingRowsInData = allowMissingRowsInData_;
                 separator = separator_;
                 stopAtBlankLine = stopAtBlankLine_;
             }
@@ -3004,14 +3076,14 @@ namespace ASELib
                     }
                 }
 
-				for (var i = 0; i < skippedRows; i++)
-				{
-					inputFile.ReadLine();
-				}
+                for (var i = 0; i < skippedRows; i++)
+                {
+                    inputFile.ReadLine();
+                }
 
-				var header = inputFile.ReadLine();
+                var header = inputFile.ReadLine();
 
-				if (skipHash)
+                if (skipHash)
                 {
                     while (header != null && header.StartsWith("#"))
                     {
@@ -3039,7 +3111,7 @@ namespace ASELib
                             result = null;
                             return false;
                         }
-                        
+
                         fieldMappings.Add(columns[i], i);
                         maxNeededField = i;
                     }
@@ -3229,7 +3301,7 @@ namespace ASELib
                 public long AsLong(string fieldName)
                 {
                     return Convert.ToInt64(AsString(fieldName));
-                } 
+                }
 
                 public int AsIntMinusOneIfStarOrEmptyString(string fieldName)
                 {
@@ -3301,8 +3373,8 @@ namespace ASELib
             bool hasMissingFields = false;
             bool skipHash;
             bool allowMissingColumnsInData;
-			bool allowMissingRowsInData;
-			int skippedRows;
+            bool allowMissingRowsInData;
+            int skippedRows;
             char separator;
             bool stopAtBlankLine;
         } // HeaderizedFile
@@ -3313,354 +3385,354 @@ namespace ASELib
             return Convert.ToInt32(value);
         }
 
-		// Gives information on CompositeREFs from methylation and corresponding gene information
-		public class CompositeREFInfoLine
-		{
-			public string Composite_Element_REF;
-			public string Chromosome;
-			public int Position;
-			public string Hugo_Symbol;
-
-			static KeyValuePair<string, GeneLocationInfo> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
-			{
-				var composite = fields[fieldMappings["compositeREF"]];
-				var geneInfo = new GeneLocationInfo();
-				geneInfo.chromosome = fields[fieldMappings["chr"]];
-				geneInfo.minLocus = Convert.ToInt32(fields[fieldMappings["start"]]);
-				geneInfo.maxLocus = Convert.ToInt32(fields[fieldMappings["end"]]);
-
-				return new KeyValuePair<string, GeneLocationInfo>(composite, geneInfo);
-
-			}
-
-
-			static public List<KeyValuePair<string, GeneLocationInfo>> ReadFile(string filename)
-			{
-				StreamReader inputFile = CreateStreamReaderWithRetry(filename);
-
-				var neededFields = new List<string>();
-				neededFields.Add("compositeREF");
-				neededFields.Add("chr");
-				neededFields.Add("start");
-				neededFields.Add("end");
-
-				bool hasDone = false;
-				var headerizedFile = new HeaderizedFile<KeyValuePair<string, GeneLocationInfo>>(inputFile, false, hasDone, "#version gdc-1.0.0", neededFields);
-
-				List<KeyValuePair<string, GeneLocationInfo>> result;
-
-				if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
-				{
-					Console.WriteLine("Error reading Composite REF File " + filename);
-					return null;
-				}
-
-				inputFile.Close();
-				return result;
-			} // ReadFile
-
-		} // CompositeREFInfoFile
-
-
-		public class CompositeREF
-		{
-			public string Composite_Element_REF;
-			public string Chromosome;
-			public int Start;
-			public int End;
-			public string[] Gene_Symbol;
-			public string[] Gene_Type;
-			public string[] Transcript_ID;
-			public int[] Position_to_TSS;
-			public string CGI_Coordinate;
-			public FeatureType Feature_Type;
-
-			// Methylation types
-			public enum FeatureType
-			{
-				// Feature type not specified
-				Other,
-				// methylation found in 2kb region upstream from island
-				N_Shore,
-				// methylation found in 2kb region downstream from island
-				S_Shore,
-				// CpG island
-				Island,
-			}
-
-			public CompositeREF(string Composite_Element_REF_,
-				string Chromosome_,
-				int Start_,
-				int End_,
-				string[] Gene_Symbol_,
-				string[] Gene_Type_,
-				string[] Transcript_ID_,
-				int[] Position_to_TSS_,
-				string CGI_Coordinate_,
-				FeatureType Feature_Type_)
-			{
-
-				var geneCount = Gene_Symbol_.Length;
-
-				if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Position_to_TSS_.Length != geneCount)
-				{
-					Console.WriteLine("Error: Gene Count does not match supporting gene data");
-				}
-
-				Composite_Element_REF = Composite_Element_REF_;
-				Chromosome = Chromosome_;
-				Start = Start_;
-				End = End_;
-				Gene_Symbol = Gene_Symbol_;
-				Gene_Type = Gene_Type_;
-				Transcript_ID = Transcript_ID_;
-				Position_to_TSS = Position_to_TSS_;
-				CGI_Coordinate = CGI_Coordinate_;
-				Feature_Type = Feature_Type_;
-
-			}
-		}
-
-		// contains annotation data from one line in a methylation file
-		public class AnnotationLine
-		{
-			public static List<AnnotationLine> filterByTSS(List<AnnotationLine> sites, int maxDistance = 2000)
-			{
-				var filteredSites = sites.Where(r =>
-				{
-					var geneAbsAverages =
-					r.compositeREF.Gene_Symbol.Zip(r.compositeREF.Position_to_TSS, (first, second) => new Tuple<string, int>(first, second))
-						.GroupBy(i => i.Item1)	// group by Gene symbol
-						.Select(i => Math.Abs(i.Select(k => k.Item2).Average()));   // get average distance from TSS for each gene
-
-					return geneAbsAverages.Where(i => i <=  maxDistance).Count() > 0;
-				});
-
-				return filteredSites.ToList();
-			}
-
-			public static double hemimethylation(double value)
-			{
-				return Math.Abs(2 * value - 1);
-			}
-
-			public static double M2Beta(double M_Value)
-			{
-				var expM = Math.Pow(2, M_Value);
-				return expM / (expM + 1);
-			}
-
-			public static double betaToM(double beta) {
-
-				// correct from 15 digit precision NaNs
-				var epsilon = 0.000000000000001;
-				if (beta == 1)
-					beta -= epsilon;
-				if (beta == 0)
-					beta += epsilon;
-
-				// M_value calculated as shown in Du et. al. 2010
-				return Math.Log(beta / (1 - beta));
-			}
-
-			public double Beta_Value;
-			public CompositeREF compositeREF;
-
-
-			// this is not in the original file, but calculated from beta_value
-			public readonly double M_Value;
-
-			AnnotationLine(CompositeREF compositeREF_, double Beta_Value_)
-			{
-				//var geneCount = Gene_Symbol_.Length;
-
-				//if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Position_to_TSS_.Length != geneCount)
-				//{
-				//	Console.WriteLine("Error: Gene Count does not match supporting gene data");
-				//}
-
-				compositeREF = compositeREF_;
-				Beta_Value = Beta_Value_;
-
-				// M_value calculated as shown in Du et. al. 2010
-				M_Value = betaToM(Beta_Value);
-			}
-
-			// Converts strings to doubles, returning 1 if empty string.
-			// We return 1 here because this function parses beta values, which must be between 0 and 1
-			static Double ConvertToDoubleTreatingNullStringAsOne(string value)
-			{
-				Double n;
-				if (!Double.TryParse(value, out n))
-					n = 1;
-				return n;
-			}
-
-			// splits string to array by specified delimiter. This is used mainly when gene symbols are left blank,
-			// which is specified by a '.'
-			static string[] splitPotentialString(string value, char delim)
-			{
-				string[] parsed = new string[] { };
-				if (value != ".")
-					parsed = value.Split(delim);
-				return parsed;
-			}
-
-			static AnnotationLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
-			{
-				// delimiter separating columns
-				var delim = ';';
-
-				Enum.TryParse(fields[fieldMappings["Feature_Type"]], out CompositeREF.FeatureType Feature_Type);
-
-				var compositeREF = new CompositeREF(
-				fields[fieldMappings["Composite Element REF"]],
-				fields[fieldMappings["Chromosome"]],
-				Convert.ToInt32(fields[fieldMappings["Start"]]),
-				Convert.ToInt32(fields[fieldMappings["End"]]),
-				splitPotentialString(fields[fieldMappings["Gene_Symbol"]], delim),
-				splitPotentialString(fields[fieldMappings["Gene_Type"]], delim),
-				splitPotentialString(fields[fieldMappings["Transcript_ID"]], delim),
-				splitPotentialString(fields[fieldMappings["Position_to_TSS"]], delim).Select(s => Convert.ToInt32(s)).ToArray(),
-				fields[fieldMappings["CGI_Coordinate"]],
-				Feature_Type);
-
-				return new AnnotationLine(compositeREF,
-				ConvertToDoubleTreatingNullStringAsOne(fields[fieldMappings["Beta_value"]]));
-			}
-
-			static public List<AnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
-			{
-				StreamReader inputFile;
-
-				inputFile = CreateStreamReaderWithRetry(filename);
-
-				var neededFields = new List<string>();
-				neededFields.Add("Composite Element REF");
-				neededFields.Add("Beta_value");
-				neededFields.Add("Chromosome");
-				neededFields.Add("Start");
-				neededFields.Add("End");
-				neededFields.Add("Gene_Symbol");
-				neededFields.Add("Gene_Type");
-				neededFields.Add("Transcript_ID");
-				neededFields.Add("Position_to_TSS");
-				neededFields.Add("CGI_Coordinate");
-				neededFields.Add("Feature_Type");
-
-				bool hasDone = false;
-				var headerizedFile = new HeaderizedFile<AnnotationLine>(inputFile, fileHasVersion, hasDone, "#version gdc-1.0.0", neededFields);
-
-				List<AnnotationLine> result;
-
-				if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
-				{
-					Console.WriteLine("Error reading Annotation File " + filename);
-					return null;
-				}
-
-				inputFile.Close();
-
-				// filter out invalid results. Invalid results include records without valid M values and records without gene symbols.
-				result = result.Where(c => (c.M_Value != double.PositiveInfinity) && (c.compositeREF.Gene_Symbol.Length > 0)).ToList();
-
-				return result;
-			} // ReadFile
-
-
-		}
-
-		public class BedLine
-		{
-			public readonly string Chromosome;
-			public readonly int Start_Position;
-			public readonly int End_Position;
-			public readonly string name;
-			public readonly int score; // value 0-1000. for methylation score/1000 gives you methylation percentage
-			public readonly char strand; // can be '.', '+' or '-'
-			public readonly double thickStart;
-			public readonly double thickEnd;
-
-			public BedLine(string Chromosome_,
-				int Start_Position_,
-				int End_Position_,
-				string name_,
-				int score_,
-				char strand_,
-				double thickStart_ = 0,
-				double thickEnd_ = 1)
-			{
-				Chromosome = Chromosome_;
-				Start_Position = Start_Position_;
-				End_Position = End_Position_;
-				name = name_;
-				score = score_;
-				strand = strand_;
-				thickStart = thickStart_;
-				thickEnd = thickEnd_;
-			}
-
-			public bool overlaps(string otherChromosome, int otherStart, int otherEnd)
-			{
-				if (ASETools.chromosomeNameToNonChrForm(otherChromosome) == ASETools.chromosomeNameToNonChrForm(Chromosome))
-				{
-					if (otherStart < End_Position && otherEnd > Start_Position)
-					{
-						return true;
-					}
-				}
-				return false;
-			}
-
-			public string toString() {
-				return this.Chromosome + "\t" + this.Start_Position + "\t" + this.End_Position + "\t" + this.name + "\t" + this.score + 
-					"\t" + this.strand + "\t" + this.thickStart + "\t" + this.thickEnd;
-			}
-
-			public static void writeFile(string filename, List<BedLine> bedLines, string header = "")
-			{
-				var file = CreateStreamWriterWithRetry(filename);
-
-				if (null == file)
-				{
-					Console.WriteLine("BedLine.writeFile: unable to create file " + filename);
-					return;
-				}
-
-				// Write header
-				file.WriteLine(header);
-
-				foreach (var line in bedLines)
-				{
-					file.WriteLine(line.toString());
-				}
-				file.Close();
-			}
-
-			static public List<BedLine> ReadFile(string filename, bool hasHeader = true)
-			{
-				StreamReader inputFile = CreateStreamReaderWithRetry(filename);
-
-				if (hasHeader)
-				{
-					var header = inputFile.ReadLine();
-				}
-
-				List<BedLine> result = new List<BedLine>();
-				string line;
-				while ((line = inputFile.ReadLine()) != null)
-				{
-					var split = line.Split('\t');
-					result.Add(new BedLine(split[0], Convert.ToInt32(split[1]), Convert.ToInt32(split[2]), split[3], Convert.ToInt32(split[4]), split[5].ToCharArray()[0], Convert.ToDouble(split[6]), Convert.ToDouble(split[7])));
-				}
-
-				inputFile.Close();
-
-				return result;
-			}
-		}
-
-		public class MAFLine : IComparable
+        // Gives information on CompositeREFs from methylation and corresponding gene information
+        public class CompositeREFInfoLine
+        {
+            public string Composite_Element_REF;
+            public string Chromosome;
+            public int Position;
+            public string Hugo_Symbol;
+
+            static KeyValuePair<string, GeneLocationInfo> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+            {
+                var composite = fields[fieldMappings["compositeREF"]];
+                var geneInfo = new GeneLocationInfo();
+                geneInfo.chromosome = fields[fieldMappings["chr"]];
+                geneInfo.minLocus = Convert.ToInt32(fields[fieldMappings["start"]]);
+                geneInfo.maxLocus = Convert.ToInt32(fields[fieldMappings["end"]]);
+
+                return new KeyValuePair<string, GeneLocationInfo>(composite, geneInfo);
+
+            }
+
+
+            static public List<KeyValuePair<string, GeneLocationInfo>> ReadFile(string filename)
+            {
+                StreamReader inputFile = CreateStreamReaderWithRetry(filename);
+
+                var neededFields = new List<string>();
+                neededFields.Add("compositeREF");
+                neededFields.Add("chr");
+                neededFields.Add("start");
+                neededFields.Add("end");
+
+                bool hasDone = false;
+                var headerizedFile = new HeaderizedFile<KeyValuePair<string, GeneLocationInfo>>(inputFile, false, hasDone, "#version gdc-1.0.0", neededFields);
+
+                List<KeyValuePair<string, GeneLocationInfo>> result;
+
+                if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
+                {
+                    Console.WriteLine("Error reading Composite REF File " + filename);
+                    return null;
+                }
+
+                inputFile.Close();
+                return result;
+            } // ReadFile
+
+        } // CompositeREFInfoFile
+
+
+        public class CompositeREF
+        {
+            public string Composite_Element_REF;
+            public string Chromosome;
+            public int Start;
+            public int End;
+            public string[] Gene_Symbol;
+            public string[] Gene_Type;
+            public string[] Transcript_ID;
+            public int[] Position_to_TSS;
+            public string CGI_Coordinate;
+            public FeatureType Feature_Type;
+
+            // Methylation types
+            public enum FeatureType
+            {
+                // Feature type not specified
+                Other,
+                // methylation found in 2kb region upstream from island
+                N_Shore,
+                // methylation found in 2kb region downstream from island
+                S_Shore,
+                // CpG island
+                Island,
+            }
+
+            public CompositeREF(string Composite_Element_REF_,
+                string Chromosome_,
+                int Start_,
+                int End_,
+                string[] Gene_Symbol_,
+                string[] Gene_Type_,
+                string[] Transcript_ID_,
+                int[] Position_to_TSS_,
+                string CGI_Coordinate_,
+                FeatureType Feature_Type_)
+            {
+
+                var geneCount = Gene_Symbol_.Length;
+
+                if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Position_to_TSS_.Length != geneCount)
+                {
+                    Console.WriteLine("Error: Gene Count does not match supporting gene data");
+                }
+
+                Composite_Element_REF = Composite_Element_REF_;
+                Chromosome = Chromosome_;
+                Start = Start_;
+                End = End_;
+                Gene_Symbol = Gene_Symbol_;
+                Gene_Type = Gene_Type_;
+                Transcript_ID = Transcript_ID_;
+                Position_to_TSS = Position_to_TSS_;
+                CGI_Coordinate = CGI_Coordinate_;
+                Feature_Type = Feature_Type_;
+
+            }
+        }
+
+        // contains annotation data from one line in a methylation file
+        public class AnnotationLine
+        {
+            public static List<AnnotationLine> filterByTSS(List<AnnotationLine> sites, int maxDistance = 2000)
+            {
+                var filteredSites = sites.Where(r =>
+                {
+                    var geneAbsAverages =
+                    r.compositeREF.Gene_Symbol.Zip(r.compositeREF.Position_to_TSS, (first, second) => new Tuple<string, int>(first, second))
+                        .GroupBy(i => i.Item1)  // group by Gene symbol
+                        .Select(i => Math.Abs(i.Select(k => k.Item2).Average()));   // get average distance from TSS for each gene
+
+                    return geneAbsAverages.Where(i => i <= maxDistance).Count() > 0;
+                });
+
+                return filteredSites.ToList();
+            }
+
+            public static double hemimethylation(double value)
+            {
+                return Math.Abs(2 * value - 1);
+            }
+
+            public static double M2Beta(double M_Value)
+            {
+                var expM = Math.Pow(2, M_Value);
+                return expM / (expM + 1);
+            }
+
+            public static double betaToM(double beta) {
+
+                // correct from 15 digit precision NaNs
+                var epsilon = 0.000000000000001;
+                if (beta == 1)
+                    beta -= epsilon;
+                if (beta == 0)
+                    beta += epsilon;
+
+                // M_value calculated as shown in Du et. al. 2010
+                return Math.Log(beta / (1 - beta));
+            }
+
+            public double Beta_Value;
+            public CompositeREF compositeREF;
+
+
+            // this is not in the original file, but calculated from beta_value
+            public readonly double M_Value;
+
+            AnnotationLine(CompositeREF compositeREF_, double Beta_Value_)
+            {
+                //var geneCount = Gene_Symbol_.Length;
+
+                //if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Position_to_TSS_.Length != geneCount)
+                //{
+                //	Console.WriteLine("Error: Gene Count does not match supporting gene data");
+                //}
+
+                compositeREF = compositeREF_;
+                Beta_Value = Beta_Value_;
+
+                // M_value calculated as shown in Du et. al. 2010
+                M_Value = betaToM(Beta_Value);
+            }
+
+            // Converts strings to doubles, returning 1 if empty string.
+            // We return 1 here because this function parses beta values, which must be between 0 and 1
+            static Double ConvertToDoubleTreatingNullStringAsOne(string value)
+            {
+                Double n;
+                if (!Double.TryParse(value, out n))
+                    n = 1;
+                return n;
+            }
+
+            // splits string to array by specified delimiter. This is used mainly when gene symbols are left blank,
+            // which is specified by a '.'
+            static string[] splitPotentialString(string value, char delim)
+            {
+                string[] parsed = new string[] { };
+                if (value != ".")
+                    parsed = value.Split(delim);
+                return parsed;
+            }
+
+            static AnnotationLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+            {
+                // delimiter separating columns
+                var delim = ';';
+
+                Enum.TryParse(fields[fieldMappings["Feature_Type"]], out CompositeREF.FeatureType Feature_Type);
+
+                var compositeREF = new CompositeREF(
+                fields[fieldMappings["Composite Element REF"]],
+                fields[fieldMappings["Chromosome"]],
+                Convert.ToInt32(fields[fieldMappings["Start"]]),
+                Convert.ToInt32(fields[fieldMappings["End"]]),
+                splitPotentialString(fields[fieldMappings["Gene_Symbol"]], delim),
+                splitPotentialString(fields[fieldMappings["Gene_Type"]], delim),
+                splitPotentialString(fields[fieldMappings["Transcript_ID"]], delim),
+                splitPotentialString(fields[fieldMappings["Position_to_TSS"]], delim).Select(s => Convert.ToInt32(s)).ToArray(),
+                fields[fieldMappings["CGI_Coordinate"]],
+                Feature_Type);
+
+                return new AnnotationLine(compositeREF,
+                ConvertToDoubleTreatingNullStringAsOne(fields[fieldMappings["Beta_value"]]));
+            }
+
+            static public List<AnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
+            {
+                StreamReader inputFile;
+
+                inputFile = CreateStreamReaderWithRetry(filename);
+
+                var neededFields = new List<string>();
+                neededFields.Add("Composite Element REF");
+                neededFields.Add("Beta_value");
+                neededFields.Add("Chromosome");
+                neededFields.Add("Start");
+                neededFields.Add("End");
+                neededFields.Add("Gene_Symbol");
+                neededFields.Add("Gene_Type");
+                neededFields.Add("Transcript_ID");
+                neededFields.Add("Position_to_TSS");
+                neededFields.Add("CGI_Coordinate");
+                neededFields.Add("Feature_Type");
+
+                bool hasDone = false;
+                var headerizedFile = new HeaderizedFile<AnnotationLine>(inputFile, fileHasVersion, hasDone, "#version gdc-1.0.0", neededFields);
+
+                List<AnnotationLine> result;
+
+                if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
+                {
+                    Console.WriteLine("Error reading Annotation File " + filename);
+                    return null;
+                }
+
+                inputFile.Close();
+
+                // filter out invalid results. Invalid results include records without valid M values and records without gene symbols.
+                result = result.Where(c => (c.M_Value != double.PositiveInfinity) && (c.compositeREF.Gene_Symbol.Length > 0)).ToList();
+
+                return result;
+            } // ReadFile
+
+
+        }
+
+        public class BedLine
+        {
+            public readonly string Chromosome;
+            public readonly int Start_Position;
+            public readonly int End_Position;
+            public readonly string name;
+            public readonly int score; // value 0-1000. for methylation score/1000 gives you methylation percentage
+            public readonly char strand; // can be '.', '+' or '-'
+            public readonly double thickStart;
+            public readonly double thickEnd;
+
+            public BedLine(string Chromosome_,
+                int Start_Position_,
+                int End_Position_,
+                string name_,
+                int score_,
+                char strand_,
+                double thickStart_ = 0,
+                double thickEnd_ = 1)
+            {
+                Chromosome = Chromosome_;
+                Start_Position = Start_Position_;
+                End_Position = End_Position_;
+                name = name_;
+                score = score_;
+                strand = strand_;
+                thickStart = thickStart_;
+                thickEnd = thickEnd_;
+            }
+
+            public bool overlaps(string otherChromosome, int otherStart, int otherEnd)
+            {
+                if (ASETools.chromosomeNameToNonChrForm(otherChromosome) == ASETools.chromosomeNameToNonChrForm(Chromosome))
+                {
+                    if (otherStart < End_Position && otherEnd > Start_Position)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            public string toString() {
+                return this.Chromosome + "\t" + this.Start_Position + "\t" + this.End_Position + "\t" + this.name + "\t" + this.score +
+                    "\t" + this.strand + "\t" + this.thickStart + "\t" + this.thickEnd;
+            }
+
+            public static void writeFile(string filename, List<BedLine> bedLines, string header = "")
+            {
+                var file = CreateStreamWriterWithRetry(filename);
+
+                if (null == file)
+                {
+                    Console.WriteLine("BedLine.writeFile: unable to create file " + filename);
+                    return;
+                }
+
+                // Write header
+                file.WriteLine(header);
+
+                foreach (var line in bedLines)
+                {
+                    file.WriteLine(line.toString());
+                }
+                file.Close();
+            }
+
+            static public List<BedLine> ReadFile(string filename, bool hasHeader = true)
+            {
+                StreamReader inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (hasHeader)
+                {
+                    var header = inputFile.ReadLine();
+                }
+
+                List<BedLine> result = new List<BedLine>();
+                string line;
+                while ((line = inputFile.ReadLine()) != null)
+                {
+                    var split = line.Split('\t');
+                    result.Add(new BedLine(split[0], Convert.ToInt32(split[1]), Convert.ToInt32(split[2]), split[3], Convert.ToInt32(split[4]), split[5].ToCharArray()[0], Convert.ToDouble(split[6]), Convert.ToDouble(split[7])));
+                }
+
+                inputFile.Close();
+
+                return result;
+            }
+        }
+
+        public class MAFLine : IComparable
         {
             public readonly string Hugo_Symbol;
             public readonly string NCBI_Build;
@@ -3710,7 +3782,7 @@ namespace ASELib
                 return NonsenseMediatedDecayCausingVariantClassifications.Contains(Variant_Classification);
             }
 
-            MAFLine(string Hugo_Symbol_, 
+            MAFLine(string Hugo_Symbol_,
              string NCBI_Build_,
              string Chromosome_,
              int Start_Position_,
@@ -3788,18 +3860,18 @@ namespace ASELib
                     );
             }
 
-			static public Dictionary<string, int> GetMutationCounts(List<MAFLine> mafLines)
-			{
-				// group MAFLines by hugo symbol to count mutations over symbol
-				var mutationCounts = mafLines.GroupBy(r => r.Hugo_Symbol)
-					.Select(group => new
-					{
-						Hugo_Symbol = group.Key,
-						Count = group.Count()
-					});
+            static public Dictionary<string, int> GetMutationCounts(List<MAFLine> mafLines)
+            {
+                // group MAFLines by hugo symbol to count mutations over symbol
+                var mutationCounts = mafLines.GroupBy(r => r.Hugo_Symbol)
+                    .Select(group => new
+                    {
+                        Hugo_Symbol = group.Key,
+                        Count = group.Count()
+                    });
 
-				return mutationCounts.ToDictionary(x => x.Hugo_Symbol, x => x.Count);
-			}
+                return mutationCounts.ToDictionary(x => x.Hugo_Symbol, x => x.Count);
+            }
 
             static public List<MAFLine> ReadFile(string filename, string file_id, bool fileHasVersion)
             {
@@ -3867,7 +3939,7 @@ namespace ASELib
 
                 for (int i = 0; i < n; i++)
                 {
-                    if (inRun && rawList[i-1].Chromosome == rawList[i].Chromosome && rawList[i-1].Start_Position == rawList[i].Start_Position)
+                    if (inRun && rawList[i - 1].Chromosome == rawList[i].Chromosome && rawList[i - 1].Start_Position == rawList[i].Start_Position)
                     {
                         continue;
                     }
@@ -3901,27 +3973,27 @@ namespace ASELib
             public void WriteToStream(StreamWriter output)
             {
                 output.WriteLine(
-                    ConvertToExcelString(Hugo_Symbol)   + "\t" +
-                    NCBI_Build                          + "\t" +
-                    Chromosome                          + "\t" +
-                    Start_Position                      + "\t" +
-                    End_Positon                         + "\t" +
-                    Variant_Classification              + "\t" +
-                    Variant_Type                        + "\t" +
-                    Reference_Allele                    + "\t" +
-                    Tumor_Seq_Allele1                   + "\t" +
-                    Tumor_Seq_Allele2                   + "\t" +
-                    Match_Norm_Seq_Allele1              + "\t" +
-                    Match_Norm_Seq_Allele2              + "\t" +
-                    Tumor_Sample_UUID                   + "\t" +
-                    Matched_Norm_Sample_UUID            + "\t" +
-                    tumor_bam_uuid                      + "\t" +
-                    normal_bam_uuid                     + "\t" +
-                    t_depth                             + "\t" +
-                    t_ref_count                         + "\t" +
-                    t_alt_count                         + "\t" +
-                    n_depth                             + "\t" +
-                    n_ref_count                         + "\t" +
+                    ConvertToExcelString(Hugo_Symbol) + "\t" +
+                    NCBI_Build + "\t" +
+                    Chromosome + "\t" +
+                    Start_Position + "\t" +
+                    End_Positon + "\t" +
+                    Variant_Classification + "\t" +
+                    Variant_Type + "\t" +
+                    Reference_Allele + "\t" +
+                    Tumor_Seq_Allele1 + "\t" +
+                    Tumor_Seq_Allele2 + "\t" +
+                    Match_Norm_Seq_Allele1 + "\t" +
+                    Match_Norm_Seq_Allele2 + "\t" +
+                    Tumor_Sample_UUID + "\t" +
+                    Matched_Norm_Sample_UUID + "\t" +
+                    tumor_bam_uuid + "\t" +
+                    normal_bam_uuid + "\t" +
+                    t_depth + "\t" +
+                    t_ref_count + "\t" +
+                    t_alt_count + "\t" +
+                    n_depth + "\t" +
+                    n_ref_count + "\t" +
                     n_alt_count
                     );
             }
@@ -3934,7 +4006,7 @@ namespace ASELib
 
                 foreach (var mafLine in linesToWrite)
                 {
-                    mafLine.WriteToStream(output);                    
+                    mafLine.WriteToStream(output);
                 }
 
                 output.WriteLine("**done**");
@@ -3993,6 +4065,12 @@ namespace ASELib
                 try
                 {
                     compressedStreamReader = CreateStreamReaderWithRetry(filename);
+
+                    if (compressedStreamReader == null)
+                    {
+                        Console.WriteLine("AllcountReader.openFile: Failed to open compressed stream reader.");
+                        return false;
+                    }
                     allcountReader = new StreamReader(new GZipStream(compressedStreamReader.BaseStream, CompressionMode.Decompress));
 
 
@@ -4380,29 +4458,29 @@ namespace ASELib
             }
         } // DownloadStringWithRetry
 
-		// Loads gene information from a reference file from UCSC Genome Browser
-		public static Dictionary<string, GeneLocationInfo> readKnownGeneFile(string knownGenesFilename) 
-		{
-			var results = new Dictionary<string, GeneLocationInfo>();
+        // Loads gene information from a reference file from UCSC Genome Browser
+        public static Dictionary<string, GeneLocationInfo> readKnownGeneFile(string knownGenesFilename)
+        {
+            var results = new Dictionary<string, GeneLocationInfo>();
 
-			var refFile = CreateStreamReaderWithRetry(knownGenesFilename);
+            var refFile = CreateStreamReaderWithRetry(knownGenesFilename);
 
-			refFile.ReadLine();    // Skip the header
+            refFile.ReadLine();    // Skip the header
 
-			string line;
-			while (null != (line = refFile.ReadLine()))
-			{
-				// Parse required fields
-				var fields = line.Split('\t');
+            string line;
+            while (null != (line = refFile.ReadLine()))
+            {
+                // Parse required fields
+                var fields = line.Split('\t');
 
-				if (fields.Count() != 22)
-				{
-					Console.WriteLine("LoadGeneLocationInfo: wrong number of fields in file " + fields.Count() + " != 22 " + ": " + line);
-					continue;
-				}
+                if (fields.Count() != 22)
+                {
+                    Console.WriteLine("LoadGeneLocationInfo: wrong number of fields in file " + fields.Count() + " != 22 " + ": " + line);
+                    continue;
+                }
 
-				var hugoSymbol = ConvertToNonExcelString(fields[16]);
-				var isoform = Isoform.fromFileLine(line);
+                var hugoSymbol = ConvertToNonExcelString(fields[16]);
+                var isoform = Isoform.fromFileLine(line);
 
                 if (!results.ContainsKey(hugoSymbol))
                 {
@@ -4412,8 +4490,8 @@ namespace ASELib
                     results[hugoSymbol].maxLocus = 0;
                     results[hugoSymbol].chromosome = "";
                 }
-				results[hugoSymbol].isoforms.Add(isoform);
-			}
+                results[hugoSymbol].isoforms.Add(isoform);
+            }
 
             //
             // We've collected all of the isoforms with their genes, now compute the min and max loci for each.
@@ -4458,15 +4536,15 @@ namespace ASELib
             }
 
             refFile.Close();
-			return results;
+            return results;
         } // readKnownGeneFile
 
-        public static string[] knownInconsistentGenes = { "SNORA44", "U6atac", "SNORD78", "FAM95B1", "PGM5-AS1", "SNORA35", "LINC00864", "H19_3", "SNORA79", "RP11-420N3.3",  };
+        public static string[] knownInconsistentGenes = { "SNORA44", "U6atac", "SNORD78", "FAM95B1", "PGM5-AS1", "SNORA35", "LINC00864", "H19_3", "SNORA79", "RP11-420N3.3", };
 
         public static string WindowsToLinuxPathname(string windowsPathname)
-		{
-			string[] components = windowsPathname.Split('\\');
-       
+        {
+            string[] components = windowsPathname.Split('\\');
+
 
             if (components.Count() < 5)
             {
@@ -4556,7 +4634,7 @@ namespace ASELib
                 return null;
             }
 
- 
+
             foreach (var mafEntry in mafManifest)
             {
                 var mafInfo = mafEntry.Value;
@@ -4583,7 +4661,7 @@ namespace ASELib
 
                 threads.Add(new Thread(() => ReadMafFileAndAppendToList(downloadedFiles[mafInfo.file_id].fileInfo.FullName, mafInfo.file_id, allMAFLines, loadStatus)));
             }
- 
+
 
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
@@ -4594,7 +4672,7 @@ namespace ASELib
                 return null;
             }
 
-            byTumorSampleId = new Dictionary<string,List<MAFLine>>();
+            byTumorSampleId = new Dictionary<string, List<MAFLine>>();
 
             foreach (MAFLine mafLine in allMAFLines) {
                 if (!byTumorSampleId.ContainsKey(mafLine.Tumor_Sample_UUID))
@@ -4683,558 +4761,558 @@ namespace ASELib
             public int size;
         }
 
-		public class GeneExpression
-		{
-			static GeneExpression() // This is a static initializer that runs once at program start time, it's not a constructor.
-			{
-				regionSizeByRegionSizeIndex[0] = 0;
-				regionSizeByRegionSizeIndex[1] = 1000;
-				for (int i = 2; i < nRegionSizes; i++)
-				{
-					regionSizeByRegionSizeIndex[i] = regionSizeByRegionSizeIndex[i - 1] * 2;
-				}
+        public class GeneExpression
+        {
+            static GeneExpression() // This is a static initializer that runs once at program start time, it's not a constructor.
+            {
+                regionSizeByRegionSizeIndex[0] = 0;
+                regionSizeByRegionSizeIndex[1] = 1000;
+                for (int i = 2; i < nRegionSizes; i++)
+                {
+                    regionSizeByRegionSizeIndex[i] = regionSizeByRegionSizeIndex[i - 1] * 2;
+                }
 
-				comparer = StringComparer.OrdinalIgnoreCase;
-			}
+                comparer = StringComparer.OrdinalIgnoreCase;
+            }
 
-			public GeneExpression(ASETools.GeneLocationInfo gene_)
-			{
-				geneLocationInfo = gene_;
+            public GeneExpression(ASETools.GeneLocationInfo gene_)
+            {
+                geneLocationInfo = gene_;
 
-				for (int sizeIndex = 0; sizeIndex < nRegionSizes; sizeIndex++)
-				{
-					regionalExpressionState[sizeIndex] = new ASETools.RegionalExpressionState();
-					exclusiveRegionalExpressionState[sizeIndex] = new ASETools.RegionalExpressionState();
-				}
-			}
+                for (int sizeIndex = 0; sizeIndex < nRegionSizes; sizeIndex++)
+                {
+                    regionalExpressionState[sizeIndex] = new ASETools.RegionalExpressionState();
+                    exclusiveRegionalExpressionState[sizeIndex] = new ASETools.RegionalExpressionState();
+                }
+            }
 
-			public void AddRegionalExpression(int locus, double z, double mu, bool isTumor)
-			{
-				int distance;
-				if (locus >= geneLocationInfo.minLocus && locus <= geneLocationInfo.maxLocus)
-				{
-					distance = 0;
-				}
-				else if (locus < geneLocationInfo.minLocus)
-				{
-					distance = geneLocationInfo.minLocus - locus;
-				}
-				else
-				{
-					distance = locus - geneLocationInfo.maxLocus;
-				}
+            public void AddRegionalExpression(int locus, double z, double mu, bool isTumor)
+            {
+                int distance;
+                if (locus >= geneLocationInfo.minLocus && locus <= geneLocationInfo.maxLocus)
+                {
+                    distance = 0;
+                }
+                else if (locus < geneLocationInfo.minLocus)
+                {
+                    distance = geneLocationInfo.minLocus - locus;
+                }
+                else
+                {
+                    distance = locus - geneLocationInfo.maxLocus;
+                }
 
-				for (int sizeIndex = nRegionSizes - 1; sizeIndex >= 0; sizeIndex--)
-				{
-					if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
-					{
-						if (sizeIndex != nRegionSizes - 1)
-						{
-							if (isTumor)
-							{
-								exclusiveRegionalExpressionState[sizeIndex + 1].AddTumorExpression(z, mu);
+                for (int sizeIndex = nRegionSizes - 1; sizeIndex >= 0; sizeIndex--)
+                {
+                    if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
+                    {
+                        if (sizeIndex != nRegionSizes - 1)
+                        {
+                            if (isTumor)
+                            {
+                                exclusiveRegionalExpressionState[sizeIndex + 1].AddTumorExpression(z, mu);
 
-							}
-							else
-							{
-								exclusiveRegionalExpressionState[sizeIndex + 1].AddNormalExpression(z, mu);
-							}
-							break;
-						}
-					}
-					if (isTumor)
-					{
-						regionalExpressionState[sizeIndex].AddTumorExpression(z, mu);
+                            }
+                            else
+                            {
+                                exclusiveRegionalExpressionState[sizeIndex + 1].AddNormalExpression(z, mu);
+                            }
+                            break;
+                        }
+                    }
+                    if (isTumor)
+                    {
+                        regionalExpressionState[sizeIndex].AddTumorExpression(z, mu);
 
-					}
-					else
-					{
-						regionalExpressionState[sizeIndex].AddNormalExpression(z, mu);
-					}
-				}
+                    }
+                    else
+                    {
+                        regionalExpressionState[sizeIndex].AddNormalExpression(z, mu);
+                    }
+                }
 
-				if (0 == distance)  // Have to special case this, since exclusive gets added when we're one smaller, and there is nothing smaller than sizeIndex 0.
-				{
-					if (isTumor)
-					{
-						exclusiveRegionalExpressionState[0].AddTumorExpression(z, mu);
+                if (0 == distance)  // Have to special case this, since exclusive gets added when we're one smaller, and there is nothing smaller than sizeIndex 0.
+                {
+                    if (isTumor)
+                    {
+                        exclusiveRegionalExpressionState[0].AddTumorExpression(z, mu);
 
-					}
-					else
-					{
-						exclusiveRegionalExpressionState[0].AddNormalExpression(z, mu);
-					}
-				}
-			}
+                    }
+                    else
+                    {
+                        exclusiveRegionalExpressionState[0].AddNormalExpression(z, mu);
+                    }
+                }
+            }
 
 
-			public static int CompareByGeneName(GeneExpression a, GeneExpression b)
-			{
-				return comparer.Compare(a.geneLocationInfo.hugoSymbol, b.geneLocationInfo.hugoSymbol);
-			}
+            public static int CompareByGeneName(GeneExpression a, GeneExpression b)
+            {
+                return comparer.Compare(a.geneLocationInfo.hugoSymbol, b.geneLocationInfo.hugoSymbol);
+            }
 
-			public const int nRegionSizes = 20;    // Because we have 0 (in the gene), this range is 2^(20 - 2) * 1000 = 262 Mbases on either side, i.e., the entire chromosome
-			public static readonly int[] regionSizeByRegionSizeIndex = new int[nRegionSizes];
+            public const int nRegionSizes = 20;    // Because we have 0 (in the gene), this range is 2^(20 - 2) * 1000 = 262 Mbases on either side, i.e., the entire chromosome
+            public static readonly int[] regionSizeByRegionSizeIndex = new int[nRegionSizes];
 
-			public ASETools.RegionalExpressionState[] regionalExpressionState = new ASETools.RegionalExpressionState[nRegionSizes]; // Dimension is log2(regionSize) - 1
-			public ASETools.RegionalExpressionState[] exclusiveRegionalExpressionState = new ASETools.RegionalExpressionState[nRegionSizes];  // Expression in this region but not closer, so from log2(regionSize - 1) to log2(regionSize) - 1.  The zero element is the same as regionalExpressionState
+            public ASETools.RegionalExpressionState[] regionalExpressionState = new ASETools.RegionalExpressionState[nRegionSizes]; // Dimension is log2(regionSize) - 1
+            public ASETools.RegionalExpressionState[] exclusiveRegionalExpressionState = new ASETools.RegionalExpressionState[nRegionSizes];  // Expression in this region but not closer, so from log2(regionSize - 1) to log2(regionSize) - 1.  The zero element is the same as regionalExpressionState
 
-			public ASETools.GeneLocationInfo geneLocationInfo;
-			public int nonSilentMutationCount = 0;
+            public ASETools.GeneLocationInfo geneLocationInfo;
+            public int nonSilentMutationCount = 0;
             public int silentMutationCount = 0;
-			public static StringComparer comparer;
+            public static StringComparer comparer;
         } // GeneExpression
 
         public class RegionalExpressionState
-		{
-			// Tumor expression data
-			public int nRegionsIncludedTumor = 0;
-			public double minTumorExpression = 100000;
-			public double maxTumorExpression = -100000;
-			public double totalTumorExpression = 0;
+        {
+            // Tumor expression data
+            public int nRegionsIncludedTumor = 0;
+            public double minTumorExpression = 100000;
+            public double maxTumorExpression = -100000;
+            public double totalTumorExpression = 0;
 
-			public double minMeanTumorExpression = 100000;
-			public double maxMeanTumorExpression = -1;
-			public double totalMeanTumorExpression = 0;
+            public double minMeanTumorExpression = 100000;
+            public double maxMeanTumorExpression = -1;
+            public double totalMeanTumorExpression = 0;
 
-			// Normal expression data
-			public int nRegionsIncludedNormal = 0;
-			public double minNormalExpression = 100000;
-			public double maxNormalExpression = -100000;
-			public double totalNormalExpression = 0;
+            // Normal expression data
+            public int nRegionsIncludedNormal = 0;
+            public double minNormalExpression = 100000;
+            public double maxNormalExpression = -100000;
+            public double totalNormalExpression = 0;
 
-			public double minMeanNormalExpression = 100000;
-			public double maxMeanNormalExpression = -1;
-			public double totalMeanNormalExpression = 0;
+            public double minMeanNormalExpression = 100000;
+            public double maxMeanNormalExpression = -1;
+            public double totalMeanNormalExpression = 0;
 
-			public void AddTumorExpression(double z, double mu)
-			{
-				nRegionsIncludedTumor++;
-				totalTumorExpression += z;
-				if (totalTumorExpression == Double.NegativeInfinity)
-				{
-					Console.WriteLine("stop ere");
-				}
-				minTumorExpression = Math.Min(minTumorExpression, z);
-				maxTumorExpression = Math.Max(maxTumorExpression, z);
+            public void AddTumorExpression(double z, double mu)
+            {
+                nRegionsIncludedTumor++;
+                totalTumorExpression += z;
+                if (totalTumorExpression == Double.NegativeInfinity)
+                {
+                    Console.WriteLine("stop ere");
+                }
+                minTumorExpression = Math.Min(minTumorExpression, z);
+                maxTumorExpression = Math.Max(maxTumorExpression, z);
 
-				totalMeanTumorExpression += mu;
-				minMeanTumorExpression = Math.Min(minMeanTumorExpression, mu);
-				maxMeanTumorExpression = Math.Max(maxMeanTumorExpression, mu);
-			}
+                totalMeanTumorExpression += mu;
+                minMeanTumorExpression = Math.Min(minMeanTumorExpression, mu);
+                maxMeanTumorExpression = Math.Max(maxMeanTumorExpression, mu);
+            }
 
-			public void AddNormalExpression(double z, double mu)
-			{
-				nRegionsIncludedNormal++;
-				totalNormalExpression += z;
-				minNormalExpression = Math.Min(minNormalExpression, z);
-				maxNormalExpression = Math.Max(maxNormalExpression, z);
+            public void AddNormalExpression(double z, double mu)
+            {
+                nRegionsIncludedNormal++;
+                totalNormalExpression += z;
+                minNormalExpression = Math.Min(minNormalExpression, z);
+                maxNormalExpression = Math.Max(maxNormalExpression, z);
 
-				totalMeanNormalExpression += mu;
-				minMeanNormalExpression = Math.Min(minMeanNormalExpression, mu);
-				maxMeanNormalExpression = Math.Max(maxMeanNormalExpression, mu);
-			}
+                totalMeanNormalExpression += mu;
+                minMeanNormalExpression = Math.Min(minMeanNormalExpression, mu);
+                maxMeanNormalExpression = Math.Max(maxMeanNormalExpression, mu);
+            }
         } // RegionalExpressionState
 
         // file that contains distance over gene names. Files created from ExpressionNearMutations
         public class RegionalSignalFile
-		{
-			string fileHeader;
-			List<ASETools.GeneExpression> allExpressions;
-			ASETools.RegionalExpressionState wholeAutosomeRegionalExpression;
-			Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState;
-			ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState;
+        {
+            string fileHeader;
+            List<ASETools.GeneExpression> allExpressions;
+            ASETools.RegionalExpressionState wholeAutosomeRegionalExpression;
+            Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState;
+            ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState;
 
-			// fileHeader is label for first line in file. For many uses, we print the pipeline name as well as the case id.
-			public RegionalSignalFile(string fileHeader_,
-				List<ASETools.GeneExpression> allExpressions_,                                                               // regional expression
-				ASETools.RegionalExpressionState wholeAutosomeRegionalExpression_,                                           // whole autosome
-				Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState_,  // dictionary of chromosome, expression information
-				ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState_)
-			{
-				fileHeader = fileHeader_;
-				allExpressions = allExpressions_;
-				wholeAutosomeRegionalExpression = wholeAutosomeRegionalExpression_;
-				allButThisChromosomeAutosomalRegionalExpressionState = allButThisChromosomeAutosomalRegionalExpressionState_;
-				perChromosomeRegionalExpressionState = perChromosomeRegionalExpressionState_;
-			}
+            // fileHeader is label for first line in file. For many uses, we print the pipeline name as well as the case id.
+            public RegionalSignalFile(string fileHeader_,
+                List<ASETools.GeneExpression> allExpressions_,                                                               // regional expression
+                ASETools.RegionalExpressionState wholeAutosomeRegionalExpression_,                                           // whole autosome
+                Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState_,  // dictionary of chromosome, expression information
+                ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState_)
+            {
+                fileHeader = fileHeader_;
+                allExpressions = allExpressions_;
+                wholeAutosomeRegionalExpression = wholeAutosomeRegionalExpression_;
+                allButThisChromosomeAutosomalRegionalExpressionState = allButThisChromosomeAutosomalRegionalExpressionState_;
+                perChromosomeRegionalExpressionState = perChromosomeRegionalExpressionState_;
+            }
 
-			public void WriteFile(string outputFilename, bool printMu, int minExamplesPerRegion, string columnSuffix, bool isTumor)
-			{
-				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+            public void WriteFile(string outputFilename, bool printMu, int minExamplesPerRegion, string columnSuffix, bool isTumor)
+            {
+                var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
 
-				outputFile.WriteLine(fileHeader);
-				outputFile.Write("Gene name\tnon-silent mutation count\tsilent mutation count");
+                outputFile.WriteLine(fileHeader);
+                outputFile.Write("Gene name\tnon-silent mutation count\tsilent mutation count");
 
-				writeRow(outputFile, allExpressions[0], printMu, minExamplesPerRegion, true, columnSuffix, isTumor);
+                writeRow(outputFile, allExpressions[0], printMu, minExamplesPerRegion, true, columnSuffix, isTumor);
 
-				outputFile.WriteLine();
+                outputFile.WriteLine();
 
-				for (int i = 0; i < allExpressions.Count(); i++)
-				{
-					outputFile.Write(ASETools.ConvertToExcelString(allExpressions[i].geneLocationInfo.hugoSymbol) + "\t" + allExpressions[i].nonSilentMutationCount + "\t" + allExpressions[i].silentMutationCount);
+                for (int i = 0; i < allExpressions.Count(); i++)
+                {
+                    outputFile.Write(ASETools.ConvertToExcelString(allExpressions[i].geneLocationInfo.hugoSymbol) + "\t" + allExpressions[i].nonSilentMutationCount + "\t" + allExpressions[i].silentMutationCount);
 
-					writeRow(outputFile, allExpressions[i], printMu, minExamplesPerRegion, false, "", isTumor);
+                    writeRow(outputFile, allExpressions[i], printMu, minExamplesPerRegion, false, "", isTumor);
 
-					outputFile.WriteLine();
-				} // for each gene
+                    outputFile.WriteLine();
+                } // for each gene
 
-				outputFile.WriteLine("**done**");
-				outputFile.Close();
-			}
+                outputFile.WriteLine("**done**");
+                outputFile.Close();
+            }
 
-			// Write order:
-			//	1. Regional values (20)
-			//  2. Autosome value (1)
-			//  3. If not ASE, regional mean values (20)
-			//  4. If not ASE, autosome value (1)
-			//  5. Exclusive regional values (20)
-			//  6. Per chromosome values (
-			void writeRow(
-				StreamWriter outputFile,
-				ASETools.GeneExpression allExpression,                                                                 
-				bool printMu,
-				int minExamplesPerRegion,
-				Boolean header,
-				string columnSuffix,
-				bool isTumor)
-			{
-				// format suffix for header names
-				string columnSuffix_mu = "(" + columnSuffix + " mu)";
-				columnSuffix = "(" + columnSuffix + ")";
+            // Write order:
+            //	1. Regional values (20)
+            //  2. Autosome value (1)
+            //  3. If not ASE, regional mean values (20)
+            //  4. If not ASE, autosome value (1)
+            //  5. Exclusive regional values (20)
+            //  6. Per chromosome values (
+            void writeRow(
+                StreamWriter outputFile,
+                ASETools.GeneExpression allExpression,
+                bool printMu,
+                int minExamplesPerRegion,
+                Boolean header,
+                string columnSuffix,
+                bool isTumor)
+            {
+                // format suffix for header names
+                string columnSuffix_mu = "(" + columnSuffix + " mu)";
+                columnSuffix = "(" + columnSuffix + ")";
 
-				// 1. Chromosome specific regional values
-				for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
-				{
-					if (header)
-					{
-						outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + columnSuffix);
-						continue;
-					}
+                // 1. Chromosome specific regional values
+                for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+                {
+                    if (header)
+                    {
+                        outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + columnSuffix);
+                        continue;
+                    }
 
-					if (isTumor)
-					{
-						if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalTumorExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-					else if (!isTumor)
-					{
-						if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalNormalExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
+                    if (isTumor)
+                    {
+                        if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalTumorExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                    else if (!isTumor)
+                    {
+                        if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalNormalExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
 
 
-				}
+                }
 
-				// 2. Whole autosome
-				if (header)
-				{
-					outputFile.Write("\tWhole Autosome " + columnSuffix);
-				}
-				else if (isTumor)
-				{
-					if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
-					{
-						outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
-					}
-					else
-					{
-						outputFile.Write("\t*");
-					}
-				}
-				else if (!isTumor)
-				{
-					if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
-					{
-						outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
-					}
-					else
-					{
-						outputFile.Write("\t*");
-					}
-				}
-				// 3. Write regional mean values
-				if (printMu)
-				{
+                // 2. Whole autosome
+                if (header)
+                {
+                    outputFile.Write("\tWhole Autosome " + columnSuffix);
+                }
+                else if (isTumor)
+                {
+                    if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
+                    {
+                        outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
+                    }
+                    else
+                    {
+                        outputFile.Write("\t*");
+                    }
+                }
+                else if (!isTumor)
+                {
+                    if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
+                    {
+                        outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
+                    }
+                    else
+                    {
+                        outputFile.Write("\t*");
+                    }
+                }
+                // 3. Write regional mean values
+                if (printMu)
+                {
 
-					for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
-					{
-						if (header)
-						{
-							outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + columnSuffix_mu);
-							continue;
-						}
+                    for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+                    {
+                        if (header)
+                        {
+                            outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + columnSuffix_mu);
+                            continue;
+                        }
 
-						if (isTumor)
-						{
-							if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
-							{
-								outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
-							}
-							else
-							{
-								outputFile.Write("\t*");
-							}
+                        if (isTumor)
+                        {
+                            if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+                            {
+                                outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+                            }
+                            else
+                            {
+                                outputFile.Write("\t*");
+                            }
 
-						}
-						else
-						{
-							if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
-							{
-								outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
-							}
-							else
-							{
-								outputFile.Write("\t*");
-							}
-						}
-					}
+                        }
+                        else
+                        {
+                            if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+                            {
+                                outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+                            }
+                            else
+                            {
+                                outputFile.Write("\t*");
+                            }
+                        }
+                    }
 
-					// 4. Write mean autosome value
-					if (header)
-					{
-						outputFile.Write("\tWhole Autosome " + columnSuffix_mu);
-					}
-					else if (isTumor)
-					{
-						if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalMeanTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-					else if (!isTumor)
-					{
-						if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-				}
+                    // 4. Write mean autosome value
+                    if (header)
+                    {
+                        outputFile.Write("\tWhole Autosome " + columnSuffix_mu);
+                    }
+                    else if (isTumor)
+                    {
+                        if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalMeanTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                    else if (!isTumor)
+                    {
+                        if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                }
 
-				// 5. Write exclusive regional values
-				for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
-				{
-					if (header)
-					{
-						outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + columnSuffix);
-						continue;
-					}
-					if (isTumor)
-					{
-						if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalTumorExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+                // 5. Write exclusive regional values
+                for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+                {
+                    if (header)
+                    {
+                        outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + columnSuffix);
+                        continue;
+                    }
+                    if (isTumor)
+                    {
+                        if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalTumorExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
 
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-					else if (!isTumor)
-					{
-						if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalNormalExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-				}
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                    else if (!isTumor)
+                    {
+                        if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalNormalExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                }
 
-				// 6. Whole autosome exclusive values
-				if (header)
-				{
-					outputFile.Write("\tWhole Autosome exclusive " + columnSuffix);
-				}
-				else if (isTumor)
-				{
-					if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
-					{
-						outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor);
-					}
-					else
-					{
-						outputFile.Write("\t*");
-					}
-				}
-				else if (!isTumor)
-				{
-					if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
-					{
-						outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal);
-					}
-					else
-					{
-						outputFile.Write("\t*");
-					}
-				}
+                // 6. Whole autosome exclusive values
+                if (header)
+                {
+                    outputFile.Write("\tWhole Autosome exclusive " + columnSuffix);
+                }
+                else if (isTumor)
+                {
+                    if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+                    {
+                        outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor);
+                    }
+                    else
+                    {
+                        outputFile.Write("\t*");
+                    }
+                }
+                else if (!isTumor)
+                {
+                    if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+                    {
+                        outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal);
+                    }
+                    else
+                    {
+                        outputFile.Write("\t*");
+                    }
+                }
 
-				if (printMu)
-				{
-					// 7. Exlusive regional means
-					for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
-					{
-						if (header)
-						{
-							outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + columnSuffix_mu);
-							continue;
-						}
-						if (isTumor)
-						{
-							if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
-							{
-								outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
-							}
-							else
-							{
-								outputFile.Write("\t*");
-							}
-						}
-						else if (!isTumor)
-						{
-							if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
-							{
-								outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
-							}
-							else
-							{
-								outputFile.Write("\t*");
-							}
-						}
-					}
+                if (printMu)
+                {
+                    // 7. Exlusive regional means
+                    for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+                    {
+                        if (header)
+                        {
+                            outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + columnSuffix_mu);
+                            continue;
+                        }
+                        if (isTumor)
+                        {
+                            if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+                            {
+                                outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+                            }
+                            else
+                            {
+                                outputFile.Write("\t*");
+                            }
+                        }
+                        else if (!isTumor)
+                        {
+                            if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+                            {
+                                outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+                            }
+                            else
+                            {
+                                outputFile.Write("\t*");
+                            }
+                        }
+                    }
 
-					// 8. Write out chromosome exclusive autosome means
-					if (header)
-					{
-						outputFile.Write("\tWhole Autosome exclusive " + columnSuffix_mu);
-					}
-					else if (isTumor)
-					{
-						if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalMeanTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-					else if (!isTumor)
-					{
-						if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalMeanNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-				}
+                    // 8. Write out chromosome exclusive autosome means
+                    if (header)
+                    {
+                        outputFile.Write("\tWhole Autosome exclusive " + columnSuffix_mu);
+                    }
+                    else if (isTumor)
+                    {
+                        if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalMeanTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                    else if (!isTumor)
+                    {
+                        if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalMeanNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                }
 
-				// 9. Write out per chromosome
-				for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-				{
-					if (header)
-					{
-						outputFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + columnSuffix);
-						continue;
-					}
-					if (isTumor)
-					{
-						if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-					else if (!isTumor)
-					{
-						if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
-						{
-							outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
-						}
-						else
-						{
-							outputFile.Write("\t*");
-						}
-					}
-				}
+                // 9. Write out per chromosome
+                for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+                {
+                    if (header)
+                    {
+                        outputFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + columnSuffix);
+                        continue;
+                    }
+                    if (isTumor)
+                    {
+                        if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                    else if (!isTumor)
+                    {
+                        if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+                        {
+                            outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                }
 
-				// 10. Write out per chromosome mean
-				if (printMu)
-				{
-					for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-					{
-						if (header)
-						{
-							outputFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + columnSuffix_mu);
-							continue;
-						}
-						if (isTumor)
-						{
-							if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
-							{
-								outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
-							}
-							else
-							{
-								outputFile.Write("\t*");
-							}
-						}
-						else if (!isTumor)
-						{
-							if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
-							{
-								outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
-							}
-							else
-							{
-								outputFile.Write("\t*");
-							}
-						}
-					}
-				}
-			}
+                // 10. Write out per chromosome mean
+                if (printMu)
+                {
+                    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        if (header)
+                        {
+                            outputFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + columnSuffix_mu);
+                            continue;
+                        }
+                        if (isTumor)
+                        {
+                            if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+                            {
+                                outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
+                            }
+                            else
+                            {
+                                outputFile.Write("\t*");
+                            }
+                        }
+                        else if (!isTumor)
+                        {
+                            if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+                            {
+                                outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
+                            }
+                            else
+                            {
+                                outputFile.Write("\t*");
+                            }
+                        }
+                    }
+                }
+            }
 
-			// Returns a tuple of ExpressionMap, and list of labels corresponding to the expression values in the dictionary
-			public static Tuple<Dictionary<string, double[]>, List<string>> ReadFile(string filename, bool skipFirstLine = true, bool includeMutationCount = false, List<string> genesToInclude = null)
-			{
-				// keeps track of index of distances
-				List<string> index = new List<string>();
+            // Returns a tuple of ExpressionMap, and list of labels corresponding to the expression values in the dictionary
+            public static Tuple<Dictionary<string, double[]>, List<string>> ReadFile(string filename, bool skipFirstLine = true, bool includeMutationCount = false, List<string> genesToInclude = null)
+            {
+                // keeps track of index of distances
+                List<string> index = new List<string>();
 
-				// for each gene, maintain a list of distance, expression tuples
-				Dictionary<string, double[]> expressionMap = new Dictionary<string, double[]>();
+                // for each gene, maintain a list of distance, expression tuples
+                Dictionary<string, double[]> expressionMap = new Dictionary<string, double[]>();
 
-				var reader = CreateStreamReaderWithRetry(filename);
+                var reader = CreateStreamReaderWithRetry(filename);
 
-				string line;
+                string line;
 
                 List<string> excelizedGenesToInclude;
                 if (genesToInclude == null)
@@ -5245,25 +5323,25 @@ namespace ASELib
                     excelizedGenesToInclude = genesToInclude.Select(x => ConvertToExcelString(x)).ToList();
                 }
 
-				// skip first line if version or other info resides there
-				if (skipFirstLine)
-					reader.ReadLine();
+                // skip first line if version or other info resides there
+                if (skipFirstLine)
+                    reader.ReadLine();
 
-				// read in header
-				var header = reader.ReadLine().Split('\t');
+                // read in header
+                var header = reader.ReadLine().Split('\t');
 
-				// skip gene name and mutation count. Get all distance labels and keep them in the index.
-				for (var i = 2; i < header.Count(); i++)
-				{
-					index.Add(header[i]);
-				}
+                // skip gene name and mutation count. Get all distance labels and keep them in the index.
+                for (var i = 2; i < header.Count(); i++)
+                {
+                    index.Add(header[i]);
+                }
 
-				while (null != (line = reader.ReadLine()))
-				{
-					if (line.Trim() == "**done**")
-					{
-						break;
-					}
+                while (null != (line = reader.ReadLine()))
+                {
+                    if (line.Trim() == "**done**")
+                    {
+                        break;
+                    }
 
                     if (excelizedGenesToInclude != null)
                     {
@@ -5284,36 +5362,36 @@ namespace ASELib
                         }
                     }
 
-					string[] fields = line.Split('\t');
+                    string[] fields = line.Split('\t');
 
-					var hugoSymbol = ConvertToNonExcelString(fields[0]);
+                    var hugoSymbol = ConvertToNonExcelString(fields[0]);
 
-					// get rid of gene name and optionally mutation count
-					fields = fields.Skip(includeMutationCount ? 1 : 3).ToArray();
+                    // get rid of gene name and optionally mutation count
+                    fields = fields.Skip(includeMutationCount ? 1 : 3).ToArray();
 
-					// the rest of the fields match the index fields
+                    // the rest of the fields match the index fields
 
-					if (fields.Length != index.Count() + (includeMutationCount ? 1 : 0))
-					{
-						throw new Exception("header does not match field length for file " + filename);
-					}
+                    if (fields.Length != index.Count() + (includeMutationCount ? 1 : 0))
+                    {
+                        throw new Exception("header does not match field length for file " + filename);
+                    }
 
-					double[] numericFields = fields.Select(r => {
-						// Set default value
-						double value = double.NegativeInfinity;
+                    double[] numericFields = fields.Select(r => {
+                        // Set default value
+                        double value = double.NegativeInfinity;
 
-						if (r != "*" && r != "-Infinity")  
-						{
-							value = Convert.ToDouble(r);
-						}
-						return value;
-					}).ToArray();
+                        if (r != "*" && r != "-Infinity")
+                        {
+                            value = Convert.ToDouble(r);
+                        }
+                        return value;
+                    }).ToArray();
 
-					// add gene to dictionary
-					expressionMap.Add(hugoSymbol, numericFields);
-				}
-				return new Tuple<Dictionary<string, double[]>, List<string>>(expressionMap, index);
-			}
+                    // add gene to dictionary
+                    expressionMap.Add(hugoSymbol, numericFields);
+                }
+                return new Tuple<Dictionary<string, double[]>, List<string>>(expressionMap, index);
+            }
 
             //
             // The other direction of our conversion of * to -Infinity
@@ -5323,7 +5401,7 @@ namespace ASELib
                 if (value == double.NegativeInfinity) return "*";
                 return value.ToString();
             }
-		} // RegionalSignalFile
+        } // RegionalSignalFile
 
         public static string stringForDouble(double value)
         {
@@ -5358,7 +5436,7 @@ namespace ASELib
                 return retVal;
             }
 
-            ASESignalLine(int nMutations_, string hugo_symbol_, double[] inclusiveASE_, double [] exclusiveASE_)
+            ASESignalLine(int nMutations_, string hugo_symbol_, double[] inclusiveASE_, double[] exclusiveASE_)
             {
                 nMutations = nMutations_;
                 nMutationsIndex = (nMutations < 2) ? nMutations : 2;
@@ -5434,7 +5512,7 @@ namespace ASELib
 
             public string OutputString()
             {
-                string retVal =  Hugo_Symbol + "\t" + nNonSilentMutations + "\t" + nSilentMutations;
+                string retVal = Hugo_Symbol + "\t" + nNonSilentMutations + "\t" + nSilentMutations;
                 for (int i = 0; i < nRegions; i++)
                 {
                     retVal += "\t" + RegionalSignalFile.stringForDouble(nonExclusive[i]);
@@ -5455,12 +5533,12 @@ namespace ASELib
         }
 
 
-		//
-		// The content of an expression file.  We used to just return the more obvious Dictionary<string, Dictionary<int, MeanAndStdDev>>, but the inside dictionaries got big enough to make
-		// something bad happen in the CLR runtime, even on 64 bit with gcAllowVeryLargeObjects set.  So, instead we add one more level of indirection to get around dictionaries with
-		// tens of millions of entries.
-		//
-		public class ExpressionFile
+        //
+        // The content of an expression file.  We used to just return the more obvious Dictionary<string, Dictionary<int, MeanAndStdDev>>, but the inside dictionaries got big enough to make
+        // something bad happen in the CLR runtime, even on 64 bit with gcAllowVeryLargeObjects set.  So, instead we add one more level of indirection to get around dictionaries with
+        // tens of millions of entries.
+        //
+        public class ExpressionFile
         {
             public ExpressionFile() { }
 
@@ -5501,13 +5579,13 @@ namespace ASELib
             public bool getValue(string contigName, int chromosomeOffset, out MeanAndStdDev meanAndStdDev)
             {
                 contigName = contigName.ToLower();
-                if (!expression.ContainsKey(contigName) || !expression[contigName].ContainsKey(chromosomeOffset / subchunkSize) || !expression[contigName][chromosomeOffset/subchunkSize].ContainsKey(chromosomeOffset))
+                if (!expression.ContainsKey(contigName) || !expression[contigName].ContainsKey(chromosomeOffset / subchunkSize) || !expression[contigName][chromosomeOffset / subchunkSize].ContainsKey(chromosomeOffset))
                 {
                     meanAndStdDev = new MeanAndStdDev(-1, -1);
                     return false;
                 }
 
-                meanAndStdDev =  expression[contigName][chromosomeOffset / subchunkSize][chromosomeOffset];
+                meanAndStdDev = expression[contigName][chromosomeOffset / subchunkSize][chromosomeOffset];
                 return true;
             }
 
@@ -5570,13 +5648,13 @@ namespace ASELib
                     if (sawDone)
                     {
                         Console.WriteLine("ASETools.ConsolodatedFileReader: index file continues after **done**: " + filename);
-                        return false;                        
+                        return false;
                     }
                     if (line.Trim() == "**done**")
                     {
                         sawDone = true;
-						continue;
-					}
+                        continue;
+                    }
                     var fields = line.Split('\t');
                     if (fields.Count() != 3)
                     {
@@ -5703,18 +5781,18 @@ namespace ASELib
             {
             }
 
-			private string formatContig(string contig)
-			{
-				//
-				// Try adding "chr" to the contig.
-				//
-				if (!(contig.Count() > 3 && contig.Substring(0, 3) == "chr"))
-				{
-					contig = "chr" + contig;
-				}
-				// use lower case to avoid issues with _random contigs
-				return contig.ToLower();
-			}
+            private string formatContig(string contig)
+            {
+                //
+                // Try adding "chr" to the contig.
+                //
+                if (!(contig.Count() > 3 && contig.Substring(0, 3) == "chr"))
+                {
+                    contig = "chr" + contig;
+                }
+                // use lower case to avoid issues with _random contigs
+                return contig.ToLower();
+            }
 
             public bool load(string snapIndexDirectory)
             {
@@ -5797,7 +5875,7 @@ namespace ASELib
                             return false;
                         }
 
-						var contig = formatContig(fields[1]);
+                        var contig = formatContig(fields[1]);
 
                         if (contigsByName.ContainsKey(contig))
                         {
@@ -5857,7 +5935,7 @@ namespace ASELib
 
             public char getBase(string contigName, int offset)
             {
-				contigName = formatContig(contigName);
+                contigName = formatContig(contigName);
                 return contigsByName[contigName].data[offset - 1];   // Offset - 1 because genome coordinates are 1 based, while C# is 0 based.
             }
 
@@ -6021,284 +6099,284 @@ namespace ASELib
             public readonly char altBase;
         } // SelectedVariant
 
-		public class MethylationCounts
-		{
-			public MethylationCounts(int nMethylated_, int nUnmethylated_, int nNeither_)
-			{
-				nMethylated = nMethylated_;
-				nUnmethylated = nUnmethylated_;
-				nNeither = nNeither_;
-			}
+        public class MethylationCounts
+        {
+            public MethylationCounts(int nMethylated_, int nUnmethylated_, int nNeither_)
+            {
+                nMethylated = nMethylated_;
+                nUnmethylated = nUnmethylated_;
+                nNeither = nNeither_;
+            }
 
-			public readonly int nMethylated;
-			public readonly int nUnmethylated;
-			public readonly int nNeither;
+            public readonly int nMethylated;
+            public readonly int nUnmethylated;
+            public readonly int nNeither;
 
-			public override string ToString()
-			{
-				return (nMethylated.ToString() + '\t' + nUnmethylated.ToString() + '\t' + nNeither.ToString());
-			}
-
-
-			// Returns ReadCounts for methylation counts of each allele. First allele is ref, second allele is alt
-			public static Tuple<MethylationCounts, MethylationCounts> ComputeMethylationReadCounts(string selectedReadsFilename,
-				string contig,
-				int variant_start_position,
-				string variant_reference_allele,
-				string variant_alt_allele,
-				string variantType,
-				int cpg_start_position,
-				string subfileName,
-				Genome genome)
-			{
-
-				// holds all the sequences matching ref
-				List<Dictionary<int, char>> matchingRef = new List<Dictionary<int, char>>();
-
-				// holds all the sequences matching alt
-				List<Dictionary<int, char>> matchingAlt = new List<Dictionary<int, char>>();
+            public override string ToString()
+            {
+                return (nMethylated.ToString() + '\t' + nUnmethylated.ToString() + '\t' + nNeither.ToString());
+            }
 
 
-				var consolodatedFile = new ASETools.ConsolodatedFileReader();
+            // Returns ReadCounts for methylation counts of each allele. First allele is ref, second allele is alt
+            public static Tuple<MethylationCounts, MethylationCounts> ComputeMethylationReadCounts(string selectedReadsFilename,
+                string contig,
+                int variant_start_position,
+                string variant_reference_allele,
+                string variant_alt_allele,
+                string variantType,
+                int cpg_start_position,
+                string subfileName,
+                Genome genome)
+            {
 
-				if (!consolodatedFile.open(selectedReadsFilename))
-				{
-					Console.WriteLine("Unable to open reads at selected variants file " + selectedReadsFilename);
-					return null;
-				}
+                // holds all the sequences matching ref
+                List<Dictionary<int, char>> matchingRef = new List<Dictionary<int, char>>();
 
-				var subfileReader = consolodatedFile.getSubfile(subfileName);
-				if (null == subfileReader)
-				{
-					Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName);
-					return null;
-				}
+                // holds all the sequences matching alt
+                List<Dictionary<int, char>> matchingAlt = new List<Dictionary<int, char>>();
 
-				// Divide reads up into alt and ref
-				var padding = 60;
-				int[] posArray = new int[padding];
-				for (int i = 0; i < padding; i++)
-				{
-					posArray[i] = variant_start_position - padding / 2 + i;
-				}
 
-				// get reference and alt sequences
-				var reference_bases = posArray
-					.Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
-				var alt_bases = posArray
-					.Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
+                var consolodatedFile = new ASETools.ConsolodatedFileReader();
 
-				// If the variant we are looking at is an INS, we have to shift the variant position 
-				// by one to match the SamLine insertion location
-				int start = variantType == "INS" ? variant_start_position + 1 : variant_start_position;
+                if (!consolodatedFile.open(selectedReadsFilename))
+                {
+                    Console.WriteLine("Unable to open reads at selected variants file " + selectedReadsFilename);
+                    return null;
+                }
 
-				// modify alt_bases based on VariantType
-				if (variantType == "DEL")
-				{
-					// replace missing bases with "N" so we can do a direct comparison
-					for (var i = 0; i < variant_reference_allele.Length; i++)
-					{
-						alt_bases[start + i] = 'N';
-					}
-				}
-				else if (variantType != "INS")
-				{
-					// for NP: replace bases for alt
-					for (var i = 0; i < variant_alt_allele.Length; i++)
-					{
-						alt_bases[start + i] = variant_alt_allele[i];
-					}
-				}
-				else
-				{
-					// insert INS into dictionary
-					KeyValuePair<int, char>[] ins = new KeyValuePair<int, char>[variant_alt_allele.Length];
+                var subfileReader = consolodatedFile.getSubfile(subfileName);
+                if (null == subfileReader)
+                {
+                    Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName);
+                    return null;
+                }
 
-					var chArr = variant_alt_allele.ToCharArray();
-					for (int i = 0; i < chArr.Length; i++)
-					{
-						ins[i] = new KeyValuePair<int, char>(i + start, chArr[i]);
-					}
+                // Divide reads up into alt and ref
+                var padding = 60;
+                int[] posArray = new int[padding];
+                for (int i = 0; i < padding; i++)
+                {
+                    posArray[i] = variant_start_position - padding / 2 + i;
+                }
 
-					alt_bases =
-						alt_bases.Where(r => r.Key < start).ToArray().Concat(ins.ToArray())
-						.Concat(alt_bases.Where(r => r.Key >= start).Select(r => new KeyValuePair<int, char>(r.Key + variant_alt_allele.Length, r.Value)).ToArray())
-						.ToDictionary(x => x.Key, x => x.Value);
-				}
+                // get reference and alt sequences
+                var reference_bases = posArray
+                    .Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
+                var alt_bases = posArray
+                    .Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
 
-				string line;
-				while (null != (line = subfileReader.ReadLine()))
-				{
-					ASETools.SAMLine samLine;
+                // If the variant we are looking at is an INS, we have to shift the variant position 
+                // by one to match the SamLine insertion location
+                int start = variantType == "INS" ? variant_start_position + 1 : variant_start_position;
 
-					int nMatchingRef = 0;
-					int nMatchingAlt = 0;
-					int nMatchingNeither = 0;
-					int nMatchingBoth = 0;
+                // modify alt_bases based on VariantType
+                if (variantType == "DEL")
+                {
+                    // replace missing bases with "N" so we can do a direct comparison
+                    for (var i = 0; i < variant_reference_allele.Length; i++)
+                    {
+                        alt_bases[start + i] = 'N';
+                    }
+                }
+                else if (variantType != "INS")
+                {
+                    // for NP: replace bases for alt
+                    for (var i = 0; i < variant_alt_allele.Length; i++)
+                    {
+                        alt_bases[start + i] = variant_alt_allele[i];
+                    }
+                }
+                else
+                {
+                    // insert INS into dictionary
+                    KeyValuePair<int, char>[] ins = new KeyValuePair<int, char>[variant_alt_allele.Length];
 
-					try
-					{
-						samLine = new ASETools.SAMLine(line);
-					}
-					catch (FormatException)
-					{
-						Console.WriteLine("Unable to parse sam line in extracted reads main file " + selectedReadsFilename + " subfile " + subfileName + ": " + line);
-						subfileReader.Close();
-						return null;
-					}
+                    var chArr = variant_alt_allele.ToCharArray();
+                    for (int i = 0; i < chArr.Length; i++)
+                    {
+                        ins[i] = new KeyValuePair<int, char>(i + start, chArr[i]);
+                    }
 
-					if (samLine.isUnmapped() || samLine.mapq < 10)
-					{
-						//
-						// Probably half of a paired-end read with the other end mapped.  Ignore it.
-						//
-						continue;
-					}
+                    alt_bases =
+                        alt_bases.Where(r => r.Key < start).ToArray().Concat(ins.ToArray())
+                        .Concat(alt_bases.Where(r => r.Key >= start).Select(r => new KeyValuePair<int, char>(r.Key + variant_alt_allele.Length, r.Value)).ToArray())
+                        .ToDictionary(x => x.Key, x => x.Value);
+                }
 
-					if (contig != samLine.rname)
-					{
-						// Wrong contig. Ignore it.
-						continue;
-					}
+                string line;
+                while (null != (line = subfileReader.ReadLine()))
+                {
+                    ASETools.SAMLine samLine;
 
-					// make sure variant and cpg can be found on this SamLine
-					if (!samLine.mappedBases.ContainsKey(start) || !samLine.mappedBases.ContainsKey(cpg_start_position))
-					{
-						//
-						// This read does not overlap the variant.  Ignore it.
-						// The 'before' case differs between variant types, and must be dealt with on a casewise basis
-						// below in the switch statement.
-						//
-						continue;
-					}
-					if (!(start > 1 + samLine.mappedBases.Keys.Min()) || !(start < samLine.mappedBases.Keys.Max() - 1))
-					{
-						//
-						// There is no padding on the variant. Without it, its hard to make a match call. Ignore.
-						//
-						continue;
-					}
+                    int nMatchingRef = 0;
+                    int nMatchingAlt = 0;
+                    int nMatchingNeither = 0;
+                    int nMatchingBoth = 0;
 
-					bool matchesRef = false;
-					bool matchesAlt = false;
+                    try
+                    {
+                        samLine = new ASETools.SAMLine(line);
+                    }
+                    catch (FormatException)
+                    {
+                        Console.WriteLine("Unable to parse sam line in extracted reads main file " + selectedReadsFilename + " subfile " + subfileName + ": " + line);
+                        subfileReader.Close();
+                        return null;
+                    }
 
-					switch (variantType)
-					{
-						case "INS":
-						case "DEL":
-						case "SNP":
-						case "DNP":
-						case "TNP":
+                    if (samLine.isUnmapped() || samLine.mapq < 10)
+                    {
+                        //
+                        // Probably half of a paired-end read with the other end mapped.  Ignore it.
+                        //
+                        continue;
+                    }
 
-							// match to ref on both sides of variant
-							var refMatchesLeft = ReadCounts.matchSequence(reference_bases, samLine.mappedBases, start, false);
-							var refMatchesRight = ReadCounts.matchSequence(reference_bases, samLine.mappedBases, start, true);
+                    if (contig != samLine.rname)
+                    {
+                        // Wrong contig. Ignore it.
+                        continue;
+                    }
 
-							// match to alt on both sides of variant
-							var altMatchesLeft = ReadCounts.matchSequence(alt_bases, samLine.mappedBases, start, false);
-							var altMatchesRight = ReadCounts.matchSequence(alt_bases, samLine.mappedBases, start, true);
+                    // make sure variant and cpg can be found on this SamLine
+                    if (!samLine.mappedBases.ContainsKey(start) || !samLine.mappedBases.ContainsKey(cpg_start_position))
+                    {
+                        //
+                        // This read does not overlap the variant.  Ignore it.
+                        // The 'before' case differs between variant types, and must be dealt with on a casewise basis
+                        // below in the switch statement.
+                        //
+                        continue;
+                    }
+                    if (!(start > 1 + samLine.mappedBases.Keys.Min()) || !(start < samLine.mappedBases.Keys.Max() - 1))
+                    {
+                        //
+                        // There is no padding on the variant. Without it, its hard to make a match call. Ignore.
+                        //
+                        continue;
+                    }
 
-							// match criteria: there are some matching bases on both sides, with a total >= 10
-							matchesRef = refMatchesLeft > 0 && refMatchesRight > 0 && refMatchesLeft + refMatchesRight >= 10;
-							matchesAlt = altMatchesLeft > 0 && altMatchesRight > 0 && altMatchesLeft + altMatchesRight >= 10;
+                    bool matchesRef = false;
+                    bool matchesAlt = false;
 
-							break;
-						default:
-							Console.WriteLine("Unknown variant type: " + variantType);
-							subfileReader.Close();
-							return null;
-					}
+                    switch (variantType)
+                    {
+                        case "INS":
+                        case "DEL":
+                        case "SNP":
+                        case "DNP":
+                        case "TNP":
 
-					// increment matches
-					if (matchesRef)
-					{
-						if (matchesAlt)
-						{
-							nMatchingBoth++;
-						}
-						else
-						{
-							matchingRef.Add(samLine.mappedBases);
-							nMatchingRef++;
-						}
-					}
-					else if (matchesAlt)
-					{
-						matchingAlt.Add(samLine.mappedBases);
-						nMatchingAlt++;
-					}
-					else
-					{
-						nMatchingNeither++;
-					}
-				} // foreach SAMLine
+                            // match to ref on both sides of variant
+                            var refMatchesLeft = ReadCounts.matchSequence(reference_bases, samLine.mappedBases, start, false);
+                            var refMatchesRight = ReadCounts.matchSequence(reference_bases, samLine.mappedBases, start, true);
 
-				subfileReader.Close();
+                            // match to alt on both sides of variant
+                            var altMatchesLeft = ReadCounts.matchSequence(alt_bases, samLine.mappedBases, start, false);
+                            var altMatchesRight = ReadCounts.matchSequence(alt_bases, samLine.mappedBases, start, true);
 
-				// Part 2: take the sequences matching ref and alt and calculate ASM at the cpg
-				var nMethylatedRef = 0;
-				var nMethylatedAlt = 0;
+                            // match criteria: there are some matching bases on both sides, with a total >= 10
+                            matchesRef = refMatchesLeft > 0 && refMatchesRight > 0 && refMatchesLeft + refMatchesRight >= 10;
+                            matchesAlt = altMatchesLeft > 0 && altMatchesRight > 0 && altMatchesLeft + altMatchesRight >= 10;
 
-				var nUnmethylatedRef = 0;
-				var nUnmethylatedAlt = 0;
+                            break;
+                        default:
+                            Console.WriteLine("Unknown variant type: " + variantType);
+                            subfileReader.Close();
+                            return null;
+                    }
 
-				var nNeitherRef = 0;
-				var nNeitherAlt = 0;
+                    // increment matches
+                    if (matchesRef)
+                    {
+                        if (matchesAlt)
+                        {
+                            nMatchingBoth++;
+                        }
+                        else
+                        {
+                            matchingRef.Add(samLine.mappedBases);
+                            nMatchingRef++;
+                        }
+                    }
+                    else if (matchesAlt)
+                    {
+                        matchingAlt.Add(samLine.mappedBases);
+                        nMatchingAlt++;
+                    }
+                    else
+                    {
+                        nMatchingNeither++;
+                    }
+                } // foreach SAMLine
 
-				foreach (var read in matchingRef)
-				{
-					if (read[cpg_start_position] == 'C')
-					{
-						nMethylatedRef++;
-					}
-					else if (read[cpg_start_position] == 'T')
-					{
-						nUnmethylatedRef++;
-					}
-					else
-					{
-						nNeitherRef++;
-					}
-				}
+                subfileReader.Close();
 
-				foreach (var read in matchingAlt)
-				{
-					if (read[cpg_start_position] == 'C')
-					{
-						nMethylatedAlt++;
-					}
-					else if (read[cpg_start_position] == 'T')
-					{
-						nUnmethylatedAlt++;
-					}
-					else
-					{
-						nNeitherAlt++;
-					}
-				}
+                // Part 2: take the sequences matching ref and alt and calculate ASM at the cpg
+                var nMethylatedRef = 0;
+                var nMethylatedAlt = 0;
 
-				// return methylated (C) and  unmethylated (T)
-				return new Tuple<MethylationCounts, MethylationCounts>(new MethylationCounts(nMethylatedRef, nUnmethylatedRef, nNeitherRef),
-					new MethylationCounts(nMethylatedAlt, nUnmethylatedAlt, nNeitherAlt));
+                var nUnmethylatedRef = 0;
+                var nUnmethylatedAlt = 0;
 
-			}
+                var nNeitherRef = 0;
+                var nNeitherAlt = 0;
+
+                foreach (var read in matchingRef)
+                {
+                    if (read[cpg_start_position] == 'C')
+                    {
+                        nMethylatedRef++;
+                    }
+                    else if (read[cpg_start_position] == 'T')
+                    {
+                        nUnmethylatedRef++;
+                    }
+                    else
+                    {
+                        nNeitherRef++;
+                    }
+                }
+
+                foreach (var read in matchingAlt)
+                {
+                    if (read[cpg_start_position] == 'C')
+                    {
+                        nMethylatedAlt++;
+                    }
+                    else if (read[cpg_start_position] == 'T')
+                    {
+                        nUnmethylatedAlt++;
+                    }
+                    else
+                    {
+                        nNeitherAlt++;
+                    }
+                }
+
+                // return methylated (C) and  unmethylated (T)
+                return new Tuple<MethylationCounts, MethylationCounts>(new MethylationCounts(nMethylatedRef, nUnmethylatedRef, nNeitherRef),
+                    new MethylationCounts(nMethylatedAlt, nUnmethylatedAlt, nNeitherAlt));
+
+            }
         } // MethylationCounts
 
 
         public class ReadCounts
-		{
+        {
 
             enum MappedReadResult { MatchesRef, MatchesAlt, MatchesNeither, MatchesBoth };
 
-			public double AlleleSpecificValue() // I'm not calling this "allele specific expression" because DNA doesn't have expression.
-			{
-				if (nMatchingAlt + nMatchingReference == 0)
-				{
-					return 0;
-				}
+            public double AlleleSpecificValue() // I'm not calling this "allele specific expression" because DNA doesn't have expression.
+            {
+                if (nMatchingAlt + nMatchingReference == 0)
+                {
+                    return 0;
+                }
 
-				return ((double)Math.Abs(nMatchingReference - nMatchingAlt)) / (nMatchingReference + nMatchingAlt);
-			}
+                return ((double)Math.Abs(nMatchingReference - nMatchingAlt)) / (nMatchingReference + nMatchingAlt);
+            }
 
             public double AltFraction()
             {
@@ -6310,84 +6388,84 @@ namespace ASELib
                 return (double)nMatchingAlt / (nMatchingReference + nMatchingAlt);
             }
 
-			public static ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig, 
-				int start_position, 
-				string reference_allele, 
-				string alt_allele, 
-				string variantType, 
-				string subfileName,
-				Genome genome)
-			{
-				int nMatchingRef = 0;
-				int nMatchingAlt = 0;
-				int nMatchingNeither = 0;
-				int nMatchingBoth = 0;
+            public static ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig,
+                int start_position,
+                string reference_allele,
+                string alt_allele,
+                string variantType,
+                string subfileName,
+                Genome genome)
+            {
+                int nMatchingRef = 0;
+                int nMatchingAlt = 0;
+                int nMatchingNeither = 0;
+                int nMatchingBoth = 0;
 
-				var consolodatedFile = new ASETools.ConsolodatedFileReader();
+                var consolodatedFile = new ASETools.ConsolodatedFileReader();
 
-				if (!consolodatedFile.open(selectedReadsFilename))
-				{
-					Console.WriteLine("Unable to open reads at selected variants file " + selectedReadsFilename);
-					return null;
-				}
+                if (!consolodatedFile.open(selectedReadsFilename))
+                {
+                    Console.WriteLine("Unable to open reads at selected variants file " + selectedReadsFilename);
+                    return null;
+                }
 
-				var subfileReader = consolodatedFile.getSubfile(subfileName);
-				if (null == subfileReader)
-				{
-					Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName);
-					return null;
-				}
+                var subfileReader = consolodatedFile.getSubfile(subfileName);
+                if (null == subfileReader)
+                {
+                    Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName);
+                    return null;
+                }
 
-				var padding = 20;
-				int[] posArray = new int[padding];
-				for (int i = 0; i < padding; i++)
-				{
-					posArray[i] = start_position - padding / 2 + i;
-				}
+                var padding = 20;
+                int[] posArray = new int[padding];
+                for (int i = 0; i < padding; i++)
+                {
+                    posArray[i] = start_position - padding / 2 + i;
+                }
 
-				// get reference and alt sequences
-				var reference_bases = posArray
-					.Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
-				var alt_bases = posArray
-					.Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
+                // get reference and alt sequences
+                var reference_bases = posArray
+                    .Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
+                var alt_bases = posArray
+                    .Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
 
-				// If the variant we are looking at is an INS, we have to shift the variant position 
-				// by one to match the SamLine insertion location
-				int start = variantType == "INS" ? start_position + 1 : start_position;
+                // If the variant we are looking at is an INS, we have to shift the variant position 
+                // by one to match the SamLine insertion location
+                int start = variantType == "INS" ? start_position + 1 : start_position;
 
-				// modify alt_bases based on VariantType
-				if (variantType == "DEL")
-				{
-					// replace missing bases with "N" so we can do a direct comparison
-					for (var i = 0; i < reference_allele.Length; i++)
-					{
-						alt_bases[start + i] = 'N';
-					}
-				}
-				else if (variantType != "INS")
-				{
-					// for NP: replace bases for alt
-					for (var i = 0; i < alt_allele.Length; i++)
-					{
-						alt_bases[start + i] = alt_allele[i];
-					}
-				}
-				else
-				{
-					// insert INS into dictionary
-					KeyValuePair<int, char>[] ins = new KeyValuePair<int, char>[alt_allele.Length];
+                // modify alt_bases based on VariantType
+                if (variantType == "DEL")
+                {
+                    // replace missing bases with "N" so we can do a direct comparison
+                    for (var i = 0; i < reference_allele.Length; i++)
+                    {
+                        alt_bases[start + i] = 'N';
+                    }
+                }
+                else if (variantType != "INS")
+                {
+                    // for NP: replace bases for alt
+                    for (var i = 0; i < alt_allele.Length; i++)
+                    {
+                        alt_bases[start + i] = alt_allele[i];
+                    }
+                }
+                else
+                {
+                    // insert INS into dictionary
+                    KeyValuePair<int, char>[] ins = new KeyValuePair<int, char>[alt_allele.Length];
 
-					var chArr = alt_allele.ToCharArray();
-					for (int i = 0; i < chArr.Length; i++)
-					{
-						ins[i] = new KeyValuePair<int, char>(i + start, chArr[i]);
-					}
+                    var chArr = alt_allele.ToCharArray();
+                    for (int i = 0; i < chArr.Length; i++)
+                    {
+                        ins[i] = new KeyValuePair<int, char>(i + start, chArr[i]);
+                    }
 
-					alt_bases =
-						alt_bases.Where(r => r.Key < start).ToArray().Concat(ins.ToArray())
-						.Concat(alt_bases.Where(r => r.Key >= start).Select(r => new KeyValuePair<int, char>(r.Key + alt_allele.Length, r.Value)).ToArray())
-						.ToDictionary(x => x.Key, x => x.Value);
-				}
+                    alt_bases =
+                        alt_bases.Where(r => r.Key < start).ToArray().Concat(ins.ToArray())
+                        .Concat(alt_bases.Where(r => r.Key >= start).Select(r => new KeyValuePair<int, char>(r.Key + alt_allele.Length, r.Value)).ToArray())
+                        .ToDictionary(x => x.Key, x => x.Value);
+                }
 
                 //
                 // Keep track of the reads we've mapped, so if we wind up with both ends of a single read covering the variant
@@ -6395,53 +6473,53 @@ namespace ASELib
                 //
                 var readResults = new Dictionary<string, MappedReadResult>();
 
-				string line;
-				while (null != (line = subfileReader.ReadLine()))
-				{
-					ASETools.SAMLine samLine;
+                string line;
+                while (null != (line = subfileReader.ReadLine()))
+                {
+                    ASETools.SAMLine samLine;
 
-					try
-					{
-						samLine = new ASETools.SAMLine(line);
-					}
-					catch (Exception e)
-					{
-						Console.WriteLine("Unable to parse sam line in extracted reads main file + " + selectedReadsFilename + " subfile " + subfileName + ": " + line);
+                    try
+                    {
+                        samLine = new ASETools.SAMLine(line);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("Unable to parse sam line in extracted reads main file + " + selectedReadsFilename + " subfile " + subfileName + ": " + line);
                         throw e;
-					}
+                    }
 
-					if (samLine.isUnmapped() || samLine.mapq < 10 /*|| samLine.isDuplicate()*/)
-					{
-						//
-						// Probably half of a paired-end read with the other end mapped.  Ignore it.
-						//
-						continue;
-					}
+                    if (samLine.isUnmapped() || samLine.mapq < 10 /*|| samLine.isDuplicate()*/)
+                    {
+                        //
+                        // Probably half of a paired-end read with the other end mapped.  Ignore it.
+                        //
+                        continue;
+                    }
 
-					if (contig != samLine.rname)
-					{
-						// Wrong contig. Ignore it.
-						continue;
-					}
+                    if (contig != samLine.rname)
+                    {
+                        // Wrong contig. Ignore it.
+                        continue;
+                    }
 
-					// make sure variant can be found on this SamLine
-					if (!samLine.mappedBases.ContainsKey(start))
-					{
-						//
-						// This read does not overlap the variant.  Ignore it.
-						// The 'before' case differs between variant types, and must be dealt with on a casewise basis
-						// below in the switch statement.
-						//
-						continue;
-					}
+                    // make sure variant can be found on this SamLine
+                    if (!samLine.mappedBases.ContainsKey(start))
+                    {
+                        //
+                        // This read does not overlap the variant.  Ignore it.
+                        // The 'before' case differs between variant types, and must be dealt with on a casewise basis
+                        // below in the switch statement.
+                        //
+                        continue;
+                    }
 
-					if (!(start > 1 + samLine.mappedBases.Keys.Min()) || !(start < samLine.mappedBases.Keys.Max() - 1))
-					{
+                    if (!(start > 1 + samLine.mappedBases.Keys.Min()) || !(start < samLine.mappedBases.Keys.Max() - 1))
+                    {
                         //
                         // There is no padding on the variant. Without it, its hard to make a match call. Ignore.
                         //
-					    continue;
-					}
+                        continue;
+                    }
 
                     if (samLine.mappedQual[start] < 10)
                     {
@@ -6451,58 +6529,58 @@ namespace ASELib
                         continue;
                     }
 
-					bool matchesRef = false;
-					bool matchesAlt = false;
+                    bool matchesRef = false;
+                    bool matchesAlt = false;
 
-					switch (variantType)
-					{
-						case "INS":
-						case "DEL":
-						case "SNP":
-						case "DNP":
-						case "TNP":
+                    switch (variantType)
+                    {
+                        case "INS":
+                        case "DEL":
+                        case "SNP":
+                        case "DNP":
+                        case "TNP":
 
-							// match to ref on both sides of variant
-							var refMatchesLeft = matchSequence(reference_bases, samLine.mappedBases, start, false);
-							var refMatchesRight = matchSequence(reference_bases, samLine.mappedBases, start, true);
+                            // match to ref on both sides of variant
+                            var refMatchesLeft = matchSequence(reference_bases, samLine.mappedBases, start, false);
+                            var refMatchesRight = matchSequence(reference_bases, samLine.mappedBases, start, true);
 
-							// match to alt on both sides of variant
-							var altMatchesLeft = matchSequence(alt_bases, samLine.mappedBases, start, false);
-							var altMatchesRight = matchSequence(alt_bases, samLine.mappedBases, start, true);
+                            // match to alt on both sides of variant
+                            var altMatchesLeft = matchSequence(alt_bases, samLine.mappedBases, start, false);
+                            var altMatchesRight = matchSequence(alt_bases, samLine.mappedBases, start, true);
 
-							// match criteria: there are some matching bases on both sides, with a total >= 10
-							matchesRef = refMatchesLeft > 0 && refMatchesRight > 0 && refMatchesLeft + refMatchesRight >= 10;
-							matchesAlt = altMatchesLeft > 0 && altMatchesRight > 0 && altMatchesLeft + altMatchesRight >= 10;
+                            // match criteria: there are some matching bases on both sides, with a total >= 10
+                            matchesRef = refMatchesLeft > 0 && refMatchesRight > 0 && refMatchesLeft + refMatchesRight >= 10;
+                            matchesAlt = altMatchesLeft > 0 && altMatchesRight > 0 && altMatchesLeft + altMatchesRight >= 10;
 
-							break;
-						default:
-							Console.WriteLine("Unknown variant type: " + variantType);
-							subfileReader.Close();
-							return null;
-					}
+                            break;
+                        default:
+                            Console.WriteLine("Unknown variant type: " + variantType);
+                            subfileReader.Close();
+                            return null;
+                    }
 
                     MappedReadResult result;
 
-					// increment matches
-					if (matchesRef)
-					{
-						if (matchesAlt)
-						{
+                    // increment matches
+                    if (matchesRef)
+                    {
+                        if (matchesAlt)
+                        {
                             result = MappedReadResult.MatchesBoth;
-						}
-						else
-						{
+                        }
+                        else
+                        {
                             result = MappedReadResult.MatchesRef;
-						}
-					}
-					else if (matchesAlt)
-					{
+                        }
+                    }
+                    else if (matchesAlt)
+                    {
                         result = MappedReadResult.MatchesAlt;
-					}
-					else
-					{
+                    }
+                    else
+                    {
                         result = MappedReadResult.MatchesNeither;
-					}
+                    }
 
                     if (samLine.qname == "*" || !readResults.ContainsKey(samLine.qname))
                     {
@@ -6531,63 +6609,63 @@ namespace ASELib
                             case MappedReadResult.MatchesNeither: nMatchingNeither--; break;
                         }
                     }
-				} // foreach SAMLine
+                } // foreach SAMLine
 
-				subfileReader.Close();
-				return new ASETools.ReadCounts(nMatchingRef, nMatchingAlt, nMatchingNeither, nMatchingBoth);
-			}
+                subfileReader.Close();
+                return new ASETools.ReadCounts(nMatchingRef, nMatchingAlt, nMatchingNeither, nMatchingBoth);
+            }
 
-			// recursively matches a sequence and counts number of matches until the sequence ends or a mismatch is found
-			public static int matchSequence(Dictionary<int, char> reference, Dictionary<int, char> sequence, int position, bool goRight, int matchCount = 0, int threshold = 10)
-			{
-				if (matchCount >= threshold)
-				{
-					// We have already seen enough bases that match. Return.
-					return matchCount;
-				}
-				// base case 1: strings have been consumed
-				if (!reference.ContainsKey(position) || !sequence.ContainsKey(position))
-				{
-					// Reached end of sequence. Return. 
-					return matchCount;
-				}
+            // recursively matches a sequence and counts number of matches until the sequence ends or a mismatch is found
+            public static int matchSequence(Dictionary<int, char> reference, Dictionary<int, char> sequence, int position, bool goRight, int matchCount = 0, int threshold = 10)
+            {
+                if (matchCount >= threshold)
+                {
+                    // We have already seen enough bases that match. Return.
+                    return matchCount;
+                }
+                // base case 1: strings have been consumed
+                if (!reference.ContainsKey(position) || !sequence.ContainsKey(position))
+                {
+                    // Reached end of sequence. Return. 
+                    return matchCount;
+                }
 
-				bool match = reference[position] == sequence[position];
-				if (match)
-				{
-					if (goRight)
-						position += 1;
-					else
-						position -= 1;
+                bool match = reference[position] == sequence[position];
+                if (match)
+                {
+                    if (goRight)
+                        position += 1;
+                    else
+                        position -= 1;
 
-					matchCount += 1;
-					return matchSequence(reference, sequence, position, goRight, matchCount);
-				}
-				else
-				{
-					// base case 2: hit a mismatch
-					return matchCount;
-				}
-			}
+                    matchCount += 1;
+                    return matchSequence(reference, sequence, position, goRight, matchCount);
+                }
+                else
+                {
+                    // base case 2: hit a mismatch
+                    return matchCount;
+                }
+            }
 
 
-			public ReadCounts(int nMatchingReference_, int nMatchingAlt_, int nMatchingNeither_, int nMatchingBoth_)
-			{
-				nMatchingReference = nMatchingReference_;
-				nMatchingAlt = nMatchingAlt_;
-				nMatchingNeither = nMatchingNeither_;
-				nMatchingBoth = nMatchingBoth_;
-			}
+            public ReadCounts(int nMatchingReference_, int nMatchingAlt_, int nMatchingNeither_, int nMatchingBoth_)
+            {
+                nMatchingReference = nMatchingReference_;
+                nMatchingAlt = nMatchingAlt_;
+                nMatchingNeither = nMatchingNeither_;
+                nMatchingBoth = nMatchingBoth_;
+            }
 
-			public readonly int nMatchingReference;
-			public readonly int nMatchingAlt;
-			public readonly int nMatchingNeither;
-			public readonly int nMatchingBoth;
+            public readonly int nMatchingReference;
+            public readonly int nMatchingAlt;
+            public readonly int nMatchingNeither;
+            public readonly int nMatchingBoth;
 
-			public override string ToString()
-			{
-				return (nMatchingReference.ToString() + '\t' + nMatchingAlt.ToString() + '\t' + nMatchingNeither.ToString() + '\t' + nMatchingBoth.ToString());
-			}
+            public override string ToString()
+            {
+                return (nMatchingReference.ToString() + '\t' + nMatchingAlt.ToString() + '\t' + nMatchingNeither.ToString() + '\t' + nMatchingBoth.ToString());
+            }
 
             public int totalReads()
             {
@@ -6603,303 +6681,303 @@ namespace ASELib
 
 
         public class RegionalExpressionLine
-		{
-			public string contig;
-			public int contig_offset;                                       
-			public int nbases_expressed;                                    // n Bases Expressed
-			public int nbases_expressed_baseline;                           // n Bases Expressed With Baseline Expression
-			public int nbases_expressed_no_baseline;                        // n Bases Expressed Without Baseline Expression
-			public int nreads_baseline;                                     // Total Reads Mapped To Bases With Baseline Expression
-			public int nreads_no_baseline;                                  // Total Reads Mapped To Bases Without Baseline Expression
-			public int nbases_baseline_other_samples;                       // Count of bases with baseline expression but not in this sample
-			public double z;                                                // Total z For Bases With Baseline Expression
-			public double min_z;                                            // Min z For Bases With Baseline Expression
-			public double max_z;											// Max z For Bases With Baseline Expression
-			public double mean_z;                                           // Mean z for Bases With Baseline Expression
-			public double mean_mu;                                          // Mean mu for Bases with Baseline Expression
+        {
+            public string contig;
+            public int contig_offset;
+            public int nbases_expressed;                                    // n Bases Expressed
+            public int nbases_expressed_baseline;                           // n Bases Expressed With Baseline Expression
+            public int nbases_expressed_no_baseline;                        // n Bases Expressed Without Baseline Expression
+            public int nreads_baseline;                                     // Total Reads Mapped To Bases With Baseline Expression
+            public int nreads_no_baseline;                                  // Total Reads Mapped To Bases Without Baseline Expression
+            public int nbases_baseline_other_samples;                       // Count of bases with baseline expression but not in this sample
+            public double z;                                                // Total z For Bases With Baseline Expression
+            public double min_z;                                            // Min z For Bases With Baseline Expression
+            public double max_z;                                            // Max z For Bases With Baseline Expression
+            public double mean_z;                                           // Mean z for Bases With Baseline Expression
+            public double mean_mu;                                          // Mean mu for Bases with Baseline Expression
 
-			public RegionalExpressionLine(string contig_, int contig_offset_,
-				int nbases_expressed_,
-				int nbases_expressed_baseline_,
-				int nbases_expressed_no_baseline_,
-				int nreads_baseline_,
-				int nreads_no_baseline_,
-				int nbases_baseline_other_samples_,
-				double z_,
-				double min_z_,
-				double max_z_,
-				double mean_z_,
-				double mean_mu_)
-			{
-				contig = contig_;
-				contig_offset = contig_offset_;
-				nbases_expressed = nbases_expressed_;
-				nbases_expressed_baseline = nbases_expressed_baseline_;
-				nbases_expressed_no_baseline = nbases_expressed_no_baseline_;
-				nreads_baseline = nreads_baseline_;
-				nreads_no_baseline = nreads_no_baseline_;
-				nbases_baseline_other_samples = nbases_baseline_other_samples_;
-				z = z_;
-				min_z = min_z_;
-				max_z = max_z_;
-				mean_z = mean_z_;
-				mean_mu = mean_mu_;
-			}
+            public RegionalExpressionLine(string contig_, int contig_offset_,
+                int nbases_expressed_,
+                int nbases_expressed_baseline_,
+                int nbases_expressed_no_baseline_,
+                int nreads_baseline_,
+                int nreads_no_baseline_,
+                int nbases_baseline_other_samples_,
+                double z_,
+                double min_z_,
+                double max_z_,
+                double mean_z_,
+                double mean_mu_)
+            {
+                contig = contig_;
+                contig_offset = contig_offset_;
+                nbases_expressed = nbases_expressed_;
+                nbases_expressed_baseline = nbases_expressed_baseline_;
+                nbases_expressed_no_baseline = nbases_expressed_no_baseline_;
+                nreads_baseline = nreads_baseline_;
+                nreads_no_baseline = nreads_no_baseline_;
+                nbases_baseline_other_samples = nbases_baseline_other_samples_;
+                z = z_;
+                min_z = min_z_;
+                max_z = max_z_;
+                mean_z = mean_z_;
+                mean_mu = mean_mu_;
+            }
         } // RegionalExpressionLine
 
         public class Region
-		{
-			static List<string> getHeaders()
-			{
-				List<string> headers = new List<string>();
-				// Add headers
-				headers.Add("Contig");
-				headers.Add("Contig Offset");
-				headers.Add("n Bases Expressed");
-				headers.Add("n Bases Expressed With Baseline Expression");
-				headers.Add("n Bases Expressed Without Baseline Expression");
-				headers.Add("Total Reads Mapped To Bases With Baseline Expression");
-				headers.Add("Total Reads Mapped To Bases Without Baseline Expression");
-				headers.Add("Count of bases with baseline expression but not in this sample");
-				headers.Add("Total z For Bases With Baseline Expression");
-				headers.Add("Min z For Bases With Baseline Expression");
-				headers.Add("Max z For Bases With BaselineExpression");
-				headers.Add("Mean z for Bases With Baseline Expression");
-				headers.Add("Mean mu for Bases with Baseline Expression");
+        {
+            static List<string> getHeaders()
+            {
+                List<string> headers = new List<string>();
+                // Add headers
+                headers.Add("Contig");
+                headers.Add("Contig Offset");
+                headers.Add("n Bases Expressed");
+                headers.Add("n Bases Expressed With Baseline Expression");
+                headers.Add("n Bases Expressed Without Baseline Expression");
+                headers.Add("Total Reads Mapped To Bases With Baseline Expression");
+                headers.Add("Total Reads Mapped To Bases Without Baseline Expression");
+                headers.Add("Count of bases with baseline expression but not in this sample");
+                headers.Add("Total z For Bases With Baseline Expression");
+                headers.Add("Min z For Bases With Baseline Expression");
+                headers.Add("Max z For Bases With BaselineExpression");
+                headers.Add("Mean z for Bases With Baseline Expression");
+                headers.Add("Mean mu for Bases with Baseline Expression");
 
-				return headers;
-			}
+                return headers;
+            }
 
-			public Region(int regionSize_, ASETools.ExpressionFile expression_, Dictionary<string, int> highestOffsetForEachContig_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_)
-			{
-				regionSize = regionSize_;
-				expression = expression_;
-				highestOffsetForEachContig = highestOffsetForEachContig_;
-				nHighQualityMappedNuclearReads = nHighQualityMappedNuclearReads_;
-				outputFile = outputFile_;
-			}
+            public Region(int regionSize_, ASETools.ExpressionFile expression_, Dictionary<string, int> highestOffsetForEachContig_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_)
+            {
+                regionSize = regionSize_;
+                expression = expression_;
+                highestOffsetForEachContig = highestOffsetForEachContig_;
+                nHighQualityMappedNuclearReads = nHighQualityMappedNuclearReads_;
+                outputFile = outputFile_;
+            }
 
-			ASETools.ExpressionFile expression;
-			Dictionary<string, int> highestOffsetForEachContig;
-			int regionSize;
-			long nHighQualityMappedNuclearReads;
-			StreamWriter outputFile;
-			string currentContig = "";
+            ASETools.ExpressionFile expression;
+            Dictionary<string, int> highestOffsetForEachContig;
+            int regionSize;
+            long nHighQualityMappedNuclearReads;
+            StreamWriter outputFile;
+            string currentContig = "";
 
-			int baseOffset = 0;
-			int lastBaseSeen = 0;
-			long nBasesExpressed = 0;
-			long nBasesExpressedWithBaselineExpression = 0;
-			long nBasesExpressedWithoutBaselineExpression = 0;
-			long totalReadsMappedToBasesWithoutBaselineExpression = 0;
-			long totalReadsMappedToBasesWithBaselineExpression = 0;
-			long nBasesWithBaselineButNoLocalExpression = 0;
-			double totalZForBasesWithBaselineExpression = 0;
-			double totalMuForBasesWithBaselineExpression = 0;   // Instead of standard deviations above/below the mean, just means.  This is 0-based (0 expression => 0 mu)
-			double minZForBasesWithBaselineExpression = 1000000000;
-			double maxZForBasesWithBaselineExpression = -10000000000;
+            int baseOffset = 0;
+            int lastBaseSeen = 0;
+            long nBasesExpressed = 0;
+            long nBasesExpressedWithBaselineExpression = 0;
+            long nBasesExpressedWithoutBaselineExpression = 0;
+            long totalReadsMappedToBasesWithoutBaselineExpression = 0;
+            long totalReadsMappedToBasesWithBaselineExpression = 0;
+            long nBasesWithBaselineButNoLocalExpression = 0;
+            double totalZForBasesWithBaselineExpression = 0;
+            double totalMuForBasesWithBaselineExpression = 0;   // Instead of standard deviations above/below the mean, just means.  This is 0-based (0 expression => 0 mu)
+            double minZForBasesWithBaselineExpression = 1000000000;
+            double maxZForBasesWithBaselineExpression = -10000000000;
 
-			public static List<RegionalExpressionLine> readFile(string filename)
-			{
-				var file = ASETools.CreateStreamReaderWithRetry(filename);
+            public static List<RegionalExpressionLine> readFile(string filename)
+            {
+                var file = ASETools.CreateStreamReaderWithRetry(filename);
 
-				if (null == file)
-				{
-					Console.WriteLine("Region.readFile: unable to open file " + filename);
-					return null;
-				}
+                if (null == file)
+                {
+                    Console.WriteLine("Region.readFile: unable to open file " + filename);
+                    return null;
+                }
 
-				// Skip first 2 rows
-				var headerizedFile = new ASETools.HeaderizedFile<RegionalExpressionLine>(file, false, true, "", getHeaders(), false, false, 2);
+                // Skip first 2 rows
+                var headerizedFile = new ASETools.HeaderizedFile<RegionalExpressionLine>(file, false, true, "", getHeaders(), false, false, 2);
 
-				List<RegionalExpressionLine> retVal;
-				if (!headerizedFile.ParseFile(parse, out retVal))
-				{
-					return null;
-				}
+                List<RegionalExpressionLine> retVal;
+                if (!headerizedFile.ParseFile(parse, out retVal))
+                {
+                    return null;
+                }
 
-				return retVal;
-			}
+                return retVal;
+            }
 
-			static RegionalExpressionLine parse(Dictionary<string, int> fieldMappings, string[] fields)
-			{
-				var contig = fields[fieldMappings["Contig"]];
-				var contig_offset = Convert.ToInt32(fields[fieldMappings["Contig Offset"]]);
-				var nbases_expressed = Convert.ToInt32(fields[fieldMappings["n Bases Expressed"]]);
-				var nbases_expressed_baseline = Convert.ToInt32(fields[fieldMappings["n Bases Expressed With Baseline Expression"]]);
-				var nbases_expressed_no_baseline = Convert.ToInt32(fields[fieldMappings["n Bases Expressed Without Baseline Expression"]]);
-				var nreads_baseline = Convert.ToInt32(fields[fieldMappings["Total Reads Mapped To Bases With Baseline Expression"]]);
-				var nreads_no_baseline = Convert.ToInt32(fields[fieldMappings["Total Reads Mapped To Bases Without Baseline Expression"]]);
-				var nbases_baseline_other_samples = Convert.ToInt32(fields[fieldMappings["Count of bases with baseline expression but not in this sample"]]);
-				var z = Convert.ToDouble(fields[fieldMappings["Total z For Bases With Baseline Expression"]]);
-				var min_z = Convert.ToDouble(fields[fieldMappings["Min z For Bases With Baseline Expression"]]);
-				var max_z = Convert.ToDouble(fields[fieldMappings["Max z For Bases With BaselineExpression"]]);
-				var mean_z = Convert.ToDouble(fields[fieldMappings["Mean z for Bases With Baseline Expression"]]);
-				var mean_mu = Convert.ToDouble(fields[fieldMappings["Mean mu for Bases with Baseline Expression"]]);
+            static RegionalExpressionLine parse(Dictionary<string, int> fieldMappings, string[] fields)
+            {
+                var contig = fields[fieldMappings["Contig"]];
+                var contig_offset = Convert.ToInt32(fields[fieldMappings["Contig Offset"]]);
+                var nbases_expressed = Convert.ToInt32(fields[fieldMappings["n Bases Expressed"]]);
+                var nbases_expressed_baseline = Convert.ToInt32(fields[fieldMappings["n Bases Expressed With Baseline Expression"]]);
+                var nbases_expressed_no_baseline = Convert.ToInt32(fields[fieldMappings["n Bases Expressed Without Baseline Expression"]]);
+                var nreads_baseline = Convert.ToInt32(fields[fieldMappings["Total Reads Mapped To Bases With Baseline Expression"]]);
+                var nreads_no_baseline = Convert.ToInt32(fields[fieldMappings["Total Reads Mapped To Bases Without Baseline Expression"]]);
+                var nbases_baseline_other_samples = Convert.ToInt32(fields[fieldMappings["Count of bases with baseline expression but not in this sample"]]);
+                var z = Convert.ToDouble(fields[fieldMappings["Total z For Bases With Baseline Expression"]]);
+                var min_z = Convert.ToDouble(fields[fieldMappings["Min z For Bases With Baseline Expression"]]);
+                var max_z = Convert.ToDouble(fields[fieldMappings["Max z For Bases With BaselineExpression"]]);
+                var mean_z = Convert.ToDouble(fields[fieldMappings["Mean z for Bases With Baseline Expression"]]);
+                var mean_mu = Convert.ToDouble(fields[fieldMappings["Mean mu for Bases with Baseline Expression"]]);
 
-				return new RegionalExpressionLine(contig, contig_offset, nbases_expressed, nbases_expressed_baseline, nbases_expressed_no_baseline, nreads_baseline,
-					nreads_no_baseline, nbases_baseline_other_samples, z, min_z, max_z, mean_z, mean_mu);
-			}
+                return new RegionalExpressionLine(contig, contig_offset, nbases_expressed, nbases_expressed_baseline, nbases_expressed_no_baseline, nreads_baseline,
+                    nreads_no_baseline, nbases_baseline_other_samples, z, min_z, max_z, mean_z, mean_mu);
+            }
 
-			void ZeroRegion(int regionBaseOffset)
-			{
-				baseOffset = regionBaseOffset;
-				lastBaseSeen = baseOffset - 1;
+            void ZeroRegion(int regionBaseOffset)
+            {
+                baseOffset = regionBaseOffset;
+                lastBaseSeen = baseOffset - 1;
 
-				closeRegion();
-			}
+                closeRegion();
+            }
 
-			public void processBase(string contig, int offset, long mappedReadCount)
-			{
-				if (contig != currentContig)
-				{
-					//
-					// Zero out the rest of the contig.
-					//
-					if (currentContig != "")
-					{
-						closeRegion();
+            public void processBase(string contig, int offset, long mappedReadCount)
+            {
+                if (contig != currentContig)
+                {
+                    //
+                    // Zero out the rest of the contig.
+                    //
+                    if (currentContig != "")
+                    {
+                        closeRegion();
 
-						for (int i = baseOffset + regionSize; i <= highestOffsetForEachContig[currentContig]; i += regionSize)
-						{
-							ZeroRegion(i);
-						}
-					}
+                        for (int i = baseOffset + regionSize; i <= highestOffsetForEachContig[currentContig]; i += regionSize)
+                        {
+                            ZeroRegion(i);
+                        }
+                    }
 
-					baseOffset = offset - offset % regionSize;
-					lastBaseSeen = baseOffset - 1;
-					currentContig = contig;
+                    baseOffset = offset - offset % regionSize;
+                    lastBaseSeen = baseOffset - 1;
+                    currentContig = contig;
 
-				}
-				else if (baseOffset + regionSize < offset)
+                }
+                else if (baseOffset + regionSize < offset)
 
-				{
-					//
-					// Finish this region, and zero any with no expression.
-					//
-					closeRegion();
+                {
+                    //
+                    // Finish this region, and zero any with no expression.
+                    //
+                    closeRegion();
 
-					int baseOffsetForNextRegionWithExpression = offset - offset % regionSize;
-					for (int i = baseOffset + regionSize; i < baseOffsetForNextRegionWithExpression; i += regionSize)
-					{
-						ZeroRegion(i);
-					}
+                    int baseOffsetForNextRegionWithExpression = offset - offset % regionSize;
+                    for (int i = baseOffset + regionSize; i < baseOffsetForNextRegionWithExpression; i += regionSize)
+                    {
+                        ZeroRegion(i);
+                    }
 
-					baseOffset = offset - offset % regionSize;
-					lastBaseSeen = baseOffset - 1;
-				}
+                    baseOffset = offset - offset % regionSize;
+                    lastBaseSeen = baseOffset - 1;
+                }
 
 
-				for (int i = lastBaseSeen + 1; i < offset; i++)
-				{
-					processSkippedBase(i);
-				}
+                for (int i = lastBaseSeen + 1; i < offset; i++)
+                {
+                    processSkippedBase(i);
+                }
 
-				nBasesExpressed++;
-				ASETools.MeanAndStdDev meanAndStdDev;
-				if (expression.getValue(contig, offset, out meanAndStdDev))
-				{
-					nBasesExpressedWithBaselineExpression++;
-					double z = (((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) - meanAndStdDev.mean) / meanAndStdDev.stddev;
+                nBasesExpressed++;
+                ASETools.MeanAndStdDev meanAndStdDev;
+                if (expression.getValue(contig, offset, out meanAndStdDev))
+                {
+                    nBasesExpressedWithBaselineExpression++;
+                    double z = (((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) - meanAndStdDev.mean) / meanAndStdDev.stddev;
 
-					totalZForBasesWithBaselineExpression += z;
-					minZForBasesWithBaselineExpression = Math.Min(z, minZForBasesWithBaselineExpression);
-					maxZForBasesWithBaselineExpression = Math.Max(z, maxZForBasesWithBaselineExpression);
-					totalReadsMappedToBasesWithBaselineExpression += mappedReadCount;
+                    totalZForBasesWithBaselineExpression += z;
+                    minZForBasesWithBaselineExpression = Math.Min(z, minZForBasesWithBaselineExpression);
+                    maxZForBasesWithBaselineExpression = Math.Max(z, maxZForBasesWithBaselineExpression);
+                    totalReadsMappedToBasesWithBaselineExpression += mappedReadCount;
 
-					totalMuForBasesWithBaselineExpression += ((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) / meanAndStdDev.mean;
-				}
-				else
-				{
-					nBasesExpressedWithoutBaselineExpression++;
-					totalReadsMappedToBasesWithoutBaselineExpression += mappedReadCount;
-				}
+                    totalMuForBasesWithBaselineExpression += ((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) / meanAndStdDev.mean;
+                }
+                else
+                {
+                    nBasesExpressedWithoutBaselineExpression++;
+                    totalReadsMappedToBasesWithoutBaselineExpression += mappedReadCount;
+                }
 
-				lastBaseSeen = offset;
-			}
+                lastBaseSeen = offset;
+            }
 
-			public void closeRegion()
-			{
-				for (int i = lastBaseSeen + 1; i < baseOffset + regionSize; i++)
-				{
-					processSkippedBase(i);
-				}
+            public void closeRegion()
+            {
+                for (int i = lastBaseSeen + 1; i < baseOffset + regionSize; i++)
+                {
+                    processSkippedBase(i);
+                }
 
-				outputFile.WriteLine(currentContig + "\t" + baseOffset + "\t" + nBasesExpressed + "\t" + nBasesExpressedWithBaselineExpression + "\t" + nBasesExpressedWithoutBaselineExpression + "\t" + totalReadsMappedToBasesWithBaselineExpression + "\t" +
-					totalReadsMappedToBasesWithoutBaselineExpression + "\t" + nBasesWithBaselineButNoLocalExpression + "\t" + totalZForBasesWithBaselineExpression + "\t" + minZForBasesWithBaselineExpression + "\t" + maxZForBasesWithBaselineExpression + "\t" +
-					totalZForBasesWithBaselineExpression / (double)regionSize + "\t" + totalMuForBasesWithBaselineExpression / regionSize);
+                outputFile.WriteLine(currentContig + "\t" + baseOffset + "\t" + nBasesExpressed + "\t" + nBasesExpressedWithBaselineExpression + "\t" + nBasesExpressedWithoutBaselineExpression + "\t" + totalReadsMappedToBasesWithBaselineExpression + "\t" +
+                    totalReadsMappedToBasesWithoutBaselineExpression + "\t" + nBasesWithBaselineButNoLocalExpression + "\t" + totalZForBasesWithBaselineExpression + "\t" + minZForBasesWithBaselineExpression + "\t" + maxZForBasesWithBaselineExpression + "\t" +
+                    totalZForBasesWithBaselineExpression / (double)regionSize + "\t" + totalMuForBasesWithBaselineExpression / regionSize);
 
-				nBasesExpressed = 0;
-				nBasesExpressedWithBaselineExpression = 0;
-				nBasesExpressedWithoutBaselineExpression = 0;
-				totalReadsMappedToBasesWithoutBaselineExpression = 0;
-				totalReadsMappedToBasesWithBaselineExpression = 0;
-				totalZForBasesWithBaselineExpression = 0;
-				totalMuForBasesWithBaselineExpression = 0;
-				nBasesWithBaselineButNoLocalExpression = 0;
-				minZForBasesWithBaselineExpression = 1000000000;
-				maxZForBasesWithBaselineExpression = -10000000000;
-			}
+                nBasesExpressed = 0;
+                nBasesExpressedWithBaselineExpression = 0;
+                nBasesExpressedWithoutBaselineExpression = 0;
+                totalReadsMappedToBasesWithoutBaselineExpression = 0;
+                totalReadsMappedToBasesWithBaselineExpression = 0;
+                totalZForBasesWithBaselineExpression = 0;
+                totalMuForBasesWithBaselineExpression = 0;
+                nBasesWithBaselineButNoLocalExpression = 0;
+                minZForBasesWithBaselineExpression = 1000000000;
+                maxZForBasesWithBaselineExpression = -10000000000;
+            }
 
-			void processSkippedBase(int offset)
-			{
-				ASETools.MeanAndStdDev meanAndStdDev;
-				if (expression.getValue(currentContig, offset, out meanAndStdDev))
-				{
-					nBasesWithBaselineButNoLocalExpression++;
-					totalZForBasesWithBaselineExpression -= meanAndStdDev.mean / meanAndStdDev.stddev; // It's one mean below the mean: ie. 0 expression
-																									   // No need to update totalMu, since 0 expression adds 0 there.
-				}
-			}
+            void processSkippedBase(int offset)
+            {
+                ASETools.MeanAndStdDev meanAndStdDev;
+                if (expression.getValue(currentContig, offset, out meanAndStdDev))
+                {
+                    nBasesWithBaselineButNoLocalExpression++;
+                    totalZForBasesWithBaselineExpression -= meanAndStdDev.mean / meanAndStdDev.stddev; // It's one mean below the mean: ie. 0 expression
+                                                                                                       // No need to update totalMu, since 0 expression adds 0 there.
+                }
+            }
 
-			static public void printHeader(StreamWriter outputFile)
-			{
-				outputFile.WriteLine(String.Join("\t", getHeaders()));
-			}
+            static public void printHeader(StreamWriter outputFile)
+            {
+                outputFile.WriteLine(String.Join("\t", getHeaders()));
+            }
         } // Region
 
         public readonly static string[] NonsenseMediatedDecayCausingVariantClassifications = { "Splice_Site", "Nonsense_Mutation", "Frame_Shift_Del", "Frame_Shift_Ins", "Nonstop_Mutation", "Splice_Region" };
 
         public class AnnotatedVariant : IComparable
         {
-			public AnnotatedVariant(){}
+            public AnnotatedVariant() { }
 
-			public string toString()
-			{
-				var str = ConvertToExcelString(Hugo_symbol) + "\t" + contig + '\t' + locus + '\t' + reference_allele + '\t' + alt_allele + '\t' + variantType + '\t' + variantClassification + '\t' + somaticMutation + '\t' + tumorDNAReadCounts.ToString() + '\t' + normalDNAReadCounts.ToString() + '\t' + tumorRNAReadCounts.ToString();
+            public string toString()
+            {
+                var str = ConvertToExcelString(Hugo_symbol) + "\t" + contig + '\t' + locus + '\t' + reference_allele + '\t' + alt_allele + '\t' + variantType + '\t' + variantClassification + '\t' + somaticMutation + '\t' + tumorDNAReadCounts.ToString() + '\t' + normalDNAReadCounts.ToString() + '\t' + tumorRNAReadCounts.ToString();
 
-				if (normalRNAReadCounts != null)
-				{
-					str += '\t' + normalRNAReadCounts.ToString();
-				}
-				else
-				{
-					str += "\t\t\t\t";
-				}
+                if (normalRNAReadCounts != null)
+                {
+                    str += '\t' + normalRNAReadCounts.ToString();
+                }
+                else
+                {
+                    str += "\t\t\t\t";
+                }
 
-				return str;
-			}
+                return str;
+            }
 
             public bool isSilent()
             {
                 return variantClassification == "Silent";
             }
-            
+
 
             public bool CausesNonsenseMediatedDecay()
             {
                 return NonsenseMediatedDecayCausingVariantClassifications.Contains(variantClassification);
             }
 
-			public double GetTumorAlleleSpecificExpression(ASECorrection aseCorrection = null)
-			{
-				return GetAlleleSpecificExpression(tumorRNAReadCounts, aseCorrection);
-			}
+            public double GetTumorAlleleSpecificExpression(ASECorrection aseCorrection = null)
+            {
+                return GetAlleleSpecificExpression(tumorRNAReadCounts, aseCorrection);
+            }
 
-			public double GetNormalAlleleSpecificExpression(ASECorrection aseCorrection = null)
-			{
-				return GetAlleleSpecificExpression(normalRNAReadCounts, aseCorrection);
-			}
+            public double GetNormalAlleleSpecificExpression(ASECorrection aseCorrection = null)
+            {
+                return GetAlleleSpecificExpression(normalRNAReadCounts, aseCorrection);
+            }
 
             public double GetAlleleSpecificExpression(bool tumor, ASECorrection aseCorrection = null)
             {
@@ -6907,15 +6985,15 @@ namespace ASELib
                 return GetNormalAlleleSpecificExpression(aseCorrection);
             }
 
-			public double GetTumorAltAlleleFraction()
-			{
-				return GetAltAlleleFraction(tumorRNAReadCounts);
-			}
+            public double GetTumorAltAlleleFraction()
+            {
+                return GetAltAlleleFraction(tumorRNAReadCounts);
+            }
 
-			public double GetNormalAltAlleleFraction()
-			{
-				return GetAltAlleleFraction(normalRNAReadCounts);
-			}
+            public double GetNormalAltAlleleFraction()
+            {
+                return GetAltAlleleFraction(normalRNAReadCounts);
+            }
 
             public double GetAltAlleleFraction(bool tumor)
             {
@@ -6923,8 +7001,8 @@ namespace ASELib
                 return GetNormalAltAlleleFraction();
             }
 
-			private static double GetAlleleSpecificExpression(ReadCounts readCounts, ASECorrection aseCorrection)
-			{
+            private static double GetAlleleSpecificExpression(ReadCounts readCounts, ASECorrection aseCorrection)
+            {
                 //
                 // This used to work by doing:
                 // var rnaFractionTumor = GetAltAlleleFraction(readCounts);
@@ -6946,14 +7024,14 @@ namespace ASELib
                 {
                     return aseCorrection.getCorrectedASE(rawASE, readCounts.usefulReads());
                 }
-			}
+            }
 
-			private static double GetAltAlleleFraction(ReadCounts readCounts)
-			{
-				return (double)readCounts.nMatchingAlt / (readCounts.nMatchingReference + readCounts.nMatchingAlt);
-			}
+            private static double GetAltAlleleFraction(ReadCounts readCounts)
+            {
+                return (double)readCounts.nMatchingAlt / (readCounts.nMatchingReference + readCounts.nMatchingAlt);
+            }
 
-			public AnnotatedVariant(string Hugo_symbol_, bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, string variantClassification_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
+            public AnnotatedVariant(string Hugo_symbol_, bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, string variantClassification_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
             {
                 Hugo_symbol = Hugo_symbol_;
                 somaticMutation = somaticMutation_;
@@ -7018,15 +7096,15 @@ namespace ASELib
                 return new AnnotatedVariant(Hugo_symbol, isSomatic, contig, loc, Ref, alt, variantType, variantClassification, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
             }
 
-			public static List<AnnotatedVariant> readFile(string filename)
-			{
-				var file = CreateStreamReaderWithRetry(filename);
+            public static List<AnnotatedVariant> readFile(string filename)
+            {
+                var file = CreateStreamReaderWithRetry(filename);
 
-				if (null == file)
-				{
-					Console.WriteLine("AnnotatedVariant.readFile: unable to open file " + filename);
-					return null;
-				}
+                if (null == file)
+                {
+                    Console.WriteLine("AnnotatedVariant.readFile: unable to open file " + filename);
+                    return null;
+                }
 
                 var wantedFields = new List<string>();
                 wantedFields.Add("Hugo_symbol");
@@ -7064,7 +7142,7 @@ namespace ASELib
                 }
 
                 return retVal;
-			}
+            }
 
             public ReadCounts getReadCount(bool tumor, bool dna)
             {
@@ -7088,51 +7166,51 @@ namespace ASELib
                     }
                 }
             }
-			
-			public static void writeFile(string filename, List<AnnotatedVariant> annotatedVariants)
-			{
-				var file = CreateStreamWriterWithRetry(filename);
 
-				if (null == file)
-				{
-					Console.WriteLine("AnnotatedVariant.writeFile: unable to create file " + filename);
-					return;
-				}
+            public static void writeFile(string filename, List<AnnotatedVariant> annotatedVariants)
+            {
+                var file = CreateStreamWriterWithRetry(filename);
 
-				// Write header
-				file.WriteLine(headerString);
+                if (null == file)
+                {
+                    Console.WriteLine("AnnotatedVariant.writeFile: unable to create file " + filename);
+                    return;
+                }
 
-				foreach (var annotatedVariant in annotatedVariants)
-				{
-					file.WriteLine(annotatedVariant.toString());
-				}
-				file.WriteLine("**done**");
-				file.Close();
+                // Write header
+                file.WriteLine(headerString);
 
-			}
+                foreach (var annotatedVariant in annotatedVariants)
+                {
+                    file.WriteLine(annotatedVariant.toString());
+                }
+                file.WriteLine("**done**");
+                file.Close();
+
+            }
 
             public static readonly string headerString = "Hugo_symbol\tChromosome\tPosition\tRef_allele\tAlt_allele\tVariant_type\tVariant_classification\tSomatic\t" +
-					"tumorDNAmatchingRef\ttumorDNAmatchingAlt\ttumorDNAmatchingNeither\ttumorDNAmatchingBoth\t" +
-					"normalDNAmatchingRef\tnormalDNAmatchingAlt\tnormalDNAmatchingNeither\tnormalDNAmatchingBoth\t" +
-					"tumorRNAmatchingRef\ttumorRNAmatchingAlt\ttumorRNAmatchingNeither\ttumorRNAmatchingBoth\t" +
-					"normalRNAmatchingRef\tnormalRNAmatchingAlt\tnormalRNAmatchingNeither\tnormalRNAmatchingBoth";
+                    "tumorDNAmatchingRef\ttumorDNAmatchingAlt\ttumorDNAmatchingNeither\ttumorDNAmatchingBoth\t" +
+                    "normalDNAmatchingRef\tnormalDNAmatchingAlt\tnormalDNAmatchingNeither\tnormalDNAmatchingBoth\t" +
+                    "tumorRNAmatchingRef\ttumorRNAmatchingAlt\ttumorRNAmatchingNeither\ttumorRNAmatchingBoth\t" +
+                    "normalRNAmatchingRef\tnormalRNAmatchingAlt\tnormalRNAmatchingNeither\tnormalRNAmatchingBoth";
 
-			public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
-			bool IsASECandidate(bool isTumor, int minRNACoverage, int minDNACoverage) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
-			{
-				// get read counts for either tumor or normal
-				var DNAReadCounts = isTumor ? this.tumorDNAReadCounts : this.normalDNAReadCounts;
-				var RNAReadCounts = isTumor ? this.tumorRNAReadCounts : this.normalRNAReadCounts;
+            public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
+            bool IsASECandidate(bool isTumor, int minRNACoverage, int minDNACoverage) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
+            {
+                // get read counts for either tumor or normal
+                var DNAReadCounts = isTumor ? this.tumorDNAReadCounts : this.normalDNAReadCounts;
+                var RNAReadCounts = isTumor ? this.tumorRNAReadCounts : this.normalRNAReadCounts;
 
-				// normal readcounts are often not available. Throw exception if this is the case.
-				if (DNAReadCounts == null || RNAReadCounts == null)
-				{
-					throw new Exception(isTumor ? "tumor " : "normal " + "read counts are null");
-				}
+                // normal readcounts are often not available. Throw exception if this is the case.
+                if (DNAReadCounts == null || RNAReadCounts == null)
+                {
+                    throw new Exception(isTumor ? "tumor " : "normal " + "read counts are null");
+                }
 
 
                 return checkReadCountsForASECandidacy(DNAReadCounts, RNAReadCounts, minDNACoverage, minRNACoverage);
-			}
+            }
 
             //
             // A version that rolls in the copy number file check.
@@ -7183,7 +7261,7 @@ namespace ASELib
                 return overlappingCNV.Count() == 0;
             }
 
-			public static int CompareByLocus(AnnotatedVariant one, AnnotatedVariant two)
+            public static int CompareByLocus(AnnotatedVariant one, AnnotatedVariant two)
             {
                 if (one.contig != two.contig)
                 {
@@ -7208,7 +7286,7 @@ namespace ASELib
                 return CompareByLocus(this, (AnnotatedVariant)peer);
             }
 
-			public readonly bool somaticMutation;
+            public readonly bool somaticMutation;
             public readonly string contig;
             public readonly int locus;
             public readonly string reference_allele;
@@ -7221,7 +7299,7 @@ namespace ASELib
             public readonly ReadCounts normalDNAReadCounts;
             public readonly ReadCounts normalRNAReadCounts; // This will be null if there is no normal RNA for this case.
         } // AnnotatedVariant
-        
+
         public static int PhredToInt(char phred)
         {
             return (int)phred - 33;
@@ -7382,11 +7460,11 @@ namespace ASELib
             public const int SecondaryAligment = 0x100;
             public const int Duplicate = 0x400;
 
-			// Dictionary of position and bases at position
+            // Dictionary of position and bases at position
             public Dictionary<int, char> mappedBases = new Dictionary<int, char>();
             public Dictionary<int, int> mappedQual = new Dictionary<int, int>();            // base call quality, converted from phred to int
 
-		} // SAMLine
+        } // SAMLine
 
         //
         // Take a string of form ###<otherstuff> and return ### as an int.
@@ -7486,10 +7564,10 @@ namespace ASELib
                     return null;
                 }
 
-                long mappedBaseCount;
+                long mappedBaseCount, basesCovered;
 
                 var fields = line.Split('\t');
-                if (fields.Count() != 2)
+                if (fields.Count() != 3)
                 {
                     Console.WriteLine("Format error in mapped base count file " + filename);
                     reader.Close();
@@ -7499,9 +7577,11 @@ namespace ASELib
                 try
                 {
                     mappedBaseCount = Convert.ToInt64(fields[0]);
+                    basesCovered = Convert.ToInt64(fields[2]);
+
                 } catch (FormatException)
                 {
-                    Console.WriteLine("Mapped base count file " + filename + " contains an unparsable count: " + fields[0]);
+                    Console.WriteLine("Mapped base count file " + filename + " contains an unparsable count: " + fields[0] + " or " + fields[2]);
                     reader.Close();
                     return null;
                 }
@@ -7522,16 +7602,18 @@ namespace ASELib
                 }
 
                 reader.Close();
-                return new MappedBaseCount(mappedBaseCount);
+                return new MappedBaseCount(mappedBaseCount, basesCovered);
             }
 
 
-            MappedBaseCount(long mappedBaseCount_)
+            MappedBaseCount(long mappedBaseCount_, long basesCovered_)
             {
                 mappedBaseCount = mappedBaseCount_;
+                basesCovered = basesCovered_;
             }
 
-            public readonly long mappedBaseCount;
+            public readonly long mappedBaseCount;       // The total length of all of the reads
+            public readonly long basesCovered;      // The total number of bases with at least one read mapped to it.
         }
 
         public class SummaryLine
@@ -7684,106 +7766,106 @@ namespace ASELib
         }
 
 
-		public class BisulfateCase
-		{
-			public string case_id;
+        public class BisulfateCase
+        {
+            public string case_id;
 
 
-			public string bam_tumor_filename;
-			public string bed_tumor_filename;
-			public string bed_normal_filename;
-			public string bam_normal_filename;
+            public string bam_tumor_filename;
+            public string bed_tumor_filename;
+            public string bed_normal_filename;
+            public string bam_normal_filename;
 
-			public string bam_tumor_file_id;
-			public string bed_tumor_file_id;
-			public string bed_normal_file_id;
-			public string bam_normal_file_id;
+            public string bam_tumor_file_id;
+            public string bed_tumor_file_id;
+            public string bed_normal_file_id;
+            public string bam_normal_file_id;
 
-			public string realigned_maf_filename;
-			public string realigned_selected_variants_filename;
+            public string realigned_maf_filename;
+            public string realigned_selected_variants_filename;
 
-			public BisulfateCase()
-			{
-			}
+            public BisulfateCase()
+            {
+            }
 
-			public static Dictionary<string, BisulfateCase> loadCases(string filename)
-			{
+            public static Dictionary<string, BisulfateCase> loadCases(string filename)
+            {
 
-				StreamReader inputFile = ASETools.CreateStreamReaderWithRetry(filename);
+                StreamReader inputFile = ASETools.CreateStreamReaderWithRetry(filename);
 
-				// format filename, location, file id, data format, access, data category, file size, project id, case id
-				var header = inputFile.ReadLine();
+                // format filename, location, file id, data format, access, data category, file size, project id, case id
+                var header = inputFile.ReadLine();
 
-				string line;
+                string line;
 
-				Dictionary<string, BisulfateCase> cases = new Dictionary<string, BisulfateCase>();
+                Dictionary<string, BisulfateCase> cases = new Dictionary<string, BisulfateCase>();
 
-				while ((line = inputFile.ReadLine()) != null)
-				{
-					var split = line.Split('\t');
+                while ((line = inputFile.ReadLine()) != null)
+                {
+                    var split = line.Split('\t');
 
-					// build bisulfate case
-					var case_id = split[0];
-
-
-					if (!cases.ContainsKey(case_id))
-					{
-						cases.Add(case_id, new BisulfateCase());
-					}
-					else
-					{
-						throw new Exception("Case " + case_id + " already in file");
-					}
-
-					cases[case_id].case_id = case_id;
-					cases[case_id].realigned_maf_filename = split[1];
-					cases[case_id].realigned_selected_variants_filename = split[2];
-					cases[case_id].bam_tumor_filename = split[3];
-					cases[case_id].bam_tumor_file_id = split[4];
-					cases[case_id].bam_normal_filename = split[5];
-					cases[case_id].bam_normal_file_id = split[6];
-
-					cases[case_id].bed_tumor_filename = split[7];
-					cases[case_id].bed_tumor_file_id = split[8];
-					cases[case_id].bed_normal_file_id = split[9];
-					cases[case_id].bed_normal_file_id = split[10];
-				}
-
-				return cases;
-			}
-		}
+                    // build bisulfate case
+                    var case_id = split[0];
 
 
-		public class MethylationPoint : IComparer<MethylationPoint>
-		{
-			public string identifier;
-			public double adjustedBValue;
-			public double mValue;
-			public bool hasOneMutation;
+                    if (!cases.ContainsKey(case_id))
+                    {
+                        cases.Add(case_id, new BisulfateCase());
+                    }
+                    else
+                    {
+                        throw new Exception("Case " + case_id + " already in file");
+                    }
 
-			public MethylationPoint(string identifier_, double mValue_, bool hasOneMutation_)
-			{
-				mValue = mValue_;
-				identifier = identifier_;
-				hasOneMutation = hasOneMutation_;
+                    cases[case_id].case_id = case_id;
+                    cases[case_id].realigned_maf_filename = split[1];
+                    cases[case_id].realigned_selected_variants_filename = split[2];
+                    cases[case_id].bam_tumor_filename = split[3];
+                    cases[case_id].bam_tumor_file_id = split[4];
+                    cases[case_id].bam_normal_filename = split[5];
+                    cases[case_id].bam_normal_file_id = split[6];
 
-				var bValue = AnnotationLine.M2Beta(mValue);
-				// Values of 1 have no/full methylation. values of partial methylation have 0 score
-				adjustedBValue = Math.Abs(2 * bValue - 1);
-			}
+                    cases[case_id].bed_tumor_filename = split[7];
+                    cases[case_id].bed_tumor_file_id = split[8];
+                    cases[case_id].bed_normal_file_id = split[9];
+                    cases[case_id].bed_normal_file_id = split[10];
+                }
 
-			public int Compare(MethylationPoint a, MethylationPoint b)
-			{
-				return xCompare(a, b);
-			}
+                return cases;
+            }
+        }
 
-			static public int xCompare(MethylationPoint a, MethylationPoint b)
-			{
-				if (a.adjustedBValue > b.adjustedBValue) return 1;
-				if (a.adjustedBValue < b.adjustedBValue) return -1;
-				return 0;
-			}
-		}
+
+        public class MethylationPoint : IComparer<MethylationPoint>
+        {
+            public string identifier;
+            public double adjustedBValue;
+            public double mValue;
+            public bool hasOneMutation;
+
+            public MethylationPoint(string identifier_, double mValue_, bool hasOneMutation_)
+            {
+                mValue = mValue_;
+                identifier = identifier_;
+                hasOneMutation = hasOneMutation_;
+
+                var bValue = AnnotationLine.M2Beta(mValue);
+                // Values of 1 have no/full methylation. values of partial methylation have 0 score
+                adjustedBValue = Math.Abs(2 * bValue - 1);
+            }
+
+            public int Compare(MethylationPoint a, MethylationPoint b)
+            {
+                return xCompare(a, b);
+            }
+
+            static public int xCompare(MethylationPoint a, MethylationPoint b)
+            {
+                if (a.adjustedBValue > b.adjustedBValue) return 1;
+                if (a.adjustedBValue < b.adjustedBValue) return -1;
+                return 0;
+            }
+        }
 
         public static bool[] BothBools = { true, false };   // There's probably something like this in the runtime, but whatever.
         public static Dictionary<bool, string> tumorToString = new Dictionary<bool, string>();  // true -> Tumor, false -> Normal
@@ -7815,14 +7897,14 @@ namespace ASELib
                     return null;
                 }
 
-                var retVal =  ReadFromStream(file, true);
+                var retVal = ReadFromStream(file, true);
                 file.Close();
 
                 return retVal;
             }
 
             static public HistogramResultLine[] ReadFromStream(StreamReader file, bool wholeFile)
-            { 
+            {
 
                 string[] wantedFields = { "minValue", "count", "total", "pdf", "cdf" };
 
@@ -8012,7 +8094,8 @@ namespace ASELib
 
                 int whichBucket = bucketForValue(value);
 
-                /*BJB*/ if (whichBucket >= nBuckets || whichBucket < 0)
+                /*BJB*/
+                if (whichBucket >= nBuckets || whichBucket < 0)
                 {
                     Console.WriteLine(whichBucket + " >= " + nBuckets + " value = " + value);
                 }
@@ -8172,7 +8255,7 @@ namespace ASELib
                 // This is pretty much a match for the code that generates the headers in the first place, which results in strange double spaces in some places.
                 //
                 var result = new List<string>();
-                string muString = ((!mu) ? "" : " mu") + (!exclusive? "" : " exclusive");
+                string muString = ((!mu) ? "" : " mu") + (!exclusive ? "" : " exclusive");
                 result.Add(range + " 1 vs. many" + muString);
                 result.Add(range + " 1 vs. not 1" + muString);
                 result.Add(range + " 1 silent vs. 1 not silent" + muString);
@@ -8212,7 +8295,7 @@ namespace ASELib
                     rangeInBases = int.MaxValue;
                 } else
                 {
-                    rangeInBases = (1 << rangeIndex-1) * 1000;
+                    rangeInBases = (1 << rangeIndex - 1) * 1000;
                 }
 
                 oneVsMany = oneVsMany_;
@@ -8268,7 +8351,7 @@ namespace ASELib
             }
         } // SingleExpressionResult
 
-		public class ExpressionResultsLine
+        public class ExpressionResultsLine
         {
             static public List<ExpressionResultsLine> readFile(string filename)
             {
@@ -8306,7 +8389,7 @@ namespace ASELib
                 return retVal;
             }
 
-            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nTumorsExcluded_, int nZero_, int nOne_, int nMore_, 
+            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nTumorsExcluded_, int nZero_, int nOne_, int nMore_,
                 int nSingleContribuingToAltFraction_, int nMultipleContributingToAltFraction_, double singleAltFraction_, double multipleAltFraction_, string rawLine_)
             {
                 hugo_symbol = hugo_symbol_;
@@ -8339,7 +8422,7 @@ namespace ASELib
 
                 return new ExpressionResultsLine(fieldGrabber.AsString("Hugo Symbol"), nonExclusiveResults, exclusiveResults, fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nTumorsExcluded"),
                     fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nZero"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nOne"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nMore"),
-                    fieldGrabber.AsInt("nSingleContibutingToAltFraction"), fieldGrabber.AsInt("nMultipleContributingToAltFraction"), 
+                    fieldGrabber.AsInt("nSingleContibutingToAltFraction"), fieldGrabber.AsInt("nMultipleContributingToAltFraction"),
                     fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("single alt fraction"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("multiple alt fraction"),
                     fieldGrabber.rawLine());
             }
@@ -8347,7 +8430,7 @@ namespace ASELib
             public static string getHeaderString()
             {
                 var result = "Hugo Symbol";
-                for (int inclusive = 0; inclusive < 2; inclusive ++)
+                for (int inclusive = 0; inclusive < 2; inclusive++)
                 {
                     for (int i = 0; i < nRegions; i++)
                     {
@@ -8361,7 +8444,7 @@ namespace ASELib
                     {
                         for (int i = 0; i < nRegions; i++)
                         {
-                            result += "\t" + ((zeroOneManySilent == 3) ? "one silent" :   ZeroOneManyString(zeroOneManySilent)) + " mutation " + regionIndexToString(i) + (inclusive ? "" : " exclusive");
+                            result += "\t" + ((zeroOneManySilent == 3) ? "one silent" : ZeroOneManyString(zeroOneManySilent)) + " mutation " + regionIndexToString(i) + (inclusive ? "" : " exclusive");
                         }
                     }
                 }
@@ -8392,12 +8475,12 @@ namespace ASELib
         // Handling power-of-two * 1Kb regions.
         //
         public const int nRegions = 21;    // 0, 1 Kb, 2Kb, 4Kb .. 256Kb, Whole Autosome
-        
+
         public static string regionIndexToString(int regionIndex)
         {
             if (0 == regionIndex) return "0Kbp";
             if (nRegions - 1 == regionIndex) return "whole autosome";
-            return "" + (1 << (regionIndex-1)) + "Kbp";
+            return "" + (1 << (regionIndex - 1)) + "Kbp";
         }
 
         public static int regionIndexToSizeInBases(int regionIndex)
@@ -8407,6 +8490,7 @@ namespace ASELib
             return (1 << regionIndex) * 1000;
         }
 
+ 
         public class AVLTree<TValue>  where TValue : IComparable
         {
             public static AVLTree<TValue> CreateFromList(List<TValue> list)
@@ -8415,6 +8499,7 @@ namespace ASELib
                 list.ForEach(x => tree.Insert(x));
                 return tree;
             }
+
             class Node
             {
                 public TValue value;
@@ -8642,7 +8727,6 @@ namespace ASELib
                 return true;
             } // FindFirstGreaterThanOrEqualTo
 
-
             public bool FindFirstLessThanOrEqualTo(TValue key, out TValue returnValue)
             {
                 Node currentNode = root;
@@ -8787,6 +8871,12 @@ namespace ASELib
 
                 return true;
             } // Lookup
+
+            public bool ContainsKey(TValue key)
+            {
+                TValue value;
+                return Lookup(key, out value);
+            }
 
             public void Insert(TValue newValue)
             {
@@ -9367,6 +9457,14 @@ namespace ASELib
                 }
             } // gotOneShorter
 
+            public void ForEach(Action<TValue> action)
+            {
+                for (TValue x = min(); x != null; x = FindFirstGreaterThan(x))
+                {
+                    action(x);
+                }
+            }
+
             Node root = null;
             int inserts = 0;
             int deletes = 0;
@@ -9563,10 +9661,10 @@ namespace ASELib
 
 		public class FPKMFile
 		{
-			public static Dictionary<string, double> ReadFile(string filename)
+			public static Dictionary<string, double> ReadFile(string filename, Configuration configuration)
 			{
 				// first, load in default ensembl id => gene names
-				var idMap = EnsembleGeneFile.ReadFile(ASETools.Configuration.defaultEnsemblToGeneFilename);
+				var idMap = EnsembleGeneFile.ReadFile(configuration.ensemblToGeneFilename);
 
 				StreamReader inputFile;
 
@@ -11106,6 +11204,7 @@ namespace ASELib
             public readonly Dictionary<string, Dictionary<int, ExpressionDistribution>> map = new Dictionary<string, Dictionary<int, ExpressionDistribution>>();
         } // ExpressionDistributionMap
 
+#if false
         public class ExpressionDistributionMaps
         {
             public ExpressionDistributionMaps(Dictionary<string, Case> cases)
@@ -11114,13 +11213,14 @@ namespace ASELib
                 {
                     if (!maps.ContainsKey(disease))
                     {
-                        maps.Add(disease, new ExpressionDistributionMap(Configuration.expression_distribution_directory + Expression_distribution_filename_base + disease));
+                        maps.Add(disease, new ExpressionDistributionMap(configuration.expression_distribution_directory + Expression_distribution_filename_base + disease));
                     }
                 }
             }
 
             public readonly Dictionary<string, ExpressionDistributionMap> maps = new Dictionary<string, ExpressionDistributionMap>();   // Maps disease -> ExpressionDistributionMap
         } // ExpressionDistributionMaps
+#endif  // If we're actually using this, we need to pass in the configuration
 
         public enum BinomalTestType
         {
@@ -11242,55 +11342,270 @@ namespace ASELib
             }  // switch
         } // binomialTest
 
+        // BED file format at http://uswest.ensembl.org/info/website/upload/bed.html
+        public class BEDLine : IComparable
+        {
+            public readonly string      chrom;
+            public readonly int         chromStart;
+            public readonly int         chromEnd;
+            public readonly string      name;
+            public readonly int         score;
+            public readonly string      strand;         // probably could be a char
+            public readonly int         thickStart;
+            public readonly int         thickEnd;
+            public readonly string      itemRGB;
+
+            // The rest of the fields aren't filled in for the files we're using, so ignore them.
+
+            public BEDLine(string chrom_, int chromStart_, int chromEnd_, string name_, int score_, string strand_, int thickStart_, int thickEnd_, string itemRGB_) 
+            {
+                chrom = chrom_;
+                chromStart = chromStart_;
+                chromEnd = chromEnd_;
+                name = name_;
+                score = score_;
+                strand = strand_;
+                thickStart = thickStart_;
+                thickEnd = thickEnd_;
+                itemRGB = itemRGB_;
+            }
+
+            public BEDLine(string chrom_, int chromStart_)  // this is to make lookup keys for the AVL tree
+            {
+                chrom = chrom_;
+                chromStart = chromStart_;
+            }
+
+            public static BEDLine fromLine(string line)
+            {
+                var fields = line.Split('\t');
+
+                return new BEDLine(fields[0], Convert.ToInt32(fields[1]), Convert.ToInt32(fields[2]), fields[3], Convert.ToInt32(fields[4]), fields[5], Convert.ToInt32(fields[6]), Convert.ToInt32(fields[7]), fields[8]);
+            }
+
+            public int CompareTo(object o_peer)
+            {
+                var peer = (BEDLine)o_peer;
+
+                var stringComp = chrom.CompareTo(peer.chrom);
+                if (stringComp != 0)
+                {
+                    return stringComp;
+                }
+
+                return chromStart.CompareTo(peer.chromStart);
+            }
+        }
+
+        public class AnnotatedBEDLine : BEDLine
+        {
+            public AnnotatedBEDLine(BEDLine non_annotated) : base(non_annotated.chrom, non_annotated.chromStart, non_annotated.chromEnd, non_annotated.name, non_annotated.score, non_annotated.strand, non_annotated.thickStart, non_annotated.thickEnd, non_annotated.itemRGB)
+            {
+            }
+
+            public int nBasesWithCoverage = 0;
+            public int nMutations = 0;
+            public int nMutationsBelow40Percent = 0;
+            public int nMutationsAbove60Percent = 0;
+
+            public double fractionCovered()
+            {
+                return (double)nBasesWithCoverage / (chromEnd - chromStart);
+            }
+
+            public double mutationsPerCoveredBase()
+            {
+                return (double)nMutations / (chromEnd - chromStart);
+
+            }
+        }
+
+        public class BEDFile
+        {
+            public static BEDFile ReadFromFile(string filename)
+            {
+                //
+                // This is not a headerized file, so we just break it into columns and parse it directly.
+                //
+
+                StreamReader inputFile;
+
+                if (filename.ToLower().EndsWith(".gz"))
+                {
+                    inputFile = CreateCompressedStreamReaderWithRetry(filename);
+                } else
+                {
+                    inputFile = CreateStreamReaderWithRetry(filename);
+                }
+
+                if (null == inputFile)
+                {
+                    Console.WriteLine("Unable to open BED file " + filename);
+                    return null;
+                }
+
+                var bedFile = new BEDFile();
+
+                string line;
+                while (null != (line = inputFile.ReadLine()))
+                {
+                    var bedLine = BEDLine.fromLine(line);
+                    BEDLine containedLine;
+                    if (bedFile.lines.Lookup(bedLine, out containedLine))
+                    {
+                        if (containedLine.chromEnd < bedLine.chromEnd)
+                        {
+                            bedFile.lines.Delete(containedLine);    // Keep the bigger one (there is one of these in the file).
+                        }
+                        else
+                        {
+                            continue;   // Skip the duplicate
+                        }
+                    }
+
+                    bedFile.lines.Insert(bedLine);
+                }
+
+                inputFile.Close();
+                return bedFile;
+            }
+
+            public bool isInRegulatoryRegion(string chrom, int locus)
+            {
+                var key = new BEDLine(chrom, locus);
+
+                var treeEntry = lines.FindFirstLessThanOrEqualTo(key);
+
+                if (treeEntry == null || treeEntry.chrom != chrom || treeEntry.chromEnd < locus)
+                {
+                    return false;
+                }
+
+                return true;
+            }
+
+            public void checkOverlap()
+            {
+                //
+                // Make sure that no regions overlap with one another.
+                //
+
+                BEDLine prevLine = null;
+                lines.findMin(out prevLine);
+                BEDLine line;
+                while (null != (line = lines.FindFirstGreaterThan(prevLine)))
+                {
+                    if (prevLine.chrom == line.chrom && prevLine.chromEnd > line.chromStart)
+                    {
+                        Console.WriteLine("Overlapping BED regions at " + prevLine.chrom + " " + prevLine.chromStart + "-" + prevLine.chromEnd + " and " + line.chromStart + "-" + line.chromEnd);
+                    }
+                    prevLine = line;
+                }
+            }
+
+            public void ForEachLine(Action<BEDLine> action)
+            {
+                lines.ForEach(action);
+            }
+
+            AVLTree<BEDLine> lines = new AVLTree<BEDLine>();
+        } // BEDFile
+
+#if false // still writing this
+
+        public class BeatAMLSamplesSummaryLine
+        {
+            static public List<BeatAMLSamplesSummaryLine> ReadFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (inputFile == null)
+                {
+                    return null;
+                }
+
+                string [] wantedFields = {"SeqID", "Original_LabID", "PatientID",  "Design_PatientID", "Diagnosis", "SpecificDiagnosis",  "Secondary_Specific_Diagnosis", "Tertiary_Specific_Diagnosis", "DiagnosisClass",
+                                          "SpecimenType", "SampleGroup", "CaptureGroup", "Sequential_CaptureGroup", "FlowCell", "Lane", "CoreProjectID", "CoreRunID",  "CoreFlowCellID", "CoreSampleID", "Outliers",
+                                           "Specimen_HasRNASeq", "Patient_HasRNASeq"};
+
+                var headerizdFile = new HeaderizedFile<BeatAMLSamplesSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
+            }
+
+            public readonly string seq_id;
+            public readonly string original_lab_id;
+            public readonly int patient_id;
+            public readonly int design_patient_id;
+            public readonly string diagnosis;
+            public readonly string specific_diagnosis;
+            public readonly string secondary_specific_diagnosis;
+            public readonly string tertiary_specific_diagnosis;
+            public readonly string diagnosis_class;
+            public readonly string specimen_type;
+            public readonly string specimen_site;
+            public readonly int sample_group;
+            public readonly int capture_group;
+            public readonly int sequential_capture_group;
+            public readonly string flow_cell;
+            public readonly string lane;
+            public readonly string core_projectId;
+            public readonly string core_runId;
+            public readonly string core_flow_cell_id;
+            public readonly string core_sample_id;
+            public readonly string outliers;
+            public readonly bool specimen_has_rna_seq;
+            public readonly bool patient_has_rna_seq;
+
+        }
+#endif
+
 
     } // ASETools
 
-//
-// I love that C# lets you do stuff like this.  This is a simple groupBy method that takes an IEnumerable and a key extractor function, and returns a dictionary indexed on keys of lists 
-// of elements in the enumerable.  This is a slight tweak on the existing GroupBy methods that fits my needs a little better.
-//
-public static class GroupByExtension
-{
-public static Dictionary<TKey, List<TSource>> GroupByToDict<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keyExtractor)
-{
-var retVal = new Dictionary<TKey, List<TSource>>();
-
-foreach (var element in source)
-{
-    var key = keyExtractor(element);
-
-    if (!retVal.ContainsKey(key))
+    //
+    // I love that C# lets you do stuff like this.  This is a simple groupBy method that takes an IEnumerable and a key extractor function, and returns a dictionary indexed on keys of lists 
+    // of elements in the enumerable.  This is a slight tweak on the existing GroupBy methods that fits my needs a little better.
+    //
+    public static class GroupByExtension
     {
-        retVal.Add(key, new List<TSource>());
+        public static Dictionary<TKey, List<TSource>> GroupByToDict<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keyExtractor)
+        {
+        var retVal = new Dictionary<TKey, List<TSource>>();
+
+        foreach (var element in source)
+        {
+            var key = keyExtractor(element);
+
+            if (!retVal.ContainsKey(key))
+            {
+                retVal.Add(key, new List<TSource>());
+            }
+
+            retVal[key].Add(element);
+        }
+
+        return retVal;
+        }
+    } // GroupByExtension
+
+    public static class EnumerableMedian    // There's certainly a way to do this for generic numeric types rather than just double, but I haven't bothered to figure out how.
+    {
+        public static double Median(this IEnumerable<double> input) 
+        {
+        var list = input.ToList();
+        var n = list.Count();
+        if (n == 0)
+        {
+            return 0;
+        }
+
+        list.Sort();
+
+        if (n % 2 == 1)
+        {
+            return list[n / 2];
+        } else
+        {
+            return (list[n / 2] + list[n / 2 - 1]) / 2;
+        }
     }
-
-    retVal[key].Add(element);
-}
-
-return retVal;
-}
-} // GroupByExtension
-
-public static class EnumerableMedian    // There's certainly a way to do this for generic numeric types rather than just double, but I haven't bothered to figure out how.
-{
-public static double Median(this IEnumerable<double> input) 
-{
-var list = input.ToList();
-var n = list.Count();
-if (n == 0)
-{
-    return 0;
-}
-
-list.Sort();
-
-if (n % 2 == 1)
-{
-    return list[n / 2];
-} else
-{
-    return (list[n / 2] + list[n / 2 - 1]) / 2;
-}
-}
 }
 }

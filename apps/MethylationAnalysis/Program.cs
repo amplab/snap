@@ -345,7 +345,7 @@ namespace MethylationAnalysis
 			}
 
 			// Get genes to process
-			var knownGenes = ASETools.readKnownGeneFile(ASETools.Configuration.defaultGeneLocationInformationFilename);
+			var knownGenes = ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename);
 			var knownGeneNames = knownGenes.Select(r => r.Value.hugoSymbol);
 
 			var selectedGenes = new List<ASETools.GeneLocationInfo>();

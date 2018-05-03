@@ -322,7 +322,7 @@ namespace MakeSignificant012Graphs
 
             foreach (var resultToReport in resultsToReport)
             {
-                var outputFile = ASETools.CreateStreamWriterWithRetry(ASETools.Configuration.zero_one_two_directory + resultToReport.line.hugo_symbol + "-" + resultToReport.range + (resultToReport.significant ? "" : "I") + ".txt");
+                var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.zero_one_two_directory + resultToReport.line.hugo_symbol + "-" + resultToReport.range + (resultToReport.significant ? "" : "I") + ".txt");
 
                 //
                 // Pull the three CDF columns at the top of the file next to one another, since that's what we make into graphs.
@@ -377,7 +377,7 @@ namespace MakeSignificant012Graphs
             {
                 var lines = gene.Value;
                 var hugoSymbol = gene.Key;
-                var outputFile = ASETools.CreateStreamWriterWithRetry(ASETools.Configuration.zero_one_two_directory + hugoSymbol + "-all.txt");
+                var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.zero_one_two_directory + hugoSymbol + "-all.txt");
 
                 for (int i = 0; i < nHistogramsPerResult; i++)
                 {
