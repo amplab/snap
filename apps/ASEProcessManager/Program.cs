@@ -2278,6 +2278,58 @@ namespace ASEProcessManager
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
         } // AnnotateRegulatoryRegionsProcessingStage
 
+        class RegulatoryMutationsNearMutationsProcessingStage : ProcessingStage
+        {
+            public RegulatoryMutationsNearMutationsProcessingStage() { }
+            public string GetStageName() { return "Regulatory Mutations Near Mutations"; }
+
+            public bool NeedsCases() { return true; }
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                nDone = stateOfTheWorld.cases.Where(x => x.Value.regulatory_mutations_near_mutations_filename != "").Count();
+                if (stateOfTheWorld.selectedGenes == null || !File.Exists(stateOfTheWorld.configuration.geneLocationInformationFilename))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                nWaitingForPrerequisites = stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename == "" || x.extracted_maf_lines_filename == "").Count();
+
+                int nOnCurrentLine = 0;
+                foreach (var case_ in stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename != "" && x.extracted_maf_lines_filename != ""))
+                {
+                    if (nOnCurrentLine == 0)
+                    {
+                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "CisRegulatoryMutationsNearMutations.exe");
+                    }
+
+                    script.Write(" " + case_.case_id);
+                    nOnCurrentLine++;
+
+                    if (nOnCurrentLine >= 60)
+                    {
+                        script.WriteLine();
+                        nOnCurrentLine = 0;
+                    }
+
+                    nAddedToScript++;
+                } // foreach case
+
+                if (nOnCurrentLine != 0)
+                {
+                    script.WriteLine();
+                }
+
+            }// EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+        } // RegulatoryMutationsNearMutationsProcessingStage
+
 
         class FPKMProcessingStage : ProcessingStage
 		{
@@ -2820,6 +2872,7 @@ namespace ASEProcessManager
             processingStages.Add(new SelectRegulatoryMAFLinesProcessingStage());
             processingStages.Add(new MappedBaseCountDistributionProcessingStage());
             processingStages.Add(new AnnotateRegulatoryRegionsProcessingStage());
+            processingStages.Add(new RegulatoryMutationsNearMutationsProcessingStage());
 
             if (checkDependencies)
             {

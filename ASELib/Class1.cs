@@ -678,6 +678,19 @@ namespace ASELib
                 return isoforms.Select(x => x.codingSize()).Max();
             }
 
+            public int minDistanceFromTSS(string locusChromosome, int locus)    // How far away is this locus from any transcription start site in this gene (different isoforms may have different TSSs, take the closest one).
+            {
+                if (chromosome != locusChromosome)
+                    return int.MaxValue;
+
+                return isoforms.Select(x => Math.Abs(x.txStart - locus)).Min();
+            }
+
+            public int minDistanceFromTSS(string locusChromosome, int start, int end)
+            {
+                return Math.Min(minDistanceFromTSS(locusChromosome, start), minDistanceFromTSS(locusChromosome, end));
+            }
+
             public List<Isoform> isoforms = new List<Isoform>();
         } // GeneLocationInfo
 
@@ -975,6 +988,7 @@ namespace ASELib
             public string selected_variant_counts_by_gene_filename = "";
             public string selected_regulatory_maf_filename = "";
             public string annotated_regulatory_regions_filename = "";
+            public string regulatory_mutations_near_mutations_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -1032,6 +1046,7 @@ namespace ASELib
             public long normal_regional_methylation_size = 0;
             public long selected_regulatory_maf_lines_size = 0;
             public long annotated_regulatory_regions_size = 0;
+            public long regulatory_mutations_near_mutations_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1235,6 +1250,7 @@ namespace ASELib
                 new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, "Selected Variant Counts By Gene File Size", c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v),
                 new FieldInformation("Selected Regulatory MAF Lines Filename",              c => c.selected_regulatory_maf_filename, (c, v) => c.selected_regulatory_maf_filename = v, DerivedFile.Type.SelectedRegulatoryMAFLines, selectedRegulatoryMAFLinesExtension, c => c.case_id, "Selected Regulatory MAF Lines Size", c => c.selected_regulatory_maf_lines_size, (c, v) => c.selected_regulatory_maf_lines_size = v),
                 new FieldInformation("Annotated Regulatory Regions Filename",               c => c.annotated_regulatory_regions_filename, (c, v) => c.annotated_regulatory_regions_filename = v, DerivedFile.Type.AnnotatedRegulatoryRegions, annotatedBEDLinesExtension, c => c.case_id, "Annotated Regulatory Regions Size", c => c.annotated_regulatory_regions_size, (c, v) => c.annotated_regulatory_regions_size = v),
+                new FieldInformation("Regulatory Mutations Near Mutations Filename",        c => c.regulatory_mutations_near_mutations_filename, (c, v) => c.regulatory_mutations_near_mutations_filename = v, DerivedFile.Type.RegulatoryMutationsNearMutations, regulatoryMutationsNearMutationsExtension, c => c.case_id, "Regulatory Mutations Near Mutations Size", c => c.regulatory_mutations_near_mutations_size, (c, v) => c.regulatory_mutations_near_mutations_size = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -2531,6 +2547,7 @@ namespace ASELib
         public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
         public const string bonferroniExtension = "_bonferroni.txt";
+        public const string regulatoryMutationsNearMutationsExtension = ".regulatory_mutations_near_mutations.txt";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
@@ -2571,6 +2588,7 @@ namespace ASELib
         public const string simulatedResultsFilename = "SimulatedASEError.txt";
         public const string mappedBaseCountDistributionFilename = "MappedBaseCountDistribution.txt";
         public const string annotatedBEDLinesExtension = "_annotated_bed_lines.txt";
+        public const string cisRegulatoryMutationsByMutationCountFilename = "CisRegulatoryMutationsByMutationCount.txt";
 
 
 
@@ -2617,7 +2635,7 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, 
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
             };
         } // DerivedFile
 
@@ -4889,10 +4907,7 @@ namespace ASELib
             {
                 nRegionsIncludedTumor++;
                 totalTumorExpression += z;
-                if (totalTumorExpression == Double.NegativeInfinity)
-                {
-                    Console.WriteLine("stop ere");
-                }
+ 
                 minTumorExpression = Math.Min(minTumorExpression, z);
                 maxTumorExpression = Math.Max(maxTumorExpression, z);
 
@@ -8478,9 +8493,31 @@ namespace ASELib
 
         public static string regionIndexToString(int regionIndex)
         {
-            if (0 == regionIndex) return "0Kbp";
-            if (nRegions - 1 == regionIndex) return "whole autosome";
-            return "" + (1 << (regionIndex - 1)) + "Kbp";
+            switch (regionIndex)
+            {
+                case 0: return "0Kpb";
+                case 1: return "1Kbp";
+                case 2: return "2Kbp";
+                case 3: return "4Kbp";
+                case 4: return "8Kbp";
+                case 5: return "16Kbp";
+                case 6: return "32Kbp";
+                case 7: return "64Kbp";
+                case 8: return "128Kbp";
+                case 9: return "256Kbp";
+                case 10: return "512Kbp";
+                case 11: return "1Mbp";
+                case 12: return "2Mbp";
+                case 13: return "4Mbp";
+                case 14: return "8Mbp";
+                case 15: return "16Mbp";
+                case 16: return "32Mbp";
+                case 17: return "64Mbp";
+                case 18: return "128Mbp";
+                case 19: return "256Mbp";
+                case 20: return "whole autosome";
+                default: return "Incorerect region index " + regionIndex;
+            }
         }
 
         public static int regionIndexToSizeInBases(int regionIndex)
@@ -11418,6 +11455,47 @@ namespace ASELib
                 return (double)nMutations / (chromEnd - chromStart);
 
             }
+
+            public static List<AnnotatedBEDLine> ReadFromFile(string filename)
+            {
+                string[] wantedFields = {"Chrom", "ChromStart",  "ChromEnd", "name", "score", "strand", "thickStart", "thickEnd", "itemRGB", "nBasesWithCoverage", "nMutations", "nMutationsBelow40Percent", "nMutationsAbove60Percent"};
+
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("AnnotatedBEDLine.ReadFromFile(): unable to open input file " + filename);
+                    return null;
+                }
+
+                var headerizedFile = new HeaderizedFile<AnnotatedBEDLine>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<AnnotatedBEDLine> retVal;
+                var worked = headerizedFile.ParseFile(ParseOneLine, out retVal);
+
+                inputFile.Close();
+                if (!worked)
+                {
+                    return null;
+                }
+
+                return retVal;
+            }
+
+            AnnotatedBEDLine(string chrom_, int chromStart_, int chromEnd_, string name_, int score_, string strand_, int thickStart_, int thickEnd_, string itemRGB_, int nBasesWithCoverage_, int nMutations_, int nMutationsBelow40Percent_, int nMutationsAbove60Percent_) :
+                base(chrom_, chromStart_, chromEnd_, name_, score_, strand_, thickStart_, thickEnd_, itemRGB_)
+            {
+                nBasesWithCoverage = nBasesWithCoverage_;
+                nMutations = nMutations_;
+                nMutationsBelow40Percent = nMutationsBelow40Percent_;
+                nMutationsAbove60Percent = nMutationsAbove60Percent_;
+            }
+
+            static AnnotatedBEDLine ParseOneLine(HeaderizedFile<AnnotatedBEDLine>.FieldGrabber fieldGrabber)
+            {
+                return new AnnotatedBEDLine(fieldGrabber.AsString("Chrom"), fieldGrabber.AsInt("ChromStart"), fieldGrabber.AsInt("ChromEnd"), fieldGrabber.AsString("name"), fieldGrabber.AsInt("score"), fieldGrabber.AsString("strand"),
+                                            fieldGrabber.AsInt("thickStart"), fieldGrabber.AsInt("thickEnd"), fieldGrabber.AsString("itemRGB"), fieldGrabber.AsInt("nBasesWithCoverage"), fieldGrabber.AsInt("nMutations"),
+                                            fieldGrabber.AsInt("nMutationsBelow40Percent"), fieldGrabber.AsInt("nMutationsAbove60Percent"));
+            }
         }
 
         public class BEDFile
@@ -11511,7 +11589,6 @@ namespace ASELib
             AVLTree<BEDLine> lines = new AVLTree<BEDLine>();
         } // BEDFile
 
-#if false // still writing this
 
         public class BeatAMLSamplesSummaryLine
         {
@@ -11524,10 +11601,59 @@ namespace ASELib
                 }
 
                 string [] wantedFields = {"SeqID", "Original_LabID", "PatientID",  "Design_PatientID", "Diagnosis", "SpecificDiagnosis",  "Secondary_Specific_Diagnosis", "Tertiary_Specific_Diagnosis", "DiagnosisClass",
-                                          "SpecimenType", "SampleGroup", "CaptureGroup", "Sequential_CaptureGroup", "FlowCell", "Lane", "CoreProjectID", "CoreRunID",  "CoreFlowCellID", "CoreSampleID", "Outliers",
+                                          "SpecimenType", "SampleGroup", "SpecimenSite", "CaptureGroup", "Sequential_CaptureGroup", "FlowCell", "Lane", "CoreProjectID", "CoreRunID",  "CoreFlowCellID", "CoreSampleID", "Outliers",
                                            "Specimen_HasRNASeq", "Patient_HasRNASeq"};
 
-                var headerizdFile = new HeaderizedFile<BeatAMLSamplesSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
+                var headerizedFile = new HeaderizedFile<BeatAMLSamplesSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
+                List<BeatAMLSamplesSummaryLine> retVal;
+                if (!headerizedFile.ParseFile(ParseOneLine, out retVal))
+                {
+                    inputFile.Close();
+                    return null;
+                }
+
+                inputFile.Close();
+                return retVal;
+            }
+
+            static BeatAMLSamplesSummaryLine ParseOneLine(HeaderizedFile<BeatAMLSamplesSummaryLine>.FieldGrabber fieldGrabber)
+            {
+                return new BeatAMLSamplesSummaryLine(
+                    fieldGrabber.AsString("SeqID"), fieldGrabber.AsString("Original_LabID"), fieldGrabber.AsInt("PatientID"), fieldGrabber.AsInt("Design_PatientID"), fieldGrabber.AsString("Diagnosis"),
+                    fieldGrabber.AsString("SpecificDiagnosis"), fieldGrabber.AsString("Secondary_Specific_Diagnosis"), fieldGrabber.AsString("Tertiary_Specific_Diagnosis"), fieldGrabber.AsString("DiagnosisClass"),
+                    fieldGrabber.AsString("SpecimenType"), fieldGrabber.AsString("SpecimenSite"), fieldGrabber.AsInt("SampleGroup"), fieldGrabber.AsInt("CaptureGroup"), fieldGrabber.AsInt("Sequential_CaptureGroup"),
+                    fieldGrabber.AsString("FlowCell"), fieldGrabber.AsString("Lane"), fieldGrabber.AsString("CoreProjectID"), fieldGrabber.AsString("CoreRunID"), fieldGrabber.AsString("CoreFlowCellID"),
+                    fieldGrabber.AsString("CoreSampleID"), fieldGrabber.AsString("Outliers"), fieldGrabber.AsBool("Specimen_HasRNASeq"), fieldGrabber.AsBool("Patient_HasRNASeq"));
+            }
+
+            BeatAMLSamplesSummaryLine(string seq_id_, string original_lab_id_, int patient_id_, int design_patient_id_, string diagnosis_, string specific_diagnosis_, string secondary_specific_diagnosis_,
+                                      string tertiary_specific_diagnosis_, string diagnosis_class_, string specimen_type_, string specimen_site_, int sample_group_, int capture_group_, int sequential_capture_group_,
+                                      string flow_cell_, string lane_, string core_projectId_, string core_runId_, string core_flow_cell_id_, string core_sample_id_, string outliers_, bool specimen_has_rna_seq_,
+                                      bool patient_has_rna_seq_)
+            {
+                seq_id = seq_id_;
+                original_lab_id = original_lab_id_;
+                patient_id = patient_id_;
+                design_patient_id = design_patient_id_;
+                diagnosis = diagnosis_;
+                specific_diagnosis = specific_diagnosis_;
+                secondary_specific_diagnosis = secondary_specific_diagnosis_;
+                tertiary_specific_diagnosis = tertiary_specific_diagnosis_;
+                diagnosis_class = diagnosis_class_;
+                specimen_type = specimen_type_;
+                specimen_site = specimen_site_;
+                sample_group = sample_group_;
+                capture_group = capture_group_;
+                sequential_capture_group = sequential_capture_group_;
+                flow_cell = flow_cell_;
+                lane = lane_;
+                core_projectId = core_projectId_;
+                core_runId = core_runId_;
+                core_flow_cell_id = core_flow_cell_id_;
+                core_sample_id = core_sample_id_;
+                outliers = outliers_;
+                specimen_has_rna_seq = specimen_has_rna_seq_;
+                patient_has_rna_seq = patient_has_rna_seq_;
             }
 
             public readonly string seq_id;
@@ -11554,9 +11680,110 @@ namespace ASELib
             public readonly bool specimen_has_rna_seq;
             public readonly bool patient_has_rna_seq;
 
-        }
-#endif
+        } // BeatAMLSamplesSummaryLine
 
+        public class RegulatoryMutationsNearGene
+        {
+            public readonly string hugo_symbol;
+            public readonly int nNonSilentMutations;
+            public readonly double[] mutationsPerCoveredBaseByRange;
+
+            public static Dictionary<string, RegulatoryMutationsNearGene> readFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (inputFile == null)
+                {
+                    Console.WriteLine("Unable to open input file " + filename);
+                    return null;
+                }
+
+                var retVal = new Dictionary<string, RegulatoryMutationsNearGene>();
+
+                string[] wantedStaticFields = { "Hugo_Symbol", "Non-Silent Mutation Count" };
+
+                var wantedFields = wantedStaticFields.ToList();
+                for (int i = 1; i < nRegions; i++)
+                {
+                    wantedFields.Add(regionIndexToString(i));
+                }
+
+                var headerizedFile = new HeaderizedFile<RegulatoryMutationsNearGene>(inputFile, false, true, "", wantedFields);
+                List<RegulatoryMutationsNearGene> list;
+                headerizedFile.ParseFile(Parse, out list);
+
+                inputFile.Close();
+
+                list.ForEach(x => retVal.Add(x.hugo_symbol, x));
+                return retVal;
+            } // readFile
+
+            static RegulatoryMutationsNearGene Parse(HeaderizedFile<RegulatoryMutationsNearGene>.FieldGrabber fieldGrabber)
+            {
+                var mutationsPerCoveredBaseByRange = new double[nRegions];  // 0 isn't used, but it's still there because that way the address space matches everywhere else
+
+                mutationsPerCoveredBaseByRange[0] = double.NegativeInfinity;
+
+                for (int i = 1; i < nRegions; i++)
+                {
+                    mutationsPerCoveredBaseByRange[i] = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(regionIndexToString(i));
+                }
+
+                return new RegulatoryMutationsNearGene(fieldGrabber.AsString("Hugo_Symbol"), fieldGrabber.AsInt("Non-Silent Mutation Count"), mutationsPerCoveredBaseByRange);
+            }
+
+            RegulatoryMutationsNearGene(string hugo_symbol_, int nNonSilentMutations_, double[] mutationsPerCoveredBaseByRange_)
+            {
+                if (mutationsPerCoveredBaseByRange_.Count() != nRegions)
+                {
+                    throw new InvalidParameterException();
+                }
+
+                hugo_symbol = hugo_symbol_;
+                nNonSilentMutations = nNonSilentMutations_;
+                mutationsPerCoveredBaseByRange = mutationsPerCoveredBaseByRange_;
+            }
+        } // RegulatoryMutationsNearGene
+
+        public static void PrintNumberBar(int maxValue)
+        {
+            if (maxValue >= 1000) return;
+
+            if (maxValue >= 100)
+            {
+                for (int i = 1; i <= maxValue; i++)
+                {
+                    if (i % 100 == 0)
+                    {
+                        Console.Write((i / 100) % 10);
+                    } else
+                    {
+                        Console.Write(" ");
+                    }
+                }
+                Console.WriteLine();
+            } // If we need a hundreds bar
+
+            if (maxValue >= 10)
+            {
+                for (int i = 1; i <= maxValue; i++)
+                {
+                    if (i % 10 == 0)
+                    {
+                        Console.Write((i / 10) % 10);
+                    } else
+                    {
+                        Console.Write(" ");
+                    }
+                }
+                Console.WriteLine();
+            } // If we need a tens bar
+
+            for (int i = 1; i <= maxValue; i++)
+            {
+                Console.Write(i % 10);
+            }
+            Console.WriteLine();
+        }
 
     } // ASETools
 
