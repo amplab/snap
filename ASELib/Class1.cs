@@ -1691,6 +1691,7 @@ namespace ASELib
             public string geneLocationInformationFilename = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
             public int minSampleCountForHeatMap = 100;
             public double ASEInNormalAtWhichToExcludeGenes = 0.5;  // If there's at least this much ASE overall in the matched normal for a gene, then don't use selected variants for it.
+            public bool downloadedFilesHaveMD5Sums = true;  // The BeatAML data set doesn't have them (though the synapse client does internally).
 
             public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
             public string encodeBEDFile = defaultBaseDirectory + @"encode\ENCFF621SFC_hg38.bed";
@@ -1906,6 +1907,18 @@ namespace ASELib
                         retVal.minDNAReadCoverage = Convert.ToInt32(fields[1]);
                     } else if (type == "encode bed file") {
                         retVal.encodeBEDFile = fields[1];
+                    } else if (type == "downloaded files have md5 sums") { 
+                        if (fields[1].ToLower() == "false")
+                        {
+                            retVal.downloadedFilesHaveMD5Sums = false;
+                        } else if (fields[1].ToLower() == "true")
+                        {
+                            retVal.downloadedFilesHaveMD5Sums = true;
+                        } else
+                        {
+                            Console.WriteLine("'downloaded files have md5 sums' configuration parameter must have value true or false.");
+                            return null;
+                        }
                     } else if (type == "beat aml") {
                         if (fields[1].ToLower() == "true")
                         {
@@ -11496,7 +11509,7 @@ namespace ASELib
                                             fieldGrabber.AsInt("thickStart"), fieldGrabber.AsInt("thickEnd"), fieldGrabber.AsString("itemRGB"), fieldGrabber.AsInt("nBasesWithCoverage"), fieldGrabber.AsInt("nMutations"),
                                             fieldGrabber.AsInt("nMutationsBelow40Percent"), fieldGrabber.AsInt("nMutationsAbove60Percent"));
             }
-        }
+        } // AnnotatedBEDLine
 
         public class BEDFile
         {

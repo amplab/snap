@@ -11,8 +11,8 @@ namespace CisRegulatoryMutationsByMutationCount
 {
     class Program
     {
-
         static ASETools.Configuration configuration;
+        static StreamWriter outputFile;
 
         class PerThreadState
         {
@@ -95,14 +95,14 @@ namespace CisRegulatoryMutationsByMutationCount
 
             threading.run();
 
-            var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.cisRegulatoryMutationsByMutationCountFilename);
+            outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.cisRegulatoryMutationsByMutationCountFilename);
             if (null == outputFile)
             {
                 Console.WriteLine("Unable to open output file " + configuration.finalResultsDirectory + ASETools.cisRegulatoryMutationsByMutationCountFilename);
                 return;
             }
 
-            outputFile.Write("Hugo symbol\tmin P\t");
+            outputFile.Write("Hugo symbol\tmin P");
             for (int region = 1; region < ASETools.nRegions; region++)
             {
                 var regionName = ASETools.regionIndexToString(region);
@@ -110,107 +110,12 @@ namespace CisRegulatoryMutationsByMutationCount
                     regionName + " one mean\t" + regionName + " more than one mean");
             }
             outputFile.WriteLine();
-            outputFile.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
 
             var genesToProcess = globalMeasurements.ToList();
-            var geneThreading = new ASETools.WorkerThreadHelper<KeyValuePair<string, List<double>[,]>, PerGeneThreadState>(genesToProcess, HandleOneGene, FinishGeneThread, null, 100);
+            var geneThreading = new ASETools.WorkerThreadHelper<KeyValuePair<string, List<double>[,]>, int>(genesToProcess, HandleOneGene, null, null, 100);
             Console.WriteLine("Processing " + genesToProcess.Count()+  " genes, one dot/100 genes:");
-
-
-
-
-            foreach (var geneDataEntry in globalMeasurements)
-            {
-                var hugo_symbol = geneDataEntry.Key;
-                var geneData = geneDataEntry.Value;
-
-                var oneVsNotOne = new double[ASETools.nRegions];
-                var oneVsMany = new double[ASETools.nRegions];
-
-                bool anyPValues = false;    // If we don't have enough data to compute even one P value, then we skip this gene.
-                double smallestPValueThisGene = 2;
-
-                for (int region = 1; region < ASETools.nRegions; region++)
-                {
-                    oneVsMany[region] = double.NegativeInfinity;
-                    oneVsNotOne[region] = double.NegativeInfinity;
-
-                    int []counts = new int[3];
-                    for (int zeroOneMore = 0; zeroOneMore < 3; zeroOneMore++)
-                    {
-                        counts[zeroOneMore] = countList(geneData[zeroOneMore, region]);
-                    }
-
-                    if (counts[1] < nValuesNeeded || counts[0] + counts[2] < nValuesNeeded)
-                    {
-                        continue;   // Not enough data, skip it
-                    }
-
-                    var data = new List<DoubleAndBool>();
-
-                    geneData[1, region].ForEach(x => data.Add(new DoubleAndBool(x, true)));
-                    if (counts[2] > 0)
-                    {
-                        geneData[2, region].ForEach(x => data.Add(new DoubleAndBool(x, false)));
-                    }
-
-                    if (counts[2] >= nValuesNeeded)
-                    {
-                        bool enoughData;
-                        bool reversed;
-                        double nFirstGroup, nSecondGroup, U, z;
-
-                        oneVsMany[region] = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(data, data[0], x => x.isOne, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, true, nValuesNeeded);
-
-                        if (enoughData)
-                        {
-                            anyPValues = true;
-                            smallestPValueThisGene = Math.Min(smallestPValueThisGene, oneVsMany[region]);
-                        } else
-                        {
-                            oneVsMany[region] = double.NegativeInfinity;
-                        }
-                    } // if enough for one vs. more than one
-
-                    if (counts[0] > 0)
-                    {
-                        geneData[0, region].ForEach(x => data.Add(new DoubleAndBool(x, false)));
-                    }
-
-                    if (counts[0] + counts[2] >= nValuesNeeded)
-                    {
-                        bool enoughData;
-                        bool reversed;
-                        double nFirstGroup, nSecondGroup, U, z;
-
-                        oneVsNotOne[region] = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(data, data[0], x => x.isOne, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, true, nValuesNeeded);
-
-                        if (enoughData)
-                        {
-                            anyPValues = true;
-                            smallestPValueThisGene = Math.Min(smallestPValueThisGene, oneVsNotOne[region]);
-                        }
-                        else
-                        {
-                            oneVsNotOne[region] = double.NegativeInfinity;
-                        }
-                    } // if enough for one vs. not one
-                    
-                } // for each region
-
-                if (anyPValues)
-                {
-                    outputFile.Write(hugo_symbol + "\t" + smallestPValue);
-                    for (int region = 1; region < ASETools.nRegions; region++)
-                    {
-                        outputFile.Write("\t" + countList(geneData[0, region]) + "\t" + countList(geneData[1, region]) + "\t" + countList(geneData[2, region]) + "\t" + valueOrStar(oneVsNotOne[region]) + "\t" +
-                            valueOrStar(oneVsMany[region]) + "\t" + meanOrStar(geneData[0, region]) + "\t" + meanOrStar(geneData[1, region]) + "\t" + meanOrStar(geneData[2, region]));
-                    }
-                    outputFile.WriteLine();
-
-                    smallestPValue = Math.Min(smallestPValue, smallestPValueThisGene);
-                }
-            } // foreach gene
+            ASETools.PrintNumberBar(genesToProcess.Count() / 100);
+            geneThreading.run();
 
             outputFile.WriteLine("**done**");
             outputFile.Close();
@@ -288,6 +193,104 @@ namespace CisRegulatoryMutationsByMutationCount
                 } // foreach measurement
             } // lock
         } // FinishUp
+
+        static void HandleOneGene(KeyValuePair<string, List<double>[,]> geneDataEntry, int state)
+        {
+            var hugo_symbol = geneDataEntry.Key;
+            var geneData = geneDataEntry.Value;
+
+            var oneVsNotOne = new double[ASETools.nRegions];
+            var oneVsMany = new double[ASETools.nRegions];
+
+            double smallestPValueThisGene = 2;
+            int nPValues = 0;
+
+            for (int region = 1; region < ASETools.nRegions; region++)
+            {
+                oneVsMany[region] = double.NegativeInfinity;
+                oneVsNotOne[region] = double.NegativeInfinity;
+
+                int[] counts = new int[3];
+                for (int zeroOneMore = 0; zeroOneMore < 3; zeroOneMore++)
+                {
+                    counts[zeroOneMore] = countList(geneData[zeroOneMore, region]);
+                }
+
+                if (counts[1] < nValuesNeeded || counts[0] + counts[2] < nValuesNeeded)
+                {
+                    continue;   // Not enough data, skip it
+                }
+
+                var data = new List<DoubleAndBool>();
+
+                geneData[1, region].ForEach(x => data.Add(new DoubleAndBool(x, true)));
+                if (counts[2] > 0)
+                {
+                    geneData[2, region].ForEach(x => data.Add(new DoubleAndBool(x, false)));
+                }
+
+                if (counts[2] >= nValuesNeeded)
+                {
+                    bool enoughData;
+                    bool reversed;
+                    double nFirstGroup, nSecondGroup, U, z;
+
+                    oneVsMany[region] = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(data, data[0], x => x.isOne, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, true, nValuesNeeded);
+
+                    if (enoughData)
+                    {
+                        nPValues++;
+                        smallestPValueThisGene = Math.Min(smallestPValueThisGene, oneVsMany[region]);
+                    }
+                    else
+                    {
+                        oneVsMany[region] = double.NegativeInfinity;
+                    }
+                } // if enough for one vs. more than one
+
+                if (counts[0] > 0)
+                {
+                    geneData[0, region].ForEach(x => data.Add(new DoubleAndBool(x, false)));
+                }
+
+                if (counts[0] + counts[2] >= nValuesNeeded)
+                {
+                    bool enoughData;
+                    bool reversed;
+                    double nFirstGroup, nSecondGroup, U, z;
+
+                    oneVsNotOne[region] = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(data, data[0], x => x.isOne, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, true, nValuesNeeded);
+
+                    if (enoughData)
+                    {
+                        nPValues++;
+                        smallestPValueThisGene = Math.Min(smallestPValueThisGene, oneVsNotOne[region]);
+                    }
+                    else
+                    {
+                        oneVsNotOne[region] = double.NegativeInfinity;
+                    }
+                } // if enough for one vs. not one
+
+            } // for each region
+
+            if (nPValues > 0)
+            {
+                lock (outputFile)
+                {
+                    outputFile.Write(hugo_symbol + "\t" + smallestPValueThisGene);
+                    for (int region = 1; region < ASETools.nRegions; region++)
+                    {
+                        outputFile.Write("\t" + countList(geneData[0, region]) + "\t" + countList(geneData[1, region]) + "\t" + countList(geneData[2, region]) + "\t" + valueOrStar(oneVsNotOne[region]) + "\t" +
+                            valueOrStar(oneVsMany[region]) + "\t" + meanOrStar(geneData[0, region]) + "\t" + meanOrStar(geneData[1, region]) + "\t" + meanOrStar(geneData[2, region]));
+                    }
+                    outputFile.WriteLine();
+
+                    smallestPValue = Math.Min(smallestPValue, smallestPValueThisGene);
+                    totalValidPValues += nPValues;
+                } // lock outputFile
+            } // if we found any P values
+        } // HandleOneGene
 
     }
 }

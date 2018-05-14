@@ -332,6 +332,10 @@ namespace ASEProcessManager
 
                 nWaitingForPrerequisites = 0;
 
+                if (!stateOfTheWorld.configuration.downloadedFilesHaveMD5Sums) {
+                    return;
+                }
+
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
