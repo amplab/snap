@@ -225,7 +225,7 @@ namespace GenerateCases
             var cases = new Dictionary<string, ASETools.Case>();
 
 			// Load in old cases to get old maf lines
-			var pastCases = ASETools.Case.LoadCases(@"\\msr-genomics-0\d$\gdc\cases.txt");
+			var pastCases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
 			const string mafCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"MAF\"]}}";
             const string bamOrTxtCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"BAM\",\"TXT\"]}}";
@@ -609,6 +609,7 @@ namespace GenerateCases
 								case_.normal_copy_number_filename = downloadedFiles[case_.normal_copy_number_file_id].fileInfo.FullName;
 							}
 						}
+
 						if (null != tumorFPKM)
 						{
 							case_.tumor_fpkm_file_id = tumorFPKM.file_id;
@@ -620,6 +621,7 @@ namespace GenerateCases
 								case_.tumor_fpkm_filename = downloadedFiles[case_.tumor_fpkm_file_id].fileInfo.FullName;
 							}
 						}
+
 						if (null != normalFPKM)
 						{
 							case_.normal_fpkm_file_id = normalFPKM.file_id;

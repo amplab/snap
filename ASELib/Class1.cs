@@ -675,7 +675,7 @@ namespace ASELib
                     return 0;
                 }
 
-                return isoforms.Select(x => x.codingSize()).Max();
+                return isoforms.Select(x => x.codingSize()).ToList().Max();
             }
 
             public int minDistanceFromTSS(string locusChromosome, int locus)    // How far away is this locus from any transcription start site in this gene (different isoforms may have different TSSs, take the closest one).
@@ -683,7 +683,16 @@ namespace ASELib
                 if (chromosome != locusChromosome)
                     return int.MaxValue;
 
-                return isoforms.Select(x => Math.Abs(x.txStart - locus)).Min();
+                var nIsoforms = isoforms.Count();
+
+                int minValue = int.MaxValue;
+                for (int i = 0; i < nIsoforms; i++ )
+                {
+                    minValue = Math.Min(minValue, Math.Abs(isoforms[i].txStart - locus));
+                }
+
+                return minValue;
+                // This seemed absurdly slow, so it's now just an explicit for loop.  I think maybe the runtime is taking an unnecessary lock here or something.   return isoforms.Select(x => Math.Abs(x.txStart - locus)).ToList().Min();
             }
 
             public int minDistanceFromTSS(string locusChromosome, int start, int end)
@@ -1183,7 +1192,7 @@ namespace ASELib
 
             public static FieldInformation[] AllFields =
             {
-                new FieldInformation("Case ID",                                             c => c.case_id, (c, v) => c.case_id = v),
+                new FieldInformation("Case ID",                                             c => c.case_id.ToLower(), (c, v) => c.case_id = v),
                 new FieldInformation("Normal DNA File ID",                                  c => c.normal_dna_file_id, (c, v) => c.normal_dna_file_id = v),
                 new FieldInformation("Tumor DNA File ID",                                   c => c.tumor_dna_file_id, (c,v) => c.tumor_dna_file_id = v),
                 new FieldInformation("Normal RNA File ID",                                  c => c.normal_rna_file_id, (c,v) => c.normal_rna_file_id = v),
@@ -1692,6 +1701,8 @@ namespace ASELib
             public int minSampleCountForHeatMap = 100;
             public double ASEInNormalAtWhichToExcludeGenes = 0.5;  // If there's at least this much ASE overall in the matched normal for a gene, then don't use selected variants for it.
             public bool downloadedFilesHaveMD5Sums = true;  // The BeatAML data set doesn't have them (though the synapse client does internally).
+            public string samplesSummaryPathname = @"\\fds-k24-09\d$\BeatAML-20180411\Samples Summary.txt";
+            public string synapseDirectory = @"\\fds-k24-09\d$\BeatAML-20180411\";
 
             public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
             public string encodeBEDFile = defaultBaseDirectory + @"encode\ENCFF621SFC_hg38.bed";
@@ -1716,6 +1727,8 @@ namespace ASELib
 
             public string zero_one_two_directory = defaultBaseDirectory + @"012graphs\";
             public string expression_distribution_directory = defaultBaseDirectory + @"expression_distribution\";
+
+            public bool configurationFileLocationExplicitlySpecified = false;
 
             public int minRNAReadCoverage = 10;
             public int minDNAReadCoverage = 10;
@@ -1798,6 +1811,7 @@ namespace ASELib
 
                 var retVal = new Configuration();
                 retVal.commandLineArgs = nonConsumedArgs.ToArray();
+                retVal.configurationFileLocationExplicitlySpecified = fromCommandLine;
 
                 if (!File.Exists(pathname))
                 {
@@ -1817,7 +1831,7 @@ namespace ASELib
                 var lines = ReadAllLinesWithRetry(pathname);
                 bool seenProgramNames = false;
                 bool seenDataDirectories = false;
-                bool firstLine = false; // This is used because we can only reset the base directory in the first line, since resetting it changes lots of other fields.
+                bool firstLine = true; // This is used because we can only reset the base directory in the first line, since resetting it changes lots of other fields.
 
                 foreach (var line in lines)
                 {
@@ -1907,7 +1921,7 @@ namespace ASELib
                         retVal.minDNAReadCoverage = Convert.ToInt32(fields[1]);
                     } else if (type == "encode bed file") {
                         retVal.encodeBEDFile = fields[1];
-                    } else if (type == "downloaded files have md5 sums") { 
+                    } else if (type == "downloaded files have md5 sums") {
                         if (fields[1].ToLower() == "false")
                         {
                             retVal.downloadedFilesHaveMD5Sums = false;
@@ -1935,6 +1949,8 @@ namespace ASELib
                         }
                         retVal.baseDirectory = fields[1];
                         retVal.reinitialzeWithBaseDirectory();
+                    } else if (type == "synapse directory") {
+                        retVal.synapseDirectory = fields[1];
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -2601,7 +2617,7 @@ namespace ASELib
         public const string simulatedResultsFilename = "SimulatedASEError.txt";
         public const string mappedBaseCountDistributionFilename = "MappedBaseCountDistribution.txt";
         public const string annotatedBEDLinesExtension = "_annotated_bed_lines.txt";
-        public const string cisRegulatoryMutationsByMutationCountFilename = "CisRegulatoryMutationsByMutationCount.txt";
+        public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
 
 
 
@@ -2701,6 +2717,8 @@ namespace ASELib
                 string md5Pathname = null;
                 bool sawBAI = false;
                 bool sawBAM = false;
+                bool sawUnsortedBAM = false;
+                string unsortedBAMPathmame = null;    
                 foreach (var pathname in Directory.EnumerateFiles(subdir))
                 {
                     var filename = GetFileNameFromPathname(pathname).ToLower();
@@ -2727,6 +2745,13 @@ namespace ASELib
                         continue;
                     }
 
+                    if (filename.EndsWith(".unsorted-bam") && configuration.isBeatAML)
+                    {
+                        sawUnsortedBAM = true;
+                        unsortedBAMPathmame = pathname;
+                        continue;
+                    }
+
                     if (null != candidatePathname)
                     {
                         Console.WriteLine("Found more than one file candidate in " + subdir);
@@ -2741,13 +2766,18 @@ namespace ASELib
                     }
                 }
 
+                if (candidatePathname == null && unsortedBAMPathmame != null)
+                {
+                    candidatePathname = unsortedBAMPathmame;    // Until we sort it, we'll just use that.
+                }
+
                 if (candidatePathname == null && md5Pathname != null)
                 {
                     Console.WriteLine("Found md5 file in directory without accompanying downloaded file (?): " + md5Pathname);
                     continue;
                 }
 
-                if (sawBAM != sawBAI)
+                if (sawBAM != sawBAI && (!configuration.isBeatAML || !sawBAM)) // Some of the BeatAML files aren't indexed, so we run a stage for that.
                 {
                     Console.WriteLine("Downloaded file directory " + subdir + " has exactly one BAM and BAI file.");
                     continue;
@@ -2810,7 +2840,7 @@ namespace ASELib
                     continue;
                 }
 
-                foreach (var derivedFilePathname in Directory.EnumerateFiles(derivedCase))
+                foreach (var derivedFilePathname in Directory.EnumerateFiles(derivedCase).Select(x => x.ToLower()))
                 {
                     var derivedFile = new DerivedFile(derivedFilePathname, caseId);
                     nDerivedFiles++;
@@ -11458,6 +11488,11 @@ namespace ASELib
             public int nMutationsBelow40Percent = 0;
             public int nMutationsAbove60Percent = 0;
 
+            public int nMutationsWithModerateVAF()
+            {
+                return nMutations - nMutationsAbove60Percent - nMutationsBelow40Percent;
+            }
+
             public double fractionCovered()
             {
                 return (double)nBasesWithCoverage / (chromEnd - chromStart);
@@ -11634,13 +11669,13 @@ namespace ASELib
                 return new BeatAMLSamplesSummaryLine(
                     fieldGrabber.AsString("SeqID"), fieldGrabber.AsString("Original_LabID"), fieldGrabber.AsInt("PatientID"), fieldGrabber.AsInt("Design_PatientID"), fieldGrabber.AsString("Diagnosis"),
                     fieldGrabber.AsString("SpecificDiagnosis"), fieldGrabber.AsString("Secondary_Specific_Diagnosis"), fieldGrabber.AsString("Tertiary_Specific_Diagnosis"), fieldGrabber.AsString("DiagnosisClass"),
-                    fieldGrabber.AsString("SpecimenType"), fieldGrabber.AsString("SpecimenSite"), fieldGrabber.AsInt("SampleGroup"), fieldGrabber.AsInt("CaptureGroup"), fieldGrabber.AsInt("Sequential_CaptureGroup"),
+                    fieldGrabber.AsString("SpecimenType"), fieldGrabber.AsString("SpecimenSite"), fieldGrabber.AsInt("SampleGroup"), fieldGrabber.AsString("CaptureGroup"), fieldGrabber.AsString("Sequential_CaptureGroup"),
                     fieldGrabber.AsString("FlowCell"), fieldGrabber.AsString("Lane"), fieldGrabber.AsString("CoreProjectID"), fieldGrabber.AsString("CoreRunID"), fieldGrabber.AsString("CoreFlowCellID"),
                     fieldGrabber.AsString("CoreSampleID"), fieldGrabber.AsString("Outliers"), fieldGrabber.AsBool("Specimen_HasRNASeq"), fieldGrabber.AsBool("Patient_HasRNASeq"));
             }
 
             BeatAMLSamplesSummaryLine(string seq_id_, string original_lab_id_, int patient_id_, int design_patient_id_, string diagnosis_, string specific_diagnosis_, string secondary_specific_diagnosis_,
-                                      string tertiary_specific_diagnosis_, string diagnosis_class_, string specimen_type_, string specimen_site_, int sample_group_, int capture_group_, int sequential_capture_group_,
+                                      string tertiary_specific_diagnosis_, string diagnosis_class_, string specimen_type_, string specimen_site_, int sample_group_, string capture_group_, string sequential_capture_group_,
                                       string flow_cell_, string lane_, string core_projectId_, string core_runId_, string core_flow_cell_id_, string core_sample_id_, string outliers_, bool specimen_has_rna_seq_,
                                       bool patient_has_rna_seq_)
             {
@@ -11681,8 +11716,8 @@ namespace ASELib
             public readonly string specimen_type;
             public readonly string specimen_site;
             public readonly int sample_group;
-            public readonly int capture_group;
-            public readonly int sequential_capture_group;
+            public readonly string capture_group;
+            public readonly string sequential_capture_group;
             public readonly string flow_cell;
             public readonly string lane;
             public readonly string core_projectId;
@@ -11699,6 +11734,11 @@ namespace ASELib
         {
             public readonly string hugo_symbol;
             public readonly int nNonSilentMutations;
+            public readonly int nNonSilentMutationsWithLowVAF;  // < 0.4
+            public readonly int nNonSilentMutationsWithModerateVAF; // 0.4 <= VAF <= 0.6
+            public readonly int nNonSilentMutationsWithHighVAF; // > 0.6
+            public readonly int nSilentMutations;
+            public readonly int nNotASECandidates;
             public readonly double[] mutationsPerCoveredBaseByRange;
 
             public static Dictionary<string, RegulatoryMutationsNearGene> readFile(string filename)
@@ -11712,7 +11752,7 @@ namespace ASELib
 
                 var retVal = new Dictionary<string, RegulatoryMutationsNearGene>();
 
-                string[] wantedStaticFields = { "Hugo_Symbol", "Non-Silent Mutation Count" };
+                string[] wantedStaticFields = { "Hugo_Symbol", "Non-Silent Mutation Count", "Non - Silent Mutations with Low VAF", "Non - Silent Mutations with Moderate VAF", "Non - Silent Mutations with High VAF", "Silent Mutations", "Not ASE Candidates" };
 
                 var wantedFields = wantedStaticFields.ToList();
                 for (int i = 1; i < nRegions; i++)
@@ -11741,10 +11781,13 @@ namespace ASELib
                     mutationsPerCoveredBaseByRange[i] = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(regionIndexToString(i));
                 }
 
-                return new RegulatoryMutationsNearGene(fieldGrabber.AsString("Hugo_Symbol"), fieldGrabber.AsInt("Non-Silent Mutation Count"), mutationsPerCoveredBaseByRange);
+                return new RegulatoryMutationsNearGene(fieldGrabber.AsString("Hugo_Symbol"), fieldGrabber.AsInt("Non-Silent Mutation Count"), fieldGrabber.AsInt("Non - Silent Mutations with Low VAF"), 
+                    fieldGrabber.AsInt("Non - Silent Mutations with Moderate VAF"), fieldGrabber.AsInt("Non - Silent Mutations with High VAF"), fieldGrabber.AsInt("Silent Mutations"),  
+                    fieldGrabber.AsInt("Not ASE Candidates"), mutationsPerCoveredBaseByRange);
             }
 
-            RegulatoryMutationsNearGene(string hugo_symbol_, int nNonSilentMutations_, double[] mutationsPerCoveredBaseByRange_)
+            RegulatoryMutationsNearGene(string hugo_symbol_, int nNonSilentMutations_, int nNonSilentMutationsWithLowVAF_, int nNonSilentMutationsWithModerateVAF_,
+                int nNonSilentMutationsWithHighVAF_, int nSilentMutations_, int nNotASECandiates_, double[] mutationsPerCoveredBaseByRange_)
             {
                 if (mutationsPerCoveredBaseByRange_.Count() != nRegions)
                 {
@@ -11753,6 +11796,11 @@ namespace ASELib
 
                 hugo_symbol = hugo_symbol_;
                 nNonSilentMutations = nNonSilentMutations_;
+                nNonSilentMutationsWithLowVAF = nNonSilentMutationsWithLowVAF_;
+                nNonSilentMutationsWithModerateVAF = nNonSilentMutationsWithModerateVAF_;
+                nNonSilentMutationsWithHighVAF = nNonSilentMutationsWithHighVAF_;
+                nSilentMutations = nSilentMutations_;
+                nNotASECandidates = nNotASECandiates_;
                 mutationsPerCoveredBaseByRange = mutationsPerCoveredBaseByRange_;
             }
         } // RegulatoryMutationsNearGene
@@ -11796,6 +11844,59 @@ namespace ASELib
                 Console.Write(i % 10);
             }
             Console.WriteLine();
+        } // PrintNumberBar
+
+        public static string PadStringToGuidLength(string inputString)
+        {
+            if (inputString.Count() > GuidStringLength)
+            {
+                throw new Exception("PadStringToGuidLength: input string too long: " + inputString);
+            }
+
+            if (inputString.Count() == GuidStringLength)
+            {
+                return inputString;
+            }
+
+            var retVal = inputString;
+            retVal += "-";
+            while (retVal.Count() < GuidStringLength)
+            {
+                retVal += "x";
+            }
+            return retVal;
+        } // PadStringToGuidLength
+
+        public static string ExtractUnderlyingStringFromGuidPaddedString(string paddedString)
+        {
+            if (paddedString.Count() != GuidStringLength)
+            {
+                throw new Exception("ExtractUnderlyingStringFromGuidPaddedString : input string is the wrong length: " + paddedString);
+            }
+
+            int nToCut = 0;
+            while (paddedString[GuidStringLength -  nToCut - 1] == 'x')
+            {
+                nToCut++;
+            }
+
+            if (paddedString[GuidStringLength - nToCut - 1] == '-')
+            {
+                nToCut++;
+            } else
+            {
+                if (nToCut != 0)
+                {
+                    throw new Exception("ExtractUnderlyingStringFromGuidPaddedString : input string is not a padded string: " + paddedString);
+                }
+
+                //
+                // Input string was the right length without any padding.
+                //
+                return paddedString;
+            }
+
+            return paddedString.Substring(0, GuidStringLength - nToCut);
         }
 
     } // ASETools

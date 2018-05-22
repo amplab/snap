@@ -55,14 +55,14 @@ namespace ASEProcessManager
 
                 nWaitingForPrerequisites = 0; // This is the very first thing we do, there are never any prerequisites
 
-                if (stateOfTheWorld.mafInfo != null)
+                if (stateOfTheWorld.mafInfo != null || stateOfTheWorld.configuration.isBeatAML)
                 {
                     nDone = 1;
                     nAddedToScript = 0;
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateMAFConfiguration -configuration " + stateOfTheWorld.configuration.configuationFilePathname);
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateMAFConfiguration" + stateOfTheWorld.configurationString);
 
                 nDone = 0;
                 nAddedToScript = 1;
@@ -103,7 +103,7 @@ namespace ASEProcessManager
 
                 nDone = 0;
 
-                if (stateOfTheWorld.mafInfo == null)
+                if (stateOfTheWorld.mafInfo == null && !stateOfTheWorld.configuration.isBeatAML)
                 {
                     nWaitingForPrerequisites = 1;
                     nAddedToScript = 0;
@@ -114,23 +114,26 @@ namespace ASEProcessManager
                 //
                 // See if we've downloaded all of the MAFs.
                 //
-
-                foreach (var mafEntry in stateOfTheWorld.mafInfo)
+                if (!stateOfTheWorld.configuration.isBeatAML)
                 {
-                    if (!stateOfTheWorld.downloadedFiles.ContainsKey(mafEntry.Value.file_id))
+                    foreach (var mafEntry in stateOfTheWorld.mafInfo)
                     {
-                        if (null == filesToDownload)
+                        if (!stateOfTheWorld.downloadedFiles.ContainsKey(mafEntry.Value.file_id))
                         {
-                            filesToDownload = new List<string>();
-                        }
+                            if (null == filesToDownload)
+                            {
+                                filesToDownload = new List<string>();
+                            }
 
-                        filesToDownload.Add(mafEntry.Value.file_id);
+                            filesToDownload.Add(mafEntry.Value.file_id);
+                        }
                     }
                 }
 
                 if (null == filesToDownload)
                 {
-                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateCases -configuration " + stateOfTheWorld.configuration.configuationFilePathname);
+                    var executable = stateOfTheWorld.configuration.isBeatAML ? "GenerateBeatAMLCases.exe" : "GenerateCases.exe";
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + executable + stateOfTheWorld.configurationString);
                     nAddedToScript = 1;
                     nWaitingForPrerequisites = 0;
                 }
@@ -203,7 +206,7 @@ namespace ASEProcessManager
                 {
                     var downloadedFile = stateOfTheWorld.downloadedFiles[file_id];
 
-                    if (!stateOfTheWorld.fileDownloadedAndVerified(file_id, expectedMD5))
+                    if (!stateOfTheWorld.fileDownloadedAndVerified(file_id, expectedMD5) || (stateOfTheWorld.configuration.isBeatAML && !File.Exists(downloadedFile.fileInfo.FullName.Substring(0, downloadedFile.fileInfo.FullName.Length - 4) + ".bai")))
                     {
                         nWaitingForPrerequisites++;
                     }
@@ -446,13 +449,26 @@ namespace ASEProcessManager
                     // The Azure script downloads on the fly, so add every one that isn't done.
                     //
                     azureScript.Write("date\n");  // NB: we use Write and \n rather than WriteLine to avoid generating crlf text that would confuse Linux
-                    azureScript.Write("rm -rf /mnt/downloaded_files/*\n"); // /mnt is a big but temporary filesystem on these azure instances
-                    azureScript.Write("cd /mnt/downloaded_files\n");
-                    azureScript.Write(@"~/gdc-client download --token-file ~/" + ASETools.GetFileNameFromPathname(stateOfTheWorld.configuration.accessTokenPathname) + " " + case_.normal_dna_file_id + "\n");
+                    if (!stateOfTheWorld.configuration.isBeatAML) { // for BeatAML, we've already manually loaded the files into an Azure files location, and mounted that on /mnt/downloaded_files/
+                        azureScript.Write("rm -rf /mnt/downloaded_files/*\n"); // /mnt is a big but temporary filesystem on these azure instances
+                        azureScript.Write("cd /mnt/downloaded_files\n");
+                        azureScript.Write(@"~/gdc-client download --token-file ~/" + ASETools.GetFileNameFromPathname(stateOfTheWorld.configuration.accessTokenPathname) + " " + case_.normal_dna_file_id + "\n");
+                    }
                     azureScript.Write("cd ~\n");
                     azureScript.Write("rm ~/x\n");    // We use a link from x to /mnt/downloaded_files/<download_directory> to make the command line shorter
-                    azureScript.Write("ln -s /mnt/downloaded_files/" + case_.normal_dna_file_id + " ~/x\n");
-                    azureScript.Write("cat ~/genomes/hg38-100k-regions | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference ~/genomes/hg38.fa ~/x/*.bam" +
+                    if (stateOfTheWorld.configuration.isBeatAML)
+                    {
+                        azureScript.Write("ln -s /mnt/downloaded_files/BeatAML/" + case_.normal_dna_file_id + " ~/x\n");
+                    }
+                    else 
+                    {
+                        azureScript.Write("ln -s /mnt/downloaded_files/" + case_.normal_dna_file_id + " ~/x\n");
+                    }
+
+                    var regionFileName = stateOfTheWorld.configuration.isBeatAML ? "~/genomes/hg19-100k-regions" : "~/genomes/hg38-100k-regions";
+                    var fastaName = stateOfTheWorld.configuration.isBeatAML ? "~/genomes/hg19-no-chr.fa" : "~/genomes/hg38.fa";
+
+                    azureScript.Write("cat " + regionFileName + " | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference " + fastaName + " ~/x/*.bam" +
                         " \" | ~/freebayes/vcflib/bin/vcffirstheader | ~/freebayes/vcflib/bin/vcfstreamsort -w 1000 | ~/freebayes/vcflib/bin/vcfuniq > ~/" +
                         case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
                     azureScript.Write("if [ $? = 0 ]; then\n");
@@ -461,7 +477,10 @@ namespace ASEProcessManager
                     azureScript.Write("    echo " + case_.normal_dna_file_id + " >> variant_calling_errors\n");
                     azureScript.Write("fi\n");
                     azureScript.Write("rm ~/" + case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
-                    azureScript.Write("rm -rf ~/downloaded_files/" + case_.normal_dna_file_id + "\n");
+                    if (!stateOfTheWorld.configuration.isBeatAML) // Don't delete it for BeatAML, since we hand uploaded it.
+                    {
+                        azureScript.Write("rm -rf ~/downloaded_files/" + case_.normal_dna_file_id + "\n");
+                    }
                     azureScript.Write("rm ~/x\n");
 
                     if (!stateOfTheWorld.fileDownloadedAndVerified(case_.normal_dna_file_id, case_.normal_dna_file_bam_md5))
@@ -471,7 +490,7 @@ namespace ASEProcessManager
                     }
 
                     linuxScript.Write("date\n");    // NB: we use Write and \n rather than WriteLine to avoid generating crlf text that would confuse Linux
-                    linuxScript.Write("cat ~/genomes/hg38-100k-regions | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference ~/genomes/hg38.fa " + 
+                    linuxScript.Write("cat " + regionFileName + " | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference " + fastaName + " " + 
                         ASETools.WindowsToLinuxPathname(stateOfTheWorld.downloadedFiles[case_.normal_dna_file_id].fileInfo.FullName) + 
                         " \" | ~/freebayes/vcflib/bin/vcffirstheader | ~/freebayes/vcflib/bin/vcfstreamsort -w 1000 | ~/freebayes/vcflib/bin/vcfuniq > " +
                         case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
@@ -484,7 +503,10 @@ namespace ASEProcessManager
                     linuxScript.Write("else\n");
                     linuxScript.Write(@"    echo " + case_.normal_dna_file_id + " >> variant_calling_errors\n");
                     linuxScript.Write("fi\n");
-                    linuxScript.Write("rm " + case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
+                    if (!stateOfTheWorld.configuration.isBeatAML) // Since we have to upload them by hand, don't auto delete them, either.
+                    {
+                        linuxScript.Write("rm " + case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
+                    }
 
                     nAddedToScript++;
                 } // foreach case
@@ -561,8 +583,8 @@ namespace ASEProcessManager
 
             void AddCasesToScripts(StateOfTheWorld stateOfTheWorld, string casesToProcess, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript)
             {
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "AnnotateVariants.exe " + casesToProcess);
-                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "AnnotateVariants.exe " + casesToProcess);
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "AnnotateVariants.exe " + stateOfTheWorld.configurationString + casesToProcess);
+                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "AnnotateVariants.exe " + stateOfTheWorld.configurationString + casesToProcess);
 
             }
 
@@ -712,8 +734,8 @@ namespace ASEProcessManager
 
                     if (nOnCurrentLine == 0) 
                     {
-                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "SelectGermlineVariants.exe");
-                        hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGermlineVariants.exe");
+                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "SelectGermlineVariants.exe" + stateOfTheWorld.configurationString);
+                        hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGermlineVariants.exe" + stateOfTheWorld.configurationString);
                     }
 
                     script.Write(" " + case_.case_id);
@@ -814,7 +836,7 @@ namespace ASEProcessManager
                             continue;
                         }
 
-                        string command = "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
+                        string command = "ExpressionDistribution.exe " + stateOfTheWorld.configurationString + stateOfTheWorld.configuration.casesFilePathname + " " +
                             stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + ASETools.Case.TumorRNAAllcountFilenameColumn + " " + ASETools.Case.TumorRNAMappedBaseCountColumn + " " + disease;
 
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + command);
@@ -906,8 +928,8 @@ namespace ASEProcessManager
 
                 if (nAddedToScript > 0)
                 {
-                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExtractMAFLines");
-                    hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractMAFLines");
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExtractMAFLines" + stateOfTheWorld.configurationString);
+                    hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractMAFLines" + stateOfTheWorld.configurationString);
                 }
             }
 
@@ -1005,8 +1027,8 @@ namespace ASEProcessManager
 
             void WriteScripts(StateOfTheWorld stateOfTheWorld, List<ASETools.Case> cases, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript)
             {
-                script.Write(stateOfTheWorld.configuration.binariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName + " " + stateOfTheWorld.configuration.regionalExpressionRegionSize + " ");
-                hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName + " " + stateOfTheWorld.configuration.regionalExpressionRegionSize + " ");
+                script.Write(stateOfTheWorld.configuration.binariesDirectory + "RegionalExpression " + stateOfTheWorld.configurationString + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName + " " + stateOfTheWorld.configuration.regionalExpressionRegionSize + " ");
+                hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "RegionalExpression " + stateOfTheWorld.configurationString + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName + " " + stateOfTheWorld.configuration.regionalExpressionRegionSize + " ");
                 foreach (var case_ in cases) {
                     script.Write(" " + case_.case_id);
                     hpcScript.Write(" " + case_.case_id);
@@ -1143,7 +1165,7 @@ namespace ASEProcessManager
 
                     if (currentCommandLine == "")
                     {
-                        currentCommandLine = "ExpressionNearMutations.exe" + (forAlleleSpecificExpression ? " -a" : "");
+                        currentCommandLine = "ExpressionNearMutations.exe" + stateOfTheWorld.configurationString + (forAlleleSpecificExpression ? " -a" : "");
                     }
 
                     currentCommandLine += " " + case_.case_id;
@@ -1295,10 +1317,10 @@ namespace ASEProcessManager
 
                 if (outputSoFar == "")
                 {
-                    outputSoFar = stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + flagsString + " " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " +
+                    outputSoFar = stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + stateOfTheWorld.configurationString + flagsString + " " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " +
                                 stateOfTheWorld.configuration.binariesDirectory + "samtools.exe ";
 
-                    outputSoFarHpc = jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + flagsString + " " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " +
+                    outputSoFarHpc = jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + stateOfTheWorld.configurationString + flagsString + " " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " +
                                 stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe ";
                 }
 
@@ -1404,8 +1426,8 @@ namespace ASEProcessManager
                 }
 
                 nAddedToScript++;
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SelectGenes.exe");
-                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGenes.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SelectGenes.exe" + stateOfTheWorld.configurationString);
+                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGenes.exe" + stateOfTheWorld.configurationString);
             }
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
@@ -1491,8 +1513,8 @@ namespace ASEProcessManager
 
                 if (nOnCurrentCommandLine == 0)
                 {
-                    script.Write(stateOfTheWorld.configuration.binariesDirectory + "CountMappedBases.exe");
-                    hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "CountMappedBases.exe");
+                    script.Write(stateOfTheWorld.configuration.binariesDirectory + "CountMappedBases.exe" + stateOfTheWorld.configurationString);
+                    hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "CountMappedBases.exe" + stateOfTheWorld.configurationString);
                 }
 
                 script.Write(" " + inputFilename + " " + ASETools.GetDirectoryFromPathname(inputFilename) + @"\" + ASETools.GetFileIdFromPathname(inputFilename) + outputExtension);
@@ -1594,8 +1616,8 @@ namespace ASEProcessManager
 
                 nAddedToScript = 1;
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateScatterGraphs.exe");
-                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateScatterGraphs.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateScatterGraphs.exe" + stateOfTheWorld.configurationString);
+                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateScatterGraphs.exe" + stateOfTheWorld.configurationString);
             } // EvaluateStage
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
@@ -1668,7 +1690,7 @@ namespace ASEProcessManager
                         nDone++;
                     } else
                     {
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadsForRepetitiveRegionDetection.exe " + stateOfTheWorld.configuration.indexDirectory + " " + chromosomeNumber + " " +
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadsForRepetitiveRegionDetection.exe " + stateOfTheWorld.configurationString + stateOfTheWorld.configuration.indexDirectory + " " + chromosomeNumber + " " +
                             stateOfTheWorld.configuration.chromosomeMapsDirectory +"chr" + chromosomeNumber +
                             ASETools.allLociExtension + " 48");
                         nAddedToScript++;
@@ -1745,7 +1767,7 @@ namespace ASEProcessManager
                     }
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MakeRepetitiveRegionMap.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MakeRepetitiveRegionMap.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript++;
             }
 
@@ -1781,7 +1803,7 @@ namespace ASEProcessManager
                     nWaitingForPrerequisites++;
                 } else
                 {
-                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallDistribution.exe");
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallDistribution.exe" + stateOfTheWorld.configurationString);
                     nAddedToScript++;
                 }
 
@@ -1798,7 +1820,7 @@ namespace ASEProcessManager
                 }
                 else
                 {
-                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallDistribution.exe -c");
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallDistribution.exe" + stateOfTheWorld.configurationString + "-c");
                     nAddedToScript++;
                 }
             } // EvaluateStage
@@ -1834,7 +1856,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateASECorrection.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateASECorrection.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript++;
             }
 
@@ -1870,7 +1892,7 @@ namespace ASEProcessManager
                 }
 
                 nAddedToScript = 1;
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "AllSitesReadDepthDistribution.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "AllSitesReadDepthDistribution.exe" + stateOfTheWorld.configurationString);
             } // EvaluateStage
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
@@ -1904,7 +1926,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExpressionByMutationCount.exe -a");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExpressionByMutationCount.exe" + stateOfTheWorld.configurationString + " -a");
                 nAddedToScript = 1;
             }
 
@@ -1940,7 +1962,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ApplyBonferroniCorrection.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ApplyBonferroniCorrection.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript = 1;
             }
 
@@ -1975,7 +1997,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ASEConsistency.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ASEConsistency.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript = 1;
             }
 
@@ -2010,7 +2032,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ASEMap.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ASEMap.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript = 1;
             } // EvaluateStage
 
@@ -2047,7 +2069,7 @@ namespace ASEProcessManager
                 }
 
                 nAddedToScript = 1;
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MakeSignificant012Graphs.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MakeSignificant012Graphs.exe" + stateOfTheWorld.configurationString);
 
             } // EvaluateStage
 
@@ -2083,7 +2105,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MannWhitney.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MannWhitney.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript = 1;
             }
 
@@ -2117,7 +2139,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ComputePerCaseASE.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ComputePerCaseASE.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript = 1;
             }
 
@@ -2150,7 +2172,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "CategorizeTumors.exe");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "CategorizeTumors.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript = 1;
             }
 
@@ -2185,7 +2207,7 @@ namespace ASEProcessManager
                             script.WriteLine();
                         }
 
-                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "SelectMutationsInReglatoryRegions.exe"); // Yes, it's spelled wrong.  It's a giant pain to fix a typo in an app name, so I'm just leaving it.
+                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "SelectMutationsInReglatoryRegions.exe" + stateOfTheWorld.configurationString); // Yes, it's spelled wrong.  It's a giant pain to fix a typo in an app name, so I'm just leaving it.
                     }
 
                     script.Write(" " + toDo[i].case_id);
@@ -2224,7 +2246,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MappedBaseCountDistribution");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MappedBaseCountDistribution.exe" + stateOfTheWorld.configurationString);
                 nAddedToScript = 1;
             }
 
@@ -2258,7 +2280,7 @@ namespace ASEProcessManager
                 {
                     if (nOnCurrentLine == 0)
                     {
-                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "AnnotateRegulatoryRegions.exe");
+                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "AnnotateRegulatoryRegions.exe" + stateOfTheWorld.configurationString);
                     }
 
                     script.Write(" " + case_.case_id);
@@ -2302,14 +2324,14 @@ namespace ASEProcessManager
                     return;
                 }
 
-                nWaitingForPrerequisites = stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename == "" || x.extracted_maf_lines_filename == "").Count();
+                nWaitingForPrerequisites = stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename == "" || x.annotated_selected_variants_filename == "").Count();
 
                 int nOnCurrentLine = 0;
-                foreach (var case_ in stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename != "" && x.extracted_maf_lines_filename != ""))
+                foreach (var case_ in stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename != "" && x.annotated_selected_variants_filename != "" && x.regulatory_mutations_near_mutations_filename == ""))
                 {
                     if (nOnCurrentLine == 0)
                     {
-                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "CisRegulatoryMutationsNearMutations.exe");
+                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "CisRegulatoryMutationsNearMutations.exe" + stateOfTheWorld.configurationString);
                     }
 
                     script.Write(" " + case_.case_id);
@@ -2333,6 +2355,182 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
         } // RegulatoryMutationsNearMutationsProcessingStage
+
+        class RegulatoryMutationsByVAFProcessingStage : ProcessingStage
+        {
+            public RegulatoryMutationsByVAFProcessingStage() { }
+            public string GetStageName() { return "Regulatory Mutations by VAF"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.cisRegulatoryMutationsByVAFFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Any(x => x.Value.regulatory_mutations_near_mutations_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "CisRegulatoryMutationsByMutationCount.exe" + stateOfTheWorld.configurationString);  // This used to work differently, hence the non-descriptive name.
+                nAddedToScript = 1;
+            } // EvaluateStage
+        } // RegulatoryMutationsByVAFProcessingStage
+
+        class IndexBAMsProcessingStage : ProcessingStage
+        {
+            public IndexBAMsProcessingStage() { }
+            public string GetStageName() { return "Index BAMs"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (!stateOfTheWorld.configuration.isBeatAML)
+                {
+                    return; // The gdc files are all already indexed, so this is handled by the download stage
+                }
+
+                foreach (var case_ in stateOfTheWorld.cases.Select(x => x.Value))
+                {
+                    HandleFile(case_.normal_dna_filename, script, ref nAddedToScript, ref nDone, ref nWaitingForPrerequisites);
+                    HandleFile(case_.tumor_dna_filename, script, ref nAddedToScript, ref nDone, ref nWaitingForPrerequisites);
+                    HandleFile(case_.normal_rna_filename, script, ref nAddedToScript, ref nDone, ref nWaitingForPrerequisites);
+                    HandleFile(case_.tumor_rna_filename, script, ref nAddedToScript, ref nDone, ref nWaitingForPrerequisites);
+                }
+            } // EvaluateStage
+
+            void HandleFile(string filename, StreamWriter script, ref int nAddedToScript, ref int nDone, ref int nWaitingForPrerequisites)
+            {
+                if (filename == "")
+                {
+                    return;
+                }
+
+                if (filename.EndsWith(".unsorted-bam"))
+                {
+                    nWaitingForPrerequisites++;
+                    return;
+                }
+
+                if (!filename.EndsWith(".bam"))
+                {
+                    Console.WriteLine("BAM file doesn't end with .bam!: " + filename);
+                    return;
+                }
+
+                var baseFilename = filename.Substring(0, filename.Length - 4);
+
+                var baiFileName = baseFilename + ".bai";
+                if (File.Exists(baiFileName))
+                {
+                    nDone++;
+                    return;
+                } 
+
+                if (!File.Exists(baseFilename + ".unsorted-bam"))
+                {
+                    //
+                    // Needs to be sorted first.
+                    //
+                    nWaitingForPrerequisites++;
+                    return;
+                }
+           
+                script.WriteLine("samtools index " + filename + " " + baiFileName);
+                nAddedToScript++;
+
+            }
+        } // IndexBAMsProcessingStage
+
+        class SortBAMsProcessingStage : ProcessingStage
+        {
+            public SortBAMsProcessingStage() { }
+            public string GetStageName() { return "Sort BAMs"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (!stateOfTheWorld.configuration.isBeatAML)
+                {
+                    return; // The gdc files are all already indexed, so this is handled by the download stage
+                }
+
+                foreach (var case_ in stateOfTheWorld.cases.Select(x => x.Value))
+                {
+                    HandleFile(case_.normal_dna_filename, script, ref nAddedToScript, ref nDone, ref nWaitingForPrerequisites);
+                    HandleFile(case_.tumor_dna_filename, script, ref nAddedToScript, ref nDone, ref nWaitingForPrerequisites);
+                    HandleFile(case_.normal_rna_filename, script, ref nAddedToScript, ref nDone, ref nWaitingForPrerequisites);
+                    HandleFile(case_.tumor_rna_filename, script, ref nAddedToScript, ref nDone, ref nWaitingForPrerequisites);
+                }
+            } // EvaluateStage
+
+            void HandleFile(string filename, StreamWriter script, ref int nAddedToScript, ref int nDone, ref int nWaitingForPrerequisites)
+            {
+                if (filename == "")
+                {
+                    return;
+                }
+
+                if (filename.EndsWith(".unsorted-bam"))
+                {
+                    // This is the weird case where the rename ran but the sort didn't.  Just generate the sort command.
+                    var bamFileName = filename.Substring(0, filename.Length - 13) + ".bai";
+
+                    script.WriteLine("samtools sort " + filename + " " + bamFileName);
+                    nAddedToScript++;
+                    return;
+                }
+
+                if (!filename.EndsWith(".bam"))
+                {
+                    Console.WriteLine("BAM file doesn't end with .bam!: " + filename);
+                    return;
+                }
+
+                var baseFilename = filename.Substring(0, filename.Length - 4);
+
+                var baiFileName = baseFilename + ".bai";
+                if (File.Exists(baiFileName) || File.Exists(baseFilename + ".unsorted-bam"))
+                {
+                    nDone++;
+                    return;
+                }
+                
+                script.WriteLine("mv " + filename + " " + baseFilename + ".unsorted-bam");
+                script.WriteLine("samtools sort " + baseFilename + ".unsorted-bam " + filename);
+                nAddedToScript++;
+
+            } 
+        } // SortBAMsProcessingStage
+
 
 
         class FPKMProcessingStage : ProcessingStage
@@ -2428,6 +2626,10 @@ namespace ASEProcessManager
             public StateOfTheWorld(ASETools.Configuration configuration_) 
             {
                 configuration = configuration_;
+                if (configuration.configurationFileLocationExplicitlySpecified)
+                {
+                    configurationString = " -configuration " + configuration.configuationFilePathname + " ";
+                }
             }
 
             public ASETools.Configuration configuration;
@@ -2442,6 +2644,8 @@ namespace ASEProcessManager
             public List<ASETools.SelectedGene> selectedGenes = null;
             public string scatterGraphsSummaryFile = "";
             public Dictionary<string, string> scatterGraphsByHugoSymbol = new Dictionary<string, string>();
+
+            public readonly string configurationString = "";
 
             public void DetermineTheStateOfTheWorld()
             {
@@ -2467,6 +2671,7 @@ namespace ASEProcessManager
 
                 mafInfo = ASETools.MAFInfo.LoadMAFManifest(configuration.mafManifestPathname);
                 cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+                fileSizesFromGDC = new Dictionary<string, long>();
 
                 if (null != cases)
                 {
@@ -2537,6 +2742,7 @@ namespace ASEProcessManager
                     int nNormalDNA = 0, nTumorDNA = 0, nNormalRNA = 0, nTumorRNA = 0, nMethylation = 0, nCopyNumber = 0;
                     ulong bytesNormalDNA = 0, bytesTumorDNA = 0, bytesNormalRNA = 0, bytesTumorRNA = 0, bytesMethylation = 0, bytesCopyNumber = 0;
 
+
                     foreach (var caseEntry in cases)
                     {
                         var case_ = caseEntry.Value;
@@ -2588,7 +2794,46 @@ namespace ASEProcessManager
 							nCopyNumber++;
 							bytesCopyNumber += (ulong)downloadedFiles[case_.tumor_copy_number_file_id].fileInfo.Length;
 						}
-					} // foreach case
+
+                        fileSizesFromGDC.Add(case_.normal_dna_file_id, case_.normal_dna_size);
+                        fileSizesFromGDC.Add(case_.tumor_dna_file_id, case_.tumor_dna_size);
+                        fileSizesFromGDC.Add(case_.tumor_rna_file_id, case_.tumor_rna_size);
+
+                        if (case_.normal_rna_file_id != "")
+                        {
+                            fileSizesFromGDC.Add(case_.normal_rna_file_id, case_.normal_rna_size);
+                        }
+
+                        if (case_.tumor_methylation_file_id != "")
+                        {
+                            fileSizesFromGDC.Add(case_.tumor_methylation_file_id, case_.tumor_methylation_size);
+                        }
+
+                        if (case_.normal_methylation_file_id != "")
+                        {
+                            fileSizesFromGDC.Add(case_.normal_methylation_file_id, case_.normal_methylation_size);
+                        }
+
+                        if (case_.tumor_copy_number_file_id != "")
+                        {
+                            fileSizesFromGDC.Add(case_.tumor_copy_number_file_id, case_.tumor_copy_number_size);
+                        }
+
+                        if (case_.normal_copy_number_file_id != "")
+                        {
+                            fileSizesFromGDC.Add(case_.normal_copy_number_file_id, case_.normal_copy_number_size);
+                        }
+
+                        if (case_.tumor_fpkm_file_id != "")
+                        {
+                            fileSizesFromGDC.Add(case_.tumor_fpkm_file_id, case_.tumor_fpkm_size);
+                        }
+
+                        if (case_.normal_fpkm_file_id != "")
+                        {
+                            fileSizesFromGDC.Add(case_.normal_fpkm_file_id, case_.normal_fpkm_size);
+                        }
+                    } // foreach case
 
 
                     Console.WriteLine(nNormalDNA + "(" + ASETools.SizeToUnits(bytesNormalDNA) + "B) normal DNA, " + nTumorDNA + "(" + ASETools.SizeToUnits(bytesTumorDNA) + "B) tumor DNA, " +
@@ -2613,54 +2858,7 @@ namespace ASEProcessManager
                         }
                     }
                 }
-
-                fileSizesFromGDC = new Dictionary<string, long>();
-
-                foreach (var caseEntry in cases)
-                {
-                    var case_ = caseEntry.Value;
-
-                    fileSizesFromGDC.Add(case_.normal_dna_file_id, case_.normal_dna_size);
-                    fileSizesFromGDC.Add(case_.tumor_dna_file_id, case_.tumor_dna_size);
-                    fileSizesFromGDC.Add(case_.tumor_rna_file_id, case_.tumor_rna_size);
-
-                    if (case_.normal_rna_file_id != "")
-                    {
-                        fileSizesFromGDC.Add(case_.normal_rna_file_id, case_.normal_rna_size);
-                    }
-
-                    if (case_.tumor_methylation_file_id != "")
-                    {
-                        fileSizesFromGDC.Add(case_.tumor_methylation_file_id, case_.tumor_methylation_size);
-                    }
-
-					if (case_.normal_methylation_file_id != "")
-					{
-						fileSizesFromGDC.Add(case_.normal_methylation_file_id, case_.normal_methylation_size);
-					}
-
-					if (case_.tumor_copy_number_file_id != "")
-                    {
-                        fileSizesFromGDC.Add(case_.tumor_copy_number_file_id, case_.tumor_copy_number_size);
-                    }
-
-					if (case_.normal_copy_number_file_id != "")
-					{
-						fileSizesFromGDC.Add(case_.normal_copy_number_file_id, case_.normal_copy_number_size);
-					}
-
-					if (case_.tumor_fpkm_file_id != "")
-					{
-						fileSizesFromGDC.Add(case_.tumor_fpkm_file_id, case_.tumor_fpkm_size);
-					}
-
-					if (case_.normal_fpkm_file_id != "")
-					{
-						fileSizesFromGDC.Add(case_.normal_fpkm_file_id, case_.normal_fpkm_size);
-					}
-				}
-
-            }
+            } // DetermineTheStateOfTheWorld
 
             public bool fileDownloadedAndVerified(string file_id, string expectedMD5)
             {
@@ -2745,7 +2943,7 @@ namespace ASEProcessManager
 
             var script = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + scriptFilename);
 
-            if (configuration.completedVCFsDirectory != "")
+            if (configuration.completedVCFsDirectory != "" && stateOfTheWorld.cases != null)
             {
                 //
                 // Check to see if there are any completed VCFs (downloaded from Auzure) that need to be moved.
@@ -2877,6 +3075,9 @@ namespace ASEProcessManager
             processingStages.Add(new MappedBaseCountDistributionProcessingStage());
             processingStages.Add(new AnnotateRegulatoryRegionsProcessingStage());
             processingStages.Add(new RegulatoryMutationsNearMutationsProcessingStage());
+            processingStages.Add(new RegulatoryMutationsByVAFProcessingStage());
+            processingStages.Add(new IndexBAMsProcessingStage());
+            processingStages.Add(new SortBAMsProcessingStage());
 
             if (checkDependencies)
             {
@@ -2999,7 +3200,24 @@ namespace ASEProcessManager
 
                 foreach (var file in allFilesToDownload)
                 {
-                    downloadScript.WriteLine(configuration.binariesDirectory + "gdc-client download --no-file-md5sum --token-file " + configuration.accessTokenPathname + " " + file);    // use the no MD5 sum option because we compute it ourselves later (and all a failed check does is print a message that we'll never see anyway)
+                    if (stateOfTheWorld.configuration.isBeatAML)
+                    {
+                        //
+                        // We don't really "download" these files, they're already here from synapse.  Instead, we copy them out to new directories so we've got the directory structure we want, and so we're not
+                        // overwriting the synapse directory.
+                        //
+                        // The fileID is of the form seqId-{r|d}na.  dna files are in synapseDir\seqcap\bam\, and rna files are in synapseDir\rnaseq\bam\
+                        //
+                        downloadScript.WriteLine("md " + file);
+                        var unpaddedFilename = ASETools.ExtractUnderlyingStringFromGuidPaddedString(file);
+                        var seqId = file.Substring(0, unpaddedFilename.Count() - 4);
+                        var rna = unpaddedFilename[unpaddedFilename.Count() - 3] == 'r';
+                        downloadScript.WriteLine("copy " + stateOfTheWorld.configuration.synapseDirectory + (rna ? "rnaseq" : "seqcap") + @"\bam\*" + seqId + "*.ba* " + file + @"\");
+                    }
+                    else
+                    {
+                        downloadScript.WriteLine(configuration.binariesDirectory + "gdc-client download --no-file-md5sum --token-file " + configuration.accessTokenPathname + " " + file);    // use the no MD5 sum option because we compute it ourselves later (and all a failed check does is print a message that we'll never see anyway)
+                    }
                     bytesToDownload += stateOfTheWorld.fileSizesFromGDC[file];
                 }
 

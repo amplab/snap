@@ -16,6 +16,7 @@ namespace CisRegulatoryMutationsNearMutations
         static List<ASETools.SelectedGene> selectedGenes;
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static ASETools.GeneMap geneMap;
+        static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
 
         static void Main(string[] args)
         {
@@ -42,14 +43,16 @@ namespace CisRegulatoryMutationsNearMutations
                 return;
             }
 
+            perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
             var casesToProcess = cases.Select(x => x.Value).Where(x => configuration.commandLineArgs.Contains(x.case_id)).ToList();
 
-            if (casesToProcess.Any(x => x.annotated_regulatory_regions_filename == "" || x.extracted_maf_lines_filename == ""))
+            if (casesToProcess.Any(x => x.annotated_regulatory_regions_filename == "" || x.annotated_selected_variants_filename == ""))
             {
                 Console.Write("Skipping cases because of missing input data:");
-                casesToProcess.Where(x => x.annotated_regulatory_regions_filename == "" || x.extracted_maf_lines_filename == "").ToList().ForEach(x => Console.Write(" " + x.case_id));
+                casesToProcess.Where(x => x.annotated_regulatory_regions_filename == "" || x.annotated_selected_variants_filename == "").ToList().ForEach(x => Console.Write(" " + x.case_id));
                 Console.WriteLine();
-                casesToProcess = casesToProcess.Where(x => x.annotated_regulatory_regions_filename != "" && x.extracted_maf_lines_filename != "").ToList();
+                casesToProcess = casesToProcess.Where(x => x.annotated_regulatory_regions_filename != "" && x.annotated_selected_variants_filename != "").ToList();
 
                 if (casesToProcess.Count() == 0)
                 {
@@ -68,7 +71,8 @@ namespace CisRegulatoryMutationsNearMutations
             }
 
             var threading = new ASETools.WorkerThreadHelper<ASETools.Case, int>(casesToProcess, HandleOneCase, null, null, 1);
-            Console.Write("Processing " + casesToProcess.Count() + " cases, one dot/case: ");
+            Console.WriteLine("Processing " + casesToProcess.Count() + " cases, one dot/case");
+            ASETools.PrintNumberBar(casesToProcess.Count());
             threading.run();
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
@@ -76,13 +80,17 @@ namespace CisRegulatoryMutationsNearMutations
 
         static void HandleOneCase(ASETools.Case case_, int state)
         {
-            var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.case_id, false);
 
-            if (null == mafLines)
+            var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
+
+            if (null == annotatedSelectedVariants)
             {
-                Console.WriteLine("Unable to read maf lines from " + case_.extracted_maf_lines_filename);
+                Console.WriteLine("Unable to read annotated selected variants from " + case_.annotated_selected_variants_filename);
                 return;
             }
+
+            var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
+            // It's OK for this to be null, a few didn't have them in TCGA.
 
             var annotatedBEDLines = ASETools.AnnotatedBEDLine.ReadFromFile(case_.annotated_regulatory_regions_filename);
             if (null == annotatedBEDLines)
@@ -90,7 +98,6 @@ namespace CisRegulatoryMutationsNearMutations
                 Console.WriteLine("Unable to read BED lines from " + case_.annotated_regulatory_regions_filename);
                 return;
             }
-
 
             string outputFilename = ASETools.GetDirectoryFromPathname(case_.annotated_regulatory_regions_filename) + @"\" + case_.case_id + ASETools.regulatoryMutationsNearMutationsExtension;
             var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
@@ -100,19 +107,49 @@ namespace CisRegulatoryMutationsNearMutations
                 return;
             }
 
-            outputFile.Write("Hugo_Symbol\tNon-Silent Mutation Count");
+            outputFile.Write("Hugo_Symbol\tNon-Silent Mutation Count\tNon - Silent Mutations with Low VAF\tNon - Silent Mutations with Moderate VAF\tNon - Silent Mutations with High VAF\tSilent Mutations\tNot ASE Candidates");
             for (int regionIndex = 1; regionIndex < ASETools.nRegions; regionIndex++)
             {
                 outputFile.Write("\t" + ASETools.regionIndexToString(regionIndex));
             }
             outputFile.WriteLine();
 
+            var variantsByGene = annotatedSelectedVariants.GroupByToDict(x => x.Hugo_symbol);
+            var bedLinesByChromosome = annotatedBEDLines.GroupByToDict(x => x.chrom);
+
             foreach (var selectedGene in selectedGenes)
             {
-                outputFile.Write(selectedGene.Hugo_Symbol + "\t" + mafLines.Where(x => x.Hugo_Symbol == selectedGene.Hugo_Symbol && x.Variant_Classification != "Silent").Count());
+                List<ASETools.AnnotatedVariant> variantsThisGene;
+                if (variantsByGene.ContainsKey(selectedGene.Hugo_Symbol))
+                {
+                    variantsThisGene = variantsByGene[selectedGene.Hugo_Symbol];
+                } else
+                {
+                    variantsThisGene = new List<ASETools.AnnotatedVariant>();
+                }
+ 
+                var nonSilentVariantsThisGene = variantsThisGene.Where(x => !x.isSilent() && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).ToList();
+                outputFile.Write(
+                    selectedGene.Hugo_Symbol + "\t" +
+                    nonSilentVariantsThisGene.Count() + "\t" +
+                    nonSilentVariantsThisGene.Where(x => x.GetTumorAltAlleleFraction() < 0.4).Count() + "\t" +
+                    nonSilentVariantsThisGene.Where(x => x.GetTumorAltAlleleFraction() >= 0.4 && x.GetTumorAltAlleleFraction() <= 0.6).Count() + "\t" +
+                    nonSilentVariantsThisGene.Where(x => x.GetTumorAltAlleleFraction() > 0.6).Count() + "\t" +
+                    variantsThisGene.Where(x => x.isSilent()).Count() + "\t" +
+                    variantsThisGene.Where(x => !x.isSilent() && !x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).Count());
+
                 var geneLocation = geneLocationInformation.genesByName[selectedGene.Hugo_Symbol];
 
-                var bedLinesThisChromosome = annotatedBEDLines.Where(x => geneLocation.chromosome == x.chrom).ToList();
+                List<ASETools.AnnotatedBEDLine> bedLinesThisChromosome;
+                if (bedLinesByChromosome.ContainsKey(geneLocation.chromosome))
+                {
+                    bedLinesThisChromosome = bedLinesByChromosome[geneLocation.chromosome];
+                } else
+                {
+                    bedLinesThisChromosome = new List<ASETools.AnnotatedBEDLine>();
+                }
+
+                int nBedLinesThisChromosome = bedLinesThisChromosome.Count();
 
                 for (int regionIndex = 1; regionIndex < ASETools.nRegions; regionIndex++) {
                     List<ASETools.AnnotatedBEDLine> bedLinesInRange;
@@ -122,16 +159,35 @@ namespace CisRegulatoryMutationsNearMutations
                         bedLinesInRange = annotatedBEDLines;
                     } else
                     {
-                        bedLinesInRange = bedLinesThisChromosome.Where(x => geneLocation.minDistanceFromTSS(x.chrom, x.chromStart, x.chromEnd) <= ASETools.regionIndexToSizeInBases(regionIndex)).ToList();
+                        bedLinesInRange = new List<ASETools.AnnotatedBEDLine>();
+
+                        for (int i = 0; i < nBedLinesThisChromosome; i++)
+                        {
+                            var bedLine = bedLinesThisChromosome[i];
+                            if (geneLocation.minDistanceFromTSS(bedLine.chrom, bedLine.chromStart, bedLine.chromEnd) < ASETools.regionIndexToSizeInBases(regionIndex))
+                            {
+                                bedLinesInRange.Add(bedLine);
+                            }
+                        }
+                        // too slow bedLinesInRange = bedLinesThisChromosome.Where(x => geneLocation.minDistanceFromTSS(x.chrom, x.chromStart, x.chromEnd) <= ASETools.regionIndexToSizeInBases(regionIndex)).ToList();
                     }
-    
-                    int nBasesWithCoverage = bedLinesInRange.Select(x => x.nBasesWithCoverage).Sum();
+
+                    int nBasesWithCoverage = 0;
+                    int nBedLinesInRange = bedLinesInRange.Count();
+                    int nCisRegulatoryMutations = 0;
+
+                    for (int i = 0; i < nBedLinesInRange; i++)
+                    {
+                        nBasesWithCoverage += bedLinesInRange[i].nBasesWithCoverage;
+                        nCisRegulatoryMutations += bedLinesInRange[i].nMutationsWithModerateVAF();
+                    }
+
+                    // unrolled into for loop above for speed    bedLinesInRange.Select(x => x.nBasesWithCoverage).Sum();
 
                     if (nBasesWithCoverage < 10)
                     {
                         outputFile.Write("\t*");
                     } else {
-                        int nCisRegulatoryMutations = bedLinesInRange.Select(x => x.nMutations).Sum();
                         outputFile.Write("\t" + (double)nCisRegulatoryMutations / nBasesWithCoverage);
                     }
                     

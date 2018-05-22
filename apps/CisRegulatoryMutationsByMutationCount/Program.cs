@@ -16,7 +16,7 @@ namespace CisRegulatoryMutationsByMutationCount
 
         class PerThreadState
         {
-            public Dictionary<string, List<double>[,]> measurements = new Dictionary<string, List<double>[,]>();  // Hugo symbol -> array of [0,1,2] for mutation count -> array by region index -> measurements
+            public Dictionary<string, List<double>[,]> measurements = new Dictionary<string, List<double>[,]>();  // Hugo symbol -> array of [0,1,2] for low, middle, high count -> array by region index -> measurements
         }
         
         static Dictionary<string, List<double>[,]>  globalMeasurements = new Dictionary<string, List<double>[,]>();
@@ -24,12 +24,12 @@ namespace CisRegulatoryMutationsByMutationCount
         class DoubleAndBool : IComparer<DoubleAndBool>
         {
             public readonly double value;
-            public readonly bool isOne;
+            public readonly bool isHigh;
 
             public DoubleAndBool(double value_, bool isOne_)
             {
                 value = value_;
-                isOne = isOne_;
+                isHigh = isOne_;
             }
 
             public int Compare(DoubleAndBool a, DoubleAndBool b)
@@ -63,9 +63,27 @@ namespace CisRegulatoryMutationsByMutationCount
             return values.Average().ToString();
         }
 
+        static string ratioOrStar(List<double> numerator, List<double> denominator)
+        {
+            if (denominator.Count() == 0 || numerator.Count() == 0)
+            {
+                return "*";
+            }
+
+            double denominatorValue = denominator.Average();
+            if (denominatorValue == 0)
+            {
+                return "*";
+            }
+
+            return (numerator.Average() / denominatorValue).ToString();
+        }
+
         const int nValuesNeeded = 10;
         static int totalValidPValues = 0;
         static double smallestPValue = 2;
+
+        static int nRegionsToUse = 13;  // Only go this far, don't look absurdly far away.
 
         static void Main(string[] args)
         {
@@ -95,19 +113,19 @@ namespace CisRegulatoryMutationsByMutationCount
 
             threading.run();
 
-            outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.cisRegulatoryMutationsByMutationCountFilename);
+            outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.cisRegulatoryMutationsByVAFFilename);
             if (null == outputFile)
             {
-                Console.WriteLine("Unable to open output file " + configuration.finalResultsDirectory + ASETools.cisRegulatoryMutationsByMutationCountFilename);
+                Console.WriteLine("Unable to open output file " + configuration.finalResultsDirectory + ASETools.cisRegulatoryMutationsByVAFFilename);
                 return;
             }
 
             outputFile.Write("Hugo symbol\tmin P");
-            for (int region = 1; region < ASETools.nRegions; region++)
+            for (int region = 1; region < nRegionsToUse; region++)
             {
                 var regionName = ASETools.regionIndexToString(region);
-                outputFile.Write("\t" + regionName + " nZero\t" + regionName + " nOne\t" + regionName + " nMoreThanOne\t" + regionName + " P one vs. not one\t" + regionName + " P one vs. more than one\t" + regionName + " zero mean\t" +
-                    regionName + " one mean\t" + regionName + " more than one mean");
+                outputFile.Write("\t" + regionName + " nLow\t" + regionName + " nModerate\t" + regionName + " nHigh\t" + regionName + " P high vs. not high\t" + regionName + " P high vs. moderate\t" + regionName + " low mean\t" +
+                    regionName + " moderate mean\t" + regionName + " high mean\t" + regionName + " high mean/moderate mean");
             }
             outputFile.WriteLine();
 
@@ -126,32 +144,57 @@ namespace CisRegulatoryMutationsByMutationCount
 
         static void HandleOneCase(ASETools.Case case_, PerThreadState state)
         {
-            var regulatoryMutationsByMutationCount = ASETools.RegulatoryMutationsNearGene.readFile(case_.regulatory_mutations_near_mutations_filename);
+            var regulatoryMutationsByVAF = ASETools.RegulatoryMutationsNearGene.readFile(case_.regulatory_mutations_near_mutations_filename);
 
-            if (regulatoryMutationsByMutationCount == null)
+            if (regulatoryMutationsByVAF == null)
             {
                 Console.WriteLine("Unable to read " + case_.regulatory_mutations_near_mutations_filename);
                 return;
             }
 
-            foreach (var geneMeasurement in regulatoryMutationsByMutationCount.Select(x => x.Value).ToList())
+            foreach (var geneMeasurement in regulatoryMutationsByVAF.Select(x => x.Value).ToList())
             {
-                if (!state.measurements.ContainsKey(geneMeasurement.hugo_symbol))
+                if (geneMeasurement.nNonSilentMutations != 1)
                 {
-                    state.measurements.Add(geneMeasurement.hugo_symbol, new List<double>[3, ASETools.nRegions]);
+                    continue;   // We only care about single mutation tumors
                 }
 
-                int mutationCount = ASETools.ZeroOneMany(geneMeasurement.nNonSilentMutations);  // Maps >2 -> 2
+                if (!state.measurements.ContainsKey(geneMeasurement.hugo_symbol))
+                {
+                    state.measurements.Add(geneMeasurement.hugo_symbol, new List<double>[3, nRegionsToUse]);
+                }
 
-                for (int range = 1; range < ASETools.nRegions; range++)
+                int vafIndex;
+
+                if (geneMeasurement.nNonSilentMutationsWithHighVAF + geneMeasurement.nNonSilentMutationsWithLowVAF + geneMeasurement.nNonSilentMutationsWithModerateVAF != 1)
+                {
+                    throw new Exception("Values don't add up in for VAF stratification.  Case ID " + case_.case_id + " filename " + case_.regulatory_mutations_near_mutations_filename + " low " + geneMeasurement.nNonSilentMutationsWithLowVAF + 
+                        " moderate " + geneMeasurement.nNonSilentMutationsWithModerateVAF + " high " + geneMeasurement.nNonSilentMutationsWithHighVAF + " total " + geneMeasurement.nNonSilentMutations + " silent " + geneMeasurement.nSilentMutations + 
+                        " gene " + geneMeasurement.hugo_symbol);
+                }
+
+                if (geneMeasurement.nNonSilentMutationsWithLowVAF == 1)
+                {
+                    vafIndex = 0;
+                }
+                else if (geneMeasurement.nNonSilentMutationsWithModerateVAF == 1)
+                {
+                    vafIndex = 1;
+                }
+                else
+                {
+                    vafIndex = 2;
+                }
+
+                for (int range = 1; range < nRegionsToUse; range++)
                 {
                     if (geneMeasurement.mutationsPerCoveredBaseByRange[range] != double.NegativeInfinity)
                     {
-                        if (state.measurements[geneMeasurement.hugo_symbol][mutationCount, range] == null)
+                        if (state.measurements[geneMeasurement.hugo_symbol][vafIndex, range] == null)
                         {
-                            state.measurements[geneMeasurement.hugo_symbol][mutationCount, range] = new List<double>();
+                            state.measurements[geneMeasurement.hugo_symbol][vafIndex, range] = new List<double>();
                         }
-                        state.measurements[geneMeasurement.hugo_symbol][mutationCount, range].Add(geneMeasurement.mutationsPerCoveredBaseByRange[range]);
+                        state.measurements[geneMeasurement.hugo_symbol][vafIndex, range].Add(geneMeasurement.mutationsPerCoveredBaseByRange[range]);
                     }
                 }
             } // foreach gene
@@ -170,7 +213,7 @@ namespace CisRegulatoryMutationsByMutationCount
                     {
                         for (int mutationCount = 0; mutationCount <= 2; mutationCount++)
                         {
-                            for (int range = 0; range < ASETools.nRegions; range++)
+                            for (int range = 0; range < nRegionsToUse; range++)
                             {
                                 if (data[mutationCount, range] == null)
                                 {
@@ -199,52 +242,52 @@ namespace CisRegulatoryMutationsByMutationCount
             var hugo_symbol = geneDataEntry.Key;
             var geneData = geneDataEntry.Value;
 
-            var oneVsNotOne = new double[ASETools.nRegions];
-            var oneVsMany = new double[ASETools.nRegions];
+            var highVsNotHigh = new double[nRegionsToUse];
+            var highVsModerate = new double[nRegionsToUse];
 
             double smallestPValueThisGene = 2;
             int nPValues = 0;
 
-            for (int region = 1; region < ASETools.nRegions; region++)
+            for (int region = 1; region < nRegionsToUse; region++)
             {
-                oneVsMany[region] = double.NegativeInfinity;
-                oneVsNotOne[region] = double.NegativeInfinity;
+                highVsModerate[region] = double.NegativeInfinity;
+                highVsNotHigh[region] = double.NegativeInfinity;
 
                 int[] counts = new int[3];
-                for (int zeroOneMore = 0; zeroOneMore < 3; zeroOneMore++)
+                for (int vafIndex = 0; vafIndex < 3; vafIndex++)
                 {
-                    counts[zeroOneMore] = countList(geneData[zeroOneMore, region]);
+                    counts[vafIndex] = countList(geneData[vafIndex, region]);
                 }
 
-                if (counts[1] < nValuesNeeded || counts[0] + counts[2] < nValuesNeeded)
+                if (counts[2] < nValuesNeeded || counts[0] + counts[1] < nValuesNeeded)
                 {
                     continue;   // Not enough data, skip it
                 }
 
                 var data = new List<DoubleAndBool>();
 
-                geneData[1, region].ForEach(x => data.Add(new DoubleAndBool(x, true)));
-                if (counts[2] > 0)
+                geneData[2, region].ForEach(x => data.Add(new DoubleAndBool(x, true)));
+                if (counts[1] > 0)
                 {
-                    geneData[2, region].ForEach(x => data.Add(new DoubleAndBool(x, false)));
+                    geneData[1, region].ForEach(x => data.Add(new DoubleAndBool(x, false)));
                 }
 
-                if (counts[2] >= nValuesNeeded)
+                if (counts[1] >= nValuesNeeded)
                 {
                     bool enoughData;
                     bool reversed;
                     double nFirstGroup, nSecondGroup, U, z;
 
-                    oneVsMany[region] = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(data, data[0], x => x.isOne, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, true, nValuesNeeded);
+                    highVsModerate[region] = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(data, data[0], x => x.isHigh, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, true, nValuesNeeded);
 
                     if (enoughData)
                     {
                         nPValues++;
-                        smallestPValueThisGene = Math.Min(smallestPValueThisGene, oneVsMany[region]);
+                        smallestPValueThisGene = Math.Min(smallestPValueThisGene, highVsModerate[region]);
                     }
                     else
                     {
-                        oneVsMany[region] = double.NegativeInfinity;
+                        highVsModerate[region] = double.NegativeInfinity;
                     }
                 } // if enough for one vs. more than one
 
@@ -253,22 +296,22 @@ namespace CisRegulatoryMutationsByMutationCount
                     geneData[0, region].ForEach(x => data.Add(new DoubleAndBool(x, false)));
                 }
 
-                if (counts[0] + counts[2] >= nValuesNeeded)
+                if (counts[0] + counts[1] >= nValuesNeeded)
                 {
                     bool enoughData;
                     bool reversed;
                     double nFirstGroup, nSecondGroup, U, z;
 
-                    oneVsNotOne[region] = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(data, data[0], x => x.isOne, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, true, nValuesNeeded);
+                    highVsNotHigh[region] = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(data, data[0], x => x.isHigh, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, true, nValuesNeeded);
 
                     if (enoughData)
                     {
                         nPValues++;
-                        smallestPValueThisGene = Math.Min(smallestPValueThisGene, oneVsNotOne[region]);
+                        smallestPValueThisGene = Math.Min(smallestPValueThisGene, highVsNotHigh[region]);
                     }
                     else
                     {
-                        oneVsNotOne[region] = double.NegativeInfinity;
+                        highVsNotHigh[region] = double.NegativeInfinity;
                     }
                 } // if enough for one vs. not one
 
@@ -279,10 +322,11 @@ namespace CisRegulatoryMutationsByMutationCount
                 lock (outputFile)
                 {
                     outputFile.Write(hugo_symbol + "\t" + smallestPValueThisGene);
-                    for (int region = 1; region < ASETools.nRegions; region++)
+                    for (int region = 1; region < nRegionsToUse; region++)
                     {
-                        outputFile.Write("\t" + countList(geneData[0, region]) + "\t" + countList(geneData[1, region]) + "\t" + countList(geneData[2, region]) + "\t" + valueOrStar(oneVsNotOne[region]) + "\t" +
-                            valueOrStar(oneVsMany[region]) + "\t" + meanOrStar(geneData[0, region]) + "\t" + meanOrStar(geneData[1, region]) + "\t" + meanOrStar(geneData[2, region]));
+                        outputFile.Write("\t" + countList(geneData[0, region]) + "\t" + countList(geneData[1, region]) + "\t" + countList(geneData[2, region]) + "\t" + valueOrStar(highVsNotHigh[region]) + "\t" +
+                            valueOrStar(highVsModerate[region]) + "\t" + meanOrStar(geneData[0, region]) + "\t" + meanOrStar(geneData[1, region]) + "\t" + meanOrStar(geneData[2, region]) +
+                            "\t" + ratioOrStar(geneData[2, region], geneData[1, region]));
                     }
                     outputFile.WriteLine();
 
