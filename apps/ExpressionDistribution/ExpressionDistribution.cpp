@@ -289,6 +289,7 @@ void ProcessAllcountFile(char *filename, char *mappedBaseCountFilename, Disease 
             goto done;
         }
 
+#if 0	// Just preserve the chr state
         if (chromosomeName[0] != 'c' || chromosomeName[1] != 'h' || chromosomeName[2] != 'r') {
             //
             // Prepend "chr"
@@ -296,6 +297,8 @@ void ProcessAllcountFile(char *filename, char *mappedBaseCountFilename, Disease 
             sprintf(lineBuffer, "chr%s", chromosomeName);
             strcpy(chromosomeName, lineBuffer);
         }
+
+#endif // 0
 
         //
         // See if we already have it.
@@ -343,11 +346,15 @@ void ProcessAllcountFile(char *filename, char *mappedBaseCountFilename, Disease 
 
         if (lineBuffer[0] == '>') {
             char chromosomeName[lineBufferSize];
+#if 0 // preserve the chr state
             if (lineBuffer[1] != 'c' || lineBuffer[2] != 'h' || lineBuffer[3] != 'r') {
                 strcpy(chromosomeName, "chr");
                 strcat(chromosomeName, lineBuffer + 1);
             }
-            else {
+
+            else 
+#endif // 0
+			{
                 strcpy(chromosomeName, lineBuffer + 1);
             }
 
@@ -556,7 +563,7 @@ int main(int argc, char* argv[])
             continue;
         }
 
-        // format is tab separated columns.  The project ID is of the form TCGA-DISEASE
+        // format is tab separated columns.  The project ID is of the form TCGA-DISEASE (or BeatAML-DISEASE)
         char *fields[maxColumn];
 
         char *nextField = inputBuffer;
@@ -587,12 +594,15 @@ int main(int argc, char* argv[])
         *charToCheck = '\0';
 
         char *diseaseName;
-        if (strlen(fields[projectColumn]) < 6 || fields[projectColumn][0] != 'T' || fields[projectColumn][1] != 'C' || fields[projectColumn][2] != 'G' || fields[projectColumn][3] != 'A' || fields[projectColumn][4] != '-') {
-            fprintf(stderr, "Invalid project name (%s), doesn't start with TCGA-", fields[projectColumn]);
+        if ((strlen(fields[projectColumn]) < 6 || fields[projectColumn][0] != 'T' || fields[projectColumn][1] != 'C' || fields[projectColumn][2] != 'G' || fields[projectColumn][3] != 'A' || fields[projectColumn][4] != '-') &&
+			(strlen(fields[projectColumn]) < 9 || fields[projectColumn][0] != 'B' || fields[projectColumn][1] != 'e' || fields[projectColumn][2] != 'a' || fields[projectColumn][3] != 't' || fields[projectColumn][4] != 'A' ||
+			                                      fields[projectColumn][5] != 'M' || fields[projectColumn][6] != 'L' || fields[projectColumn][7] != '-')) 
+		{
+            fprintf(stderr, "Invalid project name (%s), doesn't start with TCGA- or BeatAML-", fields[projectColumn]);
             return -1;
         }
 
-        diseaseName = fields[projectColumn] + 5;
+        diseaseName = fields[projectColumn] + ((fields[projectColumn][0] == 'T') ? 5  : 8);
         for (char *charToLower = diseaseName; *charToLower != '\0'; charToLower++) {
             *charToLower = tolower(*charToLower);
         }
@@ -679,6 +689,7 @@ int main(int argc, char* argv[])
         disease->listOfChromosomes = NULL;
 
     }
+
     fprintf(stderr, "Took %lldm\n", (timeInMillis() - start + 30000)/60000);
 
 	return 0;

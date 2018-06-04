@@ -44,6 +44,11 @@ namespace CisRegulatoryMutationsNearMutations
             }
 
             perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+            if (perGeneASEMap == null)
+            {
+                Console.WriteLine("Unable to load per-Gene ASE map from " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                return;
+            }
 
             var casesToProcess = cases.Select(x => x.Value).Where(x => configuration.commandLineArgs.Contains(x.case_id)).ToList();
 

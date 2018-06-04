@@ -72,7 +72,6 @@ namespace RegionalExpression
                 // Now process the body of the file.
                 //
 
-
                 int indexOfLastSlash = allcountFilename.LastIndexOf('\\');
                 if (-1 == indexOfLastSlash) {
                     Console.WriteLine("Couldn't find a backslash in allcount pathname, which is supposed to be absolute: " + allcountFilename);

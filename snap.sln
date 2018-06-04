@@ -176,6 +176,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CisRegulatoryMutationsByMut
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateBeatAMLCases", "apps\GenerateBeatAMLCases\GenerateBeatAMLCases.csproj", "{1504F394-8F45-4537-BA01-4FF042CC5234}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CisRegulatoryMutationsInKnownRegions", "apps\CisRegulatoryMutationsInKnownRegions\CisRegulatoryMutationsInKnownRegions.csproj", "{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QNDMannWhitney", "apps\QNDMannWhitney\QNDMannWhitney.csproj", "{9D85F4B0-825C-44B9-822F-2467B35A7501}"
+EndProject
 Global
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true
@@ -1273,12 +1277,47 @@ Global
 		{1504F394-8F45-4537-BA01-4FF042CC5234}.Release|Win32.Build.0 = Release|Any CPU
 		{1504F394-8F45-4537-BA01-4FF042CC5234}.Release|x64.ActiveCfg = Release|x64
 		{1504F394-8F45-4537-BA01-4FF042CC5234}.Release|x64.Build.0 = Release|x64
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Debug|Win32.Build.0 = Debug|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Debug|x64.ActiveCfg = Debug|x64
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Debug|x64.Build.0 = Debug|x64
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Release|Win32.ActiveCfg = Release|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Release|Win32.Build.0 = Release|Any CPU
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Release|x64.ActiveCfg = Release|x64
+		{C0CA4AF8-2A8A-4726-88DA-09BEEF0B6727}.Release|x64.Build.0 = Release|x64
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Debug|Win32.Build.0 = Debug|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Debug|x64.ActiveCfg = Debug|x64
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Debug|x64.Build.0 = Debug|x64
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Release|Win32.ActiveCfg = Release|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Release|Win32.Build.0 = Release|Any CPU
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Release|x64.ActiveCfg = Release|x64
+		{9D85F4B0-825C-44B9-822F-2467B35A7501}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {54B8FD8D-AD1B-41AD-8132-0137B5CB61DA}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true

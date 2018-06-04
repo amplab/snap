@@ -836,7 +836,7 @@ namespace ASEProcessManager
                             continue;
                         }
 
-                        string command = "ExpressionDistribution.exe " + stateOfTheWorld.configurationString + stateOfTheWorld.configuration.casesFilePathname + " " +
+                        string command = "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
                             stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + ASETools.Case.TumorRNAAllcountFilenameColumn + " " + ASETools.Case.TumorRNAMappedBaseCountColumn + " " + disease;
 
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + command);
@@ -1690,7 +1690,7 @@ namespace ASEProcessManager
                         nDone++;
                     } else
                     {
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadsForRepetitiveRegionDetection.exe " + stateOfTheWorld.configurationString + stateOfTheWorld.configuration.indexDirectory + " " + chromosomeNumber + " " +
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadsForRepetitiveRegionDetection.exe " + stateOfTheWorld.configuration.indexDirectory + " " + chromosomeNumber + " " +
                             stateOfTheWorld.configuration.chromosomeMapsDirectory +"chr" + chromosomeNumber +
                             ASETools.allLociExtension + " 48");
                         nAddedToScript++;

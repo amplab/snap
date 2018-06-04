@@ -55,7 +55,9 @@ namespace GenerateReadsForRepetitiveRegionDetection
             timer.Reset();
             timer.Start();
             
-            Console.Write("Generating output (1 dot/10MB): ");
+            Console.WriteLine("Generating output (1 dot/10MB, " + genome.getContigLength(contigName) + " bases): ");
+            ASETools.PrintNumberBar(genome.getContigLength(contigName) / 10000000);
+
             outputFile.WriteLine("@HD\tVN:1.4");
             outputFile.Write("@PG\tID:GRRD.1\tPG:GenerateReadsForRepetitiveRegionDetection\tCL:");
             for (int i = 0; i < args.Count(); i++)

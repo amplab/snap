@@ -1728,6 +1728,10 @@ namespace ASELib
             public string zero_one_two_directory = defaultBaseDirectory + @"012graphs\";
             public string expression_distribution_directory = defaultBaseDirectory + @"expression_distribution\";
 
+            public string geneHancerFilename = defaultBaseDirectory + @"genehancer.txt";
+
+            public bool usesChr = true; // Do the data files use "chr" in the chromosome names?
+
             public bool configurationFileLocationExplicitlySpecified = false;
 
             public int minRNAReadCoverage = 10;
@@ -1763,6 +1767,7 @@ namespace ASELib
                 methylationREFsFilename = baseDirectory + "compositeREFs450.txt";
                 zero_one_two_directory = baseDirectory + @"012graphs\";
                 expression_distribution_directory = baseDirectory + @"expression_distribution\";
+                geneHancerFilename = baseDirectory + @"genehancer.txt";
 
 
                 dataDirectories = new List<string>();
@@ -1951,6 +1956,22 @@ namespace ASELib
                         retVal.reinitialzeWithBaseDirectory();
                     } else if (type == "synapse directory") {
                         retVal.synapseDirectory = fields[1];
+                    } else if (type == "genehancer filename") {
+                        retVal.geneHancerFilename = fields[1];
+                    } else if (type == "local index directory") {
+                        retVal.localIndexDirectory = fields[1];
+                    } else if (type == "uses chr") { 
+                        if (fields[1] == "yes")
+                        {
+                            retVal.usesChr = true;
+                        } else if (fields[1] == "no")
+                        {
+                            retVal.usesChr = false;
+                        } else
+                        {
+                            Console.WriteLine("value in configuration file after 'uses chr' must be 'yes' or 'no'.");
+                            continue;
+                        }
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -2618,6 +2639,7 @@ namespace ASELib
         public const string mappedBaseCountDistributionFilename = "MappedBaseCountDistribution.txt";
         public const string annotatedBEDLinesExtension = "_annotated_bed_lines.txt";
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
+        public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
 
 
 
@@ -3841,6 +3863,11 @@ namespace ASELib
             public bool IsNonsenseMediatedDecayCausing()
             {
                 return NonsenseMediatedDecayCausingVariantClassifications.Contains(Variant_Classification);
+            }
+
+            public bool IsSilent()
+            {
+                return Variant_Classification == "Silent";
             }
 
             MAFLine(string Hugo_Symbol_,
@@ -5618,6 +5645,10 @@ namespace ASELib
                         //
 
                         currentContig = statLineFields[0].ToLower();
+                        if (expression.ContainsKey(currentContig))
+                        {
+                            throw new Exception("Duplicate contig name in expression file: " + currentContig);
+                        }
                         expression.Add(currentContig, new Dictionary<int, Dictionary<int, MeanAndStdDev>>());
                         higestOffsetForEachContig.Add(currentContig, 0);
                     } else
@@ -11898,6 +11929,122 @@ namespace ASELib
 
             return paddedString.Substring(0, GuidStringLength - nToCut);
         }
+
+        public class GeneHancerEntry
+        {
+            public readonly string chromosome;
+            public readonly int start;
+            public readonly int end;
+            public readonly string feature;
+            public readonly double score;
+            public readonly string attributes;
+            public readonly string geneHancerId;
+            public readonly Dictionary<string, double> geneScores = new Dictionary<string, double>();
+
+            GeneHancerEntry(string chromosome_, int start_, int end_, string feature_, double score_, string attributes_)
+            {
+                chromosome = chromosome_;
+                start = start_;
+                end = end_;
+                feature = feature_;
+                score = score_;
+                attributes = attributes_;
+
+                var attributeFields = attributes.Split(';');
+                int nAttributeFields = attributeFields.Count();
+                //
+                // The format is that each field is of the form name=value.  In practice, the first one is always
+                // genehancer_id, and then all the rest are connected_gene followed by score, but we'll parse
+                // it in a slightly more general way.
+                //
+                int whichField = 0;
+                while (whichField < nAttributeFields)
+                {
+                    var subfields = attributeFields[whichField].Split('=');
+                    if (subfields.Count() != 2)
+                    {
+                        throw new Exception("Unable to properly parse GeneHancer attribute field, subfield has the wrong count: " + attributes);
+                    }
+
+                    if (subfields[0] == "genehancer_id")
+                    {
+                        geneHancerId = subfields[1];
+                        whichField++;
+                    } else if (subfields[0] == "connected_gene")
+                    {
+                        if (whichField +1 == nAttributeFields)
+                        {
+                            throw new Exception("Unable to properly parse GeneHancer attribute field, connected_gene is the last field: " + attributes);
+                        }
+
+                        var score_subfields = attributeFields[whichField + 1].Split('=');
+                        if (score_subfields.Count() != 2) {
+                            throw new Exception("Unable to properly parse GeneHancer attribute field, score has wrong subfield count: " + attributes);
+                        }
+
+                        if (score_subfields[0] != "score")
+                        {
+                            throw new Exception("Unable to properly parse GeneHancer attribute field, expected score field missing: " + attributes);
+                        }
+
+                        if (geneScores.ContainsKey(subfields[1]))
+                        {
+                            throw new Exception("Unable to properly parse GeneHancer attribute field, same gene present twice for a single entry: " + attributes);
+                        }
+
+                        geneScores.Add(subfields[1], Convert.ToDouble(score_subfields[1]));
+                        whichField += 2;
+                    } else
+                    {
+                        throw new Exception("Unable to properly parse GeneHancer attribute field, subfield has the unknown type: " + attributes);
+                    }
+                }
+            } // GeneHancerEntry ctor
+
+            public static List<GeneHancerEntry> ReadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    return null;
+                }
+
+                string[] wantedFields = { "chrom", "feature name", "start", "end", "score", "attributes" };
+
+                var headerizedFile = new HeaderizedFile<GeneHancerEntry>(inputFile, false, false, "", wantedFields.ToList());
+
+                List<GeneHancerEntry> retVal;
+                headerizedFile.ParseFile(Parse, out retVal);
+
+                return retVal;
+            } // ReadFromFile
+
+            static GeneHancerEntry Parse(HeaderizedFile<GeneHancerEntry>.FieldGrabber fieldGrabber)
+            {
+                return new GeneHancerEntry(fieldGrabber.AsString("chrom"), fieldGrabber.AsInt("start"), fieldGrabber.AsInt("end"), fieldGrabber.AsString("feature name"), fieldGrabber.AsDouble("score"), fieldGrabber.AsString("attributes"));
+            }
+
+            public static Dictionary<string, List<GeneHancerEntry>> ReadFromFileToDict(string filename)
+            {
+                var geneHancers = ReadFromFile(filename);
+
+                var geneHancersByGene = new Dictionary<string, List<GeneHancerEntry>>();
+
+                foreach (var geneHancer in geneHancers)
+                {
+                    foreach (var hugo_symbol in geneHancer.geneScores.Select(x => x.Key))
+                    {
+                        if (!geneHancersByGene.ContainsKey(hugo_symbol))
+                        {
+                            geneHancersByGene.Add(hugo_symbol, new List<GeneHancerEntry>());
+                        }
+                        geneHancersByGene[hugo_symbol].Add(geneHancer);
+                    }
+                }
+
+                return geneHancersByGene;
+            }
+        } // GeneHancerEntry
 
     } // ASETools
 
