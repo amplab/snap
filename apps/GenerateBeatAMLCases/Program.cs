@@ -175,6 +175,7 @@ namespace GenerateBeatAMLCases
                 case_.sample_ids = new List<string>();
                 case_.sample_ids.Add(patient.samples[true].seq_id);
                 case_.sample_ids.Add(patient.samples[false].seq_id);
+                case_.maf_filename = mafFilename;
 
                 goodCases.Add(case_.case_id,case_);
             }

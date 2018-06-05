@@ -22,7 +22,7 @@
     <ProjectGuid>{7B583F3A-D2EA-458F-9C9B-A68B2EBE80B2}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>ExpressionDistribution</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

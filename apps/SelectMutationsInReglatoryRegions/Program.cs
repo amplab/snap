@@ -41,9 +41,9 @@ namespace SelectMutationsInReglatoryRegions
                 return;
             }
 
-            bedFile = ASETools.BEDFile.ReadFromFile(configuration.encodeBEDFile);
+            bedFile = ASETools.BEDFile.ReadFromFile(configuration.encodeBEDFile, !configuration.usesChr);
 
-            var casesToProcess = args.Select(x => cases[x]).ToList();
+            var casesToProcess = configuration.commandLineArgs.Select(x => cases[x]).ToList();
 
             var casesWithoutData = casesToProcess.Where(x => x.all_maf_lines_filename == "").ToList();
             if (casesWithoutData.Count() != 0)

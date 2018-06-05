@@ -15,6 +15,8 @@ namespace AnnotateRegulatoryRegions
         static ASETools.Configuration configuration;
         static Dictionary<string, ASETools.Case> cases;
         static ASETools.BEDFile regulatoryRegions;
+        static Dictionary<string, List<ASETools.GeneHancerLine>> geneHancersByGene;
+
 
         static void Main(string[] args)
         {
@@ -35,12 +37,20 @@ namespace AnnotateRegulatoryRegions
                 return;
             }
 
-            regulatoryRegions = ASETools.BEDFile.ReadFromFile(configuration.encodeBEDFile);
+            regulatoryRegions = ASETools.BEDFile.ReadFromFile(configuration.encodeBEDFile, !configuration.usesChr);
             if (null == regulatoryRegions)
             {
                 Console.WriteLine("Unable to read regulatory regions BED file.");
                 return;
             }
+
+            geneHancersByGene = ASETools.GeneHancerLine.ReadFromFileToDict(configuration.geneHancerFilename);
+            if (geneHancersByGene == null)
+            {
+                Console.WriteLine("Unable to read gene hancers.");
+                return;
+            }
+
 
             if (configuration.commandLineArgs.Count() == 0 || configuration.commandLineArgs.Any(x => !cases.ContainsKey(x)))
             {
@@ -96,6 +106,8 @@ namespace AnnotateRegulatoryRegions
 
             var annotatedBEDLines = new ASETools.AVLTree<ASETools.AnnotatedBEDLine>();
             regulatoryRegions.ForEachLine(x => annotatedBEDLines.Insert(new ASETools.AnnotatedBEDLine(x)));
+
+            var annotatedGeneHancerLines = new ASETools.AVLTree<ASETools.AnnotatedGeneHancerLine>();
 
             allcountReader.ReadAllcountFile((string contigName, int location, int currentMappedReadCount) => ProcessOneBase(contigName, location, currentMappedReadCount, annotatedBEDLines));
 

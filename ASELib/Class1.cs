@@ -11,6 +11,7 @@ using System.Web;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using MathNet.Numerics;
 using System.Globalization;
@@ -1364,18 +1365,18 @@ namespace ASELib
                 file.Close();
             } // SaveToFile
 
-            public static void loadAllFileLocations(Dictionary<string, Case> cases, Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
+            public static void loadAllFileLocations(Configuration configuration, Dictionary<string, Case> cases, Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
             {
                 foreach (var caseEntry in cases)
                 {
-                    caseEntry.Value.loadFileLocations(downloadedFiles, derivedFiles);
+                    caseEntry.Value.loadFileLocations(configuration, downloadedFiles, derivedFiles);
                 }
             }
 
             //
             // Fill in all the derived file locations if they exist.
             //
-            public void loadFileLocations(Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
+            public void loadFileLocations(Configuration conffiguration, Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
             {
 
                 if (downloadedFiles.ContainsKey(normal_dna_file_id))
@@ -1414,13 +1415,16 @@ namespace ASELib
                     tumor_rna_filename = "";
                 }
 
-                if (downloadedFiles.ContainsKey(maf_file_id))
+                if (!conffiguration.isBeatAML)
                 {
-                    maf_filename = downloadedFiles[maf_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    maf_filename = "";
+                    if (downloadedFiles.ContainsKey(maf_file_id))
+                    {
+                        maf_filename = downloadedFiles[maf_file_id].fileInfo.FullName;
+                    }
+                    else
+                    {
+                        maf_filename = "";
+                    }
                 }
 
                 if (tumor_methylation_file_id != "" && downloadedFiles.ContainsKey(tumor_methylation_file_id))
@@ -3919,7 +3923,7 @@ namespace ASELib
                 maf_file_id = maf_file_id_;
             }
 
-            static MAFLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields, string maf_file_id)
+            static MAFLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields, string maf_file_id, bool isBeatAML)
             {
                 return new MAFLine(
                     fields[fieldMappings["Hugo_Symbol"]],
@@ -3936,8 +3940,8 @@ namespace ASELib
                     fields[fieldMappings["Match_Norm_Seq_Allele2"]],
                     fields[fieldMappings["Tumor_Sample_UUID"]],
                     fields[fieldMappings["Matched_Norm_Sample_UUID"]],
-                    fields[fieldMappings["tumor_bam_uuid"]],
-                    fields[fieldMappings["normal_bam_uuid"]],
+                    (isBeatAML ? "" : fields[fieldMappings["tumor_bam_uuid"]]),
+                    (isBeatAML ? "" : fields[fieldMappings["normal_bam_uuid"]]),
                     ConvertToInt32TreatingNullStringAsZero(fields[fieldMappings["t_depth"]]),
                     ConvertToInt32TreatingNullStringAsZero(fields[fieldMappings["t_ref_count"]]),
                     ConvertToInt32TreatingNullStringAsZero(fields[fieldMappings["t_alt_count"]]),
@@ -3961,7 +3965,7 @@ namespace ASELib
                 return mutationCounts.ToDictionary(x => x.Hugo_Symbol, x => x.Count);
             }
 
-            static public List<MAFLine> ReadFile(string filename, string file_id, bool fileHasVersion)
+            static public List<MAFLine> ReadFile(string filename, string file_id, bool fileHasVersion, bool isBeatAML = false)
             {
                 StreamReader inputFile;
 
@@ -3989,8 +3993,11 @@ namespace ASELib
                 neededFields.Add("Match_Norm_Seq_Allele2");
                 neededFields.Add("Tumor_Sample_UUID");
                 neededFields.Add("Matched_Norm_Sample_UUID");
-                neededFields.Add("tumor_bam_uuid");
-                neededFields.Add("normal_bam_uuid");
+                if (!isBeatAML)
+                {
+                    neededFields.Add("tumor_bam_uuid");
+                    neededFields.Add("normal_bam_uuid");
+                }
                 neededFields.Add("t_depth");
                 neededFields.Add("t_ref_count");
                 neededFields.Add("t_alt_count");
@@ -3999,11 +4006,11 @@ namespace ASELib
                 neededFields.Add("n_alt_count");
 
 
-                var headerizedFile = new HeaderizedFile<MAFLine>(inputFile, fileHasVersion, !fileHasVersion, "#version gdc-1.0.0", neededFields, fileHasVersion);
+                var headerizedFile = new HeaderizedFile<MAFLine>(inputFile, fileHasVersion, !fileHasVersion, (isBeatAML ? "#version 2.4" : "#version gdc-1.0.0"), neededFields, fileHasVersion);
 
                 List<MAFLine> result;
 
-                if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b, file_id), out result))
+                if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b, file_id, isBeatAML), out result))
                 {
                     Console.WriteLine("Error reading MAF File " + filename);
                     return null;
@@ -4682,9 +4689,9 @@ namespace ASELib
             public int nFailed = 0;
         } // MAFLoadStatus
 
-        static void ReadMafFileAndAppendToList(string filename, string file_id, List<ASETools.MAFLine> allMAFLines, MAFLoadStatus loadStatus)
+        static void ReadMafFileAndAppendToList(string filename, string file_id, List<ASETools.MAFLine> allMAFLines, MAFLoadStatus loadStatus, Configuration configuration)
         {
-            var mafLinesForThisFile = ASETools.MAFLine.ReadFile(filename, file_id, true);
+            var mafLinesForThisFile = ASETools.MAFLine.ReadFile(filename, file_id, true, configuration.isBeatAML);
 
             lock (loadStatus)
             {
@@ -4747,7 +4754,7 @@ namespace ASELib
             {
                 var mafInfo = mafEntry.Value;
 
-                threads.Add(new Thread(() => ReadMafFileAndAppendToList(downloadedFiles[mafInfo.file_id].fileInfo.FullName, mafInfo.file_id, allMAFLines, loadStatus)));
+                threads.Add(new Thread(() => ReadMafFileAndAppendToList(downloadedFiles[mafInfo.file_id].fileInfo.FullName, mafInfo.file_id, allMAFLines, loadStatus, configuration)));
             }
 
 
@@ -11487,11 +11494,20 @@ namespace ASELib
                 chromStart = chromStart_;
             }
 
-            public static BEDLine fromLine(string line)
+            public static BEDLine fromLine(string line, bool stripChr)
             {
                 var fields = line.Split('\t');
 
-                return new BEDLine(fields[0], Convert.ToInt32(fields[1]), Convert.ToInt32(fields[2]), fields[3], Convert.ToInt32(fields[4]), fields[5], Convert.ToInt32(fields[6]), Convert.ToInt32(fields[7]), fields[8]);
+                string chrom;
+                if (stripChr && fields[0].ToLower().StartsWith("chr"))
+                {
+                    chrom = fields[0].Substring(3);
+                } else
+                {
+                    chrom = fields[0];
+                }
+
+                return new BEDLine(chrom, Convert.ToInt32(fields[1]), Convert.ToInt32(fields[2]), fields[3], Convert.ToInt32(fields[4]), fields[5], Convert.ToInt32(fields[6]), Convert.ToInt32(fields[7]), fields[8]);
             }
 
             public int CompareTo(object o_peer)
@@ -11579,7 +11595,7 @@ namespace ASELib
 
         public class BEDFile
         {
-            public static BEDFile ReadFromFile(string filename)
+            public static BEDFile ReadFromFile(string filename, bool stripChr)
             {
                 //
                 // This is not a headerized file, so we just break it into columns and parse it directly.
@@ -11606,7 +11622,7 @@ namespace ASELib
                 string line;
                 while (null != (line = inputFile.ReadLine()))
                 {
-                    var bedLine = BEDLine.fromLine(line);
+                    var bedLine = BEDLine.fromLine(line, stripChr);
                     BEDLine containedLine;
                     if (bedFile.lines.Lookup(bedLine, out containedLine))
                     {
@@ -11928,9 +11944,9 @@ namespace ASELib
             }
 
             return paddedString.Substring(0, GuidStringLength - nToCut);
-        }
+        } // ExtractUnderlyingStringFromGuidPaddedString
 
-        public class GeneHancerEntry
+        public class GeneHancerLine : IComparable
         {
             public readonly string chromosome;
             public readonly int start;
@@ -11941,7 +11957,7 @@ namespace ASELib
             public readonly string geneHancerId;
             public readonly Dictionary<string, double> geneScores = new Dictionary<string, double>();
 
-            GeneHancerEntry(string chromosome_, int start_, int end_, string feature_, double score_, string attributes_)
+            public GeneHancerLine(string chromosome_, int start_, int end_, string feature_, double score_, string attributes_)
             {
                 chromosome = chromosome_;
                 start = start_;
@@ -12001,7 +12017,19 @@ namespace ASELib
                 }
             } // GeneHancerEntry ctor
 
-            public static List<GeneHancerEntry> ReadFromFile(string filename)
+            public int CompareTo(object peerObject)
+            {
+                GeneHancerLine peer = (GeneHancerLine)peerObject;
+
+                if (peer.chromosome != chromosome)
+                {
+                    return chromosome.CompareTo(peer.chromosome);
+                }
+
+                return start.CompareTo(peer.start);
+            }
+
+            public static List<GeneHancerLine> ReadFromFile(string filename)
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
                 if (null == inputFile)
@@ -12011,24 +12039,24 @@ namespace ASELib
 
                 string[] wantedFields = { "chrom", "feature name", "start", "end", "score", "attributes" };
 
-                var headerizedFile = new HeaderizedFile<GeneHancerEntry>(inputFile, false, false, "", wantedFields.ToList());
+                var headerizedFile = new HeaderizedFile<GeneHancerLine>(inputFile, false, false, "", wantedFields.ToList());
 
-                List<GeneHancerEntry> retVal;
+                List<GeneHancerLine> retVal;
                 headerizedFile.ParseFile(Parse, out retVal);
 
                 return retVal;
             } // ReadFromFile
 
-            static GeneHancerEntry Parse(HeaderizedFile<GeneHancerEntry>.FieldGrabber fieldGrabber)
+            static GeneHancerLine Parse(HeaderizedFile<GeneHancerLine>.FieldGrabber fieldGrabber)
             {
-                return new GeneHancerEntry(fieldGrabber.AsString("chrom"), fieldGrabber.AsInt("start"), fieldGrabber.AsInt("end"), fieldGrabber.AsString("feature name"), fieldGrabber.AsDouble("score"), fieldGrabber.AsString("attributes"));
+                return new GeneHancerLine(fieldGrabber.AsString("chrom"), fieldGrabber.AsInt("start"), fieldGrabber.AsInt("end"), fieldGrabber.AsString("feature name"), fieldGrabber.AsDouble("score"), fieldGrabber.AsString("attributes"));
             }
 
-            public static Dictionary<string, List<GeneHancerEntry>> ReadFromFileToDict(string filename)
+            public static Dictionary<string, List<GeneHancerLine>> ReadFromFileToDict(string filename)
             {
                 var geneHancers = ReadFromFile(filename);
 
-                var geneHancersByGene = new Dictionary<string, List<GeneHancerEntry>>();
+                var geneHancersByGene = new Dictionary<string, List<GeneHancerLine>>();
 
                 foreach (var geneHancer in geneHancers)
                 {
@@ -12036,7 +12064,7 @@ namespace ASELib
                     {
                         if (!geneHancersByGene.ContainsKey(hugo_symbol))
                         {
-                            geneHancersByGene.Add(hugo_symbol, new List<GeneHancerEntry>());
+                            geneHancersByGene.Add(hugo_symbol, new List<GeneHancerLine>());
                         }
                         geneHancersByGene[hugo_symbol].Add(geneHancer);
                     }
@@ -12044,7 +12072,65 @@ namespace ASELib
 
                 return geneHancersByGene;
             }
-        } // GeneHancerEntry
+        } // GeneHancerLine
+
+        public class AnnotatedGeneHancerLine : GeneHancerLine
+        {
+            public int nBasesWithCoverage = 0;
+            public int nMutations = 0;
+            public int nMutationsBelow40Percent = 0;
+            public int nMutationsAbove60Percent = 0;
+
+            public AnnotatedGeneHancerLine(GeneHancerLine geneHancerLine) : base(geneHancerLine.chromosome, geneHancerLine.start, geneHancerLine.end, geneHancerLine.feature, geneHancerLine.score, geneHancerLine.attributes)
+            {
+            }
+
+            public int nMutationsWithModerateVAF()
+            {
+                return nMutations - nMutationsAbove60Percent - nMutationsBelow40Percent;
+            }
+
+            public double fractionCovered()
+            {
+                return (double)nBasesWithCoverage / (end - start);
+            }
+
+            public double mutationsPerCoveredBase()
+            {
+                return (double)nMutations / (end - start);
+            }
+
+            public static List<AnnotatedGeneHancerLine> ReadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (inputFile == null)
+                {
+                    return null;
+                }
+
+                string[] wantedFields = { "Chromosome", "Start", "End", "Feature", "Score", "Attributes", "n Bases With Coverage", "n Mutations", "n Mutations Below 40 Percent", "n Mutations Above 60 Percent" };
+
+                var headerizedFile = new HeaderizedFile<AnnotatedGeneHancerLine>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<AnnotatedGeneHancerLine> retVal;
+
+                headerizedFile.ParseFile(parse, out retVal);
+                return retVal;
+            }
+
+            static AnnotatedGeneHancerLine parse(HeaderizedFile<AnnotatedGeneHancerLine>.FieldGrabber fieldGrabber)
+            {
+                var line = new AnnotatedGeneHancerLine(new GeneHancerLine(fieldGrabber.AsString("Chromosome"), fieldGrabber.AsInt("Start"), fieldGrabber.AsInt("End"), fieldGrabber.AsString("Feature"), fieldGrabber.AsDouble("Score"), fieldGrabber.AsString("Attributes")));
+
+                line.nBasesWithCoverage = fieldGrabber.AsInt("n Bases With Coverage");
+                line.nMutations = fieldGrabber.AsInt("n Mutations");
+                line.nMutationsBelow40Percent = fieldGrabber.AsInt("n Mutations Below 40 Percent");
+                line.nMutationsAbove60Percent = fieldGrabber.AsInt("n Mutations Above 60 Percent");
+
+                return line;
+            }
+        } // AnnotatedGeneHancerLine
 
     } // ASETools
 

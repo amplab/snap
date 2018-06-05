@@ -17,6 +17,7 @@ namespace CisRegulatoryMutationsNearMutations
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static ASETools.GeneMap geneMap;
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
+        static Dictionary<string, List<ASETools.GeneHancerLine>> geneHancersByGene;
 
         static void Main(string[] args)
         {
@@ -40,6 +41,13 @@ namespace CisRegulatoryMutationsNearMutations
             if (configuration.commandLineArgs.Count() == 0 || configuration.commandLineArgs.Any(x => !cases.ContainsKey(x)))
             {
                 Console.WriteLine("usage: AnaylzeCisRegulatoryRegions {caseId}");
+                return;
+            }
+
+            geneHancersByGene = ASETools.GeneHancerLine.ReadFromFileToDict(configuration.geneHancerFilename);
+            if (geneHancersByGene == null)
+            {
+                Console.WriteLine("Unable to read gene hancers.");
                 return;
             }
 
@@ -85,7 +93,6 @@ namespace CisRegulatoryMutationsNearMutations
 
         static void HandleOneCase(ASETools.Case case_, int state)
         {
-
             var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 
             if (null == annotatedSelectedVariants)

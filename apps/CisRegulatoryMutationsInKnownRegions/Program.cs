@@ -11,7 +11,7 @@ namespace CisRegulatoryMutationsInKnownRegions
     class Program
     {
         static ASETools.Configuration configuration;
-        static Dictionary<string, List<ASETools.GeneHancerEntry>> geneHancersByGene;
+        static Dictionary<string, List<ASETools.GeneHancerLine>> geneHancersByGene;
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static ASETools.GeneMap geneMap;
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
@@ -40,7 +40,7 @@ namespace CisRegulatoryMutationsInKnownRegions
                 return;
             }
 
-            geneHancersByGene = ASETools.GeneHancerEntry.ReadFromFileToDict(configuration.geneHancerFilename);
+            geneHancersByGene = ASETools.GeneHancerLine.ReadFromFileToDict(configuration.geneHancerFilename);
             if (geneHancersByGene == null)
             {
                 Console.WriteLine("Unable to read gene hancers.");

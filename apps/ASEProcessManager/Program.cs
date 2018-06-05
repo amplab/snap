@@ -2737,7 +2737,7 @@ namespace ASEProcessManager
                     }
 
 
-                    ASETools.Case.loadAllFileLocations(cases, downloadedFiles, derivedFiles);
+                    ASETools.Case.loadAllFileLocations(configuration, cases, downloadedFiles, derivedFiles);
 
                     int nNormalDNA = 0, nTumorDNA = 0, nNormalRNA = 0, nTumorRNA = 0, nMethylation = 0, nCopyNumber = 0;
                     ulong bytesNormalDNA = 0, bytesTumorDNA = 0, bytesNormalRNA = 0, bytesTumorRNA = 0, bytesMethylation = 0, bytesCopyNumber = 0;
@@ -2931,7 +2931,6 @@ namespace ASEProcessManager
             jobAddString = @"job add %1 /exclusive /numnodes:1-1 /scheduler:" + stateOfTheWorld.configuration.hpcScheduler + " ";
             
             Console.WriteLine();
-
 
             if (null != stateOfTheWorld.cases)
             {

@@ -21,7 +21,7 @@ namespace ExtractMAFLines
             {
                 List<ASETools.Case> casesForThisMAF;
 
-                lock(workQueue)
+                lock (workQueue)
                 {
                     if (workQueue.Count() == 0)
                     {
@@ -32,12 +32,18 @@ namespace ExtractMAFLines
                     workQueue.RemoveAt(0);
                 }
 
-                var timer = new Stopwatch();
+                if (configuration.isBeatAML && casesForThisMAF.Count() != 1)
+                {
+                    Console.WriteLine("BeatAML MAFs must be one/case.");
+                    continue;
+                }
+
+                    var timer = new Stopwatch();
                 timer.Start();
 
                 var mafFilename = casesForThisMAF[0].maf_filename;
 
-                var mafLines = ASETools.MAFLine.ReadFile(casesForThisMAF[0].maf_filename, casesForThisMAF[0].maf_file_id, true);
+                var mafLines = ASETools.MAFLine.ReadFile(casesForThisMAF[0].maf_filename, casesForThisMAF[0].maf_file_id, true, configuration.isBeatAML);
 
                 int nSelectedThisDisease = 0;
                 int nTotalThisDisease = 0;
@@ -45,13 +51,22 @@ namespace ExtractMAFLines
 
                 foreach (var case_ in casesForThisMAF)
                 {
-                    var caseDirectory = ASETools.GetDirectoryFromPathname(mafFilename) + @"\..\..\" + configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\";
+                    string caseDirectory;
+
+                    if (configuration.isBeatAML)
+                    {
+                        caseDirectory = configuration.dataDirectories[0] + @"..\" + configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\";
+                    }
+                    else
+                    {
+                        caseDirectory  = ASETools.GetDirectoryFromPathname(mafFilename) + @"\..\..\" + configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\";
+                    }
 
                     Directory.CreateDirectory(caseDirectory);  // This is a no-op if the directory already exists.
 
                     if (doExtractedMafLineFile && case_.extracted_maf_lines_filename == "")
                     {
-                        var selectedLines = mafLines.Where(x => case_.tumor_dna_file_id == x.tumor_bam_uuid &&
+                        var selectedLines = mafLines.Where(x => (configuration.isBeatAML ||  case_.tumor_dna_file_id == x.tumor_bam_uuid) &&    // BeatAML doesn't have the uuid fields, but it's one MAF/case, so you can tell from that.
                         !(x.n_alt_count >= 10 ||
                           x.t_depth == 0 ||
                           x.n_depth > 0 && (double)x.n_alt_count / (double)x.n_depth * 5.0 >= (double)x.t_alt_count / (double)x.t_depth ||
@@ -63,7 +78,8 @@ namespace ExtractMAFLines
                           x.Variant_Classification == "3'UTR" ||
                           x.Variant_Classification == "5'UTR" ||
                           x.t_alt_count * 5 < x.t_depth ||
-                          x.Chromosome.StartsWith("chrM")
+                          x.Chromosome.StartsWith("chrM") ||
+                          x.Chromosome == "MT"  // The BeatAML version
                           )
                         ).ToList();    // The second half of the condition rejects MAF lines that look like germline variants (or pseudogenes that are mismapped), or are in uninteresting regions (IGRs, Introns, etc.) and minor subclones (< 20%) and mitochondrial genes
 
@@ -74,7 +90,7 @@ namespace ExtractMAFLines
                         if (selectedLines.Count() == 0)
                         {
                             Console.WriteLine("Found no MAF lines for case " + case_.case_id);
-                            continue;
+                            // A few BeatAML ones have them, just generate an empty MAF.  continue;
                         }
 
                         ASETools.MAFLine.WriteToFile(caseDirectory + case_.case_id + ASETools.extractedMAFLinesExtension, selectedLines);

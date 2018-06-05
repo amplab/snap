@@ -81,7 +81,7 @@ namespace MeasureRNADepthDistributionAtMutantSites
                 return;
             }
 
-            var mafLines = ASETools.MAFLine.ReadFile(interestingCases[0].maf_filename, interestingCases[0].maf_file_id, true);
+            var mafLines = ASETools.MAFLine.ReadFile(interestingCases[0].maf_filename, interestingCases[0].maf_file_id, true, configuration.isBeatAML);
 
             int nLoci = 0;
 

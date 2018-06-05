@@ -35,7 +35,7 @@ namespace ComputePerCaseASE
 
             void HandleOneItem(List<ASETools.Case> cases)
             {
-                var mafLines =  ASETools.MAFLine.ReadFile(cases[0].maf_filename, cases[0].maf_file_id, true);
+                var mafLines =  ASETools.MAFLine.ReadFile(cases[0].maf_filename, cases[0].maf_file_id, true, configuration.isBeatAML);
 
                 foreach (var case_ in cases)
                 {
