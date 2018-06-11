@@ -84,7 +84,6 @@ namespace VAFDistribution
 
             Console.WriteLine();
 
-
             const int minCount = 20;
             int bonferroniCorrection = global_one_mutation_histograms.Where(x => x.Value.count() >= minCount).Count(); // The set of genes with at least 20 tumors with single mutations
             Console.WriteLine("Bonferroni correction " + bonferroniCorrection);

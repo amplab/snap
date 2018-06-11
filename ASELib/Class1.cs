@@ -998,6 +998,7 @@ namespace ASELib
             public string selected_variant_counts_by_gene_filename = "";
             public string selected_regulatory_maf_filename = "";
             public string annotated_regulatory_regions_filename = "";
+            public string annotated_geneHancer_lines_filename = "";
             public string regulatory_mutations_near_mutations_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
@@ -1056,6 +1057,7 @@ namespace ASELib
             public long normal_regional_methylation_size = 0;
             public long selected_regulatory_maf_lines_size = 0;
             public long annotated_regulatory_regions_size = 0;
+            public long annotated_geneHancer_lines_size = 0;
             public long regulatory_mutations_near_mutations_size = 0;
 
             //
@@ -1260,6 +1262,7 @@ namespace ASELib
                 new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, "Selected Variant Counts By Gene File Size", c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v),
                 new FieldInformation("Selected Regulatory MAF Lines Filename",              c => c.selected_regulatory_maf_filename, (c, v) => c.selected_regulatory_maf_filename = v, DerivedFile.Type.SelectedRegulatoryMAFLines, selectedRegulatoryMAFLinesExtension, c => c.case_id, "Selected Regulatory MAF Lines Size", c => c.selected_regulatory_maf_lines_size, (c, v) => c.selected_regulatory_maf_lines_size = v),
                 new FieldInformation("Annotated Regulatory Regions Filename",               c => c.annotated_regulatory_regions_filename, (c, v) => c.annotated_regulatory_regions_filename = v, DerivedFile.Type.AnnotatedRegulatoryRegions, annotatedBEDLinesExtension, c => c.case_id, "Annotated Regulatory Regions Size", c => c.annotated_regulatory_regions_size, (c, v) => c.annotated_regulatory_regions_size = v),
+                new FieldInformation("Annotated GeneHancer Lines Filename",                 c => c.annotated_geneHancer_lines_filename, (c, v) => c.annotated_geneHancer_lines_filename = v, DerivedFile.Type.AnnotatedGeneHancer, annotatedGeneHancerLinesExtension, c => c.case_id, "Annotated GeneHancer Lines Size", c => c.annotated_geneHancer_lines_size, (c, v) => c.annotated_geneHancer_lines_size = v),            
                 new FieldInformation("Regulatory Mutations Near Mutations Filename",        c => c.regulatory_mutations_near_mutations_filename, (c, v) => c.regulatory_mutations_near_mutations_filename = v, DerivedFile.Type.RegulatoryMutationsNearMutations, regulatoryMutationsNearMutationsExtension, c => c.case_id, "Regulatory Mutations Near Mutations Size", c => c.regulatory_mutations_near_mutations_size, (c, v) => c.regulatory_mutations_near_mutations_size = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
@@ -2642,6 +2645,7 @@ namespace ASELib
         public const string simulatedResultsFilename = "SimulatedASEError.txt";
         public const string mappedBaseCountDistributionFilename = "MappedBaseCountDistribution.txt";
         public const string annotatedBEDLinesExtension = "_annotated_bed_lines.txt";
+        public const string annotatedGeneHancerLinesExtension = ".annotated_gene_hancers.txt";
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
 
@@ -2691,6 +2695,7 @@ namespace ASELib
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
+                AnnotatedGeneHancer
             };
         } // DerivedFile
 
@@ -11957,6 +11962,12 @@ namespace ASELib
             public readonly string geneHancerId;
             public readonly Dictionary<string, double> geneScores = new Dictionary<string, double>();
 
+            public GeneHancerLine(string chromosome_, int start_) // ctor for AVLTree keys
+            {
+                chromosome = chromosome_;
+                start = start_;
+            }
+
             public GeneHancerLine(string chromosome_, int start_, int end_, string feature_, double score_, string attributes_)
             {
                 chromosome = chromosome_;
@@ -11966,53 +11977,59 @@ namespace ASELib
                 score = score_;
                 attributes = attributes_;
 
-                var attributeFields = attributes.Split(';');
-                int nAttributeFields = attributeFields.Count();
-                //
-                // The format is that each field is of the form name=value.  In practice, the first one is always
-                // genehancer_id, and then all the rest are connected_gene followed by score, but we'll parse
-                // it in a slightly more general way.
-                //
-                int whichField = 0;
-                while (whichField < nAttributeFields)
+                if (attributes != null)
                 {
-                    var subfields = attributeFields[whichField].Split('=');
-                    if (subfields.Count() != 2)
+                    var attributeFields = attributes.Split(';');
+                    int nAttributeFields = attributeFields.Count();
+                    //
+                    // The format is that each field is of the form name=value.  In practice, the first one is always
+                    // genehancer_id, and then all the rest are connected_gene followed by score, but we'll parse
+                    // it in a slightly more general way.
+                    //
+                    int whichField = 0;
+                    while (whichField < nAttributeFields)
                     {
-                        throw new Exception("Unable to properly parse GeneHancer attribute field, subfield has the wrong count: " + attributes);
-                    }
-
-                    if (subfields[0] == "genehancer_id")
-                    {
-                        geneHancerId = subfields[1];
-                        whichField++;
-                    } else if (subfields[0] == "connected_gene")
-                    {
-                        if (whichField +1 == nAttributeFields)
+                        var subfields = attributeFields[whichField].Split('=');
+                        if (subfields.Count() != 2)
                         {
-                            throw new Exception("Unable to properly parse GeneHancer attribute field, connected_gene is the last field: " + attributes);
+                            throw new Exception("Unable to properly parse GeneHancer attribute field, subfield has the wrong count: " + attributes);
                         }
 
-                        var score_subfields = attributeFields[whichField + 1].Split('=');
-                        if (score_subfields.Count() != 2) {
-                            throw new Exception("Unable to properly parse GeneHancer attribute field, score has wrong subfield count: " + attributes);
-                        }
-
-                        if (score_subfields[0] != "score")
+                        if (subfields[0] == "genehancer_id")
                         {
-                            throw new Exception("Unable to properly parse GeneHancer attribute field, expected score field missing: " + attributes);
+                            geneHancerId = subfields[1];
+                            whichField++;
                         }
-
-                        if (geneScores.ContainsKey(subfields[1]))
+                        else if (subfields[0] == "connected_gene")
                         {
-                            throw new Exception("Unable to properly parse GeneHancer attribute field, same gene present twice for a single entry: " + attributes);
-                        }
+                            if (whichField + 1 == nAttributeFields)
+                            {
+                                throw new Exception("Unable to properly parse GeneHancer attribute field, connected_gene is the last field: " + attributes);
+                            }
 
-                        geneScores.Add(subfields[1], Convert.ToDouble(score_subfields[1]));
-                        whichField += 2;
-                    } else
-                    {
-                        throw new Exception("Unable to properly parse GeneHancer attribute field, subfield has the unknown type: " + attributes);
+                            var score_subfields = attributeFields[whichField + 1].Split('=');
+                            if (score_subfields.Count() != 2)
+                            {
+                                throw new Exception("Unable to properly parse GeneHancer attribute field, score has wrong subfield count: " + attributes);
+                            }
+
+                            if (score_subfields[0] != "score")
+                            {
+                                throw new Exception("Unable to properly parse GeneHancer attribute field, expected score field missing: " + attributes);
+                            }
+
+                            if (geneScores.ContainsKey(subfields[1]))
+                            {
+                                throw new Exception("Unable to properly parse GeneHancer attribute field, same gene present twice for a single entry: " + attributes);
+                            }
+
+                            geneScores.Add(subfields[1], Convert.ToDouble(score_subfields[1]));
+                            whichField += 2;
+                        }
+                        else
+                        {
+                            throw new Exception("Unable to properly parse GeneHancer attribute field, subfield has the unknown type: " + attributes);
+                        }
                     }
                 }
             } // GeneHancerEntry ctor

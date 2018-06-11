@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ASELib;
 using System.Diagnostics;
+using System.IO;
 
 namespace QnDFindCase
 {
@@ -13,12 +14,17 @@ namespace QnDFindCase
 
         static int tp53Min;
         static int tp53Max;
+        static ASETools.Configuration configuration;
+        static ASETools.GeneMap geneMap;
+        static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
+        static StreamWriter outputFile;
+
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
             timer.Start();
 
-            var configuration = ASETools.Configuration.loadFromFile(args);
+            configuration = ASETools.Configuration.loadFromFile(args);
             if (null == configuration)
             {
                 Console.WriteLine("Unable to load configuration.");
@@ -41,32 +47,50 @@ namespace QnDFindCase
             }
 
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
-            var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+            geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+
+            perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+            if (null == perGeneASEMap)
+            {
+                Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                return;
+            }
 
             tp53Min = geneLocationInformation.genesByName["TP53"].minLocus;
             tp53Max = geneLocationInformation.genesByName["TP53"].maxLocus;
 
+            outputFile = ASETools.CreateStreamWriterWithRetry(@"\temp\tp53_vaf.txt");
+            outputFile.WriteLine("case ID\tgermline VAF\tsomatic mutation count");
+
             var threading = new ASETools.ASVThreadingHelper<int>(cases, aseCorrection, (x, y) => true, handleOneCase, null, null, 100);
 
-            Console.Write("Processing " + cases.Count() + " cases, 1 dot/100: ");
+            Console.WriteLine("Processing " + cases.Count() + " cases, 1 dot/100: ");
+            ASETools.PrintNumberBar(cases.Count() / 100);
 
             threading.run();
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
+
+            outputFile.WriteLine("**done**");
+            outputFile.Close();
         }  // Main
+
         static void handleOneCase(ASETools.Case case_, int state, List<ASETools.AnnotatedVariant> variantsForThisCase, ASETools.ASECorrection aseCorrection, Dictionary<bool, List<ASETools.CopyNumberVariation>> copyNumber)
         {
-            if (variantsForThisCase.Where(x => x.somaticMutation && x.Hugo_symbol == "TP53" && x.CausesNonsenseMediatedDecay() && !x.isSilent()).Count() == 0)
-            {
-                return;
-            }
+            var tp53mutations = variantsForThisCase.Where(x => x.contig == "chr17" && x.locus >= tp53Min && x.locus <= tp53Max).ToList();
 
-            if (variantsForThisCase.Where(x => !x.somaticMutation && x.contig == "chr17" && x.locus > tp53Min && x.locus < tp53Max).Count() == 0)
-            {
-                return;
-            }
+            var somatic = tp53mutations.Where(x => x.somaticMutation && !x.isSilent()).ToList();
 
-            Console.WriteLine("Case " + case_.case_id + " has both a nonsense mediated decay causing somatic mutation and a germline site in TP53.");
+            var germline = tp53mutations.Where(x => !x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).ToList();
+
+            if (germline.Count() != 0)
+            {
+                lock(outputFile)
+                {
+                    outputFile.WriteLine(case_.case_id + "\t" + germline[0].GetAltAlleleFraction(true) + "\t" + somatic.Count());
+                }
+            }
         } // handleOneCase
 
     } // Program

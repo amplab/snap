@@ -2267,8 +2267,8 @@ namespace ASEProcessManager
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
 
-                nDone = stateOfTheWorld.cases.Where(x => x.Value.annotated_regulatory_regions_filename != "").Count();
-                if (stateOfTheWorld.configuration.encodeBEDFile == "")
+                nDone = stateOfTheWorld.cases.Where(x => x.Value.annotated_regulatory_regions_filename != "" && x.Value.annotated_geneHancer_lines_filename != "").Count();
+                if (stateOfTheWorld.configuration.encodeBEDFile == "" || stateOfTheWorld.configuration.geneHancerFilename == "")
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -2276,7 +2276,9 @@ namespace ASEProcessManager
                 nWaitingForPrerequisites = stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename == "" && (x.tumor_dna_allcount_filename == "" || x.selected_regulatory_maf_filename == "")).Count();
 
                 int nOnCurrentLine = 0;
-                foreach (var case_ in stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.annotated_regulatory_regions_filename == "" && x.tumor_dna_allcount_filename != "" && x.selected_regulatory_maf_filename != ""))
+                foreach (var case_ in stateOfTheWorld.cases.Select(x => x.Value).Where(x => 
+                (x.annotated_regulatory_regions_filename == ""  || x.annotated_geneHancer_lines_filename == "") && 
+                x.tumor_dna_allcount_filename != "" && x.selected_regulatory_maf_filename != ""))
                 {
                     if (nOnCurrentLine == 0)
                     {

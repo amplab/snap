@@ -15,7 +15,7 @@ namespace AnnotateRegulatoryRegions
         static ASETools.Configuration configuration;
         static Dictionary<string, ASETools.Case> cases;
         static ASETools.BEDFile regulatoryRegions;
-        static Dictionary<string, List<ASETools.GeneHancerLine>> geneHancersByGene;
+        static List<ASETools.GeneHancerLine> geneHancers;
 
 
         static void Main(string[] args)
@@ -44,8 +44,8 @@ namespace AnnotateRegulatoryRegions
                 return;
             }
 
-            geneHancersByGene = ASETools.GeneHancerLine.ReadFromFileToDict(configuration.geneHancerFilename);
-            if (geneHancersByGene == null)
+            geneHancers = ASETools.GeneHancerLine.ReadFromFile(configuration.geneHancerFilename);
+            if (geneHancers == null)
             {
                 Console.WriteLine("Unable to read gene hancers.");
                 return;
@@ -108,8 +108,9 @@ namespace AnnotateRegulatoryRegions
             regulatoryRegions.ForEachLine(x => annotatedBEDLines.Insert(new ASETools.AnnotatedBEDLine(x)));
 
             var annotatedGeneHancerLines = new ASETools.AVLTree<ASETools.AnnotatedGeneHancerLine>();
+            geneHancers.ForEach(x => annotatedGeneHancerLines.Insert(new ASETools.AnnotatedGeneHancerLine(x)));
 
-            allcountReader.ReadAllcountFile((string contigName, int location, int currentMappedReadCount) => ProcessOneBase(contigName, location, currentMappedReadCount, annotatedBEDLines));
+            allcountReader.ReadAllcountFile((string contigName, int location, int currentMappedReadCount) => ProcessOneBase(contigName, location, currentMappedReadCount, annotatedBEDLines, annotatedGeneHancerLines));
 
             var outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_allcount_filename) + @"\" + case_.case_id + ASETools.annotatedBEDLinesExtension;
             var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
@@ -127,10 +128,7 @@ namespace AnnotateRegulatoryRegions
                     continue;   // Skip these, they're no coverage so no use
                 }
 
-                var mutations = mafLines.Where(x => x.Chromosome == line.chrom && x.Start_Position <= line.chromEnd && x.End_Positon >= line.chromStart).ToList();
-                line.nMutations = mutations.Count();
-                line.nMutationsAbove60Percent = mutations.Where(x => (double)x.n_alt_count / (x.n_alt_count + x.n_ref_count) > 0.6).Count();
-                line.nMutationsBelow40Percent = mutations.Where(x => (double)x.n_alt_count / (x.n_alt_count + x.n_ref_count) < 0.4).Count();
+                HandleOneLine(mafLines, line.chrom, line.chromStart, line.chromEnd, out line.nMutations, out line.nMutationsAbove60Percent, out line.nMutationsBelow40Percent);
 
                 outputFile.WriteLine(line.chrom + "\t" + line.chromStart + "\t" + line.chromEnd + "\t" + line.name + "\t" + line.score + "\t" + line.strand + "\t" + line.thickStart + "\t" + line.thickEnd + "\t" +
                     line.itemRGB + "\t" + line.nBasesWithCoverage + "\t" + line.nMutations + "\t" + line.nMutationsBelow40Percent + "\t" + line.nMutationsAbove60Percent);
@@ -139,23 +137,65 @@ namespace AnnotateRegulatoryRegions
             outputFile.WriteLine("**done**");
             outputFile.Close();
 
+            outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_allcount_filename) + @"\" + case_.case_id + ASETools.annotatedBEDLinesExtension;
+            outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+            if (null == outputFile)
+            {
+                Console.WriteLine("Unable to open output file " + outputFilename);
+                return;
+            }
+
+            outputFile.WriteLine("Chromosome\tStart\tEnd\tFeature\tScore\tAttributes\tn Bases With Coverage\tn Mutations\tn Mutations Below 40 Percent\tn Mutations Above 60 Percent");
+            for (var line = annotatedGeneHancerLines.min(); null != line; line = annotatedGeneHancerLines.FindFirstGreaterThan(line))
+            {
+                if (line.nBasesWithCoverage == 0)
+                {
+                    continue;
+                }
+
+                HandleOneLine(mafLines, line.chromosome, line.start, line.end, out line.nMutations, out line.nMutationsAbove60Percent, out line.nMutationsBelow40Percent);
+
+                outputFile.WriteLine(line.chromosome + "\t" + line.start + "\t" + line.end + "\t" + line.feature + "\t" + line.score
+                    + "\t" + line.attributes + "\t" + line.nBasesWithCoverage + "\t" + line.nMutations + "\t" +
+                    line.nMutationsBelow40Percent + "\t" + line.nMutationsAbove60Percent);
+            }
+
+            outputFile.WriteLine("**done**");
+            outputFile.Close();
         } // HandleOneCase
 
-        static void ProcessOneBase(string contigName, int location, int currentMappedReadCount, ASETools.AVLTree<ASETools.AnnotatedBEDLine> annotatedBEDLines)
+        static void HandleOneLine(List<ASETools.MAFLine> mafLines, string chrom, int start, int end, out int nMutations,
+            out int nMutationsAbove60Percent, out int nMutationsBelow40Percent)
+        {
+            var mutations = mafLines.Where(x => x.Chromosome == chrom && x.Start_Position <= end && x.End_Positon >= start).ToList();
+            nMutations = mutations.Count();
+            nMutationsAbove60Percent = mutations.Where(x => (double)x.n_alt_count / (x.n_alt_count + x.n_ref_count) > 0.6).Count();
+            nMutationsBelow40Percent = mutations.Where(x => (double)x.n_alt_count / (x.n_alt_count + x.n_ref_count) < 0.4).Count();
+        }
+
+        static void ProcessOneBase(string contigName, int location, int currentMappedReadCount, ASETools.AVLTree<ASETools.AnnotatedBEDLine> annotatedBEDLines, 
+            ASETools.AVLTree<ASETools.AnnotatedGeneHancerLine> annotatedGeneHancerLines)
         {
             if (currentMappedReadCount < configuration.minDNAReadCoverage)
             {
                 return;
             }
 
-            ASETools.AnnotatedBEDLine line;
-            ASETools.AnnotatedBEDLine key = new ASETools.AnnotatedBEDLine(new ASETools.BEDLine(contigName, location));
+            ASETools.AnnotatedBEDLine bedLine;
+            ASETools.AnnotatedBEDLine bedKey = new ASETools.AnnotatedBEDLine(new ASETools.BEDLine(contigName, location));
 
-            if (!annotatedBEDLines.FindFirstLessThanOrEqualTo(key, out line) || line.chrom != contigName || line.chromEnd < location) {
-                return;
+            if (annotatedBEDLines.FindFirstLessThanOrEqualTo(bedKey, out bedLine) && bedLine.chrom == contigName && bedLine.chromEnd < location) {
+                bedLine.nBasesWithCoverage++;
             }
 
-            line.nBasesWithCoverage++;
-        }
+            ASETools.AnnotatedGeneHancerLine geneHancerLine;
+            ASETools.AnnotatedGeneHancerLine geneHancerKey = new ASETools.AnnotatedGeneHancerLine(new ASETools.GeneHancerLine(contigName, location));
+
+            if (annotatedGeneHancerLines.FindFirstGreaterThanOrEqualTo(geneHancerKey, out geneHancerLine) && geneHancerLine.chromosome == contigName &&
+                geneHancerLine.end <= location && geneHancerLine.end >= location)
+            {
+                geneHancerLine.nBasesWithCoverage++;
+            }
+        } // ProcessOneBase
     }
 }

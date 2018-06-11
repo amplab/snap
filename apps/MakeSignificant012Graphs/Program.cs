@@ -34,7 +34,6 @@ namespace MakeSignificant012Graphs
                     range = line.significantAtArray[whichResult];
                 }
 
-
                 var histogramNameTrailer = " mutations in " + line.hugo_symbol + " at range index " + range;
                 histograms[0] = new ASETools.PreBucketedHistogram(0, 1, rangeStep, "0 " + histogramNameTrailer);
 
@@ -178,6 +177,9 @@ namespace MakeSignificant012Graphs
             var somaticVariants = annotatedSelectedVariants.Where(x => x.somaticMutation && !x.isSilent()).ToList();
             var germlineVariants = annotatedSelectedVariants.Where(x => x.somaticMutation == false && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).ToList();
 
+            var tp53Mutations = somaticVariants.Where(x => x.Hugo_symbol == "TP53").ToList();
+            int nTP53Mutations = tp53Mutations.Count();
+
             for (int i = 0; i < nSignificantResults; i++)
             {
                 var result = resultsToReport[i];
@@ -197,13 +199,26 @@ namespace MakeSignificant012Graphs
 
                 if (nValid > 0)
                 {
+                    double ASE = totalASE / nValid;
+
                     int mutationCountIndex = ASETools.ZeroOneMany(somaticVariants.Where(x => x.Hugo_symbol == result.line.hugo_symbol).Count());
-                    result.histograms[mutationCountIndex].addValue(totalASE / nValid);
+                    result.histograms[mutationCountIndex].addValue(ASE);
 
                     // Handle the one silent mutation count case.
                     if (annotatedSelectedVariants.Where(x => x.somaticMutation && x.isSilent() && x.Hugo_symbol == result.line.hugo_symbol).Count() == 1)
                     {
-                        result.histograms[3].addValue(totalASE / nValid);
+                        result.histograms[3].addValue(ASE);
+                    }
+
+                    if (nTP53Mutations == 1 &&  result.line.hugo_symbol == "TP53" && result.maxLocus[1] != -1 
+                        && result.maxLocus[0] - result.minLocus[0] >= 500000 && result.maxLocus[0] - result.minLocus[0] < 600000
+                        && tp53Mutations[0].GetAltAlleleFraction(true) > 0.6)
+                    {
+                        // exclusive range 1Mb
+                        lock (tp531MbCases)
+                        {
+                            tp531MbCases.WriteLine(case_.case_id + "\t" + tp53Mutations[0].GetAltAlleleFraction(true) + "\t" + ASE);
+                        }
                     }
                 }
             } // for each significant result
@@ -214,6 +229,7 @@ namespace MakeSignificant012Graphs
         static ASETools.ASECorrection aseCorrection;
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static ASETools.GeneMap geneMap;
+        static StreamWriter tp531MbCases;
 
         static void Main(string[] args)
         {
@@ -309,14 +325,21 @@ namespace MakeSignificant012Graphs
                 return;
             }
 
+            tp531MbCases = ASETools.CreateStreamWriterWithRetry(@"\temp\tp53_1mb_cases.txt");
+            tp531MbCases.WriteLine("Case ID\tVAF at mutation site\tASE in 1Mb exclusive range");
+
             var casesToProcess = cases.Select(x => x.Value).Where(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "").ToList();
 
-            Console.Write("Processing " + casesToProcess.Count() + " of " + cases.Count() + " cases and " + resultsToReport.Count() + " significant results, 1 dot/100 cases: ");
+            Console.WriteLine("Processing " + casesToProcess.Count() + " of " + cases.Count() + " cases and " + resultsToReport.Count() + " significant results, 1 dot/100 cases: ");
+            ASETools.PrintNumberBar(cases.Count() / 100);
 
             var threading = new ASETools.ASVThreadingHelper<PerThreadState>(casesToProcess, aseCorrection, (x, y) => true, HandleOneCase, FinishUp, null, 100);
             threading.run();
 
             Console.WriteLine("Took " + ASETools.ElapsedTimeInSeconds(timer));
+
+            tp531MbCases.WriteLine("**done**");
+            tp531MbCases.Close();
 
             var nLinesPerHistogram = resultsToReport[0].histograms[0].ComputeHistogram().Count();
 
