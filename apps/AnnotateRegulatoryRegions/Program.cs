@@ -59,7 +59,8 @@ namespace AnnotateRegulatoryRegions
             }
 
             var casesToProcess = configuration.commandLineArgs.Select(x => cases[x]).ToList();
-            Console.Write("Processing " + casesToProcess.Count() + " cases, 1 dot/case:");
+            Console.WriteLine("Processing " + casesToProcess.Count() + " cases, 1 dot/case:");
+            ASETools.PrintNumberBar(casesToProcess.Count());
 
             var threading = new ASETools.WorkerThreadHelper<ASETools.Case, int>(casesToProcess, HandleOneCase, null, null, 1);
             threading.run();
@@ -137,7 +138,7 @@ namespace AnnotateRegulatoryRegions
             outputFile.WriteLine("**done**");
             outputFile.Close();
 
-            outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_allcount_filename) + @"\" + case_.case_id + ASETools.annotatedBEDLinesExtension;
+            outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_allcount_filename) + @"\" + case_.case_id + ASETools.annotatedGeneHancerLinesExtension;
             outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
             if (null == outputFile)
             {
@@ -191,8 +192,8 @@ namespace AnnotateRegulatoryRegions
             ASETools.AnnotatedGeneHancerLine geneHancerLine;
             ASETools.AnnotatedGeneHancerLine geneHancerKey = new ASETools.AnnotatedGeneHancerLine(new ASETools.GeneHancerLine(contigName, location));
 
-            if (annotatedGeneHancerLines.FindFirstGreaterThanOrEqualTo(geneHancerKey, out geneHancerLine) && geneHancerLine.chromosome == contigName &&
-                geneHancerLine.end <= location && geneHancerLine.end >= location)
+            if (annotatedGeneHancerLines.FindFirstLessThanOrEqualTo(geneHancerKey, out geneHancerLine) && geneHancerLine.chromosome == contigName &&
+                geneHancerLine.start <= location && geneHancerLine.end >= location)
             {
                 geneHancerLine.nBasesWithCoverage++;
             }

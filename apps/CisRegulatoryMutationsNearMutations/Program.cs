@@ -60,12 +60,12 @@ namespace CisRegulatoryMutationsNearMutations
 
             var casesToProcess = cases.Select(x => x.Value).Where(x => configuration.commandLineArgs.Contains(x.case_id)).ToList();
 
-            if (casesToProcess.Any(x => x.annotated_regulatory_regions_filename == "" || x.annotated_selected_variants_filename == ""))
+            if (casesToProcess.Any(x => x.annotated_regulatory_regions_filename == "" || x.annotated_selected_variants_filename == "" || x.annotated_geneHancer_lines_filename == ""))
             {
                 Console.Write("Skipping cases because of missing input data:");
                 casesToProcess.Where(x => x.annotated_regulatory_regions_filename == "" || x.annotated_selected_variants_filename == "").ToList().ForEach(x => Console.Write(" " + x.case_id));
                 Console.WriteLine();
-                casesToProcess = casesToProcess.Where(x => x.annotated_regulatory_regions_filename != "" && x.annotated_selected_variants_filename != "").ToList();
+                casesToProcess = casesToProcess.Where(x => x.annotated_regulatory_regions_filename != "" && x.annotated_selected_variants_filename != "" && x.annotated_geneHancer_lines_filename != "").ToList();
 
                 if (casesToProcess.Count() == 0)
                 {
@@ -111,6 +111,12 @@ namespace CisRegulatoryMutationsNearMutations
                 return;
             }
 
+            var annotatedGeneHancersByGene = ASETools.AnnotatedGeneHancerLine.ReadFromFileToDict(case_.annotated_geneHancer_lines_filename);
+            if (null == annotatedGeneHancersByGene)
+            {
+                Console.WriteLine("Unable to read annotated GeneHancer lines from " + case_.annotated_geneHancer_lines_filename);
+            }
+
             string outputFilename = ASETools.GetDirectoryFromPathname(case_.annotated_regulatory_regions_filename) + @"\" + case_.case_id + ASETools.regulatoryMutationsNearMutationsExtension;
             var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
             if (null == outputFile)
@@ -124,7 +130,7 @@ namespace CisRegulatoryMutationsNearMutations
             {
                 outputFile.Write("\t" + ASETools.regionIndexToString(regionIndex));
             }
-            outputFile.WriteLine();
+            outputFile.WriteLine("\tGeneHancers and frac mutated");
 
             var variantsByGene = annotatedSelectedVariants.GroupByToDict(x => x.Hugo_symbol);
             var bedLinesByChromosome = annotatedBEDLines.GroupByToDict(x => x.chrom);
@@ -204,8 +210,26 @@ namespace CisRegulatoryMutationsNearMutations
                     }
                     
                 } // for each region
+                outputFile.Write("\t");
+
+                bool anyGeneHancersWritten = false;
+                if (annotatedGeneHancersByGene.ContainsKey(selectedGene.Hugo_Symbol))
+                {
+                    foreach (var geneHancer in annotatedGeneHancersByGene[selectedGene.Hugo_Symbol])
+                    {
+                        if (geneHancer.nBasesWithCoverage != 0) {
+                            if (anyGeneHancersWritten)
+                            {
+                                outputFile.Write(";");
+                            }
+                            outputFile.Write(geneHancer.geneHancerId + "=" + geneHancer.mutationsPerCoveredBase());
+                            anyGeneHancersWritten = true;
+                        }
+                    }
+                } // If we have annotated GeneHancers for this gene
                 outputFile.WriteLine();
-            }
+
+            } // foreach selected gene
 
             outputFile.WriteLine("**done**");
             outputFile.Close();

@@ -11,7 +11,6 @@ using System.Web;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Diagnostics;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using MathNet.Numerics;
 using System.Globalization;
@@ -2644,7 +2643,7 @@ namespace ASELib
         public const string vaf_histogram_filename = "VAFHistograms.txt";
         public const string simulatedResultsFilename = "SimulatedASEError.txt";
         public const string mappedBaseCountDistributionFilename = "MappedBaseCountDistribution.txt";
-        public const string annotatedBEDLinesExtension = "_annotated_bed_lines.txt";
+        public const string annotatedBEDLinesExtension = ".annotated_bed_lines.txt";
         public const string annotatedGeneHancerLinesExtension = ".annotated_gene_hancers.txt";
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
@@ -12117,7 +12116,7 @@ namespace ASELib
                 return (double)nMutations / (end - start);
             }
 
-            public static List<AnnotatedGeneHancerLine> ReadFromFile(string filename)
+            public static new List<AnnotatedGeneHancerLine> ReadFromFile(string filename)
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
 
@@ -12134,6 +12133,27 @@ namespace ASELib
 
                 headerizedFile.ParseFile(parse, out retVal);
                 return retVal;
+            }
+
+            public static new Dictionary<string, List<AnnotatedGeneHancerLine>> ReadFromFileToDict(string filename) // This is an exact copy of the same function in the base class, but with different assumed types (from ReadFromFile).  There's got to be a better way to do this.
+            {
+                var geneHancers = ReadFromFile(filename);
+
+                var geneHancersByGene = new Dictionary<string, List<AnnotatedGeneHancerLine>>();
+
+                foreach (var geneHancer in geneHancers)
+                {
+                    foreach (var hugo_symbol in geneHancer.geneScores.Select(x => x.Key))
+                    {
+                        if (!geneHancersByGene.ContainsKey(hugo_symbol))
+                        {
+                            geneHancersByGene.Add(hugo_symbol, new List<AnnotatedGeneHancerLine>());
+                        }
+                        geneHancersByGene[hugo_symbol].Add(geneHancer);
+                    }
+                }
+
+                return geneHancersByGene;
             }
 
             static AnnotatedGeneHancerLine parse(HeaderizedFile<AnnotatedGeneHancerLine>.FieldGrabber fieldGrabber)
