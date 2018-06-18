@@ -14,6 +14,12 @@ namespace CisRegulatoryMutationsByMutationCount
         static ASETools.Configuration configuration;
         static StreamWriter outputFile;
 
+        class Measurements
+        {
+            public Dictionary<string, List<double>[,]> byRegion = new Dictionary<string, List<double>[,]>(); // Hugo symbol -> array of [0,1,2] for low, middle, high count -> array by region index -> measurements
+            public Dictionary<string, Dictionary<string, List<double>[]>> byGeneHancer = new Dictionary<string, Dictionary<string, List<double>[]>>; // Hugo symbol -> gene Hancer -> array of [0,1,2] for low, middle, high count->measurements 
+        }
+
         class PerThreadState
         {
             public Dictionary<string, List<double>[,]> measurements = new Dictionary<string, List<double>[,]>();  // Hugo symbol -> array of [0,1,2] for low, middle, high count -> array by region index -> measurements
@@ -127,7 +133,7 @@ namespace CisRegulatoryMutationsByMutationCount
                 outputFile.Write("\t" + regionName + " nLow\t" + regionName + " nModerate\t" + regionName + " nHigh\t" + regionName + " P high vs. not high\t" + regionName + " P high vs. moderate\t" + regionName + " low mean\t" +
                     regionName + " moderate mean\t" + regionName + " high mean\t" + regionName + " high mean/moderate mean");
             }
-            outputFile.WriteLine();
+            outputFile.WriteLine("\tGene Hancers");
 
             var genesToProcess = globalMeasurements.ToList();
             var geneThreading = new ASETools.WorkerThreadHelper<KeyValuePair<string, List<double>[,]>, int>(genesToProcess, HandleOneGene, null, null, 100);

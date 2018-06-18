@@ -11791,6 +11791,7 @@ namespace ASELib
             public readonly int nSilentMutations;
             public readonly int nNotASECandidates;
             public readonly double[] mutationsPerCoveredBaseByRange;
+            public readonly Dictionary<string, double> geneHancerMutationsPerBase;  // maps geneHancer ID -> mutations per base
 
             public static Dictionary<string, RegulatoryMutationsNearGene> readFile(string filename)
             {
@@ -11803,7 +11804,8 @@ namespace ASELib
 
                 var retVal = new Dictionary<string, RegulatoryMutationsNearGene>();
 
-                string[] wantedStaticFields = { "Hugo_Symbol", "Non-Silent Mutation Count", "Non - Silent Mutations with Low VAF", "Non - Silent Mutations with Moderate VAF", "Non - Silent Mutations with High VAF", "Silent Mutations", "Not ASE Candidates" };
+                string[] wantedStaticFields = { "Hugo_Symbol", "Non-Silent Mutation Count", "Non - Silent Mutations with Low VAF", "Non - Silent Mutations with Moderate VAF",
+                    "Non - Silent Mutations with High VAF", "Silent Mutations", "Not ASE Candidates", "GeneHancers and frac mutated" };
 
                 var wantedFields = wantedStaticFields.ToList();
                 for (int i = 1; i < nRegions; i++)
@@ -11832,13 +11834,25 @@ namespace ASELib
                     mutationsPerCoveredBaseByRange[i] = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(regionIndexToString(i));
                 }
 
+                var geneHancerMutationsPerBase = new Dictionary<string, double>();
+                foreach (var geneHancerString in fieldGrabber.AsString("GeneHancers and frac mutated").Split(';'))
+                {
+                    var fields = geneHancerString.Split('=');
+                    if (fields.Count() != 2)
+                    {
+                        throw new Exception("GeneHancer field has the wrong number of things separated by an equal sign: " + geneHancerString);
+                    }
+
+                    geneHancerMutationsPerBase.Add(fields[0], Convert.ToDouble(fields[1]));
+                }
+
                 return new RegulatoryMutationsNearGene(fieldGrabber.AsString("Hugo_Symbol"), fieldGrabber.AsInt("Non-Silent Mutation Count"), fieldGrabber.AsInt("Non - Silent Mutations with Low VAF"), 
                     fieldGrabber.AsInt("Non - Silent Mutations with Moderate VAF"), fieldGrabber.AsInt("Non - Silent Mutations with High VAF"), fieldGrabber.AsInt("Silent Mutations"),  
-                    fieldGrabber.AsInt("Not ASE Candidates"), mutationsPerCoveredBaseByRange);
-            }
+                    fieldGrabber.AsInt("Not ASE Candidates"), mutationsPerCoveredBaseByRange, geneHancerMutationsPerBase);
+            } // Parse
 
             RegulatoryMutationsNearGene(string hugo_symbol_, int nNonSilentMutations_, int nNonSilentMutationsWithLowVAF_, int nNonSilentMutationsWithModerateVAF_,
-                int nNonSilentMutationsWithHighVAF_, int nSilentMutations_, int nNotASECandiates_, double[] mutationsPerCoveredBaseByRange_)
+                int nNonSilentMutationsWithHighVAF_, int nSilentMutations_, int nNotASECandiates_, double[] mutationsPerCoveredBaseByRange_, Dictionary<string, double> geneHancerMutationsPerBase_)
             {
                 if (mutationsPerCoveredBaseByRange_.Count() != nRegions)
                 {
@@ -11853,7 +11867,8 @@ namespace ASELib
                 nSilentMutations = nSilentMutations_;
                 nNotASECandidates = nNotASECandiates_;
                 mutationsPerCoveredBaseByRange = mutationsPerCoveredBaseByRange_;
-            }
+                geneHancerMutationsPerBase = geneHancerMutationsPerBase_;
+            } // RegulatoryMutationsNearGene ctor
         } // RegulatoryMutationsNearGene
 
         public static void PrintNumberBar(int maxValue)
