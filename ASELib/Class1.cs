@@ -8472,7 +8472,7 @@ namespace ASELib
                 for (var i = 0; i < nRegions; i++)
                 {
                     foreach (bool exclusive in BothBools) {
-                        wantedFields.AddRange(SingleExpressionResult.getHeaders(false, exclusive, regionIndexToString(i)));
+                        wantedFields.AddRange(SingleExpressionResult.getHeaders(false, exclusive, "" + regionIndexToString(i))); 
                     }
                 }
 
@@ -8505,8 +8505,8 @@ namespace ASELib
                 multipleAltFraction = multipleAltFraction_;
                 rawLine = rawLine_;
 
-                resultsByRange.Add(true, nonExclusiveResultsByRange);
-                resultsByRange.Add(false, exclusiveResultsByRange);
+                resultsByRange.Add(true, exclusiveResultsByRange);
+                resultsByRange.Add(false, nonExclusiveResultsByRange);
             }
 
             static ExpressionResultsLine Parse(HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber)
@@ -8580,7 +8580,7 @@ namespace ASELib
         {
             switch (regionIndex)
             {
-                case 0: return "0Kpb";
+                case 0: return "0Kbp";
                 case 1: return "1Kbp";
                 case 2: return "2Kbp";
                 case 3: return "4Kbp";
@@ -9731,7 +9731,14 @@ namespace ASELib
             static public Dictionary<bool, List<CopyNumberVariation>> ReadBothFiles(Case case_)
             {
                 var retVal = new Dictionary<bool, List<CopyNumberVariation>>();
-                retVal.Add(true, ReadFile(case_.tumor_copy_number_filename).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList());
+                if (case_.tumor_copy_number_filename == "")
+                {
+                    retVal.Add(true, null);
+                }
+                else
+                {
+                    retVal.Add(true, ReadFile(case_.tumor_copy_number_filename).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList());
+                }
                 if (case_.normal_copy_number_filename == "") {
                     retVal.Add(false, null);
                 } else {
@@ -11815,7 +11822,13 @@ namespace ASELib
 
                 var headerizedFile = new HeaderizedFile<RegulatoryMutationsNearGene>(inputFile, false, true, "", wantedFields);
                 List<RegulatoryMutationsNearGene> list;
-                headerizedFile.ParseFile(Parse, out list);
+                headerizedFile.ParseFile(x => Parse(filename, x), out list);
+
+                if (null == list)
+                {
+                    Console.WriteLine("RegulatoryMutationsNearGene.readFile: failed to parse " + filename);
+                    return null;
+                }
 
                 inputFile.Close();
 
@@ -11823,7 +11836,7 @@ namespace ASELib
                 return retVal;
             } // readFile
 
-            static RegulatoryMutationsNearGene Parse(HeaderizedFile<RegulatoryMutationsNearGene>.FieldGrabber fieldGrabber)
+            static RegulatoryMutationsNearGene Parse(string filename, HeaderizedFile<RegulatoryMutationsNearGene>.FieldGrabber fieldGrabber)
             {
                 var mutationsPerCoveredBaseByRange = new double[nRegions];  // 0 isn't used, but it's still there because that way the address space matches everywhere else
 
@@ -11835,16 +11848,21 @@ namespace ASELib
                 }
 
                 var geneHancerMutationsPerBase = new Dictionary<string, double>();
-                foreach (var geneHancerString in fieldGrabber.AsString("GeneHancers and frac mutated").Split(';'))
+                var allGeneHancers = fieldGrabber.AsString("GeneHancers and frac mutated");
+                if (allGeneHancers != "" )
                 {
-                    var fields = geneHancerString.Split('=');
-                    if (fields.Count() != 2)
+                    foreach (var geneHancerString in allGeneHancers.Split(';'))
                     {
-                        throw new Exception("GeneHancer field has the wrong number of things separated by an equal sign: " + geneHancerString);
-                    }
+                        var fields = geneHancerString.Split('=');
+                        if (fields.Count() != 2)
+                        {
+                            throw new Exception("GeneHancer field has the wrong number of things separated by an equal sign: " + geneHancerString + " in " + filename);
+                        }
 
-                    geneHancerMutationsPerBase.Add(fields[0], Convert.ToDouble(fields[1]));
+                        geneHancerMutationsPerBase.Add(fields[0], Convert.ToDouble(fields[1]));
+                    }
                 }
+ 
 
                 return new RegulatoryMutationsNearGene(fieldGrabber.AsString("Hugo_Symbol"), fieldGrabber.AsInt("Non-Silent Mutation Count"), fieldGrabber.AsInt("Non - Silent Mutations with Low VAF"), 
                     fieldGrabber.AsInt("Non - Silent Mutations with Moderate VAF"), fieldGrabber.AsInt("Non - Silent Mutations with High VAF"), fieldGrabber.AsInt("Silent Mutations"),  
@@ -12153,6 +12171,11 @@ namespace ASELib
             public static new Dictionary<string, List<AnnotatedGeneHancerLine>> ReadFromFileToDict(string filename) // This is an exact copy of the same function in the base class, but with different assumed types (from ReadFromFile).  There's got to be a better way to do this.
             {
                 var geneHancers = ReadFromFile(filename);
+
+                if (null == geneHancers)
+                {
+                    Console.WriteLine("AnnotatedGeneHancerLine.ReadFromFileToDict: failed to read/parse input file " + filename);
+                }
 
                 var geneHancersByGene = new Dictionary<string, List<AnnotatedGeneHancerLine>>();
 

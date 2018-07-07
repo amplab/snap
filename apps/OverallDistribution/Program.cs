@@ -264,12 +264,13 @@ namespace OverallDistribution
                 Console.WriteLine("Unable to load cases.");
             }
 
-            var casesToProcess = cases.Select(x => x.Value).Where(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "").ToList();
+            var casesToProcess = cases.Select(x => x.Value).Where(x => x.annotated_selected_variants_filename != "" && (x.tumor_copy_number_filename != "" || configuration.isBeatAML)).ToList();
             int n = casesToProcess.Count();
 
             var threading = new ASETools.WorkerThreadHelper<ASETools.Case, PerThreadState>(casesToProcess, PerThreadState.HandleOneCase, PerThreadState.FinishUp, null, 100);
 
-            Console.Write("Processing " + casesToProcess.Count() + " cases, 1 dot/100 cases: ");
+            Console.WriteLine("Processing " + casesToProcess.Count() + " cases, 1 dot/100 cases: ");
+            ASETools.PrintNumberBar(casesToProcess.Count() / 100);
             threading.run();
 
             var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + (useCorrection ? ASETools.CorrectedOverallASEFilename :  ASETools.UncorrectedOverallASEFilename));

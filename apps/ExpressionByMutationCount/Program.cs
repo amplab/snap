@@ -157,7 +157,8 @@ namespace ExpressionByMutationCount
                 threads.Add(new Thread(() => ProcessRegionalExpressionFile(forAlleleSpecificExpression, casesToProcess, genesToProcess)));
             }
 
-            Console.Write("Loading expression files (1 dot/100): ");
+            Console.WriteLine("Loading expression files (1 dot/100): ");
+            ASETools.PrintNumberBar(casesToProcess.Count() / 100);
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
 
@@ -640,23 +641,11 @@ namespace ExpressionByMutationCount
             {
                 for (int mu = 0; mu < (forAlleleSpecificExpression ? 1 : 2); mu++)
                 {
-                    int width = 0;
                     string muString = ((mu == 0) ? "" : " mu") + (inclusive == 0 ? " exclusive" : "");
-                    for (int i = 0; i < ASETools.nRegions - 1 /* -1 is because we don't do whole autosome here*/; i++)
+                    for (int i = 0; i < ASETools.nRegions; i++)
                     {
-                        WriteHeaderGroup(width + "Kbp", outputFile, muString);
-
-                        if (0 == width)
-                        {
-                            width = 1;
-                        }
-                        else
-                        {
-                            width *= 2;
-                        }
+                        WriteHeaderGroup(ASETools.regionIndexToString(i), outputFile, muString);
                     }
-
-                    WriteHeaderGroup("whole autosome", outputFile, muString);
                 }
             }
 

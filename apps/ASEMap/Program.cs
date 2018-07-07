@@ -32,25 +32,21 @@ namespace ASEMap
 
             public void addASE(string chromosome, int locus, double ase)
             {
-                if (!map.ContainsKey(chromosome))
+
+                lock (this)
                 {
-                    lock (map)
+                    if (!map.ContainsKey(chromosome))
                     {
-                        if (!map.ContainsKey(chromosome))
-                        {
-
-                            map.Add(chromosome, new Dictionary<int, MapEntry>());
-                        }
+                        map.Add(chromosome, new Dictionary<int, MapEntry>());
                     }
-                }
 
-                lock (map[chromosome])
-                {
+
                     int regionBase = locus - locus % regionSize;
                     if (!map[chromosome].ContainsKey(regionBase))
                     {
                         map[chromosome].Add(regionBase, new MapEntry());
                     }
+ 
 
                     var mapEntry = map[chromosome][regionBase];
 
@@ -58,6 +54,7 @@ namespace ASEMap
                     mapEntry.totalASE += ase;
                     mapEntry.totalASESquared += ase * ase;
                 }
+
             }
 
             public static string Header()
@@ -89,12 +86,21 @@ namespace ASEMap
         static ASEMap tumorMap = new ASEMap();
         static PerGeneASE globalNormalPerGeneASE = new PerGeneASE();
         static PerGeneASE globalTumorPerGeneASE = new PerGeneASE();
+        static Dictionary<string, Dictionary<bool, PerGeneASE>> globalPerGeneASEByGene = new Dictionary<string, Dictionary<bool, PerGeneASE>>();    // Hugo symbol -> exactly one mutation/not exactly one mutation->PerGeneASE
 
         static void WorkerThread(List<ASETools.Case> casesToProcess)
         {
             var thisThreadMeasurements = new List<ASEMeasurement>();
             var normalPerGeneASEThisThread = new PerGeneASE();
             var tumorPerGeneASEThisThread = new PerGeneASE();
+            Dictionary<string, Dictionary<bool, PerGeneASE>> geneASEByGeneThisThread = new Dictionary<string, Dictionary<bool, PerGeneASE>>();    // Hugo symbol -> exactly one mutation/not exactly one mutation->PerGeneASE
+
+            foreach (var hugo_symbol in genesToDoByMutationStatus)
+            {
+                geneASEByGeneThisThread.Add(hugo_symbol, new Dictionary<bool, PerGeneASE>());
+                geneASEByGeneThisThread[hugo_symbol].Add(true, new PerGeneASE());
+                geneASEByGeneThisThread[hugo_symbol].Add(false, new PerGeneASE());
+            }
 
             while (true)
             {
@@ -104,11 +110,19 @@ namespace ASEMap
                 {
                     if (casesToProcess.Count() == 0)
                     {
-                        allMeasurements.AddRange(thisThreadMeasurements);
-                        globalNormalPerGeneASE.mergeEqually(normalPerGeneASEThisThread);
-                        globalTumorPerGeneASE.mergeEqually(tumorPerGeneASEThisThread);
+                        lock (globalNormalPerGeneASE)
+                        {
+                            allMeasurements.AddRange(thisThreadMeasurements);
+                            globalNormalPerGeneASE.mergeEqually(normalPerGeneASEThisThread);
+                            globalTumorPerGeneASE.mergeEqually(tumorPerGeneASEThisThread);
+                            foreach (var hugo_symbol in genesToDoByMutationStatus)
+                            {
+                                globalPerGeneASEByGene[hugo_symbol][true].mergeEqually(geneASEByGeneThisThread[hugo_symbol][true]);
+                                globalPerGeneASEByGene[hugo_symbol][false].mergeEqually(geneASEByGeneThisThread[hugo_symbol][false]);
+                            }
 
-                        return;
+                            return;
+                        }
                     }
 
                     case_ = casesToProcess[0];
@@ -167,6 +181,13 @@ namespace ASEMap
 
                 normalPerGeneASEThisThread.mergeInOneSample(normalPerGeneASEThisCase);
                 tumorPerGeneASEThisThread.mergeInOneSample(tumorPerGeneASEThisCase);
+
+                foreach (var hugo_symbol in genesToDoByMutationStatus)
+                {
+                    geneASEByGeneThisThread[hugo_symbol][annotatedVariants.Where(x => x.Hugo_symbol == hugo_symbol && x.somaticMutation && !x.isSilent()).Count() == 1].mergeInOneSample(tumorPerGeneASEThisCase);
+                }
+
+
             } // while true (loop over cases)
         } // WorkerThread
 
@@ -291,12 +312,12 @@ namespace ASEMap
                     return a.ase.CompareTo(b.ase);
                 }
             }
-            public void WriteToFile(StreamWriter outputFile, PerGeneASE peer)
+            public void WriteToFile(StreamWriter outputFile, PerGeneASE peer, Dictionary<string, Dictionary<bool, PerGeneASE>> perGeneASEByGene)
             {
                 int minSamplesToPrint = 10;
 
-
                 var mwPerGene = new Dictionary<string, double>();
+                var mwByMutantGene = new Dictionary<string, Dictionary<string, double>>();
 
                 ASETools.MannWhitney<ASEValueAndTumor>.GetValue getValue = new ASETools.MannWhitney<ASEValueAndTumor>.GetValue(m => m.ase);
                 ASETools.MannWhitney<ASEValueAndTumor>.WhichGroup whichGroup = new ASETools.MannWhitney<ASEValueAndTumor>.WhichGroup(m => m.tumor);
@@ -336,26 +357,82 @@ namespace ASEMap
                     }
                 }
 
-                int nMW = mwPerGene.Count();
+                foreach (var by_mutation_hugo_symbol in genesToDoByMutationStatus)
+                {
+                    foreach (var geneInfo in perGeneASEByGene[by_mutation_hugo_symbol][true].genes)
+                    {
+                        var ase_gene_hugo_symbol = geneInfo.Key;
+                        if (geneInfo.Value.n < minSamplesToPrint || !perGeneASEByGene[by_mutation_hugo_symbol][false].genes.ContainsKey(ase_gene_hugo_symbol) || perGeneASEByGene[by_mutation_hugo_symbol][false].genes[ase_gene_hugo_symbol].n <= minSamplesToPrint)
+                        {
+                            continue;
+                        }
+
+                        var values = new List<ASEValueAndTumor>();
+
+                        foreach (var value in geneInfo.Value.allASE)
+                        {
+                            values.Add(new ASEValueAndTumor(true, value));
+                        }
+
+                        foreach (var value in perGeneASEByGene[by_mutation_hugo_symbol][false].genes[ase_gene_hugo_symbol].allASE)
+                        {
+                            values.Add(new ASEValueAndTumor(false, value));
+                        }
+
+                        bool enoughData;
+                        bool reversed;
+                        double nFirstGroup;
+                        double nSecondGroup;
+                        double U;
+                        double z;
+
+                        var mw = ASETools.MannWhitney<ASEValueAndTumor>.ComputeMannWhitney(values, values[0], whichGroup, getValue,
+                            out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z);
+
+                        if (enoughData)
+                        {
+                            if (!mwByMutantGene.ContainsKey(by_mutation_hugo_symbol))
+                            {
+                                mwByMutantGene.Add(by_mutation_hugo_symbol, new Dictionary<string, double>());
+                            }
+
+                            mwByMutantGene[by_mutation_hugo_symbol].Add(ase_gene_hugo_symbol, mw);
+                        }
+                    }
+                }
+
+
+
+                int nMW = mwPerGene.Count() + mwByMutantGene.Sum(x => x.Value.Count());
 
                 foreach (var mwEntry in mwPerGene)
                 {
+                    var by_ase_hugo_symbol = mwEntry.Key;
+                    var geneInfo = genes[by_ase_hugo_symbol];
 
-                    var hugo_symbol = mwEntry.Key;
-                    var geneInfo = genes[hugo_symbol];
+                    var geneLocation = geneLocationInformation.genesByName[by_ase_hugo_symbol];
 
-                    var geneLocation = geneLocationInformation.genesByName[hugo_symbol];
+                    var peerGeneInfo = peer.genes[by_ase_hugo_symbol];
 
-                    var peerGeneInfo = peer.genes[hugo_symbol];
-
-                    outputFile.WriteLine(ASETools.ConvertToExcelString(hugo_symbol) + "\t" + geneInfo.n + "\t" + geneInfo.totalASE / geneInfo.n + "\t" + geneInfo.totalFractionOfRNAReads / geneInfo.n + "\t" +
+                    outputFile.Write(ASETools.ConvertToExcelString(by_ase_hugo_symbol) + "\t" + geneInfo.n + "\t" + geneInfo.totalASE / geneInfo.n + "\t" + geneInfo.totalFractionOfRNAReads / geneInfo.n + "\t" +
                         Math.Sqrt(geneInfo.n * geneInfo.totalASESquared - geneInfo.totalASE * geneInfo.totalASE) / geneInfo.n + "\t" +
                         peerGeneInfo.n + "\t" + peerGeneInfo.totalASE / peerGeneInfo.n + "\t" + peerGeneInfo.totalFractionOfRNAReadsSquared / peerGeneInfo.n + "\t" +
                         Math.Sqrt(peerGeneInfo.n * peerGeneInfo.totalASESquared - peerGeneInfo.totalASE * peerGeneInfo.totalASE) / peerGeneInfo.n + "\t" +
-                        (geneInfo.totalASE / geneInfo.n - peer.genes[hugo_symbol].totalASE / peer.genes[hugo_symbol].n) + "\t" + Math.Abs((geneInfo.totalASE / geneInfo.n - peer.genes[hugo_symbol].totalASE / peer.genes[hugo_symbol].n)) + "\t" +
-                        mwEntry.Value * nMW + "\t" + 
-                        geneLocation.chromosome + "\t" + geneLocation.minLocus + "\t" + geneLocation.maxLocus
-                        );
+                        (geneInfo.totalASE / geneInfo.n - peer.genes[by_ase_hugo_symbol].totalASE / peer.genes[by_ase_hugo_symbol].n) + "\t" + Math.Abs((geneInfo.totalASE / geneInfo.n - peer.genes[by_ase_hugo_symbol].totalASE / peer.genes[by_ase_hugo_symbol].n)) + "\t" +
+                        mwEntry.Value * nMW + "\t");
+
+                    foreach (var by_mutation_status_hugo_symbol in genesToDoByMutationStatus)
+                    {
+                        var by_mutation_gene = perGeneASEByGene[by_mutation_status_hugo_symbol];
+
+                        outputFile.Write(
+                            (by_mutation_gene[true].genes.ContainsKey(by_ase_hugo_symbol) ? (by_mutation_gene[true].genes[by_ase_hugo_symbol].totalASE / by_mutation_gene[true].genes[by_ase_hugo_symbol].n).ToString() : "*") + "\t" +
+                            (by_mutation_gene[false].genes.ContainsKey(by_ase_hugo_symbol) ? (by_mutation_gene[false].genes[by_ase_hugo_symbol].totalASE / by_mutation_gene[false].genes[by_ase_hugo_symbol].n).ToString() : "*") + "\t" +
+                            ((by_mutation_gene[false].genes.ContainsKey(by_ase_hugo_symbol) && by_mutation_gene[true].genes.ContainsKey(by_ase_hugo_symbol)) ? (by_mutation_gene[true].genes[by_ase_hugo_symbol].totalASE / by_mutation_gene[true].genes[by_ase_hugo_symbol].n - by_mutation_gene[false].genes[by_ase_hugo_symbol].totalASE / by_mutation_gene[false].genes[by_ase_hugo_symbol].n).ToString() : "*") + "\t" +
+                            (mwByMutantGene[by_mutation_status_hugo_symbol].ContainsKey(by_ase_hugo_symbol) ? (mwByMutantGene[by_mutation_status_hugo_symbol][by_ase_hugo_symbol] * nMW).ToString() : "*") + "\t");
+                    }
+
+                    outputFile.WriteLine(geneLocation.chromosome + "\t" + geneLocation.minLocus + "\t" + geneLocation.maxLocus);
                 }
             }
         } // PerGeneASE
@@ -363,6 +440,8 @@ namespace ASEMap
         static ASETools.GeneMap geneMap;
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static ASETools.Configuration configuration;
+
+        static string[] genesToDoByMutationStatus = { "TP53", "CDKN2A", "CDH1", "KRAS", "KEAP1", "PTEN", "VHL", "SMAD4" };
 
         static void Main(string[] args)
         {
@@ -387,8 +466,16 @@ namespace ASEMap
                 Console.WriteLine("Unable to load cases.");
             }
 
+            foreach (var hugo_symbol in genesToDoByMutationStatus)
+            {
+                globalPerGeneASEByGene.Add(hugo_symbol, new Dictionary<bool, PerGeneASE>());
+                globalPerGeneASEByGene[hugo_symbol].Add(true, new PerGeneASE());
+                globalPerGeneASEByGene[hugo_symbol].Add(false, new PerGeneASE());
+            }
+
             var casesToProcess = cases.Where(x => x.Value.annotated_selected_variants_filename != "" && x.Value.tumor_copy_number_filename != "").Select(x => x.Value).ToList();
-            Console.Write("Processing " + casesToProcess.Count() + " cases, 1 dot/100 cases: ");
+            Console.WriteLine("Processing " + casesToProcess.Count() + " cases, 1 dot/100 cases: ");
+            ASETools.PrintNumberBar(casesToProcess.Count() / 100);
 
             var threads = new List<Thread>();
             for (int i = 0; i < Environment.ProcessorCount; i++)
@@ -409,31 +496,37 @@ namespace ASEMap
             outputFile.Close();
 
             var perGeneOutputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
-            perGeneOutputFile.WriteLine("Hugo Symbol\tn Tumor Samples\tmean Tumor ASE\tTumor Fraction of RNA at Variant Sites\tstandard deviation of Tumor ASE\tn Normal Samples\tmean Normal ASE\tNormal Fraction of RNA at Variant Sites\tstandard deviation of Normal ASE\t" +
-                "Tumor ASE minus Normal ASE\tAbsolute value of Tumor ASE minus Normal ASE\tBonferroni Corrected MW p value for normal differing from tumor\tchromosome\tmin locus\tmax locus");
+            perGeneOutputFile.Write("Hugo Symbol\tn Tumor Samples\tmean Tumor ASE\tTumor Fraction of RNA at Variant Sites\tstandard deviation of Tumor ASE\tn Normal Samples\tmean Normal ASE\tNormal Fraction of RNA at Variant Sites\tstandard deviation of Normal ASE\t" +
+                "Tumor ASE minus Normal ASE\tAbsolute value of Tumor ASE minus Normal ASE\tBonferroni Corrected MW p value for normal differing from tumor");
 
-            globalTumorPerGeneASE.WriteToFile(perGeneOutputFile, globalNormalPerGeneASE);
+            foreach (var hugo_symbol in genesToDoByMutationStatus) {
+                perGeneOutputFile.Write("\tTumor ASE 1 " + hugo_symbol + " Mutation\tTumor ASE not 1 " + hugo_symbol + " mutation\tDifference between ASE for " + hugo_symbol + " 1 and not 1\tBonferroni Corrected MW p value for " + hugo_symbol + "_1 differing from "  +hugo_symbol + "_~1");
+            }
+
+            perGeneOutputFile.WriteLine("\tchromosome\tmin locus\tmax locus");
+
+            globalTumorPerGeneASE.WriteToFile(perGeneOutputFile, globalNormalPerGeneASE, globalPerGeneASEByGene);
 
             perGeneOutputFile.WriteLine("**done**");
             perGeneOutputFile.Close();
 
             Console.WriteLine();
 
-            if (false) // For some reason, it takes more than a day to run Mann-Whitney on this, and then the p value is 0.  So, skip it.
-            {
-                bool enoughData;
-                bool reversed;
-                double nFirstGroup;
-                double nSecondGroup;
-                double U;
-                double z;
+#if false// For some reason, it takes more than a day to run Mann-Whitney on this, and then the p value is 0.  So, skip it.
+            bool enoughData;
+            bool reversed;
+            double nFirstGroup;
+            double nSecondGroup;
+            double U;
+            double z;
 
-                double p = ASETools.MannWhitney<ASEMeasurement>.ComputeMannWhitney(allMeasurements, allMeasurements[0], x => x.tumor, x => x.ase, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U,
-                    out z);
+            double p = ASETools.MannWhitney<ASEMeasurement>.ComputeMannWhitney(allMeasurements, allMeasurements[0], x => x.tumor, x => x.ase, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U,
+                out z);
 
-                Console.WriteLine((int)(nFirstGroup + nSecondGroup) + " total ASE measurements between tumor and normal.  Distributions differ with p = " + p + ".  Mean for tumor is " +
-                    allMeasurements.Where(x => x.tumor).Select(x => x.ase).Average() + " mean for normal is " + allMeasurements.Where(x => !x.tumor).Select(x => x.ase).Average());
-            }
+            Console.WriteLine((int)(nFirstGroup + nSecondGroup) + " total ASE measurements between tumor and normal.  Distributions differ with p = " + p + ".  Mean for tumor is " +
+                allMeasurements.Where(x => x.tumor).Select(x => x.ase).Average() + " mean for normal is " + allMeasurements.Where(x => !x.tumor).Select(x => x.ase).Average());
+
+#endif // false
 
             var differenceMapOutputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.ASEDifferenceMapFilename);
             differenceMapOutputFile.WriteLine("Chromosome\tlocus\tnormal ASE\ttumor ASE\tdifference");

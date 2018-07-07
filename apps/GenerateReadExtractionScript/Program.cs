@@ -51,7 +51,7 @@ namespace GenerateScriptFromVariants
 
             for (int i = 4; i + 1< configuration.commandLineArgs.Count(); i += 2)
             {
-                if (!cases.ContainsKey(args[i]))
+                if (!cases.ContainsKey(configuration.commandLineArgs[i]))
                 {
                     Console.WriteLine(configuration.commandLineArgs[i] + " does not appear to be a case id.  Ignoring.");
                 } else

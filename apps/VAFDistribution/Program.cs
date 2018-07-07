@@ -117,7 +117,7 @@ namespace VAFDistribution
                 var normalLines = result.normalHistogram.ComputeHistogram();
                 var silentLines = result.silentHistogram.ComputeHistogram();
 
-                outputFile.WriteLine("hugo_symbol\tp (one mutation)\tn (one mutation)\tmean (one mutation)");
+                outputFile.WriteLine("hugo_symbol\tp (one mutation not coin flip by binomial test, bonferroni corrected)\tn (one mutation)\tmean (one mutation)");
                 outputFile.WriteLine(result.hugo_symbol + "\t" + result.p + "\t" + result.oneMutationHistogram.count() + "\t" + result.oneMutationHistogram.mean());
                 outputFile.WriteLine("minValue\tone mutation (n = " + result.oneMutationHistogram.count() + ")\tmultiple mutations (n = " + result.multipleMutationHistogram.count() + ")\tnormal (n = " + result.normalHistogram.count() + 
                     ")\tsilent (n = " + result.silentHistogram.count() + ")");

@@ -117,7 +117,7 @@ namespace ExpressionNearMutations
 
 				var inputFilename = forAlleleSpecificExpression ? case_.annotated_selected_variants_filename : case_.regional_expression_filename;
 
-				if (inputFilename == "" || case_.tumor_copy_number_filename == "")
+				if (inputFilename == "" || (case_.tumor_copy_number_filename == "" && !configuration.isBeatAML))
 				{
 					Console.WriteLine("Case " + case_.case_id + " doesn't have an input or copy number file yet.");
 					continue;

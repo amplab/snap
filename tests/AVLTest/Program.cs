@@ -72,10 +72,6 @@ namespace AVLTest
                     int whichElement = random.Next(arraySize);
 
                     CheckBoolResult(array[whichElement].inTree, tree.Lookup(array[whichElement], out returnedValue), "Tree should contain element iff array does");
-                    if (innerIteration == 310)
-                    {
-                        Console.WriteLine("Here!");
-                    }
 
                     if (array[whichElement].inTree)
                     {

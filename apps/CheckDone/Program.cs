@@ -30,7 +30,7 @@ namespace CheckDone
                 lock (FilenamesByDataDirectory)
                 {
                     nFilesProcessed++;
-                    if (nFilesProcessed % 100 == 0) Console.Write(".");
+                    if (nFilesProcessed % 1000 == 0) Console.Write(".");
                 }
 
                 if (filename.ToLower().EndsWith(".gz"))
@@ -215,9 +215,12 @@ namespace CheckDone
                 HandleFilename(case_.selected_variant_counts_by_gene_filename);
                 HandleFilename(case_.selected_regulatory_maf_filename);
                 HandleFilename(case_.annotated_regulatory_regions_filename);
+                HandleFilename(case_.regulatory_mutations_near_mutations_filename);
+                HandleFilename(case_.annotated_geneHancer_lines_filename);
             }
 
-            Console.Write("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/hundred): ");
+            Console.WriteLine("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/thousand): ");
+            ASETools.PrintNumberBar(totalFiles / 1000);
 
             //
             // Run one thread per data directory, since this is likely IO bound by the server disks rather than

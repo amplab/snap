@@ -148,11 +148,6 @@ namespace ApplyBonferroniCorrection
             {
                 pValueStats.significantAt.Add(Convert.ToString(regionIndex) + (exclusive ? "E" : "") + ((whichHistogramSet == 2) ? "S" : ""));
 
-if (ASE == double.NegativeInfinity)
-{
-    Console.WriteLine("Here!");
-}
-
                 allSignificantResultsFile.WriteLine(hugoSymbol + "\t" + ASE + "\t" + (ASENotOne == double.NegativeInfinity ? "*" : Convert.ToString(ASENotOne)) + "\t" + 
                     ASETools.GetFileNameFromPathname(inputFilename) + "\t" + exclusive + "\t" + histogramSetToName(whichHistogramSet) + "\t" + regionIndex + "\t" + ASETools.regionIndexToString(regionIndex) + "\t" + p);
                 return 1;
@@ -315,8 +310,10 @@ if (ASE == double.NegativeInfinity)
 
                 bool anyValid = false;
 
-                foreach (bool exclusive in ASETools.BothBools)
+                for  (int i = 0; i < 2; i++)
                 {
+                    bool exclusive = i == 0;    // Do it this way so that exclusive goes first, so it matches the headers in the output file.
+
                     for (int region = 0; region < ASETools.nRegions; region++)
                     {
                         outputLine += "\t";

@@ -81,6 +81,9 @@ namespace MannWhitney
 
             int nGenesProcessed = 0;
 
+            Console.WriteLine("Processing " + allHugoSymbols.Count() + " genes, one dot/100 genes: ");
+            ASETools.PrintNumberBar(allHugoSymbols.Count() / 100);
+
             foreach (var hugoSymbol in allHugoSymbols)
             {
                 nGenesProcessed++;
@@ -158,6 +161,7 @@ namespace MannWhitney
             }
             output.Close();
 
+            Console.WriteLine();
             Console.WriteLine("Processed " + allHugoSymbols.Count() + " genes in " + ASETools.ElapsedTimeInSeconds(endToEndTimer));
         } // Main
     }

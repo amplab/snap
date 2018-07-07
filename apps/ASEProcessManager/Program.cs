@@ -1135,7 +1135,7 @@ namespace ASEProcessManager
 								}
 							}
 						}
-						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "" || case_.tumor_copy_number_filename == "")
+						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "" || (case_.tumor_copy_number_filename == "" && !stateOfTheWorld.configuration.isBeatAML))
 						{
 							nWaitingForPrerequisites++;
 							continue;
@@ -1797,7 +1797,7 @@ namespace ASEProcessManager
                 if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename))
                 {
                     nDone++;
-                } else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "" && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == ""
+                } else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && (x.tumor_copy_number_filename != "" || stateOfTheWorld.configuration.isBeatAML) && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == ""
                            || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename) || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename))))
                 {
                     nWaitingForPrerequisites++;

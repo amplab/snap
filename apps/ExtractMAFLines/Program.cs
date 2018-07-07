@@ -14,9 +14,12 @@ namespace ExtractMAFLines
         static int nSelected = 0;
         static int nTotal = 0;
         static int nSilent = 0;
+        static int nDuplicate = 0;
 
         static void WorkerThread(List<List<ASETools.Case>> workQueue, ASETools.Configuration configuration)
         {
+            int nDuplicateThisThread = 0;
+
             while (true)
             {
                 List<ASETools.Case> casesForThisMAF;
@@ -25,6 +28,7 @@ namespace ExtractMAFLines
                 {
                     if (workQueue.Count() == 0)
                     {
+                        nDuplicate += nDuplicateThisThread;
                         return;
                     }
 
@@ -53,6 +57,24 @@ namespace ExtractMAFLines
                 {
                     string caseDirectory;
 
+                    var mafsThisCaseRaw = mafLines.Where(x => x.tumor_bam_uuid == case_.tumor_dna_file_id).ToList();
+
+                    //
+                    // Remove duplicates, where a duplicate is defined as having the same chromosome, start & end position and alt alleles.
+                    //
+                    var mafsThisCase = new List<ASETools.MAFLine>();
+
+                    foreach (var candidateLine in mafsThisCaseRaw)
+                    {
+                        if (!mafsThisCase.Any(x => x.Start_Position == candidateLine.Start_Position && x.End_Positon == candidateLine.End_Positon && x.Chromosome == candidateLine.Chromosome && x.Tumor_Seq_Allele1 == candidateLine.Tumor_Seq_Allele1))
+                        {
+                            mafsThisCase.Add(candidateLine);
+                        } else
+                        {
+                            nDuplicateThisThread++;
+                        }
+                    }
+
                     if (configuration.isBeatAML)
                     {
                         caseDirectory = configuration.dataDirectories[0] + @"..\" + configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\";
@@ -66,7 +88,7 @@ namespace ExtractMAFLines
 
                     if (doExtractedMafLineFile && case_.extracted_maf_lines_filename == "")
                     {
-                        var selectedLines = mafLines.Where(x => (configuration.isBeatAML ||  case_.tumor_dna_file_id == x.tumor_bam_uuid) &&    // BeatAML doesn't have the uuid fields, but it's one MAF/case, so you can tell from that.
+                        var selectedLines = mafsThisCase.Where(x => (configuration.isBeatAML ||  case_.tumor_dna_file_id == x.tumor_bam_uuid) &&    // BeatAML doesn't have the uuid fields, but it's one MAF/case, so you can tell from that.
                         !(x.n_alt_count >= 10 ||
                           x.t_depth == 0 ||
                           x.n_depth > 0 && (double)x.n_alt_count / (double)x.n_depth * 5.0 >= (double)x.t_alt_count / (double)x.t_depth ||
@@ -84,7 +106,7 @@ namespace ExtractMAFLines
                         ).ToList();    // The second half of the condition rejects MAF lines that look like germline variants (or pseudogenes that are mismapped), or are in uninteresting regions (IGRs, Introns, etc.) and minor subclones (< 20%) and mitochondrial genes
 
                         nSelectedThisDisease += selectedLines.Count();
-                        nTotalThisDisease += mafLines.Count();
+                        nTotalThisDisease += mafsThisCaseRaw.Count();
                         nSilentThisDisease += selectedLines.Where(x => x.Variant_Classification == "Silent").Count();
 
                         if (selectedLines.Count() == 0)
@@ -98,7 +120,7 @@ namespace ExtractMAFLines
 
                     if (doAllMafLineFile && case_.all_maf_lines_filename == "")
                     {
-                        ASETools.MAFLine.WriteToFile(caseDirectory + case_.case_id + ASETools.allMAFLinesExtension, mafLines.Where(x => case_.tumor_dna_file_id == x.tumor_bam_uuid).ToList());
+                        ASETools.MAFLine.WriteToFile(caseDirectory + case_.case_id + ASETools.allMAFLinesExtension, mafsThisCase);
                     }
                 }
 
@@ -197,7 +219,7 @@ namespace ExtractMAFLines
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
 
-            Console.WriteLine("Processed " + nCasesToProcess + " cases in " + casesByMAF.Count() + " MAFs, selecting " + nSelected + " (of which " + nSilent + " were silent) of " + nTotal + " in " + ASETools.ElapsedTimeInSeconds(stopwatch));
+            Console.WriteLine("Processed " + nCasesToProcess + " cases in " + casesByMAF.Count() + " MAFs, selecting " + nSelected + " (of which " + nSilent + " were silent) and eliminating as duplicate " + nDuplicate + " of " + nTotal + " in " + ASETools.ElapsedTimeInSeconds(stopwatch));
         }
     }
 }

@@ -486,7 +486,7 @@ namespace GenerateScatterGraphs
                 threads.ForEach(t => t.Join());
             } // foreach disease
 
-
+            Directory.CreateDirectory(configuration.geneScatterGraphsDirectory);
             StreamWriter summaryFile = new StreamWriter(configuration.geneScatterGraphsDirectory +  ASETools.scatterGraphsSummaryFilename);
             summaryFile.WriteLine("Gene\tnSingle\tnMultiple\tnInteresting\t%Interesting\tsex\tmedian single\tmedian multi\tmedian combined\tmedian heterozygous");
 

@@ -16,43 +16,7 @@ namespace ComputePerCaseASE
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
         static ASETools.ASECorrection ASECorrection;
 
-
-        static Dictionary<string, int> perCaseRawMAFCount = new Dictionary<string, int>();
-
         static List<string> outputLines = new List<string>();
-
-        class MAFCountPerThreadState
-        {
-            public MAFCountPerThreadState()
-            {
-
-            }
-
-            public static void HandleOneItem(List<ASETools.Case> cases, MAFCountPerThreadState perThreadState)
-            {
-                perThreadState.HandleOneItem(cases);
-            }
-
-            void HandleOneItem(List<ASETools.Case> cases)
-            {
-                var mafLines =  ASETools.MAFLine.ReadFile(cases[0].maf_filename, cases[0].maf_file_id, true, configuration.isBeatAML);
-
-                foreach (var case_ in cases)
-                {
-                    localPerCaseMAFCount.Add(case_.case_id, mafLines.Where(x => x.tumor_bam_uuid == case_.tumor_dna_file_id).Count());
-                }
-            }
-
-            public static void FinishUp(MAFCountPerThreadState state)
-            {
-                foreach (var perCaseEntry in state.localPerCaseMAFCount)
-                {
-                    perCaseRawMAFCount.Add(perCaseEntry.Key, perCaseEntry.Value);
-                }
-            }
-
-            Dictionary<string, int> localPerCaseMAFCount = new Dictionary<string, int>();
-        }
 
         static void Main(string[] args)
         {
@@ -89,13 +53,9 @@ namespace ComputePerCaseASE
 
             var casesByMAFFile = casesToProcess.GroupByToDict(x => x.maf_filename).Select(x => x.Value).ToList();
 
-            var mafCountThreading = new ASETools.WorkerThreadHelper<List<ASETools.Case>, MAFCountPerThreadState>(casesByMAFFile, MAFCountPerThreadState.HandleOneItem, MAFCountPerThreadState.FinishUp, null, 1);
-            Console.Write("Loading raw maf lines from " + casesByMAFFile.Count() + " maf files, 1 dot/file: ");
-            mafCountThreading.run();
-
-
             int nCases = casesToProcess.Count();
-            Console.Write("Processing " + nCases + " cases, 1 dot/100 cases: ");
+            Console.WriteLine("Processing " + nCases + " cases, 1 dot/100 cases: ");
+            ASETools.PrintNumberBar(nCases / 100);
 
             var threads = new List<Thread>();
             for (int i = 0; i < Environment.ProcessorCount; i++)
@@ -337,7 +297,8 @@ namespace ComputePerCaseASE
                         outputLine += "\t" + good10MBRegions[0] + "\t" + good10MBRegions[n - 1] + "\t" + good10MBRegions.Average();
                     }
                 } // foreach notTumor
-                outputLine += "\t" + ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.case_id, false).Count() + "\t" + perCaseRawMAFCount[case_.case_id];
+
+                outputLine += "\t" + ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.case_id, false).Count() + "\t" + ASETools.MAFLine.ReadFile(case_.all_maf_lines_filename, case_.case_id, false).Count();
                 localOutputLines.Add(outputLine);
             } // while true
         } // WorkerThread
