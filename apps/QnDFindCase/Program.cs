@@ -12,8 +12,7 @@ namespace QnDFindCase
     class Program
     {
 
-        static int cdkn2aMin;
-        static int cdkn2aMax;
+
         static ASETools.Configuration configuration;
         static ASETools.GeneMap geneMap;
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
@@ -57,11 +56,6 @@ namespace QnDFindCase
                 return;
             }
 
-            cdkn2aMin = geneLocationInformation.genesByName["CDKN2A"].minLocus;
-            cdkn2aMax = geneLocationInformation.genesByName["CDKN2A"].maxLocus;
-
-            outputFile = ASETools.CreateStreamWriterWithRetry(@"\temp\cdkn2a_vaf.txt");
-            outputFile.WriteLine("case ID\tgermline VAF (only ASE candidates)\tsomatic mutation count\tsomatic VAF (mean of all ASE candidate mutations)");
 
             var threading = new ASETools.ASVThreadingHelper<int>(cases, aseCorrection, (x, y) => true, handleOneCase, null, null, 100);
 
@@ -71,45 +65,42 @@ namespace QnDFindCase
             threading.run();
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
-
-            outputFile.WriteLine("**done**");
-            outputFile.Close();
         }  // Main
 
         static void handleOneCase(ASETools.Case case_, int state, List<ASETools.AnnotatedVariant> variantsForThisCase, ASETools.ASECorrection aseCorrection, Dictionary<bool, List<ASETools.CopyNumberVariation>> copyNumber)
         {
-            var cdkn2amutations = variantsForThisCase.Where(x => x.contig == "chr9" && x.locus >= cdkn2aMin && x.locus <= cdkn2aMax).ToList();
-
-            var somatic = cdkn2amutations.Where(x => x.somaticMutation && !x.isSilent()).ToList();
-
-            var germline = cdkn2amutations.Where(x => !x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).ToList();
-
-            if (somatic.Count() == 0 && germline.Count() == 0)
+            var p53Mutations = variantsForThisCase.Where(x => x.Hugo_symbol == "TP53" && !x.isSilent()).ToList();
+            if (p53Mutations.Count() != 1)
             {
                 return;
             }
 
-            lock (outputFile)
+            if (!p53Mutations[0].IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap))
             {
-                outputFile.Write(case_.case_id + "\t");
-                if (germline.Count() > 0)
-                {
-                    outputFile.Write(germline[0].GetAltAlleleFraction(true));
-                } else
-                {
-                    outputFile.Write("*");
-                }
-
-                outputFile.Write("\t" + somatic.Count() + "\t");
-
-                if (somatic.Where(x => x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).Count() > 0)
-                {
-                    outputFile.WriteLine(somatic.Where(x => x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).Select(x => x.GetAltAlleleFraction(true)).Average());
-                } else
-                {
-                    outputFile.WriteLine("*");
-                }
+                return;
             }
+
+            if (p53Mutations[0].isSilent())
+            {
+                return;
+            }
+
+            if (p53Mutations[0].GetAltAlleleFraction(true) < 0.75)
+            {
+                return;
+            }
+
+            if (p53Mutations[0].getReadCount(true, true).usefulReads() < 30 || 
+                p53Mutations[0].getReadCount(true, false).usefulReads() < 30 || 
+                p53Mutations[0].getReadCount(false, true).usefulReads() < 30) {
+                return;
+            }
+
+            lock (configuration)
+            {
+                Console.WriteLine(case_.case_id + " VAF: " + p53Mutations[0].GetAltAlleleFraction(true) + " mutation type: " + p53Mutations[0].variantClassification + ", locus: " + p53Mutations[0].locus);
+            }
+
         } // handleOneCase
 
     } // Program

@@ -1736,6 +1736,8 @@ namespace ASELib
 
             public string geneHancerFilename = defaultBaseDirectory + @"genehancer.txt";
 
+            public const string GlobalScatterGraphFilename = "ASEByCase.txt";
+
             public bool usesChr = true; // Do the data files use "chr" in the chromosome names?
 
             public bool configurationFileLocationExplicitlySpecified = false;
