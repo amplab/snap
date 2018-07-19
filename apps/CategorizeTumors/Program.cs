@@ -115,7 +115,8 @@ namespace CategorizeTumors
             Console.WriteLine("Loaded " + scatterGraphLinesByGene.Count() + " scatter graph genes with " + scatterGraphLinesByGene.Select(x => x.Value.Count()).Sum() + " lines in " + ASETools.ElapsedTimeInSeconds(stopwatch));
 
 
-            Console.Write("Processing " + scatterGraphLinesByGene.Count() + " genes, 1 dot/100 genes: ");
+            Console.WriteLine("Processing " + scatterGraphLinesByGene.Count() + " genes, 1 dot/100 genes: ");
+            ASETools.PrintNumberBar(scatterGraphLinesByGene.Count() / 100);
             int nGenesProcessed = 0;
 
             foreach (var geneEntry in scatterGraphLinesByGene)

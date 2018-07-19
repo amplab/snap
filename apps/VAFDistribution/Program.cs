@@ -77,7 +77,8 @@ namespace VAFDistribution
 
             var casesToProcess = cases.Select(x => x.Value).Where(x => x.annotated_selected_variants_filename != "").ToList();
 
-            Console.Write("Processing " + casesToProcess.Count() + " cases, one dot/100 cases: ");
+            Console.WriteLine("Processing " + casesToProcess.Count() + " cases, one dot/100 cases: ");
+            ASETools.PrintNumberBar(casesToProcess.Count() / 100);
 
             var threading = new ASETools.ASVThreadingHelper<List<Dictionary<string, ASETools.PreBucketedHistogram>>>(casesToProcess, null, (x, y) => true, HandleOneCase, FinishUp, null, 100);
             threading.run(1);
@@ -109,7 +110,7 @@ namespace VAFDistribution
             {
                 if (result.p <= 0.01)
                 {
-                    Console.WriteLine(result.hugo_symbol + " has p=" + result.p);
+                    Console.WriteLine(result.hugo_symbol + " has p=" + result.p + ", median 1 mutation VAF of " + result.oneMutationHistogram.ComputeHistogram()[50].cdfValue);
                 }
 
                 var oneMutationLines = result.oneMutationHistogram.ComputeHistogram();
@@ -193,9 +194,9 @@ namespace VAFDistribution
                     histograms[0][hugo_symbol].addValue(variants[0].GetTumorAltAlleleFraction());
                 }
 
-                if (mutationCount > 1 && variants.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent()).Count() > 0)
+                if (mutationCount > 1 && variants.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent() && !x.CausesNonsenseMediatedDecay()).Count() > 0)
                 {
-                    var vaf = variants.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent()).Select(x => x.GetTumorAltAlleleFraction()).Average();
+                    var vaf = variants.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent() && !x.CausesNonsenseMediatedDecay()).Select(x => x.GetTumorAltAlleleFraction()).Average();
 
                     histograms[1][hugo_symbol].addValue(vaf);
                 }

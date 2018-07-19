@@ -88,7 +88,8 @@ namespace ASEConsistency
 
             var casesToProcess = cases.Select(x => x.Value).Where(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "").ToList();
 
-            Console.Write("Processing " + casesToProcess.Count() + " cases, 1 dot/100 cases: ");
+            Console.WriteLine("Processing " + casesToProcess.Count() + " cases, 1 dot/100 cases: ");
+            ASETools.PrintNumberBar(casesToProcess.Count() / 100);
 
             var threads = new List<Thread>();
             for (int i = 0; i < Environment.ProcessorCount; i++)

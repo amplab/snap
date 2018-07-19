@@ -2533,6 +2533,40 @@ namespace ASEProcessManager
             } 
         } // SortBAMsProcessingStage
 
+        class VAFHistogramsProcessingStage : ProcessingStage
+        {
+            public VAFHistogramsProcessingStage() { }
+            public string GetStageName() { return "VAF Histograms"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.vaf_histogram_filename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Any(x => x.Value.annotated_selected_variants_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "VAFDistribution.exe" + stateOfTheWorld.configurationString);
+                nAddedToScript = 1;
+
+            } // EvaluateStage
+        } // VAFHistogramsProcessingStage
+
 
 
         class FPKMProcessingStage : ProcessingStage
@@ -3079,6 +3113,7 @@ namespace ASEProcessManager
             processingStages.Add(new RegulatoryMutationsByVAFProcessingStage());
             processingStages.Add(new IndexBAMsProcessingStage());
             processingStages.Add(new SortBAMsProcessingStage());
+            processingStages.Add(new VAFHistogramsProcessingStage());
 
             if (checkDependencies)
             {
