@@ -14,9 +14,6 @@ namespace RegionalExpression
 {
 	class Program
 	{
-
-	
-
         static int regionSize;
 
         class OneRun

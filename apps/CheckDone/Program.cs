@@ -167,14 +167,14 @@ namespace CheckDone
 
             configuration = ASETools.Configuration.loadFromFile(args);
 
-            if (configuration.commandLineArgs.Count() != 0 && (configuration.commandLineArgs.Count() != 1 || configuration.commandLineArgs[0] != "-a"))
-            {
-                Console.WriteLine("usage: CheckDone {-configuration configurationFileName} {-a}");
-                Console.WriteLine("-a means to skip allcount files (which is where most of the time goes).");
-                return;
-            }
-
             bool skipAllcount = configuration.commandLineArgs.Contains("-a");
+
+            string[] fileTypesToUse = null;
+
+            if (configuration.commandLineArgs.Any(x => x != "-a"))
+            {
+                fileTypesToUse = configuration.commandLineArgs.Where(x => x != "-a").Select(x => x.ToLower()).ToArray();
+            }
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -190,33 +190,34 @@ namespace CheckDone
 
                 if (!skipAllcount)
                 {
-                    HandleFilename(case_.normal_dna_allcount_filename);
-                    HandleFilename(case_.normal_rna_allcount_filename);
-                    HandleFilename(case_.tumor_dna_allcount_filename);
-                    HandleFilename(case_.tumor_rna_allcount_filename);
+                    HandleFilename(case_.normal_dna_allcount_filename, "NormalDNAAllcount", fileTypesToUse);
+                    HandleFilename(case_.normal_rna_allcount_filename, "NormalRNAAllcount", fileTypesToUse);
+                    HandleFilename(case_.tumor_dna_allcount_filename, "TumorDNAAllcount", fileTypesToUse);
+                    HandleFilename(case_.tumor_rna_allcount_filename, "TumorRNAAllcount", fileTypesToUse);
                 }
-                HandleFilename(case_.regional_expression_filename);
-                HandleFilename(case_.gene_expression_filename);
-                HandleFilename(case_.selected_variants_filename);
-                HandleFilename(case_.normal_dna_reads_at_selected_variants_index_filename);
-                HandleFilename(case_.normal_rna_reads_at_selected_variants_index_filename);
-                HandleFilename(case_.tumor_dna_reads_at_selected_variants_index_filename);
-                HandleFilename(case_.tumor_rna_reads_at_selected_variants_index_filename);
-                HandleFilename(case_.annotated_selected_variants_filename);
-                HandleFilename(case_.normal_allele_specific_gene_expression_filename);
-                HandleFilename(case_.tumor_allele_specific_gene_expression_filename);
-                HandleFilename(case_.tumor_dna_gene_coverage_filname);
-                HandleFilename(case_.extracted_maf_lines_filename);
-                HandleFilename(case_.all_maf_lines_filename);
-                HandleFilename(case_.normal_dna_mapped_base_count_filename);
-                HandleFilename(case_.tumor_dna_mapped_base_count_filename);
-                HandleFilename(case_.normal_rna_mapped_base_count_filename);
-                HandleFilename(case_.tumor_rna_mapped_base_count_filename);
-                HandleFilename(case_.selected_variant_counts_by_gene_filename);
-                HandleFilename(case_.selected_regulatory_maf_filename);
-                HandleFilename(case_.annotated_regulatory_regions_filename);
-                HandleFilename(case_.regulatory_mutations_near_mutations_filename);
-                HandleFilename(case_.annotated_geneHancer_lines_filename);
+                HandleFilename(case_.regional_expression_filename, "RegionalExpression", fileTypesToUse);
+                HandleFilename(case_.gene_expression_filename, "GeneExpression", fileTypesToUse);
+                HandleFilename(case_.selected_variants_filename, "SelectedVariants", fileTypesToUse);
+                HandleFilename(case_.normal_dna_reads_at_selected_variants_index_filename, "NormalDNAReadsAtSelectedVariants", fileTypesToUse);
+                HandleFilename(case_.normal_rna_reads_at_selected_variants_index_filename, "NormalRNAReadsAtSelectedVariants", fileTypesToUse);
+                HandleFilename(case_.tumor_dna_reads_at_selected_variants_index_filename, "TumorDNAReadsAtSelectedVariants", fileTypesToUse);
+                HandleFilename(case_.tumor_rna_reads_at_selected_variants_index_filename, "TumorRNAReadsAtSelectedVariants", fileTypesToUse);
+                HandleFilename(case_.annotated_selected_variants_filename, "AnnotatedSelectedVariants", fileTypesToUse);
+                HandleFilename(case_.normal_allele_specific_gene_expression_filename, "NormalAlleleSpecificExpression", fileTypesToUse);
+                HandleFilename(case_.tumor_allele_specific_gene_expression_filename, "TumorAlleleSpecificExpression", fileTypesToUse);
+                HandleFilename(case_.tumor_dna_gene_coverage_filname, "TumorDNAGeneCoverage", fileTypesToUse);
+                HandleFilename(case_.extracted_maf_lines_filename, "ExtractedMAFLines", fileTypesToUse);
+                HandleFilename(case_.all_maf_lines_filename, "AllMAFLines", fileTypesToUse);
+                HandleFilename(case_.normal_dna_mapped_base_count_filename, "NormalDNAMappedBaseCount", fileTypesToUse);
+                HandleFilename(case_.tumor_dna_mapped_base_count_filename, "TumorDNAMappedBaseCount", fileTypesToUse);
+                HandleFilename(case_.normal_rna_mapped_base_count_filename, "NormalRNAMappedBaseCount", fileTypesToUse);
+                HandleFilename(case_.tumor_rna_mapped_base_count_filename, "TumorRNAMappedBaseCount", fileTypesToUse);
+                HandleFilename(case_.selected_variant_counts_by_gene_filename, "SelectedVariantCountsByGene", fileTypesToUse);
+                HandleFilename(case_.selected_regulatory_maf_filename, "SelectedRegulatoryMAF", fileTypesToUse);
+                HandleFilename(case_.annotated_regulatory_regions_filename, "AnnotatedRegulatoryRegions", fileTypesToUse);
+                HandleFilename(case_.regulatory_mutations_near_mutations_filename, "RegulatoryMutationsNearMutations", fileTypesToUse);
+                HandleFilename(case_.annotated_geneHancer_lines_filename, "AnnotatedGeneHancerLines", fileTypesToUse);
+                HandleFilename(case_.expression_by_gene_filename, "ExpressionByGene", fileTypesToUse);
             }
 
             Console.WriteLine("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/thousand): ");
@@ -238,9 +239,9 @@ namespace CheckDone
             Console.WriteLine("Processed " + totalFiles + " files in " + ASETools.ElapsedTimeInSeconds(timer));
         } // Main
 
-        static void HandleFilename(string filename)
+        static void HandleFilename(string filename, string fileType, string [] fileTypesToUse)
         {
-            if (filename == "")
+            if (filename == "" || fileTypesToUse != null && !fileTypesToUse.Contains(fileType.ToLower()))
             {
                 return;
             }

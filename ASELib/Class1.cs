@@ -15,6 +15,7 @@ using System.Runtime.InteropServices;
 using MathNet.Numerics;
 using System.Globalization;
 using System.Runtime;
+using System.Collections.Concurrent;
 
 namespace ASELib
 {
@@ -241,8 +242,8 @@ namespace ASELib
                     "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
 
             public const string annotatedHeaderLine = filteredHeaderLine + "ase candidate?\t" +
-                "frac min ref\tfrac 10th %ile ref\tfrac 20th %ile ref\tfrac 30th %ile ref\tfrac 40th %ile ref\tfrac 50th %ile ref\tfrac 60th %ile ref\tfrac 70th %ile ref\tfrac 80th %ile ref\tfrac 90th %ile ref\tfrac max ref\t" +
-                "frac min alt\tfrac 10th %ile alt\tfrac 20th %ile alt\tfrac 30th %ile alt\tfrac 40th %ile alt\tfrac 50th %ile alt\tfrac 60th %ile alt\tfrac 70th %ile alt\tfrac 80th %ile alt\tfrac 90th %ile alt\tfrac max alt\t" +
+                "frac min 2ref\tfrac 10th %ile 2ref\tfrac 20th %ile 2ref\tfrac 30th %ile 2ref\tfrac 40th %ile 2ref\tfrac 50th %ile 2ref\tfrac 60th %ile 2ref\tfrac 70th %ile 2ref\tfrac 80th %ile 2ref\tfrac 90th %ile 2ref\tfrac max 2ref\t" +
+                "frac min 2alt\tfrac 10th %ile 2alt\tfrac 20th %ile 2alt\tfrac 30th %ile 2alt\tfrac 40th %ile 2alt\tfrac 50th %ile 2alt\tfrac 60th %ile 2alt\tfrac 70th %ile 2alt\tfrac 80th %ile 2alt\tfrac 90th %ile 2alt\tfrac max 2alt\t" +
                 "frac min all\tfrac 10th %ile all\tfrac 20th %ile all\tfrac 30th %ile all\tfrac 40th %ile all\tfrac 50th %ile all\tfrac 60th %ile all\tfrac 70th %ile all\tfrac 80th %ile all\tfrac 90th %ile all\tfrac max all";
 
             //
@@ -663,12 +664,17 @@ namespace ASELib
                 return chromosome == locusChromosome && minLocus <= locus && maxLocus >= locus;
             }
 
+            public bool containsLocusInCodingAndKnownExpressionRegion(string locusChromosome, int locus, ExpressionFile expressionFile)
+            {
+                return expressionFile.valueKnown(locusChromosome, locus) &&  isoforms.Any(isoform => isoform.chromosome == locusChromosome && isoform.exons.Any(exon => exon.start <= locus && exon.end >= locus));
+            }
+
             public int size()
             {
                 return maxLocus - minLocus;
             }
 
-            public int codingSize() // The sum of the exons of the largest coding isoform
+            public int codingSizeOfLargestIsoform() // The sum of the exons of the largest coding isoform
             {
                 if (isoforms.Count() == 0)
                 {
@@ -676,6 +682,20 @@ namespace ASELib
                 }
 
                 return isoforms.Select(x => x.codingSize()).ToList().Max();
+            }
+
+            public int totalBasesInCodingAndKnownExpressionRegion(ExpressionFile expressionFile) // Just what it says.
+            {
+                int basesInCodingRegion = 0;
+                for (int locus = minLocus; locus <= maxLocus; locus++)
+                {
+                    if (containsLocusInCodingAndKnownExpressionRegion(chromosome, locus, expressionFile))
+                    {
+                        basesInCodingRegion++;
+                    }
+                }
+
+                return basesInCodingRegion;
             }
 
             public int minDistanceFromTSS(string locusChromosome, int locus)    // How far away is this locus from any transcription start site in this gene (different isoforms may have different TSSs, take the closest one).
@@ -999,6 +1019,7 @@ namespace ASELib
             public string annotated_regulatory_regions_filename = "";
             public string annotated_geneHancer_lines_filename = "";
             public string regulatory_mutations_near_mutations_filename = "";
+            public string expression_by_gene_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -1058,6 +1079,7 @@ namespace ASELib
             public long annotated_regulatory_regions_size = 0;
             public long annotated_geneHancer_lines_size = 0;
             public long regulatory_mutations_near_mutations_size = 0;
+            public long expression_by_gene_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1263,6 +1285,7 @@ namespace ASELib
                 new FieldInformation("Annotated Regulatory Regions Filename",               c => c.annotated_regulatory_regions_filename, (c, v) => c.annotated_regulatory_regions_filename = v, DerivedFile.Type.AnnotatedRegulatoryRegions, annotatedBEDLinesExtension, c => c.case_id, "Annotated Regulatory Regions Size", c => c.annotated_regulatory_regions_size, (c, v) => c.annotated_regulatory_regions_size = v),
                 new FieldInformation("Annotated GeneHancer Lines Filename",                 c => c.annotated_geneHancer_lines_filename, (c, v) => c.annotated_geneHancer_lines_filename = v, DerivedFile.Type.AnnotatedGeneHancer, annotatedGeneHancerLinesExtension, c => c.case_id, "Annotated GeneHancer Lines Size", c => c.annotated_geneHancer_lines_size, (c, v) => c.annotated_geneHancer_lines_size = v),            
                 new FieldInformation("Regulatory Mutations Near Mutations Filename",        c => c.regulatory_mutations_near_mutations_filename, (c, v) => c.regulatory_mutations_near_mutations_filename = v, DerivedFile.Type.RegulatoryMutationsNearMutations, regulatoryMutationsNearMutationsExtension, c => c.case_id, "Regulatory Mutations Near Mutations Size", c => c.regulatory_mutations_near_mutations_size, (c, v) => c.regulatory_mutations_near_mutations_size = v),
+                new FieldInformation("Expression By Gene",                                  c => c.expression_by_gene_filename, (c, v) => c.expression_by_gene_filename = v, DerivedFile.Type.ExpressionByGene, expressionByGeneExtension, c => c.case_id, "Expression By Gene Size", c => c.expression_by_gene_size, (c, v) => c.expression_by_gene_size = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -1694,6 +1717,7 @@ namespace ASELib
             public string hpcIndexDirectory = defaultBaseDirectory + @"indices\hg38-16";
             public string azureScriptFilename = ""; // The empty string says to black hole this script
             public string expressionFilesDirectory = defaultBaseDirectory + @"expression\";
+            public string basesInKnownCodingRegionsDirectory = defaultBaseDirectory + @"bases_in_known_coding_regions\";
             public string completedVCFsDirectory = "";  // Where completed VCFs from Azure are dropped
             public List<string> excludedFileIDs = new List<string>();
             public int regionalExpressionRegionSize = 1000;
@@ -1738,6 +1762,8 @@ namespace ASELib
 
             public const string GlobalScatterGraphFilename = "ASEByCase.txt";
 
+            public const string PerGeneExpressionHistogramsFilename = "PerGeneExpressionHistograms.txt";
+
             public bool usesChr = true; // Do the data files use "chr" in the chromosome names?
 
             public bool configurationFileLocationExplicitlySpecified = false;
@@ -1759,6 +1785,7 @@ namespace ASELib
                 indexDirectory = baseDirectory + @"indices\hg38-16";
                 hpcIndexDirectory = baseDirectory + @"indices\hg38-16";
                 expressionFilesDirectory = baseDirectory + @"expression\";
+                basesInKnownCodingRegionsDirectory = baseDirectory + @"bases_in_known_coding_regions\";
                 selectedGenesFilename = baseDirectory + @"seleted_genes.txt";
                 finalResultsDirectory = baseDirectory + @"final_results\";
                 geneLocationInformationFilename = baseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
@@ -2606,6 +2633,7 @@ namespace ASELib
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
         public const string bonferroniExtension = "_bonferroni.txt";
         public const string regulatoryMutationsNearMutationsExtension = ".regulatory_mutations_near_mutations.txt";
+        public const string expressionByGeneExtension = ".expressionByGene";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
@@ -2649,6 +2677,8 @@ namespace ASELib
         public const string annotatedGeneHancerLinesExtension = ".annotated_gene_hancers.txt";
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
+
+        public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
 
 
@@ -2696,7 +2726,7 @@ namespace ASELib
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
-                AnnotatedGeneHancer
+                AnnotatedGeneHancer, ExpressionByGene
             };
         } // DerivedFile
 
@@ -5677,6 +5707,11 @@ namespace ASELib
                     }
                 }
             }
+            public bool valueKnown(string contigName, int chromosomeOffset)
+            {
+                contigName = contigName.ToLower();
+                return !(!expression.ContainsKey(contigName) || !expression[contigName].ContainsKey(chromosomeOffset / subchunkSize) || !expression[contigName][chromosomeOffset / subchunkSize].ContainsKey(chromosomeOffset));
+            }
 
             public bool getValue(string contigName, int chromosomeOffset, out MeanAndStdDev meanAndStdDev)
             {
@@ -8189,7 +8224,7 @@ namespace ASELib
 
             public void addValue(double value)
             {
-                if (value < minBucket || value == double.NaN)
+                if (value < minBucket || double.IsNaN(value))
                 {
                     throw new FormatException("PreBucketedHistogram " + name + " : value (" + value + ") smaller than minBucket (" + minBucket + ") or NaN");
                 }
@@ -10597,21 +10632,30 @@ namespace ASELib
 
             public void run(int nThreads)
             {
+                start(nThreads);
+                join();
+            }
+
+            public void start(int nThreads)
+            {
                 nItemsProcessed = 0;
-                var threads = new List<Thread>();
+                threads = new List<Thread>();
                 for (int i = 0; i < nThreads; i++)
                 {
                     threads.Add(new Thread(() => WorkerThread(this)));
                 }
 
                 threads.ForEach(t => t.Start());
+            }
+
+            public void join()
+            {
                 threads.ForEach(t => t.Join());
 
                 if (nItemsPerDot != 0)
                 {
                     Console.WriteLine();
                 }
-
             }
 
             static void WorkerThread(WorkerThreadHelper<TQueueItem, TPerThreadState> helper)
@@ -10669,6 +10713,7 @@ namespace ASELib
             ItemDequeued itemDequeued;
             int nItemsPerDot = 0;
             int nItemsProcessed = 0;
+            List<Thread> threads;
         } // WorkerThreadHelper
 
         public class ASVThreadingHelper<TPerThreadState>  where TPerThreadState : new()
@@ -12208,6 +12253,280 @@ namespace ASELib
                 return line;
             }
         } // AnnotatedGeneHancerLine
+        
+        public class CommonData // Stuff that's typically used by most of the apps, all rolled up into one place so I don't have to keep copying the initialization code into each new app
+        {
+            public readonly Dictionary<string, Case> cases;
+            public readonly List<Case> listOfCases;
+            public readonly Configuration configuration;
+            public readonly GeneLocationsByNameAndChromosome geneLocationInformation;
+            public readonly GeneMap geneMap;
+            public readonly Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
+            public readonly ASECorrection aseCorrection;
+            public Stopwatch timer; // Starts running as soon as this is created
+
+            public static CommonData LoadCommonData(string[] args)
+            {
+                var timer = new Stopwatch();
+                timer.Start();
+
+                var configuration = ASETools.Configuration.loadFromFile(args);
+                if (null == configuration)
+                {
+                    Console.WriteLine("Unable to load configuration.");
+                    return null;
+                }
+
+                var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+
+                if (null == cases)
+                {
+                    Console.WriteLine("Unable to load cases.");
+                    return null;
+                }
+
+                var aseCorrection = ASETools.ASECorrection.LoadFromFile(configuration.finalResultsDirectory + ASETools.ASECorrectionFilename);
+                if (null == aseCorrection)
+                {
+                    Console.WriteLine("Unable to load ASE correction");
+                    return null;
+                }
+
+                var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+                var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+
+                var perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+                if (null == perGeneASEMap)
+                {
+                    Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                    return null;
+                }
+
+                return new CommonData(cases, configuration, geneLocationInformation, geneMap, perGeneASEMap, aseCorrection, timer);
+            } // LoadCommonData
+
+            CommonData(Dictionary<string, Case> cases_, Configuration configuration_, GeneLocationsByNameAndChromosome geneLocationInformation_, GeneMap geneMap_,
+                Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap_, ASECorrection aseCorrection_, Stopwatch timer_)
+            {
+                cases = cases_;
+                listOfCases = cases.Select(x => x.Value).ToList();
+                configuration = configuration_;
+                geneLocationInformation = geneLocationInformation_;
+                geneMap = geneMap_;
+                perGeneASEMap = perGeneASEMap_;
+                aseCorrection = aseCorrection_;
+                timer = timer_;
+            }
+        } // CommonData
+
+        public class BasesInCodingAndKnownExpressionRegions
+        {
+            class GeneAndBaseCount
+            {
+                public readonly string hugo_symbol;
+                public readonly int baseCount;
+
+                public GeneAndBaseCount(string hugo_symbol_, int baseCount_)
+                {
+                    hugo_symbol = hugo_symbol_;
+                    baseCount = baseCount_;
+                }
+            } // GeneAndBaseCount
+
+            public bool isGeneKnown(string hugo_symbol)
+            {
+                return basesPerGene.ContainsKey(hugo_symbol);
+            }
+
+            public int basesForGene(string hugo_symbol)
+            {
+                return basesPerGene[hugo_symbol];
+            }
+
+            public static BasesInCodingAndKnownExpressionRegions LoadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("Unable to open file " + filename);
+                    return null;
+                }
+
+                string[] wantedFields = { "Hugo Symbol", "Bases In Coding And Known Expression Region" };
+
+                var parser = new HeaderizedFile<GeneAndBaseCount>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<GeneAndBaseCount> genesAndBases;
+                if (!parser.ParseFile(ParseOne, out genesAndBases))
+                {
+                    Console.WriteLine("Unable to parse input file " + filename);
+                    inputFile.Close();
+                }
+
+                var retVal = new BasesInCodingAndKnownExpressionRegions();
+
+                genesAndBases.ForEach(x => retVal.basesPerGene.Add(x.hugo_symbol, x.baseCount));
+
+                return retVal;
+            }
+
+            static GeneAndBaseCount ParseOne(HeaderizedFile<GeneAndBaseCount>.FieldGrabber fieldGrabber)
+            {
+                return new GeneAndBaseCount(fieldGrabber.AsString("Hugo Symbol"), fieldGrabber.AsInt("Bases In Coding And Known Expression Region"));
+            }
+
+            Dictionary<string, int> basesPerGene = new Dictionary<string, int>();
+        } // BasesInCodingAndKnownExpressionRegions
+
+        public readonly static int[] ZeroOneTwo = { 0, 1, 2 };
+
+        public class ExpressionByGeneLine
+        {
+            public static Dictionary<string, ExpressionByGeneLine> ReadFromFile(string filename)
+            {
+                var inputFile = ASETools.CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    return null;
+                }
+
+                string[] wantedFields = { "Hugo Symbol", "Fraction of mean expression" };
+                var headerizedFile = new HeaderizedFile<ExpressionByGeneLine>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<ExpressionByGeneLine> listOfResults;
+                headerizedFile.ParseFile(parser, out listOfResults);
+
+                return listOfResults.GroupByToDictUnique(x => x.hugo_symbol);
+            }
+
+            static ExpressionByGeneLine parser(ASETools.HeaderizedFile<ExpressionByGeneLine>.FieldGrabber fieldGrabber)
+            {
+                return new ExpressionByGeneLine(fieldGrabber.AsString("Hugo Symbol"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Fraction of mean expression"));
+            }
+
+            ExpressionByGeneLine(string hugo_symbol_, double fractionOfMeanExpression_)
+            {
+                hugo_symbol = hugo_symbol_;
+                fractionOfMeanExpression = fractionOfMeanExpression_;
+            }
+
+            public readonly string hugo_symbol;
+            public readonly double fractionOfMeanExpression;
+        } // ExpressionByGeneLine
+
+        public class ThrottledParallelQueue<TElement>
+        {
+            public ThrottledParallelQueue(int maxSize_, int nInitialWriters)
+            {
+                maxSize = maxSize_;
+                nRemainingWriters = nInitialWriters;
+            }
+
+            //
+            // Returns false iff the queue is terminated.
+            //
+            public bool Dequeue(out TElement element)
+            {
+                while (true)
+                {
+                    lock (this)
+                    {
+                        var size = queue.Count();
+
+                        if (0 == size)
+                        {
+                            if (nRemainingWriters == 0)
+                            {
+                                element = default(TElement);
+                                return false;
+                            }
+
+                            queueNotEmptyEvent.Reset();
+                        }
+                        else
+                        {
+                            element = queue[0];
+                            queue.RemoveAt(0);
+                            queueNotFullEvent.Set();
+
+                            if (1 == size)
+                            {
+                                queueNotEmptyEvent.Reset();
+                            }
+
+                            return true;
+                        }
+                    } // lock
+
+                    queueNotEmptyEvent.WaitOne();
+                } // while(true) 
+            } // Dequeue
+
+            public void Enqueue(TElement element)
+            {
+                while (true)
+                {
+                    lock (this)
+                    {
+                        int size = queue.Count();
+
+                        if (size >= maxSize)
+                        {
+                            queueNotFullEvent.Reset();
+                        }
+                        else
+                        {
+                            queue.Add(element);
+                            if (size + 1 >= maxSize)
+                            {
+                                queueNotFullEvent.Reset();
+                            }
+
+                            queueNotEmptyEvent.Set();
+                            return;
+                        }
+                    } // lock
+
+                    queueNotFullEvent.WaitOne();
+                } // while (true)
+            } // Enqueue
+
+            public void TerminateWriter()
+            {
+                lock (this)
+                {
+                    if (nRemainingWriters < 1)
+                    {
+                        throw new Exception("ThrottledParallelQueue: terminating writer when there are no remaining writers to terminate.");
+                    } else
+                    {
+                        nRemainingWriters--;
+                        if (nRemainingWriters == 0)
+                        {
+                            queueNotEmptyEvent.Set();   // Wake the waiters so they can exit.
+                        }
+                    }
+                }
+            } // TerminateWriter
+
+            public void AddWriter()
+            {
+                lock (this)
+                {
+                    nRemainingWriters++;
+                }
+            } // AddWriter
+
+
+
+            int maxSize;
+            int nRemainingWriters;
+            List<TElement> queue = new List<TElement>();
+            ManualResetEvent queueNotFullEvent = new ManualResetEvent(true);
+            ManualResetEvent queueNotEmptyEvent = new ManualResetEvent(false);
+
+        } // ThrottledParallelQueue
 
     } // ASETools
 
@@ -12219,21 +12538,33 @@ namespace ASELib
     {
         public static Dictionary<TKey, List<TSource>> GroupByToDict<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keyExtractor)
         {
-        var retVal = new Dictionary<TKey, List<TSource>>();
+            var retVal = new Dictionary<TKey, List<TSource>>();
 
-        foreach (var element in source)
-        {
-            var key = keyExtractor(element);
-
-            if (!retVal.ContainsKey(key))
+            foreach (var element in source)
             {
-                retVal.Add(key, new List<TSource>());
+                var key = keyExtractor(element);
+
+                if (!retVal.ContainsKey(key))
+                {
+                    retVal.Add(key, new List<TSource>());
+                }
+
+                retVal[key].Add(element);
             }
 
-            retVal[key].Add(element);
-        }
+            return retVal;
+        } // GroupByToDict
 
-        return retVal;
+        public static Dictionary<TKey, TSource> GroupByToDictUnique<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keyExtractor)
+        {
+            var retVal = new Dictionary<TKey, TSource>();
+
+            foreach (var element in source)
+            {
+                retVal.Add(keyExtractor(element), element); // If it's not unique, this throws an exception.
+            }
+
+            return retVal;
         }
     } // GroupByExtension
 

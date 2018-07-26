@@ -128,7 +128,7 @@ namespace AnnotateScatterGraphs
 
                 if (scatterGraphLine.disease != loadedDisease)
                 {
-                    var filename = ASETools.Configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + scatterGraphLine.disease;
+                    var filename = configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + scatterGraphLine.disease;
                     Console.Write("Loading expression map for " + scatterGraphLine.disease + "...");
                     var loadTimer = new Stopwatch();
                     loadTimer.Start();

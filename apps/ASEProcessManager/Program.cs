@@ -2567,6 +2567,184 @@ namespace ASEProcessManager
             } // EvaluateStage
         } // VAFHistogramsProcessingStage
 
+        class ASEScatterProcessingStage : ProcessingStage
+        {
+            public ASEScatterProcessingStage() { }
+            public string GetStageName() { return "ASE Scatter"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.Configuration.GlobalScatterGraphFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Any(x => x.Value.annotated_selected_variants_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ASEScatter.exe" + stateOfTheWorld.configurationString);
+                nAddedToScript = 1;
+
+            } // EvaluateStage
+        } // ASEScatterProcessingStage
+
+        class ExpressionByGeneProcessingStage : ProcessingStage
+        {
+            public ExpressionByGeneProcessingStage() { }
+            public string GetStageName() { return "Expression by gene"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                foreach (var disease in stateOfTheWorld.diseases)
+                {
+                    var casesForThisDisease = stateOfTheWorld.cases.Select(x => x.Value).Where(x => x.disease() == disease).ToList();
+                    if (casesForThisDisease.All(x => x.expression_by_gene_filename != ""))
+                    {
+                        nDone++;
+                        continue;
+                    }
+
+                    if (!stateOfTheWorld.expressionFiles.ContainsKey(disease) ||  casesForThisDisease.Any(x => x.tumor_rna_allcount_filename == "" || x.tumor_rna_mapped_base_count_filename == "") ||
+                        !File.Exists(stateOfTheWorld.configuration.basesInKnownCodingRegionsDirectory + ASETools.basesInKnownCodingRegionsPrefix + disease + ".txt"))
+                    {
+                        nWaitingForPrerequisites++;
+                        continue;
+                    }
+
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExpressionByGene.exe " + stateOfTheWorld.configurationString + disease);
+                    nAddedToScript++;
+                }
+
+            } // EvaluateStage 
+        } // ExpressionByGeneProcessingStage
+
+        class BasesInKnownCodingRegionsProcessingStage : ProcessingStage
+        {
+            public BasesInKnownCodingRegionsProcessingStage() { }
+            public string GetStageName() { return "Compute bases in known coding regions"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                foreach (var disease in stateOfTheWorld.diseases)
+                {
+                    if (File.Exists(stateOfTheWorld.configuration.basesInKnownCodingRegionsDirectory + ASETools.basesInKnownCodingRegionsPrefix + disease + ".txt"))
+                    {
+                        nDone++;
+                        continue;
+                    }
+
+                    if (!stateOfTheWorld.expressionFiles.ContainsKey(disease) || stateOfTheWorld.selectedGenes == null)
+                    {
+                        nWaitingForPrerequisites++;
+                        continue;
+                    }
+
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ComputeBasesInCodingAndKnownExpressionRegions.exe " + stateOfTheWorld.configurationString + disease);
+                    nAddedToScript++;
+                }
+
+            } // EvaluateStage
+        } // BasesInKnownCodingRegionsProcessingStage
+
+        class OverallGeneExpressionProcessingStage : ProcessingStage
+        {
+            public OverallGeneExpressionProcessingStage() { }
+            public string GetStageName() { return "Overall gene expression"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.Configuration.PerGeneExpressionHistogramsFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.annotated_selected_variants_filename == "" || x.expression_by_gene_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallGeneExpressionByMutationCount.exe" + stateOfTheWorld.configurationString);
+                nAddedToScript = 1;
+
+            } // EvaluateStage
+        } // BasesInKnownCodingRegionsProcessingStage
+
+        class AnnotateScatterGraphsProcessingStage : ProcessingStage
+        {
+            public AnnotateScatterGraphsProcessingStage() { }
+            public string GetStageName() { return "Annotate Scatter Graphs"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.geneScatterGraphsDirectory + ASETools.annotated_scatter_graphs_histogram_filename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.selectedGenes.Any(x => !File.Exists(stateOfTheWorld.configuration.geneScatterGraphsDirectory + x + ".txt")) || 
+                    stateOfTheWorld.diseases.Any(x => !File.Exists(stateOfTheWorld.configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + x)))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "AnnotateScatterGraphs.exe" + stateOfTheWorld.configurationString);
+                nAddedToScript = 1;
+
+            } // EvaluateStage
+        } // AnnotateScatterGraphsProcessingStage
 
 
         class FPKMProcessingStage : ProcessingStage
@@ -3114,6 +3292,11 @@ namespace ASEProcessManager
             processingStages.Add(new IndexBAMsProcessingStage());
             processingStages.Add(new SortBAMsProcessingStage());
             processingStages.Add(new VAFHistogramsProcessingStage());
+            processingStages.Add(new ASEScatterProcessingStage());
+            processingStages.Add(new ExpressionByGeneProcessingStage());
+            processingStages.Add(new BasesInKnownCodingRegionsProcessingStage());
+            processingStages.Add(new OverallGeneExpressionProcessingStage());
+            processingStages.Add(new AnnotateScatterGraphsProcessingStage());
 
             if (checkDependencies)
             {
