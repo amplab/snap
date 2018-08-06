@@ -65,7 +65,7 @@ namespace MethylationAnalysis
 			var methylation_file_id = isTumor ? case_.tumor_methylation_file_id : case_.normal_methylation_file_id;
 
 			// read in tumor methylation file 
-			var annotations = ASELib.ASETools.AnnotationLine.ReadFile(methylation_filename, methylation_file_id, false);
+			var annotations = ASELib.ASETools.MethylationAnnotationLine.ReadFile(methylation_filename, methylation_file_id, false);
 
 			fileInfo.Add(case_.case_id, new Tuple<string, string>(case_.disease(), label));
 
@@ -228,7 +228,7 @@ namespace MethylationAnalysis
 								return new Tuple<double, int>(r.Item2, mutations);
 							}).Select(r => {   
 							var m = new MethylationPoint();
-							m.mValue = ASETools.AnnotationLine.betaToM(r.Item1);
+							m.mValue = ASETools.MethylationAnnotationLine.betaToM(r.Item1);
 							m.isSingle = r.Item2 == 1;
 							m.compositeREF = methylationPoint.Key;
 							return m;

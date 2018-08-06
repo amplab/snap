@@ -100,6 +100,7 @@ namespace AnnotateScatterGraphs
             subTimer.Start();
             Console.Write("Loading repetitive region map...");
             var repetitiveRegionMap = ASETools.ASERepetitiveRegionMap.loadFromFile(configuration.redundantChromosomeRegionFilename);
+            repetitiveRegionMap = null; // Don't use this exclusion criterion here.
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
 
@@ -201,15 +202,14 @@ namespace AnnotateScatterGraphs
 
                 foreach (var multiple in ASETools.BothBools)
                 {
-                    refHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 2.02, 0.02));
-                    altHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 2.02, 0.02));
-                    allHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 2.02, 0.02));
+                    refHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 3.02, 0.02));
+                    altHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 3.02, 0.02));
+                    allHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 3.02, 0.02));
 
                 }
 
                 foreach (var line in lines)
                 {
-
                     if (line.tumorRNAFracAltPercentile == null)
                     {
                         continue;
@@ -228,9 +228,14 @@ namespace AnnotateScatterGraphs
 
                     outputFile.Write(line.rawInputLine);
 
-                    var aseCandidate = line.isASECandidate(copyNumberByCase[line.case_id], configuration, perGeneASEMap, geneMap, repetitiveRegionMap);
+                    string whyNot;
+                    var aseCandidate = line.isASECandidate(out whyNot, copyNumberByCase[line.case_id], configuration, perGeneASEMap, geneMap, repetitiveRegionMap);
 
-                    outputFile.Write("\t" + aseCandidate);
+                    string whyNotIgnoringNMD = whyNot;
+                    var aseCandidateIgnoringNMD = aseCandidate || line.isASECandidate(out whyNotIgnoringNMD, copyNumberByCase[line.case_id], configuration, perGeneASEMap, geneMap, repetitiveRegionMap, true);
+
+                    outputFile.Write("\t" + aseCandidate + "\t" + whyNot + "\t" + whyNotIgnoringNMD);
+
                     for (int i = 0; i < 11; i++)
                     {
                         if (line.tumorRNAFracAltPercentile[i] == double.NegativeInfinity)
@@ -240,7 +245,7 @@ namespace AnnotateScatterGraphs
                         else
                         {
                             outputFile.Write("\t" + line.tumorRNAFracRefPercentile[i]);
-                            if (5 == i && aseCandidate)
+                            if (5 == i && aseCandidateIgnoringNMD)
                             {
                                 refHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracRefPercentile[5]);
                                 if (!line.MultipleMutationsInThisGene)

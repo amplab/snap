@@ -241,7 +241,7 @@ namespace ASELib
             public const string filteredHeaderLine = unfilteredHeaderLine +
                     "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
 
-            public const string annotatedHeaderLine = filteredHeaderLine + "ase candidate?\t" +
+            public const string annotatedHeaderLine = filteredHeaderLine + "ase candidate?\twhy not?\twhy not (other than nonsense mediated decay)?\t" +
                 "frac min 2ref\tfrac 10th %ile 2ref\tfrac 20th %ile 2ref\tfrac 30th %ile 2ref\tfrac 40th %ile 2ref\tfrac 50th %ile 2ref\tfrac 60th %ile 2ref\tfrac 70th %ile 2ref\tfrac 80th %ile 2ref\tfrac 90th %ile 2ref\tfrac max 2ref\t" +
                 "frac min 2alt\tfrac 10th %ile 2alt\tfrac 20th %ile 2alt\tfrac 30th %ile 2alt\tfrac 40th %ile 2alt\tfrac 50th %ile 2alt\tfrac 60th %ile 2alt\tfrac 70th %ile 2alt\tfrac 80th %ile 2alt\tfrac 90th %ile 2alt\tfrac max 2alt\t" +
                 "frac min all\tfrac 10th %ile all\tfrac 20th %ile all\tfrac 30th %ile all\tfrac 40th %ile all\tfrac 50th %ile all\tfrac 60th %ile all\tfrac 70th %ile all\tfrac 80th %ile all\tfrac 90th %ile all\tfrac max all";
@@ -447,18 +447,29 @@ namespace ASELib
 
             public bool isASECandidate(List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, ASERepetitiveRegionMap repetitiveRegionMap)
             {
-                if (NonsenseMediatedDecayCausingVariantClassifications.Contains(Variant_Classification))
+                string whyNot;
+                return isASECandidate(out whyNot, copyNumber, configuration, perGeneASEMap, geneMap, repetitiveRegionMap);
+            }
+
+            public bool isASECandidate(out string whyNot, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, ASERepetitiveRegionMap repetitiveRegionMap, 
+                bool ignoreNonseMediatedDecay = false)
+
+            {
+                if (NonsenseMediatedDecayCausingVariantClassifications.Contains(Variant_Classification) && !ignoreNonseMediatedDecay)
                 {
                     nNonsenseMediatedDecay++;
-                    return false;
-                }
-                if (tumorDNAReadCounts == null || tumorRNAReadCounts == null)
-                {
-                    nNoReadCounts++;
+                    whyNot = "Nonsense mediated decay";
                     return false;
                 }
 
-                if (!checkReadCountsForASECandidacy(tumorDNAReadCounts, tumorRNAReadCounts, configuration.minRNAReadCoverage, configuration.minDNAReadCoverage))
+                if (tumorDNAReadCounts == null || tumorRNAReadCounts == null)
+                {
+                    nNoReadCounts++;
+                    whyNot = "Missing read counts";
+                    return false;
+                }
+
+                if (!checkReadCountsForASECandidacy(out whyNot, tumorDNAReadCounts, tumorRNAReadCounts, configuration.minRNAReadCoverage, configuration.minDNAReadCoverage))
                 {
                     nBadReadCounts++;
                     return false;
@@ -476,20 +487,23 @@ namespace ASELib
                     {
                         if (perGeneASEMap.ContainsKey(gene.hugoSymbol) && perGeneASEMap[gene.hugoSymbol].sampleData[false].meanASE >= configuration.ASEInNormalAtWhichToExcludeGenes)
                         {
+                            whyNot = "Gene has too high overall ASE";
                             nBadGene++;
                             return false;
                         }
                     }
                 }
 
-                if (repetitiveRegionMap.isCloseToRepetitiveRegion(ChromosomeNameToIndex(Chromosome), Start_Position, 150))
+                if (null != repetitiveRegionMap && repetitiveRegionMap.isCloseToRepetitiveRegion(ChromosomeNameToIndex(Chromosome), Start_Position, 150))
                 {
+                    whyNot = "In a repetitive region";
                     nRepetitive++;
                     return false;
                 }
 
                 if (copyNumber == null)
                 {
+                    whyNot = "ASE candidate";
                     nCandidate++;
                     return true;
                 }
@@ -500,10 +514,12 @@ namespace ASELib
 
                 if (overlappingCNV.Count() == 0)
                 {
+                    whyNot = "ASE candidate";
                     nCandidate++;
                     return true;
                 } else
                 {
+                    whyNot = "Copy number variant";
                     nBadCopyNumber++;
                     return false;
                 }
@@ -515,15 +531,51 @@ namespace ASELib
 
         static bool checkReadCountsForASECandidacy(ReadCounts DNAReadCounts, ReadCounts RNAReadCounts, int minDNACoverage, int minRNACoverage)
         {
+            string whyNot;
+            return checkReadCountsForASECandidacy(out whyNot, DNAReadCounts, RNAReadCounts, minDNACoverage, minRNACoverage);
+        }
+
+        static bool checkReadCountsForASECandidacy(out string whyNot, ReadCounts DNAReadCounts, ReadCounts RNAReadCounts, int minDNACoverage, int minRNACoverage)
+        {
             // check there is sufficient coverage for DNA and RNA
             // check annotated variant is not a possible minor subclone
+            if (!(DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= minDNACoverage))
+            {
+                whyNot = "Low DNA Read Count";
+                return false;
+            }
 
-            return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= minDNACoverage &&
-                        RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= minRNACoverage &&
-                        DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
-                        DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2 &&
-                        (DNAReadCounts.nMatchingNeither + DNAReadCounts.nMatchingBoth) * 20 < DNAReadCounts.totalReads() &&
-                        (RNAReadCounts.nMatchingNeither + RNAReadCounts.nMatchingBoth) * 20 < RNAReadCounts.totalReads());
+            if (!(RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= minRNACoverage))
+            {
+                whyNot = "Low RNA read count";
+                return false;
+            }
+
+            if (!(DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2))
+            {
+                whyNot = "Low reference DNA";
+                return false;
+            }
+
+            if (!(DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2))
+            {
+                whyNot = "High reference DNA";
+                return false;
+            }
+
+            if (!((DNAReadCounts.nMatchingNeither + DNAReadCounts.nMatchingBoth) * 20 < DNAReadCounts.totalReads()))
+            {
+                whyNot = "Too many funny DNA reads";
+                return false;
+            }
+
+            if (!((RNAReadCounts.nMatchingNeither + RNAReadCounts.nMatchingBoth) * 20 < RNAReadCounts.totalReads())) {
+                whyNot = "Too many funny RNA reads";
+                return false;
+            }
+
+            whyNot = "ASE candidate";
+            return true;
         }
 
         public static double MeanOfList(List<double> values)
@@ -2677,6 +2729,7 @@ namespace ASELib
         public const string annotatedGeneHancerLinesExtension = ".annotated_gene_hancers.txt";
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
+        public const string MethylationDistributionsFilename = "MethylationDistributions.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -3617,9 +3670,9 @@ namespace ASELib
         }
 
         // contains annotation data from one line in a methylation file
-        public class AnnotationLine
+        public class MethylationAnnotationLine
         {
-            public static List<AnnotationLine> filterByTSS(List<AnnotationLine> sites, int maxDistance = 2000)
+            public static List<MethylationAnnotationLine> filterByTSS(List<MethylationAnnotationLine> sites, int maxDistance = 2000)
             {
                 var filteredSites = sites.Where(r =>
                 {
@@ -3665,7 +3718,7 @@ namespace ASELib
             // this is not in the original file, but calculated from beta_value
             public readonly double M_Value;
 
-            AnnotationLine(CompositeREF compositeREF_, double Beta_Value_)
+            MethylationAnnotationLine(CompositeREF compositeREF_, double Beta_Value_)
             {
                 //var geneCount = Gene_Symbol_.Length;
 
@@ -3701,7 +3754,7 @@ namespace ASELib
                 return parsed;
             }
 
-            static AnnotationLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+            static MethylationAnnotationLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
             {
                 // delimiter separating columns
                 var delim = ';';
@@ -3720,11 +3773,11 @@ namespace ASELib
                 fields[fieldMappings["CGI_Coordinate"]],
                 Feature_Type);
 
-                return new AnnotationLine(compositeREF,
+                return new MethylationAnnotationLine(compositeREF,
                 ConvertToDoubleTreatingNullStringAsOne(fields[fieldMappings["Beta_value"]]));
             }
 
-            static public List<AnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
+            static public List<MethylationAnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
             {
                 StreamReader inputFile;
 
@@ -3744,9 +3797,9 @@ namespace ASELib
                 neededFields.Add("Feature_Type");
 
                 bool hasDone = false;
-                var headerizedFile = new HeaderizedFile<AnnotationLine>(inputFile, fileHasVersion, hasDone, "#version gdc-1.0.0", neededFields);
+                var headerizedFile = new HeaderizedFile<MethylationAnnotationLine>(inputFile, fileHasVersion, hasDone, "#version gdc-1.0.0", neededFields);
 
-                List<AnnotationLine> result;
+                List<MethylationAnnotationLine> result;
 
                 if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
                 {
@@ -3761,9 +3814,92 @@ namespace ASELib
 
                 return result;
             } // ReadFile
+        } // MethylationAnnotationLine
 
+        public class MethylationDistributionLine
+        {
+            public string contig;
+            public int locus;
+            public int n;
+            public double min;
+            public double max;
+            public double mean;
+            public double stdDev;
 
+            MethylationDistributionLine(string contig_, int locus_, int n_, double min_, double max_, double mean_, double stdDev_)
+            {
+                contig = contig_;
+                locus = locus_;
+                n = n_;
+                min = min_;
+                max = max_;
+                mean = mean_;
+                stdDev = stdDev_;
+            }
+
+            static public List<MethylationDistributionLine> ReadFromFile(string filename)
+            {
+
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("MethylationDistributionLine.ReadFromFile: unable to open input file " + filename);
+                    return null;
+                }
+
+                string[] wantedFields = { "contig", "locus", "n", "min beta", "max beta", "mean beta", "beta standard deviation" };
+
+                var headerizedFile = new HeaderizedFile<MethylationDistributionLine>(inputFile, false, true, "", wantedFields.ToList());
+                List<MethylationDistributionLine> retVal;
+
+                if (!headerizedFile.ParseFile(Parse, out retVal))
+                {
+                    Console.WriteLine("Unable to parse " + filename);
+                    inputFile.Close();
+                    return null;
+                }
+
+                inputFile.Close();
+
+                return retVal;
+            }
+
+            static MethylationDistributionLine Parse(HeaderizedFile<MethylationDistributionLine>.FieldGrabber fieldGrbber)
+            {
+                return new MethylationDistributionLine(fieldGrbber.AsString("contig"), fieldGrbber.AsInt("locus"), fieldGrbber.AsInt("n"), fieldGrbber.AsDouble("min beta"), fieldGrbber.AsDouble("max beta"), fieldGrbber.AsDouble("mean beta"),
+                    fieldGrbber.AsDouble("beta standard deviation"));
+            }
         }
+        public class MethylationDistribution
+        {
+
+            public static MethylationDistribution ReadFromFile(string filename)
+            {
+                var lines = MethylationDistributionLine.ReadFromFile(filename);
+                if (null == lines)
+                {
+                    return null;
+                }
+
+                var retVal = new MethylationDistribution();
+
+                foreach(var line in lines)
+                {
+                    if (!retVal.lineMap.ContainsKey(line.contig))
+                    {
+                        retVal.lineMap.Add(line.contig, new Dictionary<int, MethylationDistributionLine>());
+                    }
+
+                    retVal.lineMap[line.contig].Add(line.locus, line);
+                }
+
+                return retVal;
+            }
+
+            Dictionary<string, Dictionary<int, MethylationDistributionLine>> lineMap = new Dictionary<string, Dictionary<int, MethylationDistributionLine>>();
+        } // MethylationDistribution
+
+
 
         public class BedLine
         {
@@ -4837,6 +4973,14 @@ namespace ASELib
 
             public void addValue(double value)
             {
+                if (0 == n)
+                {
+                    min = max = value;
+                } else
+                {
+                    min = Math.Min(min, value);
+                    max = Math.Max(max, value);
+                }
                 n++;
                 total += value;
                 totalOfSquares += value * value;
@@ -4861,9 +5005,21 @@ namespace ASELib
                 return n;
             }
 
+            public double getMin()
+            {
+                return min;
+            }
+
+            public double getMax()
+            {
+                return max;
+            }
+
             int n = 0;
             double total = 0;
             double totalOfSquares = 0;
+            double min;
+            double max;
         }
 
         //
@@ -7335,6 +7491,13 @@ namespace ASELib
             public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
             bool IsASECandidate(bool isTumor, int minRNACoverage, int minDNACoverage) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
             {
+                string whyNot;
+                return IsASECandidate(out whyNot, isTumor, minRNACoverage, minDNACoverage);
+            }
+
+            bool IsASECandidate(out string whyNot, bool isTumor, int minRNACoverage, int minDNACoverage) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
+
+            {
                 // get read counts for either tumor or normal
                 var DNAReadCounts = isTumor ? this.tumorDNAReadCounts : this.normalDNAReadCounts;
                 var RNAReadCounts = isTumor ? this.tumorRNAReadCounts : this.normalRNAReadCounts;
@@ -7346,7 +7509,7 @@ namespace ASELib
                 }
 
 
-                return checkReadCountsForASECandidacy(DNAReadCounts, RNAReadCounts, minDNACoverage, minRNACoverage);
+                return checkReadCountsForASECandidacy(out whyNot, DNAReadCounts, RNAReadCounts, minDNACoverage, minRNACoverage);
             }
 
             //
@@ -7354,8 +7517,15 @@ namespace ASELib
             //
             public bool IsASECandidate(bool isTumor, Dictionary<bool, List<CopyNumberVariation>> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int inputMinRNACoverage = -1, int inputMinDNACoverage = -1)
             {
+                string whyNot;
+                return IsASECandidate(out whyNot, isTumor, copyNumber, configuration, perGeneASEMap, geneMap, inputMinRNACoverage, inputMinDNACoverage);
+            }
+
+            public bool IsASECandidate(out string whyNot, bool isTumor, Dictionary<bool, List<CopyNumberVariation>> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int inputMinRNACoverage = -1, int inputMinDNACoverage = -1)
+            { 
                 if (!isTumor && normalRNAReadCounts == null)
                 {
+                    whyNot = "No Normal RNA";
                     return false;
                 }
 
@@ -7365,7 +7535,7 @@ namespace ASELib
                 int minRNACoverage = (inputMinRNACoverage == -1) ? configuration.minRNAReadCoverage : inputMinRNACoverage;
                 int minDNACoverage = (inputMinDNACoverage == -1) ? configuration.minDNAReadCoverage : inputMinDNACoverage;
 
-                if (!IsASECandidate(isTumor, minRNACoverage, minDNACoverage))
+                if (!IsASECandidate(out whyNot, isTumor, minRNACoverage, minDNACoverage))
                 {
                     return false;
                 }
@@ -7382,6 +7552,7 @@ namespace ASELib
                     {
                         if (perGeneASEMap.ContainsKey(gene.hugoSymbol) && perGeneASEMap[gene.hugoSymbol].sampleData[false].meanASE >= configuration.ASEInNormalAtWhichToExcludeGenes)
                         {
+                            whyNot = "Gene with too high mean normal ASE";
                             return false;
                         }
                     }
@@ -7389,13 +7560,22 @@ namespace ASELib
 
                 if (copyNumber[isTumor] == null)
                 {
+                    whyNot = "ASE Candidate";
                     return true;
                 }
 
                 var overlappingCNV = copyNumber[isTumor].Where(cnv =>
                     cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(contig),
                     locus, locus + 1)).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                return overlappingCNV.Count() == 0;
+
+                if (overlappingCNV.Count() == 0)
+                {
+                    whyNot = "ASE Candidate";
+                    return true;
+                }
+
+                whyNot = "Copy number variant";
+                return false;
             }
 
             public static int CompareByLocus(AnnotatedVariant one, AnnotatedVariant two)
@@ -7986,7 +8166,7 @@ namespace ASELib
                 identifier = identifier_;
                 hasOneMutation = hasOneMutation_;
 
-                var bValue = AnnotationLine.M2Beta(mValue);
+                var bValue = MethylationAnnotationLine.M2Beta(mValue);
                 // Values of 1 have no/full methylation. values of partial methylation have 0 score
                 adjustedBValue = Math.Abs(2 * bValue - 1);
             }
@@ -8010,6 +8190,7 @@ namespace ASELib
         public class HistogramResultLine
         {
             public string minValue;
+            public double minValueAsDouble;
             public long count = 0;
             public double total = 0;    // The sum of all of the values in this line
             public double pdfValue = 0;
@@ -8062,12 +8243,13 @@ namespace ASELib
 
             static HistogramResultLine parse(HeaderizedFile<HistogramResultLine>.FieldGrabber fieldGrabber)
             {
-                return new HistogramResultLine(fieldGrabber.AsString("minValue"), fieldGrabber.AsInt("count"), fieldGrabber.AsDouble("total"), fieldGrabber.AsDouble("pdf"), fieldGrabber.AsDouble("cdf"));
+                return new HistogramResultLine(fieldGrabber.AsString("minValue"), fieldGrabber.AsDouble("minValue"),  fieldGrabber.AsInt("count"), fieldGrabber.AsDouble("total"), fieldGrabber.AsDouble("pdf"), fieldGrabber.AsDouble("cdf"));
             }
 
-            public HistogramResultLine(string minValue_, int count_, double total_, double pdfValue_, double cdfValue_)
+            public HistogramResultLine(string minValue_, double minValueAsDuoble_, int count_, double total_, double pdfValue_, double cdfValue_)
             {
                 minValue = minValue_;
+                minValueAsDouble = minValueAsDuoble_;
                 count = count_;
                 total = total_;
                 pdfValue = pdfValue_;
@@ -8259,6 +8441,32 @@ namespace ASELib
             public double mean()
             {
                 return totalSeenValue / nValues;
+            }
+
+            public double percentile(int desiredPercentile)
+            {
+                if (desiredPercentile < 1 || desiredPercentile > 99)
+                {
+                    throw new Exception("PreBuckedHistogram: percentiles must be between 1 and 99 inclusive");
+                }
+
+                var lines = ComputeHistogram();
+
+                double desiredPercentileAsDouble = (double)desiredPercentile / 100;
+
+                for (int i = 0; i < lines.Count()-1; i++)
+                {
+                    if (lines[i].cdfValue >= desiredPercentileAsDouble)
+                    {
+                        if (i == 0)
+                        {
+                            return lines[i].minValueAsDouble;
+                        }
+                    }
+                }
+
+                /*BJB*/
+                return 0;   // writeme
             }
 
             public void merge(PreBucketedHistogram peer)
