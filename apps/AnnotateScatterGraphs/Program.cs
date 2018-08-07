@@ -194,17 +194,17 @@ namespace AnnotateScatterGraphs
 
                 lines.Sort((x, y) => CompareScatterGraphLines(x, y, perGeneASEMap, geneMap, copyNumberByCase, repetitiveRegionMap));                
 
-                var refHistograms = new Dictionary<bool, ASETools.PreBucketedHistogram>();
-                var altHistograms = new Dictionary<bool, ASETools.PreBucketedHistogram>();
-                var allHistograms = new Dictionary<bool, ASETools.PreBucketedHistogram>();
+                var refHistograms = new Dictionary<bool, ASETools.Histogram>();
+                var altHistograms = new Dictionary<bool, ASETools.Histogram>();
+                var allHistograms = new Dictionary<bool, ASETools.Histogram>();
 
                 var singleMutationDataPoints = new List<DataPoint>();
 
                 foreach (var multiple in ASETools.BothBools)
                 {
-                    refHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 3.02, 0.02));
-                    altHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 3.02, 0.02));
-                    allHistograms.Add(multiple, new ASETools.PreBucketedHistogram(0, 3.02, 0.02));
+                    refHistograms.Add(multiple, new ASETools.Histogram());
+                    altHistograms.Add(multiple, new ASETools.Histogram());
+                    allHistograms.Add(multiple, new ASETools.Histogram());
 
                 }
 
@@ -293,7 +293,7 @@ namespace AnnotateScatterGraphs
                 } // foreach line
 
 
-                if (refHistograms[true].count() >= 10 || refHistograms[false].count() >= 10) 
+                if ((refHistograms[true].count() >= 10 || refHistograms[false].count() >= 10) && singleMutationDataPoints.Count() > 0)
                 {
                     bool enoughData, reversed;
                     double nFirstGroup, nSecondGroup, U, z;
@@ -316,12 +316,12 @@ namespace AnnotateScatterGraphs
 
                     var cdfs = new List<double>[6];
 
-                    cdfs[0] = refHistograms[false].ComputeHistogram().Select(x => x.cdfValue).ToList();
-                    cdfs[1] = altHistograms[false].ComputeHistogram().Select(x => x.cdfValue).ToList();
-                    cdfs[2] = allHistograms[false].ComputeHistogram().Select(x => x.cdfValue).ToList();
-                    cdfs[3] = refHistograms[true].ComputeHistogram().Select(x => x.cdfValue).ToList();
-                    cdfs[4] = altHistograms[true].ComputeHistogram().Select(x => x.cdfValue).ToList();
-                    cdfs[5] = allHistograms[true].ComputeHistogram().Select(x => x.cdfValue).ToList();
+                    cdfs[0] = refHistograms[false].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
+                    cdfs[1] = altHistograms[false].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
+                    cdfs[2] = allHistograms[false].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
+                    cdfs[3] = refHistograms[true].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
+                    cdfs[4] = altHistograms[true].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
+                    cdfs[5] = allHistograms[true].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
 
                     for (int i =0; i < cdfs[0].Count(); i++)
                     {
@@ -340,7 +340,24 @@ namespace AnnotateScatterGraphs
                         combinedHistogramsFile.WriteLine();
                     }
 
-                    combinedHistogramsFile.WriteLine();
+                    //
+                    // Now write out the R format lines to allow easily making R boxplots.  We pad the shorter ones out with "NA" so they're all equal length
+                    // so that we can put them in an R data.frame.
+                    //
+                    int maxLength = refHistograms.Select(_ => _.Value.getValues().Count()).Max();   // The ref is always longest, since it includes some Nonsense Mediated Decay that's otherwise excluded.
+
+                    combinedHistogramsFile.WriteLine("ref <- c(" + refHistograms[false].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
+                    combinedHistogramsFile.WriteLine("alt <- c(" + altHistograms[false].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
+                    combinedHistogramsFile.WriteLine("all <- c(" + allHistograms[false].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
+                    combinedHistogramsFile.WriteLine("ref_many <- c(" + refHistograms[true].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
+                    combinedHistogramsFile.WriteLine("alt_many <- c(" + altHistograms[true].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
+                    combinedHistogramsFile.WriteLine("all_many <- c(" + allHistograms[true].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
+
+                    combinedHistogramsFile.WriteLine(hugo_symbol + " <- data.frame(ref, alt, all, ref_many, alt_many, all_many)");
+                    combinedHistogramsFile.WriteLine("boxplot(" + hugo_symbol + ", las=2)");
+
+
+                    combinedHistogramsFile.WriteLine(); // Space between genes
                 } // If we had anything for histograms
 
                 if (outputFile != null)

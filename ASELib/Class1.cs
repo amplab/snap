@@ -8371,6 +8371,11 @@ namespace ASELib
                 return lines.Select(x => x.cdfValue).ToArray();
             }
 
+            public List<double> getValues()
+            {
+                return values;
+            }
+
             List<double> values = new List<double>();
             public readonly string name;
         } // Histogram
@@ -12775,6 +12780,40 @@ namespace ASELib
             return retVal;
         }
     } // GroupByExtension
+
+    public static class ListExtension
+    {
+        //
+        // Make a string like elt0, elt1, elt2 
+        //
+        // If you want it to have a length other than its actual length, then set length.  If length is longer than
+        // source.Count(), then it's padded with padding.
+        //
+        public static string EnumerateWithCommas<TValue>(this List<TValue> source, int length = -1, string padding = "")  // Probably could do this for IEnumerable...
+        {
+            var count = source.Count();
+            var lengthToUse = (length < 0) ? count : length;
+            var retVal = "";
+            for (int i = 0; i < lengthToUse; i++)
+            {
+                if (i >= count)
+                {
+                    retVal += padding;
+                }
+                else
+                {
+                    retVal += source[i];
+                }
+
+                if (i != lengthToUse - 1)
+                {
+                    retVal += ", ";
+                }
+            }
+
+            return retVal;
+        } // EnumerateWithCommas
+    } // ListExtension
 
     public static class EnumerableMedian    // There's certainly a way to do this for generic numeric types rather than just double, but I haven't bothered to figure out how.
     {
