@@ -3896,6 +3896,16 @@ namespace ASELib
                 return retVal;
             }
 
+            public MethylationDistributionLine forLocus(string contig, int locus)
+            {
+                if (!lineMap.ContainsKey(contig) || !lineMap[contig].ContainsKey(locus))
+                {
+                    return null;
+                }
+
+                return lineMap[contig][locus];
+            }
+
             Dictionary<string, Dictionary<int, MethylationDistributionLine>> lineMap = new Dictionary<string, Dictionary<int, MethylationDistributionLine>>();
         } // MethylationDistribution
 
@@ -12740,6 +12750,7 @@ namespace ASELib
             ManualResetEvent queueNotEmptyEvent = new ManualResetEvent(false);
 
         } // ThrottledParallelQueue
+
 
     } // ASETools
 
