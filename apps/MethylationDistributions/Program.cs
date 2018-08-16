@@ -122,7 +122,7 @@ namespace MethylationDistributions
 
         static void HandleOneCase(ASETools.Case case_, BetaValues state)
         {
-            var methylationLines = ASETools.MethylationAnnotationLine.ReadFile(case_.tumor_methylation_filename, case_.tumor_methylation_file_id, false);
+            var methylationLines = ASETools.MethylationAnnotationLine.ReadFile(case_.tumor_methylation_filename);
             if (null == methylationLines)
             {
                 throw new Exception("Failed to read methylation data for case " + case_.case_id);

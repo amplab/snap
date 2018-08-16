@@ -2730,6 +2730,8 @@ namespace ASELib
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
         public const string MethylationDistributionsFilename = "MethylationDistributions.txt";
+        public const string MethylationCorrelationsFilename = "MethylationCorrelations.txt";
+        public const string MethylagtionCorrelationsHistogramFilename = "MethylationCorrelationsHistogram.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -3777,11 +3779,16 @@ namespace ASELib
                 ConvertToDoubleTreatingNullStringAsOne(fields[fieldMappings["Beta_value"]]));
             }
 
-            static public List<MethylationAnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
+            static public List<MethylationAnnotationLine> ReadFile(string filename)
             {
                 StreamReader inputFile;
 
                 inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("Unable to open " + filename);
+                    return null;
+                }
 
                 var neededFields = new List<string>();
                 neededFields.Add("Composite Element REF");
@@ -3797,7 +3804,7 @@ namespace ASELib
                 neededFields.Add("Feature_Type");
 
                 bool hasDone = false;
-                var headerizedFile = new HeaderizedFile<MethylationAnnotationLine>(inputFile, fileHasVersion, hasDone, "#version gdc-1.0.0", neededFields);
+                var headerizedFile = new HeaderizedFile<MethylationAnnotationLine>(inputFile, false, hasDone, "#version gdc-1.0.0", neededFields);
 
                 List<MethylationAnnotationLine> result;
 
@@ -3878,6 +3885,7 @@ namespace ASELib
                 var lines = MethylationDistributionLine.ReadFromFile(filename);
                 if (null == lines)
                 {
+                    Console.WriteLine("Failed to read methylation lines from " + filename);
                     return null;
                 }
 
@@ -4296,6 +4304,7 @@ namespace ASELib
             }
 
         } // MAFLine
+
 
         public static string SizeToUnits(ulong size)
         {
@@ -10841,7 +10850,8 @@ namespace ASELib
             public delegate void ItemDequeued();
             public WorkerThreadHelper(List<TQueueItem> queue_, HandleOneItem handleOneItem_, FinishUp finishUp_, ItemDequeued itemDequeued_, int nItemsPerDot_ = 0)
             {
-                queue = queue_;
+                queue = new List<TQueueItem>();
+                queue_.ForEach(_ => queue.Add(_));  // Copy the queue, so that we don't modify the one the caller proovided.
                 handleOneItem = handleOneItem_;
                 finishUp = finishUp_;
                 itemDequeued = itemDequeued_;
@@ -12751,7 +12761,65 @@ namespace ASELib
 
         } // ThrottledParallelQueue
 
+        public class ExpressionByGene
+        {
+            class HugoSymbolAndExpression
+            {
+                public HugoSymbolAndExpression(string hugo_symbol_, double expression_)
+                {
+                    hugo_symbol = hugo_symbol_;
+                    expression = expression_;
+                }
 
+                public string hugo_symbol;
+                public double expression;
+            }
+
+            static public ExpressionByGene LoadFromFile(string filename)
+            {
+                string[] wantedFields = { "Hugo Symbol", "Fraction of mean expression" };
+
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("Unable to open " + filename);
+                    return null;
+                }
+
+                var headerizedFile = new HeaderizedFile<HugoSymbolAndExpression>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<HugoSymbolAndExpression> values;
+                if (!headerizedFile.ParseFile(parse, out values))
+                {
+                    Console.WriteLine("Unable to parse " + filename);
+                    return null;
+                }
+
+                inputFile.Close();
+
+                var retVal = new ExpressionByGene();
+                values.ForEach(_ => retVal.fractionOfAllReads.Add(_.hugo_symbol, _.expression));
+
+                return retVal;
+            }
+
+            static HugoSymbolAndExpression parse(HeaderizedFile<HugoSymbolAndExpression>.FieldGrabber fieldGrabber)
+            {
+                return new HugoSymbolAndExpression(fieldGrabber.AsString("Hugo Symbol"), fieldGrabber.AsDouble("Fraction of mean expression"));
+            }
+
+            public double getMeanExpressionForGene(string hugo_symbol)
+            {
+                return fractionOfAllReads[hugo_symbol];
+            }
+
+            public List<string> GetAllHugoSymbols()
+            {
+                return fractionOfAllReads.Select(_ => _.Key).ToList();
+            }
+
+            Dictionary<string, double> fractionOfAllReads = new Dictionary<string, double>();
+        } // ExpressionByGene
     } // ASETools
 
     //
@@ -12825,6 +12893,23 @@ namespace ASELib
             return retVal;
         } // EnumerateWithCommas
     } // ListExtension
+
+    public static class IEnumerableExtension
+    {
+        // The code for OrderRandomly comes from https://stackoverflow.com/questions/254573/can-you-enumerate-a-collection-in-c-sharp-out-of-order, but I modified it to remove the RemoveAt() call.
+        public static IEnumerable<T> OrderRandomly<T>(this IEnumerable<T> sequence)
+        {
+            Random random = new Random();
+            var copy = sequence.ToArray();
+
+            for (int i = copy.Count(); i > 0; i--)
+            {
+                int index = random.Next(i);
+                yield return copy[index];
+                copy[index] = copy[i-1];  // This removes the returned item from the active part of the array.  There's no need to swap, however.
+            }
+        } // OrderRandomly
+    } // IEnumerableExtension
 
     public static class EnumerableMedian    // There's certainly a way to do this for generic numeric types rather than just double, but I haven't bothered to figure out how.
     {

@@ -139,8 +139,6 @@ namespace ExpressionNearMutations
 				var geneExpressions = new Dictionary<string, ASETools.GeneExpression>();
 				foreach (var mafLine in mafLines)
 				{
-
-
 					if (!geneLocationInformation.genesByName.ContainsKey(mafLine.Hugo_Symbol))
 					{
 						//

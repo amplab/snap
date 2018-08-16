@@ -1093,7 +1093,13 @@ namespace ASEProcessManager
 				forAlleleSpecificExpression = forAlleleSpecificExpression_;
 			}
 
-            public string GetStageName() { return "Expresssion Near Mutations"; }
+            public string GetStageName() {
+                if (forAlleleSpecificExpression)
+                {
+                    return "Allele-Specific Expresssion Near Mutations";
+                }
+                return "Expresssion Near Mutations";
+            }
 
             public bool NeedsCases() { return true; }
 
@@ -3250,8 +3256,6 @@ namespace ASEProcessManager
 
             List<ProcessingStage> processingStages = new List<ProcessingStage>();
 
-			var forAlleleSpecificExpression = true;
-
 			processingStages.Add(new MAFConfigurationProcessingStage());
 			processingStages.Add(new GenerateCasesProcessingStage());
 			processingStages.Add(new AllcountProcesingStage());
@@ -3263,8 +3267,9 @@ namespace ASEProcessManager
 			processingStages.Add(new ExpressionDistributionProcessingStage());
 			processingStages.Add(new ExtractMAFLinesProcessingStage());
 			processingStages.Add(new RegionalExpressionProcessingStage());
-			processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
-			processingStages.Add(new ExtractReadsProcessingStage());
+            processingStages.Add(new ExpressionNearMutationsProcessingStage(true));
+            processingStages.Add(new ExpressionNearMutationsProcessingStage(false));
+            processingStages.Add(new ExtractReadsProcessingStage());
 			processingStages.Add(new SelectGenesProcessingStage());
 			processingStages.Add(new CountMappedBasesProcessingStage());
 			processingStages.Add(new GenerateScatterGraphsProcessingStage());

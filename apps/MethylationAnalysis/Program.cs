@@ -62,10 +62,9 @@ namespace MethylationAnalysis
 			// select metadata whether processing normal or tumor methylation data
 			var label = isTumor ? "Tumor" : "Normal";
 			var methylation_filename = isTumor ? case_.tumor_methylation_filename : case_.normal_methylation_filename;
-			var methylation_file_id = isTumor ? case_.tumor_methylation_file_id : case_.normal_methylation_file_id;
 
 			// read in tumor methylation file 
-			var annotations = ASELib.ASETools.MethylationAnnotationLine.ReadFile(methylation_filename, methylation_file_id, false);
+			var annotations = ASELib.ASETools.MethylationAnnotationLine.ReadFile(methylation_filename);
 
 			fileInfo.Add(case_.case_id, new Tuple<string, string>(case_.disease(), label));
 
