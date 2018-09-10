@@ -20,7 +20,13 @@ namespace MethylationAndExpressionCorrelation
         static ASETools.CommonData commonData;
         static string chromosomeToProcess = null;
 
-        static Dictionary<string, Dictionary<int, double[]>> correlationState = new Dictionary<string, Dictionary<int, double[]>>(); // contig->locus->gene index->running total of product of differences from the mean.  Locking is per locus.
+        struct SumAndN
+        {
+            public double sum;
+            public int n;
+        }
+
+        static Dictionary<string, Dictionary<int, SumAndN[]>> correlationState = new Dictionary<string, Dictionary<int, SumAndN[]>>(); // contig->locus->gene index->running total of product of differences from the mean.  Locking is per locus.
 
         static void Main(string[] args)
         {
@@ -87,12 +93,12 @@ namespace MethylationAndExpressionCorrelation
 
                     if (!correlationState.ContainsKey(contig))
                     {
-                        correlationState.Add(contig, new Dictionary<int, double[]>());
+                        correlationState.Add(contig, new Dictionary<int, SumAndN[]>());
                     }
 
                     if (!correlationState[contig].ContainsKey(locus))
                     {
-                        correlationState[contig].Add(locus, new double[nSelectedGenes]);
+                        correlationState[contig].Add(locus, new SumAndN[nSelectedGenes]);
                         var thisLocus = correlationState[contig][locus];
                         nMethylationSites++;
                     } // locus
@@ -145,7 +151,12 @@ namespace MethylationAndExpressionCorrelation
             {
                 for (int geneIndex = 0; geneIndex < nSelectedGenes; geneIndex++)
                 {
-                    standardDeviationsOfGeneExpressions[selectedGenes[geneIndex]].addValue(geneExpressionByCase[caseId][geneIndex]);
+                    var expression = geneExpressionByCase[caseId][geneIndex];
+                    if (expression == double.NegativeInfinity || double.IsNaN(expression))
+                    {
+                        continue;
+                    }
+                    standardDeviationsOfGeneExpressions[selectedGenes[geneIndex]].addValue(expression);
                 }
             }
 
@@ -171,16 +182,24 @@ namespace MethylationAndExpressionCorrelation
                 foreach (var locusEntry in contigEntry.Value)
                 {
                     var locus = locusEntry.Key;
-                    var sumsOfCovariants = locusEntry.Value;    // Array indexed by geneIndex
+                    var sumsAndNsOfCovariants = locusEntry.Value;    // Array indexed by geneIndex
 
                     for (int geneIndex = 0; geneIndex < nSelectedGenes; geneIndex++)
                     {
                         var hugoSymbol = selectedGenes[geneIndex];
-                        var sumOfCovariants = sumsOfCovariants[geneIndex];
+                        var sumOfCovariants = sumsAndNsOfCovariants[geneIndex].sum;
+                        int nOfCovariants = sumsAndNsOfCovariants[geneIndex].n;
 
-                        var meanOfCovariants = sumOfCovariants / methylationDistribution.forLocus(contig, locus).n;
+                        var meanOfCovariants = sumOfCovariants / nOfCovariants;
 
                         var correlationCoefficient = meanOfCovariants / (methylationDistribution.forLocus(contig, locus).stdDev * standardDeviationsOfGeneExpressions[hugoSymbol].getMeanAndStdDev().stddev);
+
+                        if (double.IsNaN(correlationCoefficient) || correlationCoefficient == double.NegativeInfinity)
+                        {
+                            Console.WriteLine("Bogus correlation coefficient " + correlationCoefficient + " hugo symbol " + hugoSymbol + " sum of covariants " + sumOfCovariants + " mean of covariants " + meanOfCovariants + " methylation std dev " + methylationDistribution.forLocus(contig, locus).stdDev + " gene expression std dev " + standardDeviationsOfGeneExpressions[hugoSymbol].getMeanAndStdDev().stddev);
+                            outputFile.Close();
+                            System.Diagnostics.Process.GetCurrentProcess().Kill();
+                        }
 
                         outputFile.WriteLine(contig + "\t" + locus + "\t" + hugoSymbol + "\t" + correlationCoefficient);
 
@@ -203,7 +222,6 @@ namespace MethylationAndExpressionCorrelation
             histogramFile.Close();
 
             Console.WriteLine("Total elapsed time " + ASETools.ElapsedTimeInSeconds(commonData.timer));
-
         } // Main
 
         static void LoadOneGeneExpression(ASETools.Case case_, int state)
@@ -242,7 +260,18 @@ namespace MethylationAndExpressionCorrelation
                         var hugo_symbol = selectedGenes[geneIndex];
 
                         var meanExpressionForThisCase = caseData[geneIndex];
-                        locusMap[geneIndex] += (meanExpressionForThisCase - 1) * methylationDifferenceFromMean; /* The -1 is because the expression is in units of the mean expression for that gene, so the mean of all of them is 1*/
+                        if (double.IsNaN(meanExpressionForThisCase) || meanExpressionForThisCase == double.NegativeInfinity)
+                        {
+                            continue;
+                        }
+
+                        locusMap[geneIndex].sum += (meanExpressionForThisCase - 1) * methylationDifferenceFromMean; /* The -1 is because the expression is in units of the mean expression for that gene, so the mean of all of them is 1*/
+                        locusMap[geneIndex].n++;
+                        if (double.IsNaN(locusMap[geneIndex].sum))
+                        {
+                            Console.WriteLine("Got NAN for a sum of covariants.  meanExpression " + meanExpressionForThisCase + ", methylation difference from mean " + methylationDifferenceFromMean + ", hugo symbol " + hugo_symbol);
+                            System.Diagnostics.Process.GetCurrentProcess().Kill();
+                        }
                     } // gene index
                 } // lock
             } // methylation

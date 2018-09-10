@@ -29,6 +29,22 @@ namespace AnnotateScatterGraphs
             }
         }
 
+        class HugoPAndMedians
+        {
+            public readonly string hugo_symbol;
+            public readonly double p;
+            public readonly double refMedian;
+            public readonly double altMedian;
+
+            public HugoPAndMedians(string hugo, double p_, double refMedian_, double altMedian_)
+            {
+                hugo_symbol = hugo;
+                p = p_;
+                refMedian = refMedian_;
+                altMedian = altMedian_;
+            }
+        }
+
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
@@ -157,8 +173,8 @@ namespace AnnotateScatterGraphs
                                 scatterGraphLine.tumorRNAFracAllPercentile[j] = double.NegativeInfinity;
                             } else
                             {
-                                scatterGraphLine.tumorRNAFracAltPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingAlt * 2 / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
-                                scatterGraphLine.tumorRNAFracRefPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingReference * 2 / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
+                                scatterGraphLine.tumorRNAFracAltPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingAlt / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
+                                scatterGraphLine.tumorRNAFracRefPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingReference / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
                                 scatterGraphLine.tumorRNAFracAllPercentile[j] = (((double)scatterGraphLine.tumorRNAReadCounts.totalReads()) / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
                             }
                         }
@@ -187,6 +203,7 @@ namespace AnnotateScatterGraphs
 
             int nCandidates = 0;
 
+            List<HugoPAndMedians> results = new List<HugoPAndMedians>();
 
             foreach (var hugo_symbol in genesWithData) {
                 var lines = scatterGraphLinesByGene[hugo_symbol];
@@ -302,26 +319,29 @@ namespace AnnotateScatterGraphs
                     combinedHistogramsFile.Write(hugo_symbol);
                     if (enoughData)
                     {
+                        results.Add(new HugoPAndMedians(hugo_symbol, mw, refHistograms[false].median(), altHistograms[false].median()));
                         combinedHistogramsFile.Write(" uncorrected p = " + mw);
                         nCandidates++;
-
-                        if (mw < 0.01)
-                        {
-                            Console.WriteLine(hugo_symbol + " has uncorrected p of " + mw);
-                        }
                     }
 
                     combinedHistogramsFile.WriteLine("\twild-type one mutation (n = " + refHistograms[false].count() + ")\tmutant one mutation (n = " + altHistograms[false].count() + ")\tall one mutation (n = " + allHistograms[false].count() + ")\twild-type > 1 mutation (n = " +
                         refHistograms[true].count() + ")\tmutant > 1 mutation (n = " + altHistograms[true].count() + ")\tall > 1 mutation (n = " + allHistograms[true].count() + ")");
 
-                    var cdfs = new List<double>[6];
+                    const int nHistograms = 6;
+                    var histograms = new ASETools.Histogram[nHistograms];
+                    histograms[0] = refHistograms[false];
+                    histograms[1] = altHistograms[false];
+                    histograms[2] = allHistograms[false];
+                    histograms[3] = refHistograms[true];
+                    histograms[4] = altHistograms[true];
+                    histograms[5] = allHistograms[true];
 
-                    cdfs[0] = refHistograms[false].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
-                    cdfs[1] = altHistograms[false].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
-                    cdfs[2] = allHistograms[false].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
-                    cdfs[3] = refHistograms[true].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
-                    cdfs[4] = altHistograms[true].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
-                    cdfs[5] = allHistograms[true].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
+
+                    var cdfs = new List<double>[nHistograms];
+                    for (int i = 0; i < nHistograms; i++)
+                    {
+                        cdfs[i] = histograms[i].ComputeHistogram(0, 3.02, .02).Select(x => x.cdfValue).ToList();
+                    }
 
                     for (int i =0; i < cdfs[0].Count(); i++)
                     {
@@ -346,18 +366,37 @@ namespace AnnotateScatterGraphs
                     //
                     int maxLength = refHistograms.Select(_ => _.Value.getValues().Count()).Max();   // The ref is always longest, since it includes some Nonsense Mediated Decay that's otherwise excluded.
 
-                    combinedHistogramsFile.WriteLine("ref <- c(" + refHistograms[false].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
-                    combinedHistogramsFile.WriteLine("alt <- c(" + altHistograms[false].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
-                    combinedHistogramsFile.WriteLine("all <- c(" + allHistograms[false].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
-                    combinedHistogramsFile.WriteLine("ref_many <- c(" + refHistograms[true].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
-                    combinedHistogramsFile.WriteLine("alt_many <- c(" + altHistograms[true].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
-                    combinedHistogramsFile.WriteLine("all_many <- c(" + allHistograms[true].getValues().EnumerateWithCommas(maxLength, "NA") + ")");
+                    var perGeneRawDataFilename = configuration.geneScatterGraphsDirectory + hugo_symbol + ASETools.raw_median_data_extension;
 
-                    combinedHistogramsFile.WriteLine(hugo_symbol + " <- data.frame(ref, alt, all, ref_many, alt_many, all_many)");
-                    combinedHistogramsFile.WriteLine("boxplot(" + hugo_symbol + ", las=2)");
+                    double biggestValue = 0;
+                    for (int i = 0; i < nHistograms; i++)
+                    {
+                        if (histograms[i].count() > 0)
+                        {
+                            biggestValue = Math.Max(biggestValue, histograms[i].max());
+                        }
+                    }
 
+                    combinedHistogramsFile.WriteLine(hugo_symbol + " <- read.table(\"" + perGeneRawDataFilename.Replace('\\', '/') + "\", sep=\"\\t\", header=TRUE)");    // switch from backslashes to forward, since that's what R wants
+                    combinedHistogramsFile.WriteLine("boxplot(" + hugo_symbol + ", names=c(\"Ref 1\", \"Mut 1\", \"All 1\", \"Ref >1\", \"Mut >1\", \"All >1\"), ylim=c(0," + Math.Min(3, biggestValue) + 
+                        "), ylab=\"Expression (multiple of median)\")");
 
                     combinedHistogramsFile.WriteLine(); // Space between genes
+
+                    var perGeneRawDataFile = ASETools.CreateStreamWriterWithRetry(perGeneRawDataFilename);
+                    perGeneRawDataFile.WriteLine("Ref 1 mutation\tAlt 1 mutation\tAll 1 mutation\tRef > 1 mutation\tAlt > 1 mutation\tAll > 1 mutation");
+                    var ref_ = refHistograms[false].getValues().EnumerateWithCommas(maxLength, "").Split(',');
+                    var alt = altHistograms[false].getValues().EnumerateWithCommas(maxLength, "").Split(',');
+                    var all = allHistograms[false].getValues().EnumerateWithCommas(maxLength, "").Split(',');
+                    var ref_many = refHistograms[true].getValues().EnumerateWithCommas(maxLength, "").Split(',');
+                    var alt_many = altHistograms[true].getValues().EnumerateWithCommas(maxLength, "").Split(',');
+                    var all_many = allHistograms[true].getValues().EnumerateWithCommas(maxLength, "").Split(',');
+
+                    for (int i = 0; i < ref_.Count(); i++)
+                    {
+                        perGeneRawDataFile.WriteLine(ref_[i] + "\t" + alt[i] + "\t" + all[i] + "\t" + ref_many[i] + "\t" + alt_many[i] + "\t" + all_many[i]);
+                    }
+                    perGeneRawDataFile.Close();
                 } // If we had anything for histograms
 
                 if (outputFile != null)
@@ -371,6 +410,15 @@ namespace AnnotateScatterGraphs
             combinedHistogramsFile.Close();
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
+
+            results.Sort((x, y) => x.p.CompareTo(y.p));
+            for (int i = 0; i < results.Count(); i++)
+            {
+                if (results[i].p * nCandidates <= 0.01)
+                {
+                    Console.WriteLine(results[i].hugo_symbol + " has ref median of " + results[i].refMedian + " and alt median of " + results[i].altMedian + " corrected p value of " + results[i].p * nCandidates);
+                }
+            }
 
             Console.WriteLine("nNonsenseMediatedDecay = " + ASETools.nNonsenseMediatedDecay + ", nNoReadCounts = " + ASETools.nNoReadCounts + ", nBadReadCounts = " + ASETools.nBadReadCounts + ", nBadGene = " + ASETools.nBadGene + ", nNoCopyNumber = " + ASETools.nNoCopyNumber + 
                 ", nBadCopyNumber = " + ASETools.nBadCopyNumber + ", nRepetitive = " + ASETools.nRepetitive + ", nCandidate = " + ASETools.nCandidate);

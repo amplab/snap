@@ -361,7 +361,7 @@ namespace ASELib
 
                 foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? Configuration.unfilteredCountsExtention : ".txt")))
                 {
-                    if (filename.Contains(ASETools.annotated_scatter_graph_filename_extension) || filename.Contains(annotated_scatter_graphs_histogram_filename))
+                    if (filename.Contains(ASETools.annotated_scatter_graph_filename_extension) || filename.Contains(annotated_scatter_graphs_histogram_filename) || filename.Contains(raw_median_data_extension))
                     {
                         continue;    // Skip the annotated ones for now.
                     }
@@ -382,7 +382,7 @@ namespace ASELib
                         Console.WriteLine("Unable to open " + filename);
                         throw new FileNotFoundException();
                     }
-                    var headerizedFile = new HeaderizedFile<GeneScatterGraphLine>(inputFile, false, true, "", wantedFields);
+                    var headerizedFile = new HeaderizedFile<GeneScatterGraphLine>(inputFile, false, true, "", wantedFields, inputFilename_: filename);
 
                     List<GeneScatterGraphLine> linesFromThisFile;
 
@@ -2721,6 +2721,7 @@ namespace ASELib
         public const string AllSitesReadDepthFilename = "AllSitesReadDepth.txt";
         public const string Expression_distribution_filename_base = "expression_distribution_";
         public const string annotated_scatter_graph_filename_extension = "_annotated_scatter_lines.txt";
+        public const string raw_median_data_extension = "_raw_median_data.txt";
         public const string annotated_scatter_graphs_histogram_filename = "_annotated_scatter_graphs_histograms.txt";
         public const string vaf_histogram_filename = "VAFHistograms.txt";
         public const string simulatedResultsFilename = "SimulatedASEError.txt";
@@ -3197,7 +3198,7 @@ namespace ASELib
 
             public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_,
                 bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0, bool allowMissingRowsInData_ = false,
-                char separator_ = '\t', bool stopAtBlankLine_ = false)
+                char separator_ = '\t', bool stopAtBlankLine_ = false, string inputFilename_ = "")
             {
                 inputFile = inputFile_;
                 hasVersion = hasVersion_;
@@ -3210,6 +3211,7 @@ namespace ASELib
                 allowMissingRowsInData = allowMissingRowsInData_;
                 separator = separator_;
                 stopAtBlankLine = stopAtBlankLine_;
+                inputFilename = inputFilename_;
             }
 
             //
@@ -3285,7 +3287,7 @@ namespace ASELib
                     {
                         if (fieldMappings.ContainsKey(columns[i]))
                         {
-                            Console.WriteLine("Duplicate needed column in headerized file (or code bug or something): " + columns[i]);
+                            Console.WriteLine("Duplicate needed column in headerized file " + inputFilename + " (or code bug or something): " + columns[i]);
                             result = null;
                             return false;
                         }
@@ -3313,7 +3315,7 @@ namespace ASELib
                         return false;
 
                     }
-                    Console.Write("Headerized file: missing columns:");
+                    Console.Write("Headerized file (" + inputFilename + "): missing columns:");
                     foreach (var missingColumn in missingColumns)
                     {
                         Console.Write(" " + missingColumn);
@@ -3328,7 +3330,7 @@ namespace ASELib
                 result = new List<outputType>();
                 while (null != (inputLine = inputFile.ReadLine())) {
                     if (sawDone) {
-                        Console.WriteLine("HeaderizedFile: Saw data after **done**");
+                        Console.WriteLine("HeaderizedFile (" + inputFilename + "): Saw data after **done**");
                         result = null;
                         return false;
                     }
@@ -3346,7 +3348,7 @@ namespace ASELib
                     var fields = inputLine.Split('\t');
                     if (fields.Count() <= maxNeededField && !allowMissingColumnsInData)
                     {
-                        Console.WriteLine("HeaderizedFile.Parse: input line didn't include a needed field " + inputLine);
+                        Console.WriteLine("HeaderizedFile.Parse (" + inputFilename + "): input line didn't include a needed field " + inputLine);
                         result = null;
                         return false;
                     }
@@ -3382,13 +3384,13 @@ namespace ASELib
 
                 if (hasDone && !sawDone)
                 {
-                    Console.WriteLine("HeaderizedFile.Parse: missing **done**");
+                    Console.WriteLine("HeaderizedFile.Parse (" + inputFilename + "): missing **done**");
                     result = null;
                     return false;
                 }
                 else if (!hasDone && sawDone)
                 {
-                    Console.WriteLine("Saw unepected **done**.  Ignoring.");
+                    Console.WriteLine(inputFilename + "Saw unepected **done**.  Ignoring.");
                     result = null;
                     return false;
                 }
@@ -3555,6 +3557,7 @@ namespace ASELib
             int skippedRows;
             char separator;
             bool stopAtBlankLine;
+            string inputFilename;
         } // HeaderizedFile
 
         public static int ConvertToInt32TreatingNullStringAsZero(string value)
@@ -8305,6 +8308,18 @@ namespace ASELib
                 return values.Average();
             }
 
+            public double median()
+            {
+                values.Sort();
+                if (values.Count() % 2 == 0)
+                {
+                    return (values[values.Count() / 2] + values[values.Count() / 2 - 1]) / 2;   // Take the mean of the middle values for an even-sized distribution.
+                } else
+                {
+                    return values[values.Count() / 2];
+                }
+            }
+
             public void merge(Histogram peer)
             {
                 values.AddRange(peer.values);
@@ -12820,6 +12835,8 @@ namespace ASELib
 
             Dictionary<string, double> fractionOfAllReads = new Dictionary<string, double>();
         } // ExpressionByGene
+
+
     } // ASETools
 
     //
