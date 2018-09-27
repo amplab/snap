@@ -1698,7 +1698,7 @@ namespace ASEProcessManager
                     {
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadsForRepetitiveRegionDetection.exe " + stateOfTheWorld.configuration.indexDirectory + " " + chromosomeNumber + " " +
                             stateOfTheWorld.configuration.chromosomeMapsDirectory +"chr" + chromosomeNumber +
-                            ASETools.allLociExtension + " 48");
+                            ASETools.allLociExtension + " " + stateOfTheWorld.configuration.readLengthForRepetitiveRegionDetection);
                         nAddedToScript++;
                     }
                 }
@@ -1735,10 +1735,24 @@ namespace ASEProcessManager
                     else
                     {
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "snap.exe single " + stateOfTheWorld.configuration.localIndexDirectory + " " + stateOfTheWorld.configuration.chromosomeMapsDirectory + "chr" + chromosomeNumber +
-                            ASETools.allLociExtension + " -o " + stateOfTheWorld.configuration.chromosomeMapsDirectory +"chr" + chromosomeNumber + ASETools.allLociAlignedExtension + " -om 3 -omax 1 -x -D 3 -map -mrl 48");
+                            ASETools.allLociExtension + " -o " + stateOfTheWorld.configuration.chromosomeMapsDirectory +"chr" + chromosomeNumber + ASETools.allLociAlignedExtension + " -om 3 -omax 1 -x -D 3 -map -mrl 48 -=");
                         nAddedToScript++;
                     }
-                }
+
+                    if (File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "transcriptome_" + chromosomeNumber + ASETools.allLociAlignedExtension))
+                    {
+                        nDone++;
+                    } else if (!File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "transcriptome_" + chromosomeNumber + ASETools.allLociExtension))
+                    {
+                        nWaitingForPrerequisites++;
+                    } else
+                    {
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "snap.exe single " + stateOfTheWorld.configuration.chromosomeMapsDirectory + ASETools.generatedTranscriptomeIndexName + " " +
+                                         stateOfTheWorld.configuration.chromosomeMapsDirectory + "transcriptome_" + chromosomeNumber + ASETools.allLociExtension +
+                                         " -o " + stateOfTheWorld.configuration.chromosomeMapsDirectory + "transcriptome_" + chromosomeNumber + ASETools.allLociAlignedExtension + " -om 3 -x -D 3 -map -mrl 48 -="); // omit -omax for transcriptome, because some mappings might be to different contigs that then themselves map back to the same genome location
+                        nAddedToScript++;
+                    }
+                } // for each chromosome
             }
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }   // Really no dependencies for this unless the reference genome changes, since the input files are effectively constants
@@ -1767,6 +1781,12 @@ namespace ASEProcessManager
                 for (int chromosomeNumber = 1; chromosomeNumber <= ASETools.nHumanAutosomes; chromosomeNumber++)
                 {
                     if (!File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "chr" + chromosomeNumber + ASETools.allLociAlignedExtension))
+                    {
+                        nWaitingForPrerequisites++;
+                        return;
+                    }
+
+                    if (!File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "transcriptome_" + chromosomeNumber + ASETools.allLociAlignedExtension))
                     {
                         nWaitingForPrerequisites++;
                         return;
@@ -2715,7 +2735,90 @@ namespace ASEProcessManager
                 nAddedToScript = 1;
 
             } // EvaluateStage
-        } // BasesInKnownCodingRegionsProcessingStage
+        } // OverallGeneExpressionProcessingStage
+
+        class GenerateTranscriptomeReadsAndReferenceProcessingStage : ProcessingStage
+        {
+            public GenerateTranscriptomeReadsAndReferenceProcessingStage() { }
+            public string GetStageName() { return "Generate Transcriptome Reads and Reference"; }
+
+            public bool NeedsCases() { return false; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                bool needFasta = !File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + ASETools.transcriptomeFastaFilename);
+
+                for (int i = 1; i <= ASETools.nHumanAutosomes; i++)
+                {
+                    if (File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "transcriptome_" + i + ASETools.allLociExtension))
+                    {
+                        nDone++;
+                        continue;
+                    }
+
+                    script.Write(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadsForRepetitiveTranscriptome.exe" + stateOfTheWorld.configurationString + " " + stateOfTheWorld.configuration.localIndexDirectory + " " +
+                                 stateOfTheWorld.configuration.chromosomeMapsDirectory + "transcriptome_" + i + ASETools.allLociExtension + " " + i);
+                    if (needFasta)
+                    {
+                        script.WriteLine(" " + stateOfTheWorld.configuration.chromosomeMapsDirectory + ASETools.transcriptomeFastaFilename);
+                        needFasta = false;
+                    } else
+                    {
+                        script.WriteLine();
+                    }
+
+                    nAddedToScript++;
+                }
+
+                if (needFasta)
+                {
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadsForRepetitiveTranscriptome.exe" + stateOfTheWorld.configurationString + " " + stateOfTheWorld.configuration.localIndexDirectory + " " +
+                                 stateOfTheWorld.configuration.chromosomeMapsDirectory + "transcriptome" + ASETools.allLociExtension + " " + stateOfTheWorld.configuration.chromosomeMapsDirectory + " 22 " +
+                                 stateOfTheWorld.configuration.chromosomeMapsDirectory + ASETools.transcriptomeFastaFilename);
+                    nAddedToScript++;
+                }
+
+            } // EvaluateStage
+        } // GenerateTranscriptomeReadsAndReferenceProcessingStage
+
+        class GenerateTranscriptomeIndexProcessingStage : ProcessingStage
+        {
+            public GenerateTranscriptomeIndexProcessingStage() { }
+            public string GetStageName() { return "Generate Transcriptome Index"; }
+
+            public bool NeedsCases() { return false; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + ASETools.generatedTranscriptomeIndexName + "\\GenomeIndexHash"))
+                {
+                    nDone++;
+                    return;
+                } else if (!File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + ASETools.transcriptomeFastaFilename))
+                {
+                    nWaitingForPrerequisites++;
+                    return;
+                } else
+                {
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "snap.exe index " + stateOfTheWorld.configuration.chromosomeMapsDirectory + ASETools.transcriptomeFastaFilename + " " +
+                        stateOfTheWorld.configuration.chromosomeMapsDirectory + ASETools.generatedTranscriptomeIndexName + " -s 16");
+                    nAddedToScript++;
+                }
+             } // EvaluateStage
+        } // GenerateTranscriptomeIndexProcessingStage
 
         class AnnotateScatterGraphsProcessingStage : ProcessingStage
         {
@@ -3302,6 +3405,8 @@ namespace ASEProcessManager
             processingStages.Add(new BasesInKnownCodingRegionsProcessingStage());
             processingStages.Add(new OverallGeneExpressionProcessingStage());
             processingStages.Add(new AnnotateScatterGraphsProcessingStage());
+            processingStages.Add(new GenerateTranscriptomeReadsAndReferenceProcessingStage());
+            processingStages.Add(new GenerateTranscriptomeIndexProcessingStage());
 
             if (checkDependencies)
             {

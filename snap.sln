@@ -198,6 +198,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationDistributions", 
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FillDisk", "FillDisk\FillDisk.vcxproj", "{456F23DC-C2E5-4D5A-B7DA-44AC9020AD36}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateReadsForRepetitiveTranscriptome", "apps\GenerateReadsForRepetitiveTranscriptome\GenerateReadsForRepetitiveTranscriptome.csproj", "{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpliceosomeAllelicImbalance", "apps\SpliceosomeAllelicImbalance\SpliceosomeAllelicImbalance.csproj", "{161F30F7-08DC-4383-AF07-556A38A3DF10}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1466,6 +1470,38 @@ Global
 		{456F23DC-C2E5-4D5A-B7DA-44AC9020AD36}.Release|Win32.Build.0 = Release|Win32
 		{456F23DC-C2E5-4D5A-B7DA-44AC9020AD36}.Release|x64.ActiveCfg = Release|x64
 		{456F23DC-C2E5-4D5A-B7DA-44AC9020AD36}.Release|x64.Build.0 = Release|x64
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Debug|Win32.Build.0 = Debug|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Debug|x64.ActiveCfg = Debug|x64
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Debug|x64.Build.0 = Debug|x64
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Release|Win32.ActiveCfg = Release|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Release|Win32.Build.0 = Release|Any CPU
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Release|x64.ActiveCfg = Release|x64
+		{9D9011CD-0352-4566-B1F1-FA8EB0FE1FC4}.Release|x64.Build.0 = Release|x64
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Debug|Win32.Build.0 = Debug|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Debug|x64.ActiveCfg = Debug|x64
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Debug|x64.Build.0 = Debug|x64
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|Win32.ActiveCfg = Release|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|Win32.Build.0 = Release|Any CPU
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|x64.ActiveCfg = Release|x64
+		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

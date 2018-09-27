@@ -598,7 +598,7 @@ namespace ASELib
         }
 
 
-        public class Exon
+        public class Exon : IEquatable<Exon>    // IEquatable allows this to be a dictionary key.
         {
             public Exon(string startString, string endString)
             {
@@ -608,10 +608,26 @@ namespace ASELib
 
             public int start;
             public int end;
+
+            public bool Equals(Exon other)
+            {
+                return (start == other.start && end == other.end);
+            }
+
+            public int length()
+            { 
+                return end - start;
+            }
+
+            public override int GetHashCode()
+            {
+                return start ^ (end << 4);  // 4 is the max shift that won't lose any bits for the largest chromosome offset, which is the end of chr1 at ~249Mb = 0x0e4e1c00
+            }
         }
 
         public class Isoform    // These come from the knownGene file
         {
+            public string hugo_symbol;
             public string ucscId;
             public string chromosome;   // The non-chr version
             public string strand;
@@ -634,6 +650,7 @@ namespace ASELib
 
                 var isoform = new Isoform();
 
+                isoform.hugo_symbol = ConvertToNonExcelString(fields[16]);
                 isoform.ucscId = ConvertToNonExcelString(fields[0]);
                 isoform.chromosome = ConvertToNonExcelString(fields[1]);
                 isoform.strand = ConvertToNonExcelString(fields[2]);
@@ -984,6 +1001,47 @@ namespace ASELib
             AVLTree<Range> map = new AVLTree<Range>();
         } // GeneMap
 
+        public class IsoformMap
+        {
+            public IsoformMap(Dictionary<string, GeneLocationInfo> genesByName)
+            {
+                foreach (var geneInfo in genesByName.Select(x => x.Value).ToList())
+                {
+                    foreach (var isoform in geneInfo.isoforms)
+                    {
+                        if (!map.ContainsKey(isoform.chromosome))
+                        {
+                            map.Add(isoform.chromosome, new Dictionary<int, List<Isoform>>());
+                        }
+
+                        foreach (var exon in isoform.exons)
+                        {
+                            for (int locus = exon.start; locus <= exon.end; locus++)
+                            {
+                                if (!map[isoform.chromosome].ContainsKey(locus))
+                                {
+                                    map[isoform.chromosome].Add(locus, new List<Isoform>());
+                                }
+
+                                map[isoform.chromosome][locus].Add(isoform);
+                            } // for each locus in the exon
+                        } // for each exon
+                    }  // for each isoform
+                } // for each gene
+            } // ctor
+
+            public List<Isoform> getIsoformsMappedTo(string contig, int locus)
+            {
+                if (!map.ContainsKey(contig) || !map[contig].ContainsKey(locus))
+                {
+                    return new List<Isoform>();
+                }
+
+                return map[contig][locus];
+            }
+
+            Dictionary<string, Dictionary<int, List<Isoform>>> map = new Dictionary<string, Dictionary<int, List<Isoform>>>();  // chr->locus->list of isoforms
+        }
 
         //
         // A Case is a person with TCGA data.
@@ -1792,6 +1850,8 @@ namespace ASELib
             public string bisulfiteDirectory = defaultBaseDirectory + @"bisulfate\";
             public string bisulfiteCasesFilePathname = defaultBaseDirectory + @"bisulfite\cases_bisulfite.txt";
 
+            public int readLengthForRepetitiveRegionDetection = 48;
+
             public string chromosomeMapsDirectory = defaultBaseDirectory + @"chromosome_maps\";
             public string redundantChromosomeRegionFilename = defaultBaseDirectory + "redundantRegions.txt";
 
@@ -2013,6 +2073,8 @@ namespace ASELib
                         retVal.minDNAReadCoverage = Convert.ToInt32(fields[1]);
                     } else if (type == "encode bed file") {
                         retVal.encodeBEDFile = fields[1];
+                    } else if (type == "read length for repetitive region detection") {
+                        retVal.readLengthForRepetitiveRegionDetection = Convert.ToInt32(fields[1]);
                     } else if (type == "downloaded files have md5 sums") {
                         if (fields[1].ToLower() == "false")
                         {
@@ -2718,6 +2780,8 @@ namespace ASELib
         public const string TumorGermlineASEDistributionFilename = "TumorGermlineASEDistribution.txt";
         public const string allLociExtension = "-all-loci.sam";
         public const string allLociAlignedExtension = "-all-loci-aligned.sam";
+        public const string transcriptomeFastaFilename = "transcriptome.fasta";
+        public const string generatedTranscriptomeIndexName = "TranscriptomeSNAPIndex";
         public const string AllSitesReadDepthFilename = "AllSitesReadDepth.txt";
         public const string Expression_distribution_filename_base = "expression_distribution_";
         public const string annotated_scatter_graph_filename_extension = "_annotated_scatter_lines.txt";
@@ -12836,7 +12900,8 @@ namespace ASELib
             Dictionary<string, double> fractionOfAllReads = new Dictionary<string, double>();
         } // ExpressionByGene
 
-
+        // These are the genes from figure S11(a) of "Genomic and Epigenomic Landscapes of Adult De Novo Acute Myeloid Leukemia," N Engl J Med 2013; 368:2059-2074;  https://www.nejm.org/doi/suppl/10.1056/NEJMoa1301689/suppl_file/nejmoa1301689_appendix.pdf
+        public static string[] spliceosome_genes = { "CSTF2T", "DDX1", "DDX23", "DHX32", "HNRNPK", "METTL3", "PLRG1", "POLR2A", "PRPF3", "PRPF8", "RBMX", "SF3B1", "SNRNP200", "SRRM2", "SRSF2", "SRSF6", "SUPT5H", "TRA2B", "U2AF1", "U2AF1L4", "U2AF2" };
     } // ASETools
 
     //
