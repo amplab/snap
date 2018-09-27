@@ -2615,7 +2615,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (stateOfTheWorld.cases.Any(x => x.Value.annotated_selected_variants_filename == ""))
+                if (stateOfTheWorld.cases.Any(x => x.Value.annotated_selected_variants_filename == "") || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -2725,7 +2725,8 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.annotated_selected_variants_filename == "" || x.expression_by_gene_filename == ""))
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.annotated_selected_variants_filename == "" || x.expression_by_gene_filename == "") ||
+                    !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
