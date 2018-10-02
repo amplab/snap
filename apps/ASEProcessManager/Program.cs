@@ -1823,8 +1823,9 @@ namespace ASEProcessManager
                 if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename))
                 {
                     nDone++;
-                } else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && (x.tumor_copy_number_filename != "" || stateOfTheWorld.configuration.isBeatAML) && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == ""
-                           || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename) || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename))))
+                } else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && (x.tumor_copy_number_filename != "" || stateOfTheWorld.configuration.isBeatAML) && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == ""))
+                           || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename)
+                           || !File.Exists(stateOfTheWorld.configuration.redundantChromosomeRegionFilename))
                 {
                     nWaitingForPrerequisites++;
                 } else
@@ -1846,7 +1847,7 @@ namespace ASEProcessManager
                 }
                 else
                 {
-                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallDistribution.exe" + stateOfTheWorld.configurationString + "-c");
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallDistribution.exe" + stateOfTheWorld.configurationString + " -c");
                     nAddedToScript++;
                 }
             } // EvaluateStage
@@ -2081,7 +2082,7 @@ namespace ASEProcessManager
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
 
-                if (File.Exists(stateOfTheWorld.configuration.zero_one_two_directory + "TP53-0.txt")) // NB: Assumes p53 in gene is significant
+                if (File.Exists(stateOfTheWorld.configuration.zero_one_two_directory + "TP53-20.txt")) // NB: Assumes p53 in gene is significant
                 {
                     nDone = 1;
                     return;
@@ -2581,7 +2582,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (stateOfTheWorld.cases.Any(x => x.Value.annotated_selected_variants_filename == ""))
+                if (stateOfTheWorld.cases.Any(x => x.Value.annotated_selected_variants_filename == "")  || !File.Exists(stateOfTheWorld.configuration.redundantChromosomeRegionFilename))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -2843,7 +2844,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (stateOfTheWorld.selectedGenes.Any(x => !File.Exists(stateOfTheWorld.configuration.geneScatterGraphsDirectory + x + ".txt")) || 
+                if (!File.Exists(stateOfTheWorld.configuration.geneScatterGraphsDirectory + ASETools.scatterGraphsSummaryFilename) || 
                     stateOfTheWorld.diseases.Any(x => !File.Exists(stateOfTheWorld.configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + x)))
                 {
                     nWaitingForPrerequisites = 1;
@@ -2855,6 +2856,75 @@ namespace ASEProcessManager
 
             } // EvaluateStage
         } // AnnotateScatterGraphsProcessingStage
+
+        class SpliceosomeAllelicImbalanceProcessingStage : ProcessingStage
+        {
+            public SpliceosomeAllelicImbalanceProcessingStage() { }
+            public string GetStageName() { return "Spilceosome Allelic Imbalance"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.IsoformBalanceFilename) && File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.IsoformBalancePValueHistogramFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Any(_ => _.Value.tumor_rna_allcount_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SpliceosomeAllelicImbalance.exe" + stateOfTheWorld.configurationString);
+                nAddedToScript = 1;
+
+            } // EvaluateStage
+        } // SpliceosomeAllelicImbalanceProcessingStage
+
+        class ReadLengthDistributionProcessingStage : ProcessingStage
+        {
+            public ReadLengthDistributionProcessingStage() { }
+            public string GetStageName() { return "Read length distribution"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ReadLengthHistogramFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Select(_ => _.Value).Any(_ => _.normal_dna_reads_at_selected_variants_filename == "" || _.tumor_dna_reads_at_selected_variants_filename == "" || _.tumor_rna_reads_at_selected_variants_filename == "" ||
+                                                          _.selected_variants_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ReadLengthDistributions.exe" + stateOfTheWorld.configurationString);
+                nAddedToScript = 1;
+
+            } // EvaluateStage
+        } // ReadLengthDistributionProcessingStage
 
 
         class FPKMProcessingStage : ProcessingStage
@@ -3408,6 +3478,8 @@ namespace ASEProcessManager
             processingStages.Add(new AnnotateScatterGraphsProcessingStage());
             processingStages.Add(new GenerateTranscriptomeReadsAndReferenceProcessingStage());
             processingStages.Add(new GenerateTranscriptomeIndexProcessingStage());
+            processingStages.Add(new SpliceosomeAllelicImbalanceProcessingStage());
+            processingStages.Add(new ReadLengthDistributionProcessingStage());
 
             if (checkDependencies)
             {

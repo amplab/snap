@@ -23,6 +23,7 @@ namespace OverallDistribution
         static Dictionary<string, ASETools.PreBucketedHistogram> germlineTumorDNAReadDepthByDiseaseType = new Dictionary<string, ASETools.PreBucketedHistogram>();
         static Dictionary<string, ASETools.PreBucketedHistogram> validGermlineASESitesByDisease = new Dictionary<string, ASETools.PreBucketedHistogram>();
         static ASETools.PreBucketedHistogram overallValidGermlineASESites = new ASETools.PreBucketedHistogram(0, 2000, 1);
+        static ASETools.ASERepetitiveRegionMap repetitiveRegionMap;
 
         class PerThreadState
         {
@@ -84,6 +85,14 @@ namespace OverallDistribution
                         {
                             if (!variant.somaticMutation == somatic || variant.isSilent())
                             {
+                                continue;
+                            }
+
+                            if (somatic && repetitiveRegionMap.isInRepetitiveRegion(ASETools.chromosomeNameToNonChrForm(variant.contig)[0], variant.locus))
+                            {
+                                //
+                                // We excluded repetitive regions from the germline variants, but the somatic ones are everything from the MAF.  So, drop them here if needed.
+                                //
                                 continue;
                             }
 
@@ -254,6 +263,13 @@ namespace OverallDistribution
             if (null == perGeneASEMap)
             {
                 Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                return;
+            }
+
+            repetitiveRegionMap = ASETools.ASERepetitiveRegionMap.loadFromFile(configuration.redundantChromosomeRegionFilename);
+            if (null == repetitiveRegionMap)
+            {
+                Console.WriteLine("Unable to load repetitive region map from " + configuration.redundantChromosomeRegionFilename);
                 return;
             }
 

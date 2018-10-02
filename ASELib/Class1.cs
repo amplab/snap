@@ -1682,6 +1682,33 @@ namespace ASELib
                 if (dna) return normal_dna_allcount_filename;
                 return normal_rna_allcount_filename;
             } // getAllcountFilename
+
+            public string getReadsAtSelectedVariantsFilename(bool tumor, bool dna)
+            {
+                if (tumor)
+                {
+                    if (dna) return tumor_dna_reads_at_selected_variants_filename;
+                    else return tumor_rna_reads_at_selected_variants_filename;
+                } else
+                {
+                    if (dna) return normal_dna_reads_at_selected_variants_filename;
+                    return normal_rna_reads_at_selected_variants_filename;
+                }
+            } // getReadsAtSelectedVariantsFilename
+
+            public string getDownloadedReadsFileId(bool tumor, bool dna)
+            {
+                if (tumor)
+                {
+                    if (dna) return tumor_dna_file_id;
+                    return tumor_rna_file_id;
+                } else
+                {
+                    if (dna) return normal_dna_file_id;
+                    return normal_rna_file_id;
+                }
+            } // getDownloadedReadsFileId
+
         } // Case
 
         public static long LongFromString(string String)
@@ -2797,6 +2824,9 @@ namespace ASELib
         public const string MethylationDistributionsFilename = "MethylationDistributions.txt";
         public const string MethylationCorrelationsFilename = "MethylationCorrelations.txt";
         public const string MethylagtionCorrelationsHistogramFilename = "MethylationCorrelationsHistogram.txt";
+        public const string IsoformBalanceFilename = "IsoformBalance.txt";
+        public const string IsoformBalancePValueHistogramFilename = "IsoformBalance-pValueHistogram.txt";
+        public const string ReadLengthHistogramFilename = "ReadLengthHistograms.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -2876,163 +2906,171 @@ namespace ASELib
             ulong totalBytesInDownloadedFiles = 0;
             ulong totalBytesInDerivedFiles = 0;
 
+            ulong freeBytesAvailable, totalBytes, totalNumberOfFreeBytes;
+
             var downloadedFiles = new List<DownloadedFile>();
             var derivedFiles = new List<DerivedFile>();
 
-            foreach (var subdir in Directory.EnumerateDirectories(downloadedFilesDirectory))
+            try
             {
-                var file_id = GetFileNameFromPathname(subdir).ToLower();    // The directory is the same as the file id.
-
-                if (file_id.Count() != GuidStringLength)
+                foreach (var subdir in Directory.EnumerateDirectories(downloadedFilesDirectory))
                 {
-                    lock (state)
-                    {
-                        Console.WriteLine("Found subdirectory of a downloaded files dierectory whose name doesn't appear to be a guid, ignoring: " + subdir);
-                    }
-                    continue;
-                }
+                    var file_id = GetFileNameFromPathname(subdir).ToLower();    // The directory is the same as the file id.
 
-                //
-                // Look through the subdirectory to find the downloaded file and also any .md5 versions of it.
-                //
-                string candidatePathname = null;
-                string md5Pathname = null;
-                bool sawBAI = false;
-                bool sawBAM = false;
-                bool sawUnsortedBAM = false;
-                string unsortedBAMPathmame = null;    
-                foreach (var pathname in Directory.EnumerateFiles(subdir))
-                {
-                    var filename = GetFileNameFromPathname(pathname).ToLower();
-                    if (filename == "annotations.txt")
+                    if (file_id.Count() != GuidStringLength)
                     {
-                        continue;
-                    }
-
-                    if (filename.EndsWith(".bai"))
-                    {
-                        sawBAI = true;
-                        continue;
-                    }
-
-
-                    if (filename.EndsWith(".md5"))
-                    {
-                        if (null != md5Pathname)
+                        lock (state)
                         {
-                            Console.WriteLine("Directory " + subdir + " contains more than one file with extension .md5");
+                            Console.WriteLine("Found subdirectory of a downloaded files dierectory whose name doesn't appear to be a guid, ignoring: " + subdir);
+                        }
+                        continue;
+                    }
+
+                    //
+                    // Look through the subdirectory to find the downloaded file and also any .md5 versions of it.
+                    //
+                    string candidatePathname = null;
+                    string md5Pathname = null;
+                    bool sawBAI = false;
+                    bool sawBAM = false;
+                    bool sawUnsortedBAM = false;
+                    string unsortedBAMPathmame = null;
+                    foreach (var pathname in Directory.EnumerateFiles(subdir))
+                    {
+                        var filename = GetFileNameFromPathname(pathname).ToLower();
+                        if (filename == "annotations.txt")
+                        {
                             continue;
                         }
-                        md5Pathname = pathname;
+
+                        if (filename.EndsWith(".bai"))
+                        {
+                            sawBAI = true;
+                            continue;
+                        }
+
+
+                        if (filename.EndsWith(".md5"))
+                        {
+                            if (null != md5Pathname)
+                            {
+                                Console.WriteLine("Directory " + subdir + " contains more than one file with extension .md5");
+                                continue;
+                            }
+                            md5Pathname = pathname;
+                            continue;
+                        }
+
+                        if (filename.EndsWith(".unsorted-bam") && configuration.isBeatAML)
+                        {
+                            sawUnsortedBAM = true;
+                            unsortedBAMPathmame = pathname;
+                            continue;
+                        }
+
+                        if (null != candidatePathname)
+                        {
+                            Console.WriteLine("Found more than one file candidate in " + subdir);
+                            continue;
+                        }
+
+                        candidatePathname = pathname;
+
+                        if (filename.EndsWith(".bam"))
+                        {
+                            sawBAM = true;
+                        }
+                    }
+
+                    if (candidatePathname == null && unsortedBAMPathmame != null)
+                    {
+                        candidatePathname = unsortedBAMPathmame;    // Until we sort it, we'll just use that.
+                    }
+
+                    if (candidatePathname == null && md5Pathname != null)
+                    {
+                        Console.WriteLine("Found md5 file in directory without accompanying downloaded file (?): " + md5Pathname);
                         continue;
                     }
 
-                    if (filename.EndsWith(".unsorted-bam") && configuration.isBeatAML)
+                    if (sawBAM != sawBAI && (!configuration.isBeatAML || !sawBAM)) // Some of the BeatAML files aren't indexed, so we run a stage for that.
                     {
-                        sawUnsortedBAM = true;
-                        unsortedBAMPathmame = pathname;
+                        Console.WriteLine("Downloaded file directory " + subdir + " has exactly one BAM and BAI file.");
                         continue;
                     }
 
-                    if (null != candidatePathname)
+                    string md5Value = "";
+                    if (md5Pathname != null)
                     {
-                        Console.WriteLine("Found more than one file candidate in " + subdir);
-                        continue;
+                        if (md5Pathname.ToLower() != candidatePathname.ToLower() + ".md5")
+                        {
+                            Console.WriteLine("md5 file has wrong basename: " + md5Pathname);
+                        }
+                        else
+                        {
+                            try
+                            {
+                                var lines = File.ReadAllLines(md5Pathname); // Don't use the with retry version, because we don't want to get stuck behind a worker hashing a file.
+                                if (lines.Count() != 1 || lines[0].Count() != 32)
+                                {
+                                    Console.WriteLine("md5 file " + md5Pathname + " has a non-md5 content.  Ignoring.");
+                                }
+                                else
+                                {
+                                    md5Value = lines[0];
+                                }
+                            }
+                            catch (IOException)
+                            {
+                                Console.WriteLine("Skipping md5 file " + md5Pathname + " because of an IO error.  It's most likely being created now.");
+                            }
+                        }
                     }
 
-                    candidatePathname = pathname;
 
-                    if (filename.EndsWith(".bam"))
+                    if (null == candidatePathname)
                     {
-                        sawBAM = true;
-                    }
-                }
-
-                if (candidatePathname == null && unsortedBAMPathmame != null)
-                {
-                    candidatePathname = unsortedBAMPathmame;    // Until we sort it, we'll just use that.
-                }
-
-                if (candidatePathname == null && md5Pathname != null)
-                {
-                    Console.WriteLine("Found md5 file in directory without accompanying downloaded file (?): " + md5Pathname);
-                    continue;
-                }
-
-                if (sawBAM != sawBAI && (!configuration.isBeatAML || !sawBAM)) // Some of the BeatAML files aren't indexed, so we run a stage for that.
-                {
-                    Console.WriteLine("Downloaded file directory " + subdir + " has exactly one BAM and BAI file.");
-                    continue;
-                }
-
-                string md5Value = "";
-                if (md5Pathname != null)
-                {
-                    if (md5Pathname.ToLower() != candidatePathname.ToLower() + ".md5")
-                    {
-                        Console.WriteLine("md5 file has wrong basename: " + md5Pathname);
+                        Console.WriteLine("Couldn't find downloaded file in directory " + subdir);
                     }
                     else
                     {
-                        try
-                        {
-                            var lines = File.ReadAllLines(md5Pathname); // Don't use the with retry version, because we don't want to get stuck behind a worker hashing a file.
-                            if (lines.Count() != 1 || lines[0].Count() != 32)
-                            {
-                                Console.WriteLine("md5 file " + md5Pathname + " has a non-md5 content.  Ignoring.");
-                            }
-                            else
-                            {
-                                md5Value = lines[0];
-                            }
-                        }
-                        catch (IOException)
-                        {
-                            Console.WriteLine("Skipping md5 file " + md5Pathname + " because of an IO error.  It's most likely being created now.");
-                        }
+                        nDownloadedFiles++;
+                        var downloadedFile = new DownloadedFile(file_id, candidatePathname, md5Value, md5Pathname);
+                        downloadedFiles.Add(downloadedFile);
+
+                        totalBytesInDownloadedFiles += (ulong)downloadedFile.fileInfo.Length;
                     }
-                }
+                } // foreach subdir
 
-
-                if (null == candidatePathname)
+                string derivedFilesDirectory = downloadedFilesDirectory + @"..\" + configuration.derivedFilesDirectory;
+                foreach (var derivedCase in Directory.EnumerateDirectories(derivedFilesDirectory))
                 {
-                    Console.WriteLine("Couldn't find downloaded file in directory " + subdir);
-                }
-                else
-                {
-                    nDownloadedFiles++;
-                    var downloadedFile = new DownloadedFile(file_id, candidatePathname, md5Value, md5Pathname);
-                    downloadedFiles.Add(downloadedFile);
+                    var caseId = ASETools.GetFileNameFromPathname(derivedCase).ToLower();
 
-                    totalBytesInDownloadedFiles += (ulong)downloadedFile.fileInfo.Length;
-                }
-            } // foreach subdir
-
-            string derivedFilesDirectory = downloadedFilesDirectory + @"..\" + configuration.derivedFilesDirectory;
-            foreach (var derivedCase in Directory.EnumerateDirectories(derivedFilesDirectory))
-            {
-                var caseId = ASETools.GetFileNameFromPathname(derivedCase).ToLower();
-
-                if (caseId.Count() != GuidStringLength)
-                {
-                    lock (state)
+                    if (caseId.Count() != GuidStringLength)
                     {
-                        Console.WriteLine("Found subdirectory of a derived files dierectory whose name doesn't appear to be a guid, ignoring: " + derivedCase);
+                        lock (state)
+                        {
+                            Console.WriteLine("Found subdirectory of a derived files dierectory whose name doesn't appear to be a guid, ignoring: " + derivedCase);
+                        }
+                        continue;
                     }
-                    continue;
+
+                    foreach (var derivedFilePathname in Directory.EnumerateFiles(derivedCase).Select(x => x.ToLower()))
+                    {
+                        var derivedFile = new DerivedFile(derivedFilePathname, caseId);
+                        nDerivedFiles++;
+                        totalBytesInDerivedFiles += (ulong)derivedFile.fileinfo.Length;
+                        derivedFiles.Add(derivedFile);
+                    }
                 }
 
-                foreach (var derivedFilePathname in Directory.EnumerateFiles(derivedCase).Select(x => x.ToLower()))
-                {
-                    var derivedFile = new DerivedFile(derivedFilePathname, caseId);
-                    nDerivedFiles++;
-                    totalBytesInDerivedFiles += (ulong)derivedFile.fileinfo.Length;
-                    derivedFiles.Add(derivedFile);
-                }
+                GetDiskFreeSpaceEx(downloadedFilesDirectory, out freeBytesAvailable, out totalBytes, out totalNumberOfFreeBytes);
+            } catch (Exception e)
+            {
+                Console.WriteLine("Exception in ScanOneFilesystem for " + downloadedFilesDirectory);
+                throw e;
             }
-
-            ulong freeBytesAvailable, totalBytes, totalNumberOfFreeBytes;
-            GetDiskFreeSpaceEx(downloadedFilesDirectory, out freeBytesAvailable, out totalBytes, out totalNumberOfFreeBytes);
 
             lock (state)
             {
@@ -7731,6 +7769,8 @@ namespace ASELib
                 seq = fields[9];
                 qual = fields[10];
 
+                nonclippedBases = 0;
+
                 //
                 // Break down the bases in seq based on their mapped location.  Orindarily, this is one
                 // base per location, but in the cases of insertions or deletions (or skipped bases for RNA) it could be zero or more than one.
@@ -7754,7 +7794,7 @@ namespace ASELib
                             case 'I':
                             case '=':
                             case 'X':
-                                offsetInCigarString++;  // Consume the M, = or X
+                                offsetInCigarString++;  // Consume the M, I, = or X
                                 int count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
                                 if (0 == count)
@@ -7775,9 +7815,12 @@ namespace ASELib
                                 cigarElementLength = 0;
                                 cigarElementStart = offsetInCigarString;
 
+                                nonclippedBases += count;
+
                                 break;
+
                             case 'D':
-                                offsetInCigarString++;  // Consume the M, = or X
+                                offsetInCigarString++;  // Consume the D
                                 count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
                                 if (0 == count)
@@ -7797,9 +7840,10 @@ namespace ASELib
                                 cigarElementStart = offsetInCigarString;
 
                                 break;
+
                             case 'N':
                             case 'H':
-                                offsetInCigarString++;  // Consume the M, = or X
+                                offsetInCigarString++;  // Consume the N or H
                                 count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
                                 // skip region. Reset
@@ -7808,8 +7852,9 @@ namespace ASELib
                                 cigarElementLength = 0;
                                 cigarElementStart = offsetInCigarString;
                                 break;
+
                             case 'S':
-                                offsetInCigarString++;  // Consume the M, = or X
+                                offsetInCigarString++;  // Consume the S
                                 count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
                                 // skip region. Reset
@@ -7818,6 +7863,7 @@ namespace ASELib
                                 cigarElementLength = 0;
                                 cigarElementStart = offsetInCigarString;
                                 break;
+
                             default:
                                 offsetInCigarString++;
                                 cigarElementLength++;
@@ -7858,6 +7904,7 @@ namespace ASELib
             public readonly int tlen;
             public readonly string seq;
             public readonly string qual;
+            public readonly int nonclippedBases;
 
             public const int Unmapped = 0x4;
             public const int SecondaryAligment = 0x100;
@@ -8329,7 +8376,15 @@ namespace ASELib
 
             static HistogramResultLine parse(HeaderizedFile<HistogramResultLine>.FieldGrabber fieldGrabber)
             {
-                return new HistogramResultLine(fieldGrabber.AsString("minValue"), fieldGrabber.AsDouble("minValue"),  fieldGrabber.AsInt("count"), fieldGrabber.AsDouble("total"), fieldGrabber.AsDouble("pdf"), fieldGrabber.AsDouble("cdf"));
+                double minValue;
+                if (fieldGrabber.AsString("minValue") == "More")
+                {
+                    minValue = 1;
+                } else
+                {
+                    minValue = fieldGrabber.AsDouble("minValue");
+                }
+                return new HistogramResultLine(fieldGrabber.AsString("minValue"), minValue,  fieldGrabber.AsInt("count"), fieldGrabber.AsDouble("total"), fieldGrabber.AsDouble("pdf"), fieldGrabber.AsDouble("cdf"));
             }
 
             public HistogramResultLine(string minValue_, double minValueAsDuoble_, int count_, double total_, double pdfValue_, double cdfValue_)
@@ -11329,6 +11384,11 @@ namespace ASELib
                 tree = tree_;
             }
 
+            public bool isInRepetitiveRegion(string chromosome, int locus)
+            {
+                return isInRepetitiveRegion(chromosomeNameToNonChrForm(chromosome)[0], locus);
+            }
+
             public bool isInRepetitiveRegion(char chromosomeNumber, int locus)
             {
                 var key = new SingleRepetitiveRegion(chromosomeNumber, locus, locus);
@@ -12902,6 +12962,11 @@ namespace ASELib
 
         // These are the genes from figure S11(a) of "Genomic and Epigenomic Landscapes of Adult De Novo Acute Myeloid Leukemia," N Engl J Med 2013; 368:2059-2074;  https://www.nejm.org/doi/suppl/10.1056/NEJMoa1301689/suppl_file/nejmoa1301689_appendix.pdf
         public static string[] spliceosome_genes = { "CSTF2T", "DDX1", "DDX23", "DHX32", "HNRNPK", "METTL3", "PLRG1", "POLR2A", "PRPF3", "PRPF8", "RBMX", "SF3B1", "SNRNP200", "SRRM2", "SRSF2", "SRSF6", "SUPT5H", "TRA2B", "U2AF1", "U2AF1L4", "U2AF2" };
+
+        public static string NumberWithCommas(long value)
+        {
+            return String.Format("{0:n0}", value);
+        }
     } // ASETools
 
     //

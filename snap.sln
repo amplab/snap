@@ -202,6 +202,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateReadsForRepetitiveT
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpliceosomeAllelicImbalance", "apps\SpliceosomeAllelicImbalance\SpliceosomeAllelicImbalance.csproj", "{161F30F7-08DC-4383-AF07-556A38A3DF10}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReadLengthDistributions", "apps\ReadLengthDistributions\ReadLengthDistributions.csproj", "{D3AFAC08-77B3-4899-86BD-B6D945982498}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1502,6 +1504,22 @@ Global
 		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|Win32.Build.0 = Release|Any CPU
 		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|x64.ActiveCfg = Release|x64
 		{161F30F7-08DC-4383-AF07-556A38A3DF10}.Release|x64.Build.0 = Release|x64
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Debug|Win32.Build.0 = Debug|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Debug|x64.ActiveCfg = Debug|x64
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Debug|x64.Build.0 = Debug|x64
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Release|Win32.ActiveCfg = Release|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Release|Win32.Build.0 = Release|Any CPU
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Release|x64.ActiveCfg = Release|x64
+		{D3AFAC08-77B3-4899-86BD-B6D945982498}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

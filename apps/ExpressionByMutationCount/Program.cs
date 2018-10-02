@@ -116,9 +116,18 @@ namespace ExpressionByMutationCount
 
             var genesToProcess = new Dictionary<string, GeneState>();
 
+            Console.WriteLine("Loading scatter graphs for " + selectedGenes.Count() + " genes, one dot/100 genes:");
+            ASETools.PrintNumberBar(selectedGenes.Count() / 100);
+
             int nGenesSkipped = 0;
+            int nScatterGraphsLoaded = 0;
             foreach (var selectedGene in selectedGenes)
             {
+                nScatterGraphsLoaded++;
+                if (nScatterGraphsLoaded % 100 == 0)
+                {
+                    Console.Write(".");
+                }
                 //
                 // Load the unfiltered scatter graph for this gene into memory.
                 //
@@ -136,6 +145,7 @@ namespace ExpressionByMutationCount
                 genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines, 
                     !(overallTumorASEAboveWhichToExcludeCases <= 1.0 || overallTumorASEBelowWhichToExcludeCases >= 0 || maxChromosomeASEBelowWhichToExcludeCases >= 0 || dependOnTP53)));
             }
+            Console.WriteLine();
 
             if (genesToProcess.Count() == 0)
             {
@@ -211,11 +221,21 @@ namespace ExpressionByMutationCount
             timer.Reset();
             timer.Start();
 
+            Console.WriteLine("Writing out results for " + genesToProcess + " genes, 1 dot/100 genes:");
+            ASETools.PrintNumberBar(genesToProcess.Count() / 100);
+            int nGenesProcessed = 0;
+
             //
             // Now generate output for all of the genes.
             //
             foreach (var geneToProcessEntry in genesToProcess)
             {
+                nGenesProcessed++;
+                if (nGenesProcessed % 100 == 0)
+                {
+                    Console.Write(".");
+                }
+
                 var geneToProcess = geneToProcessEntry.Value;
 
                 //
@@ -304,6 +324,7 @@ namespace ExpressionByMutationCount
                 geneToProcessEntry.Value.perGeneLinesFile.Close();
             }
 
+            Console.WriteLine();
             Console.WriteLine("Total run time " + ASETools.ElapsedTimeInSeconds(endToEndTimer));
         } // Main
         class ExpressionInstance : IComparer<ExpressionInstance>
@@ -936,8 +957,6 @@ namespace ExpressionByMutationCount
                             geneToProcess.countsByDisease[disease].nOneSilent++;
                             geneToProcess.overallCounts.nOneSilent++;
                         }
-
-
 
                         var thisExpression = expressionForThisCase[geneToProcess.hugo_symbol];
 

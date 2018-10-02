@@ -34,10 +34,24 @@ namespace SpliceosomeAllelicImbalance
             }
         }
 
-        class NameAndPValue
+        class Result
         {
             public string name;
             public double pValue;
+            public double meanNoMutation;
+            public double meanWithMutation;
+            public int nNoMutation;
+            public int nWithMutation;
+
+            public Result(string name_, double pValue_, double meanNoMutation_, double meanWithMutation_, int nNoMutation_, int nWithMutation_)
+            {
+                name = name_;
+                pValue = pValue_;
+                meanNoMutation = meanNoMutation_;
+                meanWithMutation = meanWithMutation_;
+                nNoMutation = nNoMutation_;
+                nWithMutation = nWithMutation_;
+            }
         }
 
         static void Main(string[] args)
@@ -80,7 +94,9 @@ namespace SpliceosomeAllelicImbalance
 
             int nTooFewSamples = 0;
             int nConsidered = 0;
-            var results = new List<NameAndPValue>();
+            var results = new List<Result>();
+
+            var pValueHistogram = new ASETools.PreBucketedHistogram(0, 1, 0.001);
 
             foreach (var geneInfo in commonData.geneLocationInformation.genesByName.Select(x => x.Value).ToList())
             {
@@ -103,12 +119,60 @@ namespace SpliceosomeAllelicImbalance
                     bool enoughData, reversed;
                     double nFirstGroup, nSecondGroup, U, z;
 
-                    ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(items, items[0], _ => _.whichClass, _ => _.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z);
-                    
+                    double p = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(items, items[0], _ => _.whichClass, _ => _.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z);
 
+                    pValueHistogram.addValue(p);
 
-                }
+                    var nonMutantItems = items.Where(_ => !_.whichClass).Select(_ => _.value);
+                    var mutantItems = items.Where(_ => _.whichClass).Select(_ => _.value);
+
+                    results.Add(new Result(geneInfo.hugoSymbol + ":" + isoformName, p, nonMutantItems.Average(), mutantItems.Average(), nonMutantItems.Count(), mutantItems.Count()));
+                } // for each isoform
+            } // for each gene
+
+            int nSignificant = results.Where(_ => _.pValue * nConsidered <= .01).Count();
+
+            results.Sort((x, y) => y.pValue.CompareTo(x.pValue));   // Backwards sort, so smallest is last
+
+            double maxSignificantUncorrectedPValue = 0.01 / nConsidered;
+            results.Where(_ => _.pValue <= maxSignificantUncorrectedPValue).ToList().ForEach(_ => Console.WriteLine(_.name + " has pValue " + (_.pValue * nConsidered) + " after Bonferroni correction."));
+
+            var outputFilename = commonData.configuration.finalResultsDirectory + ASETools.IsoformBalanceFilename;
+            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+            if (null == outputFile)
+            {
+                Console.WriteLine("Unable to open output file " + outputFilename);
+                //
+                // Just let it go and print the last line anyway.
+                //
+            } else
+            {
+                //
+                // Sort so significant results go first.  Within significant results, sort by ascending p value.  For insignificant results, sort by name.
+                //
+                results.Sort((x, y) => (x.pValue < maxSignificantUncorrectedPValue && y.pValue < maxSignificantUncorrectedPValue) ? x.pValue.CompareTo(y.pValue) : (x.pValue < maxSignificantUncorrectedPValue ? -1 : (y.pValue < maxSignificantUncorrectedPValue ? 1 : x.name.CompareTo(y.name))));
+
+                outputFile.WriteLine("Name\tCorrected pValuet\tn with no mutation\tmean with no mutation\tn with mutation\tmean with mutation");
+                results.ForEach(_ => outputFile.WriteLine(_.name + "\t" + (_.pValue * nConsidered) + "\t" + _.nNoMutation + "\t" + _.meanNoMutation+ "\t" + _.nWithMutation  + "\t" + _.meanWithMutation));
+                outputFile.WriteLine("**done**");
+                outputFile.Close();
             }
+
+            var pValueHistogramOutputFilename = commonData.configuration.finalResultsDirectory + ASETools.IsoformBalancePValueHistogramFilename;
+            var pValueHistogramFile = ASETools.CreateStreamWriterWithRetry(pValueHistogramOutputFilename);
+            if (null == pValueHistogramFile)
+            {
+                Console.WriteLine("Unable to open p value histogram file " + pValueHistogramOutputFilename);
+                // Fall through
+            } else
+            {
+                pValueHistogramFile.WriteLine(ASETools.HistogramResultLine.Header());
+                pValueHistogram.ComputeHistogram().ToList().ForEach(_ => pValueHistogramFile.WriteLine(_.ToString()));
+                pValueHistogramFile.WriteLine("**done**");
+                pValueHistogramFile.Close();
+            }
+
+            Console.WriteLine("Considered " + nConsidered + " isoforms, of which " + nSignificant + " are have significant differences in balance based on spliceosome mutations at the 0.01 level after Bonferroni correction in " + ASETools.ElapsedTimeInSeconds(commonData.timer));
         } // Main
 
         static void HandleOneCase(ASETools.Case case_, int state)
@@ -140,7 +204,9 @@ namespace SpliceosomeAllelicImbalance
             {
                 foreach (var hugo_symbol in valuesForThisCase.Select(_ => _.Key).ToList())
                 {
-                    int totalIsoformReads = valuesForThisCase[hugo_symbol].Select(_ => _.Value).Sum();  // This is more than the actual mapped reads, since some exons are in more than one isoform.  Hence "isoformReads"
+                    long totalIsoformReads = 0;  // This is more than the actual mapped reads, since some exons are in more than one isoform.  Hence "isoformReads"
+                    valuesForThisCase[hugo_symbol].ToList().ForEach(_ => totalIsoformReads += _.Value); // This is instead of the more obvious .Sum() because it will overflow int
+                        
                     foreach (var isoformName in valuesForThisCase[hugo_symbol].Select(_ => _.Key))
                     {
                         isoformBalanceBySpliceosome[hugo_symbol][isoformName][anySpliceosomeMutations].Add((double)valuesForThisCase[hugo_symbol][isoformName] / totalIsoformReads);

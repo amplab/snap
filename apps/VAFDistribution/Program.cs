@@ -15,6 +15,7 @@ namespace VAFDistribution
         static ASETools.Configuration configuration;
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
         static ASETools.GeneMap geneMap;
+        static ASETools.ASERepetitiveRegionMap repetitiveRegionMap;
 
         static Dictionary<string, ASETools.PreBucketedHistogram> global_one_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
         static Dictionary<string, ASETools.PreBucketedHistogram> global_multiple_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
@@ -74,6 +75,13 @@ namespace VAFDistribution
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
             perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+            repetitiveRegionMap = ASETools.ASERepetitiveRegionMap.loadFromFile(configuration.redundantChromosomeRegionFilename);
+            if (null == repetitiveRegionMap)
+            {
+                Console.WriteLine("Unable to load repetitive region map from " + configuration.redundantChromosomeRegionFilename);
+                return;
+            }
 
             var casesToProcess = cases.Select(x => x.Value).Where(x => x.annotated_selected_variants_filename != "").ToList();
 
@@ -187,27 +195,38 @@ namespace VAFDistribution
                     }
                 }
 
-                int mutationCount = variants.Where(x => x.somaticMutation && !x.isSilent()).Count();
+                var mutations = variants.Where(x => x.somaticMutation && !x.isSilent()).ToList();
+                int mutationCount = mutations.Count();
 
-                if (mutationCount == 1 && variants[0].IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !variants[0].CausesNonsenseMediatedDecay() && !variants[0].isSilent())
+                if (mutationCount == 1 && mutations[0].IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !mutations[0].CausesNonsenseMediatedDecay() && !mutations[0].isSilent() && 
+                    !repetitiveRegionMap.isInRepetitiveRegion(mutations[0].contig, mutations[0].locus))
                 {
-                    histograms[0][hugo_symbol].addValue(variants[0].GetTumorAltAlleleFraction());
+                    if (mutations[0].Hugo_symbol == "COL1A2")
+                    {
+                        Console.WriteLine("COL1A2 case " + case_.case_id + " single mutation, tumor DNA " + mutations[0].tumorDNAReadCounts.nMatchingReference + " matching reference, " + mutations[0].tumorDNAReadCounts.nMatchingAlt +
+                            " matching alt, tumor RNA " + mutations[0].tumorRNAReadCounts.nMatchingReference + " matching reference (" + mutations[0].reference_allele +"), " + mutations[0].tumorRNAReadCounts.nMatchingAlt + 
+                            " matching alt (" + mutations[0].alt_allele + "), locus " + 
+                            mutations[0].contig + ":" + ASETools.NumberWithCommas(mutations[0].locus));
+                    }
+                    histograms[0][hugo_symbol].addValue(mutations[0].GetTumorAltAlleleFraction());
                 }
 
-                if (mutationCount > 1 && variants.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent() && !x.CausesNonsenseMediatedDecay()).Count() > 0)
+                if (mutationCount > 1 && mutations.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent() && !x.CausesNonsenseMediatedDecay()
+                    && !repetitiveRegionMap.isInRepetitiveRegion(x.contig, x.locus)).Count() > 0)
                 {
-                    var vaf = variants.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent() && !x.CausesNonsenseMediatedDecay()).Select(x => x.GetTumorAltAlleleFraction()).Average();
+                    var vaf = mutations.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent() && !x.CausesNonsenseMediatedDecay()
+                    && !repetitiveRegionMap.isInRepetitiveRegion(x.contig, x.locus)).Select(x => x.GetTumorAltAlleleFraction()).Average();
 
                     histograms[1][hugo_symbol].addValue(vaf);
                 }
 
-                if (variants.Where(x => !x.somaticMutation && x.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap)).Count() > 0)
+                if (variants.Where(x => !x.somaticMutation && x.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap)).Count() > 0)  // Don't need to check repetitveRegionMap for germline variants, that happened in selectVariants
                 {
                     var vaf = variants.Where(x => !x.somaticMutation && x.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap)).Select(x => x.GetNormalAltAlleleFraction()).Average();
                     histograms[2][hugo_symbol].addValue(vaf);
                 }
 
-                if (mutationCount == 0 && variants.Where(x => x.isSilent() && x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).Count() > 0)
+                if (mutationCount == 0 && variants.Where(x => x.isSilent() && x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).Count() > 0) // how can this happen?  There are no silent/non-silent tags on germline variants
                 {
                     var vaf = variants.Where(x => x.isSilent() && x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).Select(x => x.GetTumorAltAlleleFraction()).Average();
                     histograms[3][hugo_symbol].addValue(vaf);
