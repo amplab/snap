@@ -1104,15 +1104,17 @@ namespace ASELib
             public string tumor_rna_allcount_filename = "";
             public string regional_expression_filename = "";
             public string gene_expression_filename = "";
+            public string tentative_selected_variants_filename = "";
             public string selected_variants_filename = "";
-            public string tumor_dna_reads_at_selected_variants_filename = "";
-            public string tumor_dna_reads_at_selected_variants_index_filename = "";
-            public string tumor_rna_reads_at_selected_variants_filename = "";
-            public string tumor_rna_reads_at_selected_variants_index_filename = "";
-            public string normal_rna_reads_at_selected_variants_filename = "";
-            public string normal_rna_reads_at_selected_variants_index_filename = "";
-            public string normal_dna_reads_at_selected_variants_filename = "";
-            public string normal_dna_reads_at_selected_variants_index_filename = "";
+            public string tumor_dna_reads_at_tentative_selected_variants_filename = "";
+            public string tumor_dna_reads_at_tentative_selected_variants_index_filename = "";
+            public string tumor_rna_reads_at_tentative_selected_variants_filename = "";
+            public string tumor_rna_reads_at_tentative_selected_variants_index_filename = "";
+            public string normal_rna_reads_at_tentative_selected_variants_filename = "";
+            public string normal_rna_reads_at_tentative_selected_variants_index_filename = "";
+            public string normal_dna_reads_at_tentative_selected_variants_filename = "";
+            public string normal_dna_reads_at_tentative_selected_variants_index_filename = "";
+            public string tentative_annotated_selected_variants_filename = "";
             public string annotated_selected_variants_filename = "";
             public string tumor_allele_specific_gene_expression_filename = "";
             public string normal_allele_specific_gene_expression_filename = "";
@@ -1162,6 +1164,7 @@ namespace ASELib
             public long tumor_rna_allcount_size = 0;
             public long regional_expression_size = 0;
             public long gene_expression_size = 0;
+            public long tentative_selected_variants_size = 0;
             public long selected_variants_size = 0;
             public long tumor_dna_reads_at_selected_variants_size = 0;
             public long tumor_dna_reads_at_selected_variants_index_size = 0;
@@ -1171,6 +1174,7 @@ namespace ASELib
             public long tumor_rna_reads_at_selected_variants_index_size = 0;
             public long normal_rna_reads_at_selected_variants_size = 0;
             public long normal_rna_reads_at_selected_variants_index_size = 0;
+            public long tentative_annotated_selected_variants_size = 0;
             public long annotated_selected_variants_size = 0;
             public long normal_allele_specific_gene_expression_size = 0;
             public long tumor_allele_specific_gene_expression_size = 0;
@@ -1370,15 +1374,17 @@ namespace ASELib
                 new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id, "Tumor RNA Allcount File Size", c => c.tumor_rna_allcount_size, (c, v) => c.tumor_rna_allcount_size = v),
                 new FieldInformation("Regional Expression Filename",                        c => c.regional_expression_filename, (c,v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id, "Regional Expression File Size", c => c.regional_expression_size, (c, v) => c.regional_expression_size = v),
                 new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id, "Gene Expression File Size", c => c.gene_expression_size, (c, v) => c.gene_expression_size = v),
+                new FieldInformation("Tentative Selected Variants",                         c => c.tentative_selected_variants_filename, (c, v) => c.tentative_selected_variants_filename = v, DerivedFile.Type.TentativeSelectedVariants, tentativeSelectedVariantsExtension, c => c.normal_dna_file_id, "Tentative Selected Variants Size", c => c.tentative_selected_variants_size, (c, v) => c.tentative_selected_variants_size = v),
                 new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id, "Selected Variants File Size", c=> c.selected_variants_size, (c, v) => c.selected_variants_size = v),
-                new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_selected_variants_filename, (c,v) => c.normal_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtSelectedVariantsExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants File Size", c => c.normal_dna_reads_at_selected_variants_size, (c, v) => c.normal_dna_reads_at_selected_variants_size = v),
-                new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtSelectedVariantsIndexExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants Index File Size", c => c.normal_dna_reads_at_selected_variants_index_size, (c, v) => c.normal_dna_reads_at_selected_variants_index_size = v),
-                new FieldInformation("Tumor DNA Reads At Selected Variants Filename",       c => c.tumor_dna_reads_at_selected_variants_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtSelectedVariantsExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants File Size", c => c.tumor_dna_reads_at_selected_variants_size, (c, v) => c.tumor_dna_reads_at_selected_variants_size = v),
-                new FieldInformation("Tumor DNA Reads At Selected Variants Index Filename", c => c.tumor_dna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariantsIndex, tumorDNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants Index File Size", c => c.tumor_dna_reads_at_selected_variants_index_size, (c, v) => c.tumor_dna_reads_at_selected_variants_index_size = v),
-                new FieldInformation("Normal RNA Reads At Selected Variants Filename",      c => c.normal_rna_reads_at_selected_variants_filename, (c,v) => c.normal_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariants, normalRNAReadsAtSelectedVariantsExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants File Size", c => c.normal_rna_reads_at_selected_variants_size, (c, v) => c.normal_rna_reads_at_selected_variants_size = v),
-                new FieldInformation("Normal RNA Reads At Selected Variants Index Filename",c => c.normal_rna_reads_at_selected_variants_index_filename, (c,v) => c.normal_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariantsIndex, normalRNAReadsAtSelectedVariantsIndexExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants Index File Size", c => c.normal_rna_reads_at_selected_variants_index_size, (c, v) => c.normal_rna_reads_at_selected_variants_index_size = v),
-                new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtSelectedVariantsExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants File Size", c => c.tumor_rna_reads_at_selected_variants_size, (c, v) => c.tumor_rna_reads_at_selected_variants_size = v),
-                new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants Index File Size", c => c.tumor_rna_reads_at_selected_variants_index_size, (c, v) => c.tumor_rna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_tentative_selected_variants_filename, (c,v) => c.normal_dna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtTentativeSelectedVariantsExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants File Size", c => c.normal_dna_reads_at_selected_variants_size, (c, v) => c.normal_dna_reads_at_selected_variants_size = v),
+                new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants Index File Size", c => c.normal_dna_reads_at_selected_variants_index_size, (c, v) => c.normal_dna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Tumor DNA Reads At Selected Variants Filename",       c => c.tumor_dna_reads_at_tentative_selected_variants_filename, (c,v) => c.tumor_dna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtTentativeSelectedVariantsExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants File Size", c => c.tumor_dna_reads_at_selected_variants_size, (c, v) => c.tumor_dna_reads_at_selected_variants_size = v),
+                new FieldInformation("Tumor DNA Reads At Selected Variants Index Filename", c => c.tumor_dna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.tumor_dna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariantsIndex, tumorDNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants Index File Size", c => c.tumor_dna_reads_at_selected_variants_index_size, (c, v) => c.tumor_dna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Normal RNA Reads At Selected Variants Filename",      c => c.normal_rna_reads_at_tentative_selected_variants_filename, (c,v) => c.normal_rna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariants, normalRNAReadsAtTentativeSelectedVariantsExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants File Size", c => c.normal_rna_reads_at_selected_variants_size, (c, v) => c.normal_rna_reads_at_selected_variants_size = v),
+                new FieldInformation("Normal RNA Reads At Selected Variants Index Filename",c => c.normal_rna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.normal_rna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariantsIndex, normalRNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants Index File Size", c => c.normal_rna_reads_at_selected_variants_index_size, (c, v) => c.normal_rna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_tentative_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtTentativeSelectedVariantsExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants File Size", c => c.tumor_rna_reads_at_selected_variants_size, (c, v) => c.tumor_rna_reads_at_selected_variants_size = v),
+                new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants Index File Size", c => c.tumor_rna_reads_at_selected_variants_index_size, (c, v) => c.tumor_rna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Tentative Annotated Selected Variants Filename",      c => c.tentative_annotated_selected_variants_filename, (c, v) => c.tentative_annotated_selected_variants_filename = v, DerivedFile.Type.TentativeAnnotatedSelectedVariants, tentativeAnnotatedSelectedVariantsExtension, c => c.case_id, "Tentative Annotated Selected Variants", c => c.tentative_annotated_selected_variants_size, (c, v) => c.tentative_annotated_selected_variants_size = v),
                 new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id, "Annotated Selected Variants File Size", c => c.annotated_selected_variants_size, (c, v) => c.annotated_selected_variants_size = v),
                 new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id, "Normal Allele Specific Gene Expression File Size", c => c.normal_allele_specific_gene_expression_size, (c, v) => c.normal_allele_specific_gene_expression_size = v),
                 new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id, "Tumor Allele Specific Gene Expression File Size", c => c.tumor_allele_specific_gene_expression_size, (c, v) => c.tumor_allele_specific_gene_expression_size = v),
@@ -1622,13 +1628,13 @@ namespace ASELib
                     tumor_allele_specific_gene_expression_filename = "";
                     normal_allele_specific_gene_expression_filename = "";
                     annotated_selected_variants_filename = "";
-                    tumor_dna_reads_at_selected_variants_filename = "";
-                    tumor_dna_reads_at_selected_variants_index_filename = "";
+                    tumor_dna_reads_at_tentative_selected_variants_filename = "";
+                    tumor_dna_reads_at_tentative_selected_variants_index_filename = "";
                     gene_expression_filename = "";
-                    tumor_dna_reads_at_selected_variants_filename = "";
+                    tumor_dna_reads_at_tentative_selected_variants_filename = "";
                     regional_expression_filename = "";
-                    tumor_rna_reads_at_selected_variants_filename = "";
-                    tumor_rna_reads_at_selected_variants_index_filename = "";
+                    tumor_rna_reads_at_tentative_selected_variants_filename = "";
+                    tumor_rna_reads_at_tentative_selected_variants_index_filename = "";
                     selected_variants_filename = "";
                     vcf_filename = "";
                     return;
@@ -1687,12 +1693,12 @@ namespace ASELib
             {
                 if (tumor)
                 {
-                    if (dna) return tumor_dna_reads_at_selected_variants_filename;
-                    else return tumor_rna_reads_at_selected_variants_filename;
+                    if (dna) return tumor_dna_reads_at_tentative_selected_variants_filename;
+                    else return tumor_rna_reads_at_tentative_selected_variants_filename;
                 } else
                 {
-                    if (dna) return normal_dna_reads_at_selected_variants_filename;
-                    return normal_rna_reads_at_selected_variants_filename;
+                    if (dna) return normal_dna_reads_at_tentative_selected_variants_filename;
+                    return normal_rna_reads_at_tentative_selected_variants_filename;
                 }
             } // getReadsAtSelectedVariantsFilename
 
@@ -1846,7 +1852,8 @@ namespace ASELib
             public string casesFilePathname = defaultBaseDirectory + "cases.txt";
 
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-16";
-            public string localIndexDirectory = @"d:\gdc\indices\hg38-16";
+            public string localIndexDirectory
+                = @"d:\gdc\indices\hg38-16";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
@@ -2749,20 +2756,22 @@ namespace ASELib
         public const string normalRNAAllcountExtension = ".normal_rna_allcount.gz";
         public const string normalDNAAllcountExtension = ".normal_dna_allcount.gz";
         public const string tumorDNAAllcountExtension = ".tumor_dna_allcount.gz";
+        public const string tentativeSelectedVariantsExtension = ".tentativeSelectedVariants";
         public const string selectedVariantsExtension = ".selectedVariants";
+        public const string tentativeAnnotatedSelectedVariantsExtension = ".tentativeAnnotatedSelectedVariants";
         public const string annotatedSelectedVariantsExtension = ".annotatedSeletedVariants";
         public const string regionalExpressionExtension = ".regional_expression.txt";
         public const string geneExpressionExtension = ".gene_expression.txt";
         public const string tumorAlleleSpecificGeneExpressionExtension = ".tumor-allele-specific_gene_expression.txt";
         public const string normalAlleleSpecificGeneExpressionExtension = ".normal-allele-specific_gene_expression.txt";
-        public const string tumorRNAReadsAtSelectedVariantsExtension = ".tumor-rna-reads-at-selected-variants.txt";
-        public const string tumorRNAReadsAtSelectedVariantsIndexExtension = ".tumor-rna-reads-at-selected-variants.txt.index";
-        public const string normalRNAReadsAtSelectedVariantsExtension = ".normal-rna-reads-at-selected-variants.txt";
-        public const string normalRNAReadsAtSelectedVariantsIndexExtension = ".normal-rna-reads-at-selected-variants.txt.index";
-        public const string normalDNAReadsAtSelectedVariantsExtension = ".normal-dna-reads-at-selected-variants.txt";
-        public const string normalDNAReadsAtSelectedVariantsIndexExtension = ".normal-dna-reads-at-selected-variants.txt.index";
-        public const string tumorDNAReadsAtSelectedVariantsExtension = ".tumor-dna-reads-at-selected-variants.txt";
-        public const string tumorDNAReadsAtSelectedVariantsIndexExtension = ".tumor-dna-reads-at-selected-variants.txt.index";
+        public const string tumorRNAReadsAtTentativeSelectedVariantsExtension = ".tumor-rna-reads-at-tentative-selected-variants.txt";
+        public const string tumorRNAReadsAtTentativeSelectedVariantsIndexExtension = ".tumor-rna-reads-at-tentative-selected-variants.txt.index";
+        public const string normalRNAReadsAtTentativeSelectedVariantsExtension = ".normal-rna-reads-at-tentative-selected-variants.txt";
+        public const string normalRNAReadsAtTentativeSelectedVariantsIndexExtension = ".normal-rna-reads-at-tentative-selected-variants.txt.index";
+        public const string normalDNAReadsAtTentativeSelectedVariantsExtension = ".normal-dna-reads-at-tentative-selected-variants.txt";
+        public const string normalDNAReadsAtTentativeSelectedVariantsIndexExtension = ".normal-dna-reads-at-tentative-selected-variants.txt.index";
+        public const string tumorDNAReadsAtTentativeSelectedVariantsExtension = ".tumor-dna-reads-at-tentative-selected-variants.txt";
+        public const string tumorDNAReadsAtTentativeSelectedVariantsIndexExtension = ".tumor-dna-reads-at-tentative-selected-variants.txt.index";
         public const string vcfExtension = ".vcf";
         public const string extractedMAFLinesExtension = ".extracted_maf_lines.txt";
         public const string allMAFLinesExtension = ".all_maf_lines";
@@ -2827,6 +2836,7 @@ namespace ASELib
         public const string IsoformBalanceFilename = "IsoformBalance.txt";
         public const string IsoformBalancePValueHistogramFilename = "IsoformBalance-pValueHistogram.txt";
         public const string ReadLengthHistogramFilename = "ReadLengthHistograms.txt";
+        public const string variantSelectionSummaryFilename = "VariantSelectionSummary.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -2872,11 +2882,11 @@ namespace ASELib
             } // DerviedFile.DerivedFile
 
 
-            public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
+            public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage, TentativeSelectedVariants,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
-                AnnotatedGeneHancer, ExpressionByGene
+                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants
             };
         } // DerivedFile
 
@@ -12348,6 +12358,20 @@ namespace ASELib
             }
             Console.WriteLine();
         } // PrintNumberBar
+
+        public static void PrintMessageAndNumberBar(string messageBeforeCount, string messageAfterCount, int count, out int nPerDot)
+        {
+            nPerDot = 1;
+            int maxDots = 200;
+
+            while (count / nPerDot > maxDots)
+            {
+                nPerDot *= 10;
+            }
+
+            Console.WriteLine(messageBeforeCount + " " + count + " " + messageAfterCount + " (one dot/" + nPerDot + ")");
+            PrintNumberBar(count / nPerDot);
+        }
 
         public static string PadStringToGuidLength(string inputString)
         {

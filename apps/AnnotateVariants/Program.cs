@@ -42,8 +42,8 @@ namespace AnnotateVariants
                     casesToProcess.RemoveAt(0);
                 }
 
-                if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_index_filename == "" ||
-                    case_.tumor_rna_reads_at_selected_variants_filename == "" || case_.tumor_rna_reads_at_selected_variants_index_filename == "" || case_.normal_dna_reads_at_selected_variants_filename == "" || case_.normal_dna_reads_at_selected_variants_index_filename == "")
+                if (case_.extracted_maf_lines_filename == "" || case_.tentative_selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_index_filename == "" ||
+                    case_.tumor_rna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_rna_reads_at_tentative_selected_variants_index_filename == "" || case_.normal_dna_reads_at_tentative_selected_variants_filename == "" || case_.normal_dna_reads_at_tentative_selected_variants_index_filename == "")
                 {
                     Console.WriteLine("Case " + case_.case_id + " is missing some required data.  Ignoring.");
                     continue;
@@ -95,19 +95,19 @@ namespace AnnotateVariants
 
                     if (!variantType.Equals(VariantType.somatic))
                     {
-                        var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
-                        if (null == selectedVariants)
+                        var tentativeSelectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.tentative_selected_variants_filename);
+                        if (null == tentativeSelectedVariants)
                         {
-                            Console.WriteLine("Case " + case_.case_id + " failed to load selected variants.  Ignoring.");
+                            Console.WriteLine("Case " + case_.case_id + " failed to load tentative selected variants.  Ignoring.");
                             continue;
                         }
 
-                        foreach (var selectedVariant in selectedVariants)
+                        foreach (var tentativeSelectedVariant in tentativeSelectedVariants)
                         {
                             try
                             {
-                                annotatedVariants.Add(AnnotateVariant("", false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP", "",
-                                    selectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
+                                annotatedVariants.Add(AnnotateVariant("", false, case_, tentativeSelectedVariant.contig, tentativeSelectedVariant.locus, Convert.ToString(tentativeSelectedVariant.referenceBase), Convert.ToString(tentativeSelectedVariant.altBase), "SNP", "",
+                                    tentativeSelectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
                             } catch (FileNotFoundException f)
                             {
                                 //
@@ -120,7 +120,7 @@ namespace AnnotateVariants
                                 }
                                 else
                                 {
-                                    Console.WriteLine("Skipping annotating germline variant that had too many reads.  Case " + case_.case_id + ", chrom " + selectedVariant.contig + " start " + selectedVariant.locus);
+                                    Console.WriteLine("Skipping annotating germline variant that had too many reads.  Case " + case_.case_id + ", chrom " + tentativeSelectedVariant.contig + " start " + tentativeSelectedVariant.locus);
                                     continue;
                                 }
                             }
@@ -133,7 +133,7 @@ namespace AnnotateVariants
                 }
 
 				// write out annotated selected variants
-                string outputFilename = ASETools.GetDirectoryFromPathname(case_.selected_variants_filename) + @"\" + case_.case_id + ASETools.annotatedSelectedVariantsExtension;
+                string outputFilename = ASETools.GetDirectoryFromPathname(case_.tentative_selected_variants_filename) + @"\" + case_.case_id + ASETools.tentativeAnnotatedSelectedVariantsExtension;
 
                 lock (casesToProcess)
                 {
@@ -147,9 +147,9 @@ namespace AnnotateVariants
 
         static ASETools.AnnotatedVariant AnnotateVariant(string Hugo_symbol, bool somatic, ASETools.Case case_, string contig, int start_position, string reference_allele, string alt_allele, string variantType, string variantClassification, string subfileExtension)
         {
-            ASETools.ReadCounts tumorDNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.tumor_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.tumor_dna_file_id + subfileExtension, genome);
-            ASETools.ReadCounts tumorRNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.tumor_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.tumor_rna_file_id + subfileExtension, genome);
-            ASETools.ReadCounts normalDNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.normal_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.normal_dna_file_id + subfileExtension, genome);
+            ASETools.ReadCounts tumorDNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.tumor_dna_reads_at_tentative_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.tumor_dna_file_id + subfileExtension, genome);
+            ASETools.ReadCounts tumorRNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.tumor_rna_reads_at_tentative_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.tumor_rna_file_id + subfileExtension, genome);
+            ASETools.ReadCounts normalDNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.normal_dna_reads_at_tentative_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.normal_dna_file_id + subfileExtension, genome);
 
             if (tumorDNAReadCounts == null || tumorRNAReadCounts == null || normalDNAReadCounts == null)
             {
@@ -158,9 +158,9 @@ namespace AnnotateVariants
             }
 
             ASETools.ReadCounts normalRNAReadCounts;
-            if (case_.normal_rna_reads_at_selected_variants_filename != "")
+            if (case_.normal_rna_reads_at_tentative_selected_variants_filename != "")
             {
-                normalRNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.normal_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.normal_rna_file_id + subfileExtension, genome);
+                normalRNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.normal_rna_reads_at_tentative_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.normal_rna_file_id + subfileExtension, genome);
                 if (null == normalDNAReadCounts)
                 {
                     Console.WriteLine("Failed to correctly compute annotated variant for normal RNA for case " + case_.case_id);

@@ -547,14 +547,14 @@ namespace ASEProcessManager
 				foreach (var caseEntry in stateOfTheWorld.cases)
 				{
 					var case_ = caseEntry.Value;
-					if (case_.annotated_selected_variants_filename != "")
+					if (case_.tentative_annotated_selected_variants_filename != "")
 					{
 						nDone++;
 						continue;
 					}
-					else if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_index_filename == "" ||
-					case_.tumor_rna_reads_at_selected_variants_filename == "" || case_.tumor_rna_reads_at_selected_variants_index_filename == "" || case_.normal_dna_reads_at_selected_variants_filename == "" || case_.normal_dna_reads_at_selected_variants_index_filename == "" ||
-                    (case_.normal_rna_file_id != "" && (case_.normal_rna_reads_at_selected_variants_filename == "" || case_.normal_rna_reads_at_selected_variants_index_filename == "")))
+					else if (case_.extracted_maf_lines_filename == "" || case_.tentative_selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_index_filename == "" ||
+					case_.tumor_rna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_rna_reads_at_tentative_selected_variants_index_filename == "" || case_.normal_dna_reads_at_tentative_selected_variants_filename == "" || case_.normal_dna_reads_at_tentative_selected_variants_index_filename == "" ||
+                    (case_.normal_rna_file_id != "" && (case_.normal_rna_reads_at_tentative_selected_variants_filename == "" || case_.normal_rna_reads_at_tentative_selected_variants_index_filename == "")))
 					{
 						nWaitingForPrerequisites++;
 						continue;
@@ -596,8 +596,8 @@ namespace ASEProcessManager
 				{
 					var case_ = caseEntry.Value;
 
-					if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_index_filename == "" ||
-					case_.tumor_rna_reads_at_selected_variants_filename == "" || case_.tumor_rna_reads_at_selected_variants_index_filename == "" || case_.normal_dna_reads_at_selected_variants_filename == "" || case_.normal_dna_reads_at_selected_variants_index_filename == "")
+					if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_index_filename == "" ||
+					case_.tumor_rna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_rna_reads_at_tentative_selected_variants_index_filename == "" || case_.normal_dna_reads_at_tentative_selected_variants_filename == "" || case_.normal_dna_reads_at_tentative_selected_variants_index_filename == "")
 					{
 						Console.WriteLine("Annotated variants file " + case_.annotated_selected_variants_filename + " exists, but dependencies do not.");
 						allOK = false;
@@ -686,7 +686,7 @@ namespace ASEProcessManager
 
             public string GetStageName()
             {
-                return "Select Germline Variants";
+                return "Select Tentative Germline Variants";
             }
 
             public bool NeedsCases() { return true; }
@@ -710,7 +710,7 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    if (case_.selected_variants_filename != "")
+                    if (case_.tentative_selected_variants_filename != "")
                     {
                         nDone++;
                         continue;
@@ -1279,8 +1279,9 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            void HandleFileAndType(StateOfTheWorld stateOfTheWorld, ASETools.Case case_, string flagsString, string readsAtSelectedVariantsFilename, string readsAtSelectedVariantsIndexFilename, string fileId, string md5Checksum, string inputFilename, string outputExtension,
-                ref string outputSoFar, ref string outputSoFarHpc, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
+            void HandleFileAndType(StateOfTheWorld stateOfTheWorld, ASETools.Case case_, string flagsString, string readsAtTentativeSelectedVariantsFilename, string readsAtTentativeSelectedVariantsIndexFilename, 
+                string fileId, string md5Checksum, string inputFilename, string outputExtension, ref string outputSoFar, ref string outputSoFarHpc, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, 
+                ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
             {
                 if (fileId == "")
                 {
@@ -1290,22 +1291,22 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if ((readsAtSelectedVariantsFilename == "") != (readsAtSelectedVariantsIndexFilename == ""))
+                if ((readsAtTentativeSelectedVariantsFilename == "") != (readsAtTentativeSelectedVariantsIndexFilename == ""))
                 {
-                    Console.WriteLine("Exactly one of reads at selected variants and reads at selected variants index files exists: " + readsAtSelectedVariantsFilename + " " + readsAtSelectedVariantsIndexFilename);
+                    Console.WriteLine("Exactly one of reads at selected variants and reads at selected variants index files exists: " + readsAtTentativeSelectedVariantsFilename + " " + readsAtTentativeSelectedVariantsIndexFilename);
                     return;
                 }
 
-                if (readsAtSelectedVariantsFilename != "")
+                if (readsAtTentativeSelectedVariantsFilename != "")
                 {
                     if (false)  // This is off because it's slow
                     {
-                        var writeTime1 = new FileInfo(readsAtSelectedVariantsFilename).LastWriteTime;
-                        var writeTime2 = new FileInfo(readsAtSelectedVariantsIndexFilename).LastWriteTime;
+                        var writeTime1 = new FileInfo(readsAtTentativeSelectedVariantsFilename).LastWriteTime;
+                        var writeTime2 = new FileInfo(readsAtTentativeSelectedVariantsIndexFilename).LastWriteTime;
 
                         if (writeTime1 > writeTime2.AddDays(1) || writeTime2 > writeTime1.AddDays(1))
                         {
-                            Console.WriteLine("Extracted reads and index files differ by more than one day: " + readsAtSelectedVariantsFilename + " " + readsAtSelectedVariantsIndexFilename);
+                            Console.WriteLine("Extracted reads and index files differ by more than one day: " + readsAtTentativeSelectedVariantsFilename + " " + readsAtTentativeSelectedVariantsIndexFilename);
                         }
                     }
 
@@ -1313,7 +1314,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (!stateOfTheWorld.fileDownloadedAndVerified(fileId, md5Checksum) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
+                if (!stateOfTheWorld.fileDownloadedAndVerified(fileId, md5Checksum) || case_.tentative_selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
                 {
                     nWaitingForPrerequisites++;
                     return;
@@ -1365,10 +1366,10 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    HandleFileAndType(stateOfTheWorld, case_, "-d -t", case_.tumor_dna_reads_at_selected_variants_filename, case_.tumor_dna_reads_at_selected_variants_index_filename, case_.tumor_dna_file_id,  case_.tumor_dna_file_bam_md5,  case_.tumor_dna_filename,  ASETools.tumorDNAReadsAtSelectedVariantsExtension,  ref tumorDNAOutput,  ref tumorDNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    HandleFileAndType(stateOfTheWorld, case_, "-d -n", case_.normal_dna_reads_at_selected_variants_filename, case_.normal_dna_reads_at_selected_variants_index_filename, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, case_.normal_dna_filename, ASETools.normalDNAReadsAtSelectedVariantsExtension, ref normalDNAOutput, ref normalDNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    HandleFileAndType(stateOfTheWorld, case_, "-r -t", case_.tumor_rna_reads_at_selected_variants_filename, case_.tumor_rna_reads_at_selected_variants_index_filename, case_.tumor_rna_file_id,  case_.tumor_rna_file_bam_md5,  case_.tumor_rna_filename,  ASETools.tumorRNAReadsAtSelectedVariantsExtension,  ref tumorRNAOutput,  ref tumorRNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    HandleFileAndType(stateOfTheWorld, case_, "-r -n", case_.normal_rna_reads_at_selected_variants_filename, case_.normal_rna_reads_at_selected_variants_index_filename, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, case_.normal_rna_filename, ASETools.normalRNAReadsAtSelectedVariantsExtension, ref normalRNAOutput, ref normalRNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-d -t", case_.tumor_dna_reads_at_tentative_selected_variants_filename, case_.tumor_dna_reads_at_tentative_selected_variants_index_filename, case_.tumor_dna_file_id,  case_.tumor_dna_file_bam_md5,  case_.tumor_dna_filename,  ASETools.tumorDNAReadsAtTentativeSelectedVariantsExtension,  ref tumorDNAOutput,  ref tumorDNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-d -n", case_.normal_dna_reads_at_tentative_selected_variants_filename, case_.normal_dna_reads_at_tentative_selected_variants_index_filename, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, case_.normal_dna_filename, ASETools.normalDNAReadsAtTentativeSelectedVariantsExtension, ref normalDNAOutput, ref normalDNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-r -t", case_.tumor_rna_reads_at_tentative_selected_variants_filename, case_.tumor_rna_reads_at_tentative_selected_variants_index_filename, case_.tumor_rna_file_id,  case_.tumor_rna_file_bam_md5,  case_.tumor_rna_filename,  ASETools.tumorRNAReadsAtTentativeSelectedVariantsExtension,  ref tumorRNAOutput,  ref tumorRNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-r -n", case_.normal_rna_reads_at_tentative_selected_variants_filename, case_.normal_rna_reads_at_tentative_selected_variants_index_filename, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, case_.normal_rna_filename, ASETools.normalRNAReadsAtTentativeSelectedVariantsExtension, ref normalRNAOutput, ref normalRNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                 }
 
                 string[] outputs = { tumorDNAOutput, normalDNAOutput, tumorRNAOutput, normalRNAOutput };
@@ -2913,7 +2914,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (stateOfTheWorld.cases.Select(_ => _.Value).Any(_ => _.normal_dna_reads_at_selected_variants_filename == "" || _.tumor_dna_reads_at_selected_variants_filename == "" || _.tumor_rna_reads_at_selected_variants_filename == "" ||
+                if (stateOfTheWorld.cases.Select(_ => _.Value).Any(_ => _.normal_dna_reads_at_tentative_selected_variants_filename == "" || _.tumor_dna_reads_at_tentative_selected_variants_filename == "" || _.tumor_rna_reads_at_tentative_selected_variants_filename == "" ||
                                                           _.selected_variants_filename == ""))
                 {
                     nWaitingForPrerequisites = 1;

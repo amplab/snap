@@ -57,7 +57,7 @@ namespace ReadLengthDistributions
                 return;
             }
 
-            if (commonData.cases.Select(_ => _.Value).Any(_ => _.normal_dna_reads_at_selected_variants_filename == "" || _.tumor_dna_reads_at_selected_variants_filename == "" || _.tumor_rna_reads_at_selected_variants_filename == "" ||
+            if (commonData.cases.Select(_ => _.Value).Any(_ => _.normal_dna_reads_at_tentative_selected_variants_filename == "" || _.tumor_dna_reads_at_tentative_selected_variants_filename == "" || _.tumor_rna_reads_at_tentative_selected_variants_filename == "" ||
                                                           _.selected_variants_filename == ""))
             {
                 Console.WriteLine("Some cases are missing reads at selected variants or selected variants files.  Make them and try again.");

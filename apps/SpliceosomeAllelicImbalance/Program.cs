@@ -98,8 +98,19 @@ namespace SpliceosomeAllelicImbalance
 
             var pValueHistogram = new ASETools.PreBucketedHistogram(0, 1, 0.001);
 
+            int nPerDot;
+            ASETools.PrintMessageAndNumberBar("Processing", "genes", commonData.geneLocationInformation.genesByName.Count(), out nPerDot);
+
+            int nGenesProcessed = 0;
+
             foreach (var geneInfo in commonData.geneLocationInformation.genesByName.Select(x => x.Value).ToList())
             {
+                nGenesProcessed++;
+
+                if (nGenesProcessed % nPerDot == 0)
+                {
+                    Console.Write(".");
+                }
                 foreach (var isoformName in geneInfo.isoforms.Select(x => x.ucscId))
                 {
                     if (isoformBalanceBySpliceosome[geneInfo.hugoSymbol][isoformName].Select(_ => _.Value.Count()).Min() < minSamplesPerClass)
@@ -129,6 +140,8 @@ namespace SpliceosomeAllelicImbalance
                     results.Add(new Result(geneInfo.hugoSymbol + ":" + isoformName, p, nonMutantItems.Average(), mutantItems.Average(), nonMutantItems.Count(), mutantItems.Count()));
                 } // for each isoform
             } // for each gene
+
+            Console.WriteLine();
 
             int nSignificant = results.Where(_ => _.pValue * nConsidered <= .01).Count();
 

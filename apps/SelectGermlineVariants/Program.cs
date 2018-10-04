@@ -14,7 +14,7 @@ namespace SelectGermlineVariants
     class Program
     {
 
-        const long granularity = 1000; // How often to select a variant if one is available.
+        const long granularity = 1; // How often to select a variant if one is available. (This used to be 1000, but we're skipping the granularity here at the tentative stage, and doing it when we go from tentative to final, since we don't know what will be eliminated later and don't want to lose a candidate by choosing a bad one from a grain that otherwise has a good one.)
         const long isolationDistance = 150; // How many bases around a selected variant must match the germline exclusively.
 
         class CandidateVariant
@@ -270,10 +270,13 @@ namespace SelectGermlineVariants
                         nextHighestMAFLine.Chromosome == fields[0] && locus + isolationDistance > nextHighestMAFLine.Start_Position)
                     {
                         goodCandidate = false;
-                    } else if (repetitiveRegionMap.isCloseToRepetitiveRegion(ASETools.ChromosomeNameToIndex(fields[0]), (int)locus, (int)isolationDistance))
+                    } 
+                    /*
+                     else if (repetitiveRegionMap.isCloseToRepetitiveRegion(ASETools.ChromosomeNameToIndex(fields[0]), (int)locus, (int)isolationDistance))
                     {
                         goodCandidate = false;
                     }
+                    */
 
                     //
                     // Eliminate any variant in a gene that also contains a somatic mutation that might cause nonsense mediated decay.
@@ -411,7 +414,7 @@ namespace SelectGermlineVariants
                     //
                     // Now run through the grains, select only the variants that have enough reads, and emit the best one for each grain.
                     //
-                    var outputFilename = case_.vcf_filename.Substring(0, case_.vcf_filename.LastIndexOf('.')) + ASETools.selectedVariantsExtension;
+                    var outputFilename = case_.vcf_filename.Substring(0, case_.vcf_filename.LastIndexOf('.')) + ASETools.tentativeSelectedVariantsExtension;
                     var outputFile = computeDistribution ? StreamWriter.Null :  ASETools.CreateStreamWriterWithRetry(outputFilename);    // Don't actually write the output if we're computing distribution.
                     outputFile.WriteLine("SelectGermlineVariants v1.1 for input file " + case_.vcf_filename);      // v1.0 didn't take into account the read counts when selecting variants.
 
@@ -464,7 +467,7 @@ namespace SelectGermlineVariants
 
         static bool computeDistribution;
         static ASETools.Configuration configuration;
-        static ASETools.ASERepetitiveRegionMap repetitiveRegionMap;
+        //static ASETools.ASERepetitiveRegionMap repetitiveRegionMap;
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static ASETools.GeneMap geneMap;
 
@@ -520,9 +523,9 @@ namespace SelectGermlineVariants
             var timer = new Stopwatch();
             timer.Start();
 
-            Console.Write("Loading repetitive region map...");
-            repetitiveRegionMap = ASETools.ASERepetitiveRegionMap.loadFromFile(configuration.redundantChromosomeRegionFilename);
-            Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
+            //Console.Write("Loading repetitive region map...");
+            //repetitiveRegionMap = ASETools.ASERepetitiveRegionMap.loadFromFile(configuration.redundantChromosomeRegionFilename);
+            //Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
 
             var threads = new List<Thread>();
             for (int i = 0; i < Environment.ProcessorCount; i++)

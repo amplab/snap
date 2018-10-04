@@ -127,10 +127,10 @@ namespace GenerateScriptFromVariants
                     }
                 }
 
-                var selectedVariantsFilename = case_.selected_variants_filename;
+                var tentativeSelectedVariantsFilename = case_.tentative_selected_variants_filename;
                 var extractedMAFLinesFilename = case_.extracted_maf_lines_filename;
 
-                if (selectedVariantsFilename == "" || extractedMAFLinesFilename == "" || inputBamFilename == "")
+                if (tentativeSelectedVariantsFilename == "" || extractedMAFLinesFilename == "" || inputBamFilename == "")
                 {
                     Console.WriteLine("GenerateScriptsFromVariants: at least one input is missing for case " + case_.case_id);
                     File.Delete(localSamtoolsPathname);
@@ -140,13 +140,13 @@ namespace GenerateScriptFromVariants
 
                 int nVariants = 0;
 
-                var selectedVariants = ASETools.SelectedVariant.LoadFromFile(selectedVariantsFilename);
+                var tentativeSelectedVariants = ASETools.SelectedVariant.LoadFromFile(tentativeSelectedVariantsFilename);
 
-                foreach (var selectedVariant in selectedVariants)
+                foreach (var tenativeSelectedVariant in tentativeSelectedVariants)
                 {
 
-                    generatedScript.Add("samtools view " + inputBamFilename + " " + selectedVariant.contig + ":" + Math.Max(1, selectedVariant.locus - 200) + "-" + (selectedVariant.locus + 10) +
-                        @" > " + bamFileId + selectedVariant.getExtractedReadsExtension());
+                    generatedScript.Add("samtools view " + inputBamFilename + " " + tenativeSelectedVariant.contig + ":" + Math.Max(1, tenativeSelectedVariant.locus - 200) + "-" + (tenativeSelectedVariant.locus + 10) +
+                        @" > " + bamFileId + tenativeSelectedVariant.getExtractedReadsExtension());
 
                     nVariants++;
                 }
