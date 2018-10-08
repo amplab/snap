@@ -527,7 +527,6 @@ namespace ASEProcessManager
 
 		class AnnotateVariantsProcessingStage : ProcessingStage
 		{
-
 			public AnnotateVariantsProcessingStage() {}
 
 			public string GetStageName() { return "Annotate Variants"; }
@@ -596,7 +595,7 @@ namespace ASEProcessManager
 				{
 					var case_ = caseEntry.Value;
 
-					if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_index_filename == "" ||
+					if (case_.extracted_maf_lines_filename == "" || case_.tentative_selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_dna_reads_at_tentative_selected_variants_index_filename == "" ||
 					case_.tumor_rna_reads_at_tentative_selected_variants_filename == "" || case_.tumor_rna_reads_at_tentative_selected_variants_index_filename == "" || case_.normal_dna_reads_at_tentative_selected_variants_filename == "" || case_.normal_dna_reads_at_tentative_selected_variants_index_filename == "")
 					{
 						Console.WriteLine("Annotated variants file " + case_.annotated_selected_variants_filename + " exists, but dependencies do not.");
@@ -767,15 +766,15 @@ namespace ASEProcessManager
 
                     if (case_.vcf_filename == "" || case_.tumor_rna_allcount_filename == "" || case_.tumor_dna_allcount_filename == "")
                     {
-                        Console.WriteLine(case_.selected_variants_filename + " depends on a file that is missing.");
+                        Console.WriteLine(case_.tentative_selected_variants_filename + " depends on a file that is missing.");
                         allOK = false;
                         continue;
                     }
 
-                    var selectedVariantsWriteTime = new FileInfo(case_.selected_variants_filename).LastWriteTime;
-                    allOK &= checkOneDependency(case_.selected_variants_filename, selectedVariantsWriteTime, case_.vcf_filename);
-                    allOK &= checkOneDependency(case_.selected_variants_filename, selectedVariantsWriteTime, case_.tumor_dna_allcount_filename);
-                    allOK &= checkOneDependency(case_.selected_variants_filename, selectedVariantsWriteTime, case_.tumor_rna_allcount_filename);
+                    var tentativeSelectedVariantsWriteTime = new FileInfo(case_.tentative_selected_variants_filename).LastWriteTime;
+                    allOK &= checkOneDependency(case_.tentative_selected_variants_filename, tentativeSelectedVariantsWriteTime, case_.vcf_filename);
+                    allOK &= checkOneDependency(case_.tentative_selected_variants_filename, tentativeSelectedVariantsWriteTime, case_.tumor_dna_allcount_filename);
+                    allOK &= checkOneDependency(case_.tentative_selected_variants_filename, tentativeSelectedVariantsWriteTime, case_.tumor_rna_allcount_filename);
                 }
 
                 return allOK;
@@ -2915,7 +2914,7 @@ namespace ASEProcessManager
                 }
 
                 if (stateOfTheWorld.cases.Select(_ => _.Value).Any(_ => _.normal_dna_reads_at_tentative_selected_variants_filename == "" || _.tumor_dna_reads_at_tentative_selected_variants_filename == "" || _.tumor_rna_reads_at_tentative_selected_variants_filename == "" ||
-                                                          _.selected_variants_filename == ""))
+                                                          _.tentative_selected_variants_filename == ""))
                 {
                     nWaitingForPrerequisites = 1;
                     return;

@@ -1,21 +1,16 @@
-﻿using System;
+﻿using MathNet.Numerics;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Diagnostics;
 using System.IO;
-using System.Threading;
 using System.IO.Compression;
+using System.Linq;
 using System.Net;
-using System.Web;
+using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using MathNet.Numerics;
-using System.Globalization;
-using System.Runtime;
-using System.Collections.Concurrent;
+using System.Text;
+using System.Threading;
 
 namespace ASELib
 {
@@ -1105,7 +1100,7 @@ namespace ASELib
             public string regional_expression_filename = "";
             public string gene_expression_filename = "";
             public string tentative_selected_variants_filename = "";
-            public string selected_variants_filename = "";
+            //public string selected_variants_filename = "";
             public string tumor_dna_reads_at_tentative_selected_variants_filename = "";
             public string tumor_dna_reads_at_tentative_selected_variants_index_filename = "";
             public string tumor_rna_reads_at_tentative_selected_variants_filename = "";
@@ -1375,7 +1370,7 @@ namespace ASELib
                 new FieldInformation("Regional Expression Filename",                        c => c.regional_expression_filename, (c,v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id, "Regional Expression File Size", c => c.regional_expression_size, (c, v) => c.regional_expression_size = v),
                 new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id, "Gene Expression File Size", c => c.gene_expression_size, (c, v) => c.gene_expression_size = v),
                 new FieldInformation("Tentative Selected Variants",                         c => c.tentative_selected_variants_filename, (c, v) => c.tentative_selected_variants_filename = v, DerivedFile.Type.TentativeSelectedVariants, tentativeSelectedVariantsExtension, c => c.normal_dna_file_id, "Tentative Selected Variants Size", c => c.tentative_selected_variants_size, (c, v) => c.tentative_selected_variants_size = v),
-                new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id, "Selected Variants File Size", c=> c.selected_variants_size, (c, v) => c.selected_variants_size = v),
+                //new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id, "Selected Variants File Size", c=> c.selected_variants_size, (c, v) => c.selected_variants_size = v),
                 new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_tentative_selected_variants_filename, (c,v) => c.normal_dna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtTentativeSelectedVariantsExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants File Size", c => c.normal_dna_reads_at_selected_variants_size, (c, v) => c.normal_dna_reads_at_selected_variants_size = v),
                 new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants Index File Size", c => c.normal_dna_reads_at_selected_variants_index_size, (c, v) => c.normal_dna_reads_at_selected_variants_index_size = v),
                 new FieldInformation("Tumor DNA Reads At Selected Variants Filename",       c => c.tumor_dna_reads_at_tentative_selected_variants_filename, (c,v) => c.tumor_dna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtTentativeSelectedVariantsExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants File Size", c => c.tumor_dna_reads_at_selected_variants_size, (c, v) => c.tumor_dna_reads_at_selected_variants_size = v),
@@ -1517,7 +1512,7 @@ namespace ASELib
             //
             // Fill in all the derived file locations if they exist.
             //
-            public void loadFileLocations(Configuration conffiguration, Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
+            public void loadFileLocations(Configuration configuration, Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
             {
 
                 if (downloadedFiles.ContainsKey(normal_dna_file_id))
@@ -1556,7 +1551,7 @@ namespace ASELib
                     tumor_rna_filename = "";
                 }
 
-                if (!conffiguration.isBeatAML)
+                if (!configuration.isBeatAML)
                 {
                     if (downloadedFiles.ContainsKey(maf_file_id))
                     {
@@ -1635,7 +1630,9 @@ namespace ASELib
                     regional_expression_filename = "";
                     tumor_rna_reads_at_tentative_selected_variants_filename = "";
                     tumor_rna_reads_at_tentative_selected_variants_index_filename = "";
-                    selected_variants_filename = "";
+                    //selected_variants_filename = "";
+                    tentative_selected_variants_filename = "";
+                    tentative_annotated_selected_variants_filename = "";
                     vcf_filename = "";
                     return;
                 }
@@ -1917,6 +1914,11 @@ namespace ASELib
             public int minRNAReadCoverage = 10;
             public int minDNAReadCoverage = 10;
 
+            public int maxProximityForReferenceBiasCheck = 25;
+            public int minDepthForReferenceBiasCheck = 60;
+            public int minDistanceFromRepetitiveRegion = 50;    // How far from a region with multiply mapped reads must we be to include a germline variant (if it's not decidable by actual reference bias measurements)
+            public int minDistanceBetweenGermlineVariants = 1000;
+
             public bool isBeatAML = false;
 
             void reinitialzeWithBaseDirectory()
@@ -2143,7 +2145,7 @@ namespace ASELib
                         retVal.geneHancerFilename = fields[1];
                     } else if (type == "local index directory") {
                         retVal.localIndexDirectory = fields[1];
-                    } else if (type == "uses chr") { 
+                    } else if (type == "uses chr") {
                         if (fields[1] == "yes")
                         {
                             retVal.usesChr = true;
@@ -2155,6 +2157,10 @@ namespace ASELib
                             Console.WriteLine("value in configuration file after 'uses chr' must be 'yes' or 'no'.");
                             continue;
                         }
+                    } else if (type == "max distance for reference bias proximity check") {
+                        retVal.maxProximityForReferenceBiasCheck = Convert.ToInt32(fields[1]);
+                    } else if (type == "min depth for reference bias check") {
+                        retVal.minDepthForReferenceBiasCheck = Convert.ToInt32(fields[1]);
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
