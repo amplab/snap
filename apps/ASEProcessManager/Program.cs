@@ -2348,6 +2348,7 @@ namespace ASEProcessManager
                 nWaitingForPrerequisites = 0;
 
                 nDone = stateOfTheWorld.cases.Where(x => x.Value.regulatory_mutations_near_mutations_filename != "").Count();
+
                 if (stateOfTheWorld.selectedGenes == null || !File.Exists(stateOfTheWorld.configuration.geneLocationInformationFilename))
                 {
                     nWaitingForPrerequisites = 1;
