@@ -197,11 +197,12 @@ namespace CheckDone
                 }
                 HandleFilename(case_.regional_expression_filename, "RegionalExpression", fileTypesToUse);
                 HandleFilename(case_.gene_expression_filename, "GeneExpression", fileTypesToUse);
-                HandleFilename(case_.selected_variants_filename, "SelectedVariants", fileTypesToUse);
+                HandleFilename(case_.tentative_selected_variants_filename, "TentativeSelectedVariants", fileTypesToUse);
                 HandleFilename(case_.normal_dna_reads_at_tentative_selected_variants_index_filename, "NormalDNAReadsAtSelectedVariants", fileTypesToUse);
                 HandleFilename(case_.normal_rna_reads_at_tentative_selected_variants_index_filename, "NormalRNAReadsAtSelectedVariants", fileTypesToUse);
                 HandleFilename(case_.tumor_dna_reads_at_tentative_selected_variants_index_filename, "TumorDNAReadsAtSelectedVariants", fileTypesToUse);
                 HandleFilename(case_.tumor_rna_reads_at_tentative_selected_variants_index_filename, "TumorRNAReadsAtSelectedVariants", fileTypesToUse);
+                HandleFilename(case_.tentative_annotated_selected_variants_filename, "TentativeAnnotatedSelectedVariants", fileTypesToUse);
                 HandleFilename(case_.annotated_selected_variants_filename, "AnnotatedSelectedVariants", fileTypesToUse);
                 HandleFilename(case_.normal_allele_specific_gene_expression_filename, "NormalAlleleSpecificExpression", fileTypesToUse);
                 HandleFilename(case_.tumor_allele_specific_gene_expression_filename, "TumorAlleleSpecificExpression", fileTypesToUse);

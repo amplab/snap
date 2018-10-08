@@ -58,9 +58,9 @@ namespace ReadLengthDistributions
             }
 
             if (commonData.cases.Select(_ => _.Value).Any(_ => _.normal_dna_reads_at_tentative_selected_variants_filename == "" || _.tumor_dna_reads_at_tentative_selected_variants_filename == "" || _.tumor_rna_reads_at_tentative_selected_variants_filename == "" ||
-                                                          _.selected_variants_filename == ""))
+                                                          _.tentative_selected_variants_filename == ""))
             {
-                Console.WriteLine("Some cases are missing reads at selected variants or selected variants files.  Make them and try again.");
+                Console.WriteLine("Some cases are missing reads at tentative selected variants or tentative selected variants files.  Make them and try again.");
                 return;
             }
 
@@ -115,7 +115,7 @@ namespace ReadLengthDistributions
 
         static void HandleOneCase(ASETools.Case case_, PerThreadState perThreadState)
         {
-            var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
+            var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.tentative_selected_variants_filename);
 
             foreach (var tumor in ASETools.BothBools)
             {
@@ -124,7 +124,7 @@ namespace ReadLengthDistributions
                     if (case_.getReadsAtSelectedVariantsFilename(tumor, dna) == "")
                     {
                         //
-                        // This is normal DNA for a case that doesn't have it.
+                        // This is normal RNA for a case that doesn't have it.
                         //
                         continue;
                     }
