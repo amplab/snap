@@ -1915,8 +1915,9 @@ namespace ASELib
             public int minDNAReadCoverage = 10;
 
             public int maxProximityForReferenceBiasCheck = 25;
-            public int minDepthForReferenceBiasCheck = 60;
+            public int minDepthForReferenceBiasCheck = 30;      // This is an interpretation of the phrase "a few dozen" in the wikipedia article on confidence intervals.
             public int minDistanceFromRepetitiveRegion = 50;    // How far from a region with multiply mapped reads must we be to include a germline variant (if it's not decidable by actual reference bias measurements)
+            public double repetitiveRegionConfidence = 0.95;   // 
             public int minDistanceBetweenGermlineVariants = 1000;
 
             public bool isBeatAML = false;
@@ -12997,6 +12998,26 @@ namespace ASELib
         {
             return String.Format("{0:n0}", value);
         }
+
+        public static void ComputeConfidenceInterval(IEnumerable<double> enumerableValues, double desiredConfidence, out double mean, out double range)
+        {
+            //
+            // Implemented from the Wikipedia page, https://en.wikipedia.org/wiki/Confidence_interval, "Theoretical Example."   This assumes a normal distribution of the underlying distribution, but
+            // for n > "a few dozen" it's "quite good," unless the distribution's "CDF does not have any discontinuities and its skewness is moderate."
+            //
+
+            var values = enumerableValues.ToList();
+            int n = values.Count();
+
+            var meanAndStdDev = new RunningMeanAndStdDev();
+            values.ForEach(_ => meanAndStdDev.addValue(_));
+
+            var c = MathNet.Numerics.Distributions.StudentT.InvCDF(0, 1, n - 1, desiredConfidence / 2);
+
+            mean = meanAndStdDev.getMeanAndStdDev().mean;
+            range = c * meanAndStdDev.getMeanAndStdDev().stddev / Math.Sqrt(n);
+        } // ComputeConfidenceInterval
+
     } // ASETools
 
     //

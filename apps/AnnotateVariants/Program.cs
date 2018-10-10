@@ -54,7 +54,7 @@ namespace AnnotateVariants
 
                 var annotatedVariants = new List<ASETools.AnnotatedVariant>();
 
-                try
+//                try
                 {
                     if (!variantType.Equals(VariantType.germline))
                     {
@@ -126,13 +126,17 @@ namespace AnnotateVariants
                             }
                         }
                     } // germline variants
-                } catch {
-                    Console.WriteLine("Error handling case " + case_.case_id + ".  Skipping it.");
+                }
+#if false
+
+                catch (Exception e) {
+                    Console.WriteLine("Error handling case " + case_.case_id + ".  Skipping it.  Exception: " + e.Message);
                     Interlocked.Increment(ref failedCases);
                     continue;
                 }
+#endif
 
-				// write out annotated selected variants
+                // write out annotated selected variants
                 string outputFilename = ASETools.GetDirectoryFromPathname(case_.tentative_selected_variants_filename) + @"\" + case_.case_id + ASETools.tentativeAnnotatedSelectedVariantsExtension;
 
                 lock (casesToProcess)

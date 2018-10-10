@@ -30,7 +30,7 @@ namespace CheckDone
                 lock (FilenamesByDataDirectory)
                 {
                     nFilesProcessed++;
-                    if (nFilesProcessed % 1000 == 0) Console.Write(".");
+                    if (nFilesProcessed % nPerDot == 0) Console.Write(".");
                 }
 
                 if (filename.ToLower().EndsWith(".gz"))
@@ -160,6 +160,8 @@ namespace CheckDone
             } // foreach filename
         } // ProcessOneDataDirectory
 
+
+        static int nPerDot;
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
@@ -221,8 +223,7 @@ namespace CheckDone
                 HandleFilename(case_.expression_by_gene_filename, "ExpressionByGene", fileTypesToUse);
             }
 
-            Console.WriteLine("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/thousand): ");
-            ASETools.PrintNumberBar(totalFiles / 1000);
+            ASETools.PrintMessageAndNumberBar("Processing", "files in " + FilenamesByDataDirectory.Count() + " data directories", totalFiles, out nPerDot);
 
             //
             // Run one thread per data directory, since this is likely IO bound by the server disks rather than

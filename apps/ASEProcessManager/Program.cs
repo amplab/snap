@@ -2927,6 +2927,39 @@ namespace ASEProcessManager
             } // EvaluateStage
         } // ReadLengthDistributionProcessingStage
 
+        class ChooseAnnotatedVariantsProcessingStage : ProcessingStage
+        {
+            public ChooseAnnotatedVariantsProcessingStage() { }
+            public string GetStageName() { return "Choose Annotated Variants"; }
+
+            public bool NeedsCases() { return true; }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = new List<string>();
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (stateOfTheWorld.cases.All(_ => _.Value.annotated_selected_variants_filename != ""))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Any(_ => _.Value.tentative_annotated_selected_variants_filename == ""))
+                {
+                    nWaitingForPrerequisites = stateOfTheWorld.cases.Where(_ => _.Value.tentative_annotated_selected_variants_filename == "").Count();  // This is a little funny, since there's only one global run, but it's more informative.
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ChooseAnnotatedVariants.exe" + stateOfTheWorld.configurationString);
+                nAddedToScript = 1;
+
+            } // EvaluateStage
+        } // ChooseAnnotatedVariantsProcessingStage
 
         class FPKMProcessingStage : ProcessingStage
 		{
@@ -3481,6 +3514,7 @@ namespace ASEProcessManager
             processingStages.Add(new GenerateTranscriptomeIndexProcessingStage());
             processingStages.Add(new SpliceosomeAllelicImbalanceProcessingStage());
             processingStages.Add(new ReadLengthDistributionProcessingStage());
+            processingStages.Add(new ChooseAnnotatedVariantsProcessingStage());
 
             if (checkDependencies)
             {
