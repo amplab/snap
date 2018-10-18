@@ -221,7 +221,7 @@ namespace ExpressionByMutationCount
             timer.Reset();
             timer.Start();
 
-            Console.WriteLine("Writing out results for " + genesToProcess + " genes, 1 dot/100 genes:");
+            Console.WriteLine("Writing out results for " + genesToProcess.Count() + " genes, 1 dot/100 genes:");
             ASETools.PrintNumberBar(genesToProcess.Count() / 100);
             int nGenesProcessed = 0;
 

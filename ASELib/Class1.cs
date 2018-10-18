@@ -1004,6 +1004,7 @@ namespace ASELib
                 {
                     foreach (var isoform in geneInfo.isoforms)
                     {
+                        isoformsByName.Add(isoform.ucscId, isoform);
                         if (!map.ContainsKey(isoform.chromosome))
                         {
                             map.Add(isoform.chromosome, new Dictionary<int, List<Isoform>>());
@@ -1035,7 +1036,18 @@ namespace ASELib
                 return map[contig][locus];
             }
 
+            public Isoform getIsoform(string ucsdId)
+            {
+                return isoformsByName[ucsdId];
+            }
+
+            public List<Isoform> getAllIsoforms()
+            {
+                return isoformsByName.Select(_ => _.Value).ToList();
+            }
+
             Dictionary<string, Dictionary<int, List<Isoform>>> map = new Dictionary<string, Dictionary<int, List<Isoform>>>();  // chr->locus->list of isoforms
+            Dictionary<string, Isoform> isoformsByName = new Dictionary<string, Isoform>();
         }
 
         //
@@ -1127,6 +1139,7 @@ namespace ASELib
             public string annotated_geneHancer_lines_filename = "";
             public string regulatory_mutations_near_mutations_filename = "";
             public string expression_by_gene_filename = "";
+            public string isoform_read_counts_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -1189,6 +1202,7 @@ namespace ASELib
             public long annotated_geneHancer_lines_size = 0;
             public long regulatory_mutations_near_mutations_size = 0;
             public long expression_by_gene_size = 0;
+            public long isoform_read_counts_file_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1217,6 +1231,8 @@ namespace ASELib
             {
                 if (!File.Exists(inputFilename))
                 {
+                    Console.WriteLine("Cases file " + inputFilename + " doesn't exist.");
+
                     return null;   // Nothing to load because we haven't generated a cases file yet.
                 }
 
@@ -1397,6 +1413,7 @@ namespace ASELib
                 new FieldInformation("Annotated GeneHancer Lines Filename",                 c => c.annotated_geneHancer_lines_filename, (c, v) => c.annotated_geneHancer_lines_filename = v, DerivedFile.Type.AnnotatedGeneHancer, annotatedGeneHancerLinesExtension, c => c.case_id, "Annotated GeneHancer Lines Size", c => c.annotated_geneHancer_lines_size, (c, v) => c.annotated_geneHancer_lines_size = v),            
                 new FieldInformation("Regulatory Mutations Near Mutations Filename",        c => c.regulatory_mutations_near_mutations_filename, (c, v) => c.regulatory_mutations_near_mutations_filename = v, DerivedFile.Type.RegulatoryMutationsNearMutations, regulatoryMutationsNearMutationsExtension, c => c.case_id, "Regulatory Mutations Near Mutations Size", c => c.regulatory_mutations_near_mutations_size, (c, v) => c.regulatory_mutations_near_mutations_size = v),
                 new FieldInformation("Expression By Gene",                                  c => c.expression_by_gene_filename, (c, v) => c.expression_by_gene_filename = v, DerivedFile.Type.ExpressionByGene, expressionByGeneExtension, c => c.case_id, "Expression By Gene Size", c => c.expression_by_gene_size, (c, v) => c.expression_by_gene_size = v),
+                new FieldInformation("Isoform Read Counts",                                 c => c.isoform_read_counts_filename, (c, v) => c.isoform_read_counts_filename = v, DerivedFile.Type.IsoformReadCounts, isoformReadCountsExtension, c => c.case_id, "Isoform Gene Counts Size", c => c.isoform_read_counts_file_size, (c, v) => c.isoform_read_counts_file_size = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -1920,6 +1937,8 @@ namespace ASELib
             public double repetitiveRegionConfidence = 0.95;   // 
             public int minDistanceBetweenGermlineVariants = 1000;
 
+            public int nWorkerMachines = 28;                 // Over how many machines would we like to evenly split our work?
+
             public bool isBeatAML = false;
 
             void reinitialzeWithBaseDirectory()
@@ -2146,6 +2165,8 @@ namespace ASELib
                         retVal.geneHancerFilename = fields[1];
                     } else if (type == "local index directory") {
                         retVal.localIndexDirectory = fields[1];
+                    } else if (type == "n worker machines") {
+                        retVal.nWorkerMachines = Convert.ToInt32(fields[1]);
                     } else if (type == "uses chr") {
                         if (fields[1] == "yes")
                         {
@@ -2791,6 +2812,7 @@ namespace ASELib
         public const string bonferroniExtension = "_bonferroni.txt";
         public const string regulatoryMutationsNearMutationsExtension = ".regulatory_mutations_near_mutations.txt";
         public const string expressionByGeneExtension = ".expressionByGene";
+        public const string isoformReadCountsExtension = ".isoformReadCounts";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
@@ -2893,7 +2915,7 @@ namespace ASELib
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
-                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants
+                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts
             };
         } // DerivedFile
 
@@ -13017,6 +13039,80 @@ namespace ASELib
             mean = meanAndStdDev.getMeanAndStdDev().mean;
             range = c * meanAndStdDev.getMeanAndStdDev().stddev / Math.Sqrt(n);
         } // ComputeConfidenceInterval
+
+        public class IsoformReadCounts
+        {
+            public IsoformReadCounts(string ucsdId_, int tumor_, int normal_)
+            {
+                ucsdId = ucsdId_;
+                tumor = tumor_;
+                normal = normal_;
+            }
+
+            public int getCount(bool forTumor)
+            {
+                if (forTumor)
+                {
+                    return tumor;
+                }
+
+                return normal;
+            }
+
+            public static Dictionary<string, IsoformReadCounts> LoadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("Unable to open input file " + filename);
+                    return null;
+                }
+
+                string[] wantedFields = { "Uscd ID", "Normal Read Count", "Tumor Read Count" };
+
+                var headerizedFile = new HeaderizedFile<IsoformReadCounts>(inputFile, false, true, "", wantedFields.ToList());
+                List<IsoformReadCounts> listOfResults;
+                if (!headerizedFile.ParseFile(parse, out listOfResults))
+                {
+                    Console.WriteLine("Unable to parse " + filename);
+                    return null;
+                }
+
+                var retVal = new Dictionary<string, IsoformReadCounts>();
+                listOfResults.ForEach(_ => retVal.Add(_.ucsdId, _));
+
+                return retVal;
+            } // LoadFromFile
+
+            static IsoformReadCounts parse(HeaderizedFile<IsoformReadCounts>.FieldGrabber fieldGrabber)
+            {
+                return new IsoformReadCounts(fieldGrabber.AsString("Uscd ID"), fieldGrabber.AsInt("Normal Read Count"), fieldGrabber.AsInt("Tumor Read Count"));
+            }
+
+            public static void WriteToFile(string filename, List<IsoformReadCounts> readCounts)
+            {
+                var outputFile = CreateStreamWriterWithRetry(filename);
+                if (null == outputFile)
+                {
+                    Console.WriteLine("Unable to open output file " + filename);
+                    return;
+                }
+
+                outputFile.WriteLine("Uscd ID\tNormal Read Count\tTumor Read Count");
+
+                foreach (var readCount in readCounts)
+                {
+                    outputFile.WriteLine(readCount.ucsdId + "\t" + readCount.normal + "\t" + readCount.tumor);
+                }
+
+                outputFile.WriteLine("**done**");
+                outputFile.Close();
+            } // WriteToFile
+
+
+            public readonly string ucsdId;
+            public readonly int tumor, normal;
+        } // IsoformReadCounts
 
     } // ASETools
 

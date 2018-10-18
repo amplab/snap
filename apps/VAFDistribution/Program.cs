@@ -89,7 +89,7 @@ namespace VAFDistribution
             ASETools.PrintNumberBar(casesToProcess.Count() / 100);
 
             var threading = new ASETools.ASVThreadingHelper<List<Dictionary<string, ASETools.PreBucketedHistogram>>>(casesToProcess, null, (x, y) => true, HandleOneCase, FinishUp, null, 100);
-            threading.run(1);
+            threading.run();
 
             Console.WriteLine();
 

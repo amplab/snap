@@ -13,7 +13,6 @@ namespace ChooseAnnotatedVariants
         static PerThreadState globalState = new PerThreadState();
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static ASETools.GeneMap geneMap;
-        static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
 
         static void Main(string[] args)
         {
@@ -29,14 +28,6 @@ namespace ChooseAnnotatedVariants
 
             geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
-
-            perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
-
-            if (null == perGeneASEMap)
-            {
-                Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
-                return;
-            }
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
             if (null == cases)
@@ -108,11 +99,13 @@ namespace ChooseAnnotatedVariants
             threading2.run();
 
             Console.WriteLine();
-            Console.WriteLine("Processed " + listOfCases.Count() + " cases in " + ASETools.ElapsedTimeInSeconds(timer));
+            Console.WriteLine("Processed " + listOfCases.Count() + " cases with " + globalCounts.nTentativeVariants + " tentative variants in " + ASETools.ElapsedTimeInSeconds(timer));
 
-            Console.WriteLine("Accepted " + globalCounts.nIncluded + " germline and " + globalCounts.nSomatic + " somatic variants (" + globalCounts.nIncludedForNoObservedBias + " for lack of observed bias (in either direction), rejected " + globalCounts.nExcludedByIsASE +
-                " because of IsASE, " +  + globalCounts.nExcludedByMappedReads +
+            Console.WriteLine("Accepted " + globalCounts.nIncluded + " germline and " + globalCounts.nSomatic + " somatic variants (" + globalCounts.nIncludedForNoObservedBias + " for lack of observed bias in either direction), rejected " + globalCounts.nExcludedByIsASE +
+                " because of IsASE, " + globalCounts.nExcludedForObservedBias + " because of observed bias, " + globalCounts.nExcludedByMappedReads +
                 " because of repetitive mapped reads, and " + globalCounts.nExcludedByProximityToOtherVariants + " because of proximity to other variants.");
+
+            Console.WriteLine("Acceptance rate " + (double)globalCounts.nIncluded / globalCounts.nTentativeVariants);
         }
 
         const int treeGranularity = 100;
@@ -230,7 +223,7 @@ namespace ChooseAnnotatedVariants
             foreach (var annotatedVariant in annotatedVariants)
             {
                 string whyNot;
-                if (!annotatedVariant.IsASECandidate(out whyNot, true, copyNumber, configuration, perGeneASEMap, geneMap))
+                if (!annotatedVariant.IsASECandidate(out whyNot, true, copyNumber, configuration, null, geneMap))
                 {
                     continue;
                 }
@@ -252,8 +245,10 @@ namespace ChooseAnnotatedVariants
 
         class SelectVariantsPerThreadState
         {
+            public int nTentativeVariants = 0;
             public int nExcludedByIsASE = 0;
             public int nIncludedForNoObservedBias = 0;
+            public int nExcludedForObservedBias = 0;
             public int nExcludedByMappedReads = 0;
             public int nExcludedByProximityToOtherVariants = 0;
             public int nIncluded = 0;
@@ -261,12 +256,14 @@ namespace ChooseAnnotatedVariants
 
             public void merge(SelectVariantsPerThreadState peer)
             {
+                nTentativeVariants += peer.nTentativeVariants;
                 nExcludedByIsASE += peer.nExcludedByIsASE;
                 nIncludedForNoObservedBias += peer.nIncludedForNoObservedBias;
+                nExcludedForObservedBias += peer.nExcludedForObservedBias;
                 nExcludedByMappedReads += peer.nExcludedByMappedReads;
-                nExcludedByProximityToOtherVariants += nExcludedByProximityToOtherVariants;
-                nIncluded += nIncluded;
-                nSomatic += nSomatic;
+                nExcludedByProximityToOtherVariants += peer.nExcludedByProximityToOtherVariants;
+                nIncluded += peer.nIncluded;
+                nSomatic += peer.nSomatic;
             }
         }
 
@@ -296,13 +293,15 @@ namespace ChooseAnnotatedVariants
                 return;
             }
 
+            state.nTentativeVariants += tentativeAnnotatedSelectedVariants.Count();
+
             var annotatedSelectedVariants = tentativeAnnotatedSelectedVariants.Where(_ => _.somaticMutation).ToList();  // The final result.  We take all somatic mutations, so we start with them.
 
             //
             // Filter the ones with bad read counts, DNA imbalance or copy number variants.  We alrady put the somatic mutations in the final list, so cull them
             // here for the rest of the processing.
             //
-            var aseCandidates = tentativeAnnotatedSelectedVariants.Where(_ => _.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !_.somaticMutation).ToList();
+            var aseCandidates = tentativeAnnotatedSelectedVariants.Where(_ => _.IsASECandidate(true, copyNumber, configuration, null, geneMap) && !_.somaticMutation).ToList();
             state.nExcludedByIsASE += tentativeAnnotatedSelectedVariants.Where(_ => !_.somaticMutation).Count() - aseCandidates.Count();
 
             var afterRepetitiveFilter = new List<ASETools.AnnotatedVariant>();
@@ -313,6 +312,7 @@ namespace ChooseAnnotatedVariants
                 // of this location) and see if that fits entirely within the range of 0.4-0.6.  If not, then we look at the repetitive regions map that was generated by mapping the reference back against itself.
                 //
                 bool passedIntervalTest = false;
+                bool failedIntervalTest = false;
 
                 for (int genomeWidth = 0; genomeWidth <= configuration.maxProximityForReferenceBiasCheck; genomeWidth += configuration.maxProximityForReferenceBiasCheck) // fancy way of having genomeWidth be 0 then max
                 {
@@ -329,6 +329,13 @@ namespace ChooseAnnotatedVariants
                     {
                         passedIntervalTest = true;
                         break;
+                    } else if (mean + confidenceIntervalWidth < 0.40 || mean - confidenceIntervalWidth > 0.60)
+                    {
+                        //
+                        // The 95% confidence interval is entirely outside the 0.4-0.6 range.  Exclude this variant.
+                        //
+                        failedIntervalTest = true;
+                        break;
                     }
                 } // genomeWidth
 
@@ -339,7 +346,11 @@ namespace ChooseAnnotatedVariants
                 }
                 else
                 {
-                    if (repetitiveRegionMap.isCloseToRepetitiveRegion(ASETools.ChromosomeNameToIndex(tentativeVariant.contig), tentativeVariant.locus,
+                    if (failedIntervalTest)
+                    {
+                        state.nExcludedForObservedBias++;
+                    } 
+                    else if (repetitiveRegionMap.isCloseToRepetitiveRegion(ASETools.ChromosomeNameToIndex(tentativeVariant.contig), tentativeVariant.locus,
                         configuration.minDistanceFromRepetitiveRegion))
                     {
                         state.nExcludedByMappedReads++;

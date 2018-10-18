@@ -221,6 +221,7 @@ namespace CheckDone
                 HandleFilename(case_.regulatory_mutations_near_mutations_filename, "RegulatoryMutationsNearMutations", fileTypesToUse);
                 HandleFilename(case_.annotated_geneHancer_lines_filename, "AnnotatedGeneHancerLines", fileTypesToUse);
                 HandleFilename(case_.expression_by_gene_filename, "ExpressionByGene", fileTypesToUse);
+                HandleFilename(case_.isoform_read_counts_filename, "IsoformReadCounts", fileTypesToUse);
             }
 
             ASETools.PrintMessageAndNumberBar("Processing", "files in " + FilenamesByDataDirectory.Count() + " data directories", totalFiles, out nPerDot);
@@ -238,6 +239,7 @@ namespace CheckDone
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
 
+            Console.WriteLine();
             Console.WriteLine("Processed " + totalFiles + " files in " + ASETools.ElapsedTimeInSeconds(timer));
         } // Main
 
