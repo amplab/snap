@@ -2862,7 +2862,7 @@ namespace ASELib
         public const string MethylationDistributionsFilename = "MethylationDistributions.txt";
         public const string MethylationCorrelationsFilename = "MethylationCorrelations.txt";
         public const string MethylagtionCorrelationsHistogramFilename = "MethylationCorrelationsHistogram.txt";
-        public const string IsoformBalanceFilename = "IsoformBalance.txt";
+        public const string IsoformBalanceFilenameBase = "IsoformBalance";
         public const string IsoformBalancePValueHistogramFilename = "IsoformBalance-pValueHistogram.txt";
         public const string ReadLengthHistogramFilename = "ReadLengthHistograms.txt";
         public const string variantSelectionSummaryFilename = "VariantSelectionSummary.txt";
