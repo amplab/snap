@@ -18,8 +18,14 @@ namespace SpliceosomeAllelicImbalance
         static Dictionary<bool, Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<bool, List<double>>>>>> perDiseaseIsoformBalanceBySpliceosome = 
             new Dictionary<bool, Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<bool, List<double>>>>>>();
 
+        // mutant gene->hugo_symbol->isoform->isSpiceosomeGeneMutated->frac of all reads mapped to this gene that are in this isoform.
+        static Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<bool, List<double>>>>> perSplicosomeGeneIsoformBalance = null;   // No global one, the first thread to finish just donates its
+ 
+
         static List<string> diseases;
         static List<string> diseasesAndAll = new List<string>();
+
+        static List<string> spliceosomeGenesAndControls;
 
         class DoubleAndBool : IComparer<DoubleAndBool>
         {
@@ -76,6 +82,10 @@ namespace SpliceosomeAllelicImbalance
 
             var cases = commonData.cases;
 
+            spliceosomeGenesAndControls = ASETools.spliceosome_genes.ToList();
+            spliceosomeGenesAndControls.Add("ACTB");    // Everyone's favorite control
+            spliceosomeGenesAndControls.Add("TTN"); // Just in case there's a per-gene-size effect.  Plus, because it's so big it gets lots of mutations.
+
 #if false
 cases = new Dictionary<string, ASETools.Case>();
 foreach (var case_ in commonData.listOfCases.Where(_ => _.disease() == "laml"))
@@ -125,6 +135,8 @@ minSamplesPerClass = 1;
                     } // genes
                 } // disease
             } // tumor
+
+
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(commonData.timer) + " overall elapsed time.");
 
 
@@ -138,7 +150,9 @@ minSamplesPerClass = 1;
             // all of these are tumor->disease->value
             var nTooFewSamples = new Dictionary<bool, Dictionary<string, int>>();
             var nConsidered = new Dictionary<bool, Dictionary<string, int>>();
+            var nConsideredBySpliceosomeMutationOrControl = new Dictionary<string, int>();
             var results = new Dictionary<bool, Dictionary<string, List<Result>>>();
+            var resultsBySpecificSpliceosomeGeneOrControl = new Dictionary<string, List<Result>>(); // spliceosome gene or controlresult
             var nSignificant = new Dictionary<bool, Dictionary<string, int>>();
 
             ASETools.BothBools.ToList().ForEach(tumor => { nTooFewSamples.Add(tumor, new Dictionary<string, int>()); nConsidered.Add(tumor, new Dictionary<string, int>()); results.Add(tumor, new Dictionary<string, List<Result>>()); nSignificant.Add(tumor, new Dictionary<string, int>()); });
@@ -152,6 +166,18 @@ minSamplesPerClass = 1;
                 {
                     pValueHistograms[tumor].Add(disease, new ASETools.PreBucketedHistogram(0, 1, 0.01));
                 }
+            }
+
+            foreach (var spliceosomeGeneOrControl in spliceosomeGenesAndControls)
+            {
+                nConsideredBySpliceosomeMutationOrControl.Add(spliceosomeGeneOrControl, 0);
+            }
+
+            var pValueHistogramsBySpliceosomeGeneOrControl = new Dictionary<string, ASETools.PreBucketedHistogram>();
+            foreach (var spliceosomeGeneOrControl in spliceosomeGenesAndControls)
+            {
+                resultsBySpecificSpliceosomeGeneOrControl.Add(spliceosomeGeneOrControl, new List<Result>());
+                pValueHistogramsBySpliceosomeGeneOrControl.Add(spliceosomeGeneOrControl, new ASETools.PreBucketedHistogram(0, 1, 0.01));
             }
 
             ASETools.PrintMessageAndNumberBar("Processing", "genes", commonData.geneLocationInformation.genesByName.Count(), out nPerDot);
@@ -205,6 +231,39 @@ minSamplesPerClass = 1;
                         } // for each isoform
                     } // for each disease
                 } // tumor
+
+                foreach (var spliceosomeGeneOrControl in spliceosomeGenesAndControls)
+                {
+                    foreach (var isoformName in geneInfo.isoforms.Select(x => x.ucscId))
+                    {
+                        if (perSplicosomeGeneIsoformBalance[spliceosomeGeneOrControl][geneInfo.hugoSymbol][isoformName].Select(_ => _.Value.Count()).Min() < minSamplesPerClass)
+                        {
+                            continue;
+                        }
+
+                        var items = new List<DoubleAndBool>();
+                        foreach (var mutant in ASETools.BothBools)
+                        {
+                            perSplicosomeGeneIsoformBalance[spliceosomeGeneOrControl][geneInfo.hugoSymbol][isoformName][mutant].ForEach(_ => items.Add(new DoubleAndBool(mutant, _)));
+                        } // mutant
+
+                        nConsideredBySpliceosomeMutationOrControl[spliceosomeGeneOrControl]++;
+
+                        bool enoughData, reversed;
+                        double nFirstGroup, nSecondGroup, U, z;
+
+                        double p = ASETools.MannWhitney<DoubleAndBool>.ComputeMannWhitney(items, items[0], _ => _.whichClass, _ => _.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z);
+
+                        pValueHistogramsBySpliceosomeGeneOrControl[spliceosomeGeneOrControl].addValue(p);
+
+                        var nonMutantItems = items.Where(_ => !_.whichClass).Select(_ => _.value);
+                        var mutantItems = items.Where(_ => _.whichClass).Select(_ => _.value);
+
+                        resultsBySpecificSpliceosomeGeneOrControl[spliceosomeGeneOrControl].Add(
+                            new Result(geneInfo.hugoSymbol + ":" + isoformName, p, nonMutantItems.Average(), mutantItems.Average(), nonMutantItems.Count(), mutantItems.Count()));
+
+                    } // isoform name
+                } // spliceosomeGeneOrControl
             } // for each gene
 
             Console.WriteLine();
@@ -223,8 +282,6 @@ minSamplesPerClass = 1;
                 foreach (var disease in diseasesAndAll)
                 {
                     nSignificant[tumor][disease] = results[tumor][disease].Where(_ => _.pValue * nConsidered[tumor][disease] <= .01).Count();
-
-                    results[tumor][disease].Sort((x, y) => y.pValue.CompareTo(x.pValue));   // Backwards sort, so smallest is last
 
                     double maxSignificantUncorrectedPValue = 0.01 / nConsidered[tumor][disease];
 
@@ -274,6 +331,36 @@ minSamplesPerClass = 1;
                 } // disease
             } // tumor
 
+            foreach (var spliceosomeGeneOrControl in spliceosomeGenesAndControls)
+            {
+                double maxSignificantUncorrectedPValue = 0.01 / nConsideredBySpliceosomeMutationOrControl[spliceosomeGeneOrControl];
+
+                var outputFilename = commonData.configuration.finalResultsDirectory + spliceosomeGeneOrControl + "_" + ASETools.IsoformBalanceFilename;
+                var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+
+                if (null == outputFile)
+                {
+                    Console.WriteLine("Unable to open output file " + outputFilename);
+                }
+                else
+                {
+                    //
+                    // Sort so significant results go first.  Within significant results, sort by ascending p value.  For insignificant results, sort by name.
+                    //
+                    resultsBySpecificSpliceosomeGeneOrControl[spliceosomeGeneOrControl].Sort((x, y) => (x.pValue < maxSignificantUncorrectedPValue && y.pValue < maxSignificantUncorrectedPValue) ? x.pValue.CompareTo(y.pValue) : (x.pValue < maxSignificantUncorrectedPValue ? -1 : (y.pValue < maxSignificantUncorrectedPValue ? 1 : x.name.CompareTo(y.name))));
+
+                    outputFile.WriteLine("Name\tCorrected pValue\tn with no mutation\tmean with no mutation\tn with mutation\tmean with mutation");
+                    resultsBySpecificSpliceosomeGeneOrControl[spliceosomeGeneOrControl].ForEach(_ => outputFile.WriteLine(_.name + "\t" + (_.pValue * nConsideredBySpliceosomeMutationOrControl[spliceosomeGeneOrControl]) + "\t" + _.nNoMutation + "\t" + _.meanNoMutation + "\t" + _.nWithMutation + "\t" + _.meanWithMutation));
+                    outputFile.WriteLine("**done**");
+                    outputFile.Close();
+                } // output file opened correctly
+
+                pValueHistogramFile.WriteLine("p value histogram when splitting by mutations in gene " + spliceosomeGeneOrControl);
+                pValueHistogramFile.WriteLine(ASETools.HistogramResultLine.Header());
+                pValueHistogramsBySpliceosomeGeneOrControl[spliceosomeGeneOrControl].ComputeHistogram().ToList().ForEach(_ => pValueHistogramFile.WriteLine(_.ToString()));
+
+            } // spliceosomeGeneOrControl
+
             pValueHistogramFile.WriteLine("**done**");
             pValueHistogramFile.Close();
 
@@ -285,6 +372,10 @@ minSamplesPerClass = 1;
             // tumor->hugo_symbol->isoform->spliceosomemutant->frac of all reads mapped to this gene that are in this isoform.  Empty string disease is all diseases.
             public Dictionary<bool,Dictionary<string, Dictionary<string, Dictionary<bool, List<double>>>>> overallIsoformBalanceBySpliceosome =
                 new Dictionary<bool, Dictionary<string, Dictionary<string, Dictionary<bool, List<double>>>>>();
+
+            public Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<bool, List<double>>>>> perSplicosomeGeneIsoformBalance =
+                new Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<bool, List<double>>>>>();
+
 
             public PerThreadState()
             {
@@ -307,6 +398,27 @@ minSamplesPerClass = 1;
                         } // isoforms
                     } // genes
                 } // tumor
+
+                // mutant gene->hugo_symbol->isoform->isSpiceosomeGeneMutated->frac of all reads mapped to this gene that are in this isoform.
+                foreach (var spliceosomeGeneOrControl in spliceosomeGenesAndControls)
+                {
+                    perSplicosomeGeneIsoformBalance.Add(spliceosomeGeneOrControl, new Dictionary<string, Dictionary<string, Dictionary<bool, List<double>>>>());
+
+                    foreach (var geneInfo in commonData.geneLocationInformation.genesByName.Select(x => x.Value).ToList())
+                    {
+                        perSplicosomeGeneIsoformBalance[spliceosomeGeneOrControl].Add(geneInfo.hugoSymbol, new Dictionary<string, Dictionary<bool, List<double>>>());
+
+                        foreach (var isoformName in geneInfo.isoforms.Select(x => x.ucscId))
+                        {
+                            perSplicosomeGeneIsoformBalance[spliceosomeGeneOrControl][geneInfo.hugoSymbol].Add(isoformName, new Dictionary<bool, List<double>>());
+
+                            foreach (var spliceosomeGeneIsMutated in ASETools.BothBools)
+                            {
+                                perSplicosomeGeneIsoformBalance[spliceosomeGeneOrControl][geneInfo.hugoSymbol][isoformName].Add(spliceosomeGeneIsMutated, new List<double>());
+                            } // is mutated
+                        } // isoform name
+                    } // gene
+                } // spliceosome gene or control
             } // ctor
         } // PerThreadState
 
@@ -315,7 +427,7 @@ minSamplesPerClass = 1;
             var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, "", false);
             bool anySpliceosomeMutations = mafLines.Any(_ => !_.IsSilent() && ASETools.spliceosome_genes.Contains(_.Hugo_Symbol));
 
-            //var splicesomeMutations = mafLines.Where(_ => !_.IsSilent() && ASETools.spliceosome_genes.Contains(_.Hugo_Symbol)).ToList();
+            var mutatedSplicesomeMutationsAndControls = mafLines.Where(_ => !_.IsSilent() && spliceosomeGenesAndControls.Contains(_.Hugo_Symbol)).ToList().GroupByToDict(_ => _.Hugo_Symbol).Select(_ => _.Key).ToList();
 
             var isoformReadCounts = ASETools.IsoformReadCounts.LoadFromFile(case_.isoform_read_counts_filename);
             if (isoformReadCounts == null)
@@ -346,10 +458,18 @@ minSamplesPerClass = 1;
 
                         foreach (var ucsdName in geneInfo.isoforms.Select(_ => _.ucscId))
                         {
-                            perDiseaseIsoformBalanceBySpliceosome[tumor][case_.disease()][geneInfo.hugoSymbol][ucsdName][anySpliceosomeMutations].Add((double)isoformReadCounts[ucsdName].getCount(tumor) / totalIsoformReadsByGene[geneInfo.hugoSymbol]);
+                            var fracReadsInThisIsoform = (double)isoformReadCounts[ucsdName].getCount(tumor) / totalIsoformReadsByGene[geneInfo.hugoSymbol];
+                            perDiseaseIsoformBalanceBySpliceosome[tumor][case_.disease()][geneInfo.hugoSymbol][ucsdName][anySpliceosomeMutations].Add(fracReadsInThisIsoform);
 
-                            state.overallIsoformBalanceBySpliceosome[tumor][geneInfo.hugoSymbol][ucsdName][anySpliceosomeMutations].Add((double)isoformReadCounts[ucsdName].getCount(tumor) / totalIsoformReadsByGene[geneInfo.hugoSymbol]);
-                        }
+                            state.overallIsoformBalanceBySpliceosome[tumor][geneInfo.hugoSymbol][ucsdName][anySpliceosomeMutations].Add(fracReadsInThisIsoform);
+                            if (tumor) { // the control on this is non-spliceosome genes, not normal RNA
+                                foreach (var spliceosomeGeneOrControl in spliceosomeGenesAndControls)
+                                {
+                                    // mutant gene->hugo_symbol->isoform->isSpiceosomeGeneMutated->frac of all reads mapped to this gene that are in this isoform.
+                                    state.perSplicosomeGeneIsoformBalance[spliceosomeGeneOrControl][geneInfo.hugoSymbol][ucsdName][mutatedSplicesomeMutationsAndControls.Contains(spliceosomeGeneOrControl)].Add(fracReadsInThisIsoform);
+                                } // spliceosome gene or control
+                            } // if tumor
+                        } // isoform
                     } // per gene
                 } // lock
             } // tumor
@@ -379,6 +499,32 @@ minSamplesPerClass = 1;
                     } // per gene
                 } // lock
             } // tumor
+
+            lock (commonData) // can't lock the global, because it starts out null
+            {
+                if (perSplicosomeGeneIsoformBalance == null)
+                {
+                    // We're first out, so just donate our local version.  Everyone else will add to it.
+                    perSplicosomeGeneIsoformBalance = state.perSplicosomeGeneIsoformBalance;
+                } else
+                {
+                    // mutant gene->hugo_symbol->isoform->isSpiceosomeGeneMutated->frac of all reads mapped to this gene that are in this isoform.
+                    foreach (var spliceosomeGeneOrControl in spliceosomeGenesAndControls)
+                    {
+                        foreach (var geneInfo in commonData.geneLocationInformation.genesByName.Select(x => x.Value).ToList())
+                        {
+                            foreach (var isoformName in geneInfo.isoforms.Select(x => x.ucscId))
+                            {
+                                foreach (var spliceosomeGeneIsMutated in ASETools.BothBools)
+                                {
+                                    perSplicosomeGeneIsoformBalance[spliceosomeGeneOrControl][geneInfo.hugoSymbol][isoformName][spliceosomeGeneIsMutated].AddRange(
+                                        state.perSplicosomeGeneIsoformBalance[spliceosomeGeneOrControl][geneInfo.hugoSymbol][isoformName][spliceosomeGeneIsMutated]);
+                                } // is mutated
+                            } // isoform name
+                        } // gene
+                    } // spliceosome gene or control
+                } // we weren't first
+            } // lock
         } // FinishUp
     }
 }
