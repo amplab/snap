@@ -13086,7 +13086,7 @@ namespace ASELib
 
             static IsoformReadCounts parse(HeaderizedFile<IsoformReadCounts>.FieldGrabber fieldGrabber)
             {
-                return new IsoformReadCounts(fieldGrabber.AsString("Uscd ID"), fieldGrabber.AsInt("Normal Read Count"), fieldGrabber.AsInt("Tumor Read Count"));
+                return new IsoformReadCounts(fieldGrabber.AsString("Uscd ID"), fieldGrabber.AsInt("Tumor Read Count"), fieldGrabber.AsInt("Normal Read Count"));
             }
 
             public static void WriteToFile(string filename, List<IsoformReadCounts> readCounts)

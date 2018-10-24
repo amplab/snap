@@ -286,14 +286,14 @@ minSamplesPerClass = 1;
                     double maxSignificantUncorrectedPValue = 0.01 / nConsidered[tumor][disease];
 
                     string outputFilename;
-                    string tumorString = tumor ? "tumor_" : "normal_";
+                    string tumorString = tumor ? "tumor" : "normal";
                     if (disease == "")
                     {
-                        outputFilename = commonData.configuration.finalResultsDirectory + tumorString + ASETools.IsoformBalanceFilename;
+                        outputFilename = commonData.configuration.finalResultsDirectory  + ASETools.IsoformBalanceFilenameBase + "_" + tumorString  + ".txt";
                     }
                     else
                     {
-                        outputFilename = commonData.configuration.finalResultsDirectory + disease + "_" + tumorString + ASETools.IsoformBalanceFilename;
+                        outputFilename = commonData.configuration.finalResultsDirectory + ASETools.IsoformBalanceFilenameBase + "_" + tumorString + "_" + disease + ".txt";
                     }
 
                     var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
@@ -335,7 +335,7 @@ minSamplesPerClass = 1;
             {
                 double maxSignificantUncorrectedPValue = 0.01 / nConsideredBySpliceosomeMutationOrControl[spliceosomeGeneOrControl];
 
-                var outputFilename = commonData.configuration.finalResultsDirectory + spliceosomeGeneOrControl + "_" + ASETools.IsoformBalanceFilename;
+                var outputFilename = commonData.configuration.finalResultsDirectory + ASETools.IsoformBalanceFilenameBase + "_" + spliceosomeGeneOrControl + ".txt";
                 var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
 
                 if (null == outputFile)

@@ -352,8 +352,8 @@ namespace ASEProcessManager
             }
 
             static GetCaseFile[] getCaseFiles = { _ => _.isoform_read_counts_filename };
-            static GetOneOffFile[] getOutputFiles = {_ => _.configuration.finalResultsDirectory + ASETools.IsoformBalancePValueHistogramFilename , _ => _.configuration.finalResultsDirectory + "tumor_" + ASETools.IsoformBalanceFilenameBase,
-            _ => _.configuration.finalResultsDirectory + "normal_" + ASETools.IsoformBalanceFilenameBase};  // XXX should be a way to do the per-disease files here, too.
+            static GetOneOffFile[] getOutputFiles = {_ => _.configuration.finalResultsDirectory + ASETools.IsoformBalancePValueHistogramFilename , _ => _.configuration.finalResultsDirectory + ASETools.IsoformBalanceFilenameBase + "_tumor.txt",
+            _ => _.configuration.finalResultsDirectory + ASETools.IsoformBalanceFilenameBase + "_normal.txt"};  // XXX should be a way to do the per-disease and per-gene files here, too.
         }
 
 
