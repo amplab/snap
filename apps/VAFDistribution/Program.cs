@@ -21,6 +21,9 @@ namespace VAFDistribution
         static Dictionary<string, ASETools.PreBucketedHistogram> global_multiple_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
         static Dictionary<string, ASETools.PreBucketedHistogram> global_normal_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
         static Dictionary<string, ASETools.PreBucketedHistogram> global_silent_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
+        static Dictionary<string, ASETools.PreBucketedHistogram> global_idh1_one_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();  // Maps IDH1 mutation type->historgam
+        static Dictionary<string, ASETools.PreBucketedHistogram> global_idh1_normal_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();  // Maps IDH1 mutation type->historgam
+        static Dictionary<string, ASETools.PreBucketedHistogram> global_idh1_multiple_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();  // Maps IDH1 mutation type->historgam
 
         class HistogramsAndPValue : IComparable<HistogramsAndPValue>
         {
@@ -94,7 +97,8 @@ namespace VAFDistribution
             Console.WriteLine();
 
             const int minCount = 20;
-            int bonferroniCorrection = global_one_mutation_histograms.Where(x => x.Value.count() >= minCount).Count(); // The set of genes with at least 20 tumors with single mutations
+            int bonferroniCorrection = global_one_mutation_histograms.Where(x => x.Value.count() >= minCount).Count();      // The set of genes with at least 20 tumors with single mutations
+            bonferroniCorrection += global_idh1_one_mutation_histograms.Where(x => x.Value.count() >= minCount).Count();     // Or of specific IDH1 mutations
             Console.WriteLine("Bonferroni correction " + bonferroniCorrection);
 
 
@@ -108,6 +112,15 @@ namespace VAFDistribution
                 results.Add(new HistogramsAndPValue(ASETools.binomialTest((int)histogram.nLessThan(0.5), (int)histogram.count(), 0.5, ASETools.BinomalTestType.TwoSided) * bonferroniCorrection, histogram, 
                     global_multiple_mutation_histograms[hugo_symbol], global_normal_histograms[hugo_symbol], global_silent_histograms[hugo_symbol], hugo_symbol));
 
+            }
+
+            foreach (var particularMutation in global_idh1_one_mutation_histograms)
+            {
+                var mutation = particularMutation.Key;
+                var histogram = particularMutation.Value;
+
+                results.Add(new HistogramsAndPValue(ASETools.binomialTest((int)histogram.nLessThan(0.5), (int)histogram.count(), 0.5, ASETools.BinomalTestType.TwoSided) * bonferroniCorrection, histogram,
+                    global_idh1_multiple_mutation_histograms[mutation], global_idh1_normal_histograms[mutation], new ASETools.PreBucketedHistogram(0, 1.01, 0.01), "IDH1:" + mutation));
             }
 
             results.Sort();
@@ -160,7 +173,7 @@ namespace VAFDistribution
             return "";
         }
 
-        const int nHistograms = 4;
+        const int nHistograms = 7;
 
         static void HandleOneCase(ASETools.Case case_, List<Dictionary<string, ASETools.PreBucketedHistogram>> histograms, List<ASETools.AnnotatedVariant> variantsForThisCase, ASETools.ASECorrection aseCorrection, Dictionary<bool, List<ASETools.CopyNumberVariation>> copyNumber)
         {
@@ -198,6 +211,21 @@ namespace VAFDistribution
                 var mutations = variants.Where(x => x.somaticMutation && !x.isSilent()).ToList();
                 int mutationCount = mutations.Count();
 
+                if (hugo_symbol == "IDH1")
+                {
+                    foreach (var mutation in mutations)
+                    {
+                        var mutationType = mutation.IDH1MutationType();
+
+                        if (!histograms[4].ContainsKey(mutationType))
+                        {
+                            histograms[4].Add(mutationType, new ASETools.PreBucketedHistogram(0, 1.01, .01));
+                            histograms[5].Add(mutationType, new ASETools.PreBucketedHistogram(0, 1.01, .01));
+                            histograms[6].Add(mutationType, new ASETools.PreBucketedHistogram(0, 1.01, .01));
+                        }
+                    }
+                }
+
                 if (mutationCount == 1 && mutations[0].IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !mutations[0].CausesNonsenseMediatedDecay() && !mutations[0].isSilent() && 
                     !repetitiveRegionMap.isInRepetitiveRegion(mutations[0].contig, mutations[0].locus))
                 {
@@ -209,6 +237,13 @@ namespace VAFDistribution
                             mutations[0].contig + ":" + ASETools.NumberWithCommas(mutations[0].locus));
                     }
                     histograms[0][hugo_symbol].addValue(mutations[0].GetTumorAltAlleleFraction());
+
+                    if (hugo_symbol == "IDH1")
+                    {
+                        var mutationType = mutations[0].IDH1MutationType();
+
+                        histograms[4][mutationType].addValue(mutations[0].GetTumorAltAlleleFraction());
+                    }
                 }
 
                 if (mutationCount > 1 && mutations.Where(x => x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.isSilent() && !x.CausesNonsenseMediatedDecay()
@@ -218,12 +253,33 @@ namespace VAFDistribution
                     && !repetitiveRegionMap.isInRepetitiveRegion(x.contig, x.locus)).Select(x => x.GetTumorAltAlleleFraction()).Average();
 
                     histograms[1][hugo_symbol].addValue(vaf);
+
+                    if (hugo_symbol == "IDH1")
+                    {
+                        foreach (var mutation in mutations)
+                        {
+                            if (mutation.somaticMutation && mutation.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !mutation.isSilent() && !mutation.CausesNonsenseMediatedDecay() &&
+                                !repetitiveRegionMap.isInRepetitiveRegion(mutation.contig, mutation.locus))
+                            {
+                                histograms[5][mutation.IDH1MutationType()].addValue(mutation.GetTumorAltAlleleFraction());
+                            } // if it's qualified
+                        } // each mutation
+                    } // IDH1
                 }
 
                 if (variants.Where(x => !x.somaticMutation && x.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap)).Count() > 0)  // Don't need to check repetitveRegionMap for germline variants, that happened in selectVariants
                 {
                     var vaf = variants.Where(x => !x.somaticMutation && x.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap)).Select(x => x.GetNormalAltAlleleFraction()).Average();
                     histograms[2][hugo_symbol].addValue(vaf);
+
+                    if (hugo_symbol == "IDH1")
+                    {
+                        if (!histograms[6].ContainsKey("Other"))
+                        {
+                            histograms[6].Add("Other", new ASETools.PreBucketedHistogram(0, 1.01, .01));
+                        }
+                        histograms[6]["Other"].addValue(vaf);
+                    }
                 }
 
                 if (mutationCount == 0 && variants.Where(x => x.isSilent() && x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).Count() > 0) // how can this happen?  There are no silent/non-silent tags on germline variants
@@ -238,15 +294,15 @@ namespace VAFDistribution
         {
             foreach (var geneEntry in local)
             {
-                var hugo_symbol = geneEntry.Key;
+                var hugo_symbol_or_mutation = geneEntry.Key;
                 var histogram = geneEntry.Value;
 
-                if (!global.ContainsKey(hugo_symbol))
+                if (!global.ContainsKey(hugo_symbol_or_mutation))
                 {
-                    global.Add(hugo_symbol, histogram);
+                    global.Add(hugo_symbol_or_mutation, histogram);
                 } else
                 {
-                    global[hugo_symbol].merge(histogram);
+                    global[hugo_symbol_or_mutation].merge(histogram);
                 }
             }
         }
@@ -259,6 +315,9 @@ namespace VAFDistribution
                 mergeHistograms(global_multiple_mutation_histograms, histograms[1]);
                 mergeHistograms(global_normal_histograms, histograms[2]);
                 mergeHistograms(global_silent_histograms, histograms[3]);
+                mergeHistograms(global_idh1_one_mutation_histograms, histograms[4]);
+                mergeHistograms(global_idh1_multiple_mutation_histograms, histograms[5]);
+                mergeHistograms(global_idh1_normal_histograms, histograms[6]);
             } // lock
         } // FinishUp
     }

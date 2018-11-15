@@ -208,6 +208,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChooseAnnotatedVariants", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExtractIsoformReadCounts", "apps\ExtractIsoformReadCounts\ExtractIsoformReadCounts.csproj", "{412429E8-261E-48CB-B121-FD51C6EE1DAE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemoveEmptyDirectories", "apps\RemoveEmptyDirectories\RemoveEmptyDirectories.csproj", "{07969185-DA80-4B69-9BFE-B40D3D912826}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1556,6 +1558,22 @@ Global
 		{412429E8-261E-48CB-B121-FD51C6EE1DAE}.Release|Win32.Build.0 = Release|Any CPU
 		{412429E8-261E-48CB-B121-FD51C6EE1DAE}.Release|x64.ActiveCfg = Release|x64
 		{412429E8-261E-48CB-B121-FD51C6EE1DAE}.Release|x64.Build.0 = Release|x64
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Debug|Win32.Build.0 = Debug|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Debug|x64.ActiveCfg = Debug|x64
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Debug|x64.Build.0 = Debug|x64
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Release|Any CPU.Build.0 = Release|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Release|Win32.ActiveCfg = Release|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Release|Win32.Build.0 = Release|Any CPU
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Release|x64.ActiveCfg = Release|x64
+		{07969185-DA80-4B69-9BFE-B40D3D912826}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

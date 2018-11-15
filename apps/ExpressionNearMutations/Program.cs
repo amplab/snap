@@ -117,7 +117,7 @@ namespace ExpressionNearMutations
 
 				var inputFilename = forAlleleSpecificExpression ? case_.annotated_selected_variants_filename : case_.regional_expression_filename;
 
-				if (inputFilename == "" || (case_.tumor_copy_number_filename == "" && !configuration.isBeatAML))
+				if (inputFilename == "" || (case_.tumor_copy_number_filename == "" && !configuration.isBeatAML) || case_.extracted_maf_lines_filename == "")
 				{
 					Console.WriteLine("Case " + case_.case_id + " doesn't have an input or copy number file yet.");
 					continue;
@@ -348,10 +348,21 @@ namespace ExpressionNearMutations
 
 			int minExamplesPerRegion = 1;   // If there are fewer than this, then ignore the region.
 
-			//
-			// Now build the map of mutations by gene.
-			//
-			timer.Reset();
+            if (forAlleleSpecificExpression)
+            {
+                perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+                if (null == perGeneASEMap)
+                {
+                    Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                    return;
+                }
+            } // forAlleleSpecificExpression
+
+            //
+            // Now build the map of mutations by gene.
+            //
+            timer.Reset();
             timer.Start();
 
 			// Get information for current genome build

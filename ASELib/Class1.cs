@@ -22,7 +22,7 @@ namespace ASELib
             tumorToString.Add(false, "Normal");
         }
 
-        public const string urlPrefix = @"https://gdc-api.nci.nih.gov/";
+        public const string urlPrefix = @"https://api.gdc.cancer.gov/";
 
         public const int GuidStringLength = 36;
 
@@ -4208,6 +4208,21 @@ namespace ASELib
                 return Variant_Classification == "Silent";
             }
 
+            public string IDH1MutationType()
+            {
+                if (Hugo_Symbol.ToUpper() != "IDH1")
+                {
+                    throw new Exception("MAFLine.IHD1MutationType: this is not an IDH1 mutation, hugo symbol = " + Hugo_Symbol);
+                }
+
+                if (Variant_Type != "SNP")
+                {
+                    return "Other";
+                }
+
+                return IDH1MutantDescription(Start_Position, Tumor_Seq_Allele2[0]);
+            }
+
             MAFLine(string Hugo_Symbol_,
              string NCBI_Build_,
              string Chromosome_,
@@ -7766,6 +7781,21 @@ namespace ASELib
                 return CompareByLocus(this, (AnnotatedVariant)peer);
             }
 
+            public string IDH1MutationType()
+            {
+                if (Hugo_symbol.ToUpper() != "IDH1")
+                {
+                    throw new Exception("Annotatedariant.IHD1MutationType: this is not an IDH1 mutation, hugo symbol = " + Hugo_symbol);
+                }
+
+                if (variantType != "SNP")
+                {
+                    return "Other";
+                }
+
+                return IDH1MutantDescription(locus, alt_allele[0]);
+            }
+
             public readonly bool somaticMutation;
             public readonly string contig;
             public readonly int locus;
@@ -10405,6 +10435,11 @@ namespace ASELib
             public static List<ASEMapPerGeneLine> ReadFromFile(string filename)
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
+                if (inputFile == null)
+                {
+                    Console.WriteLine("ASEMapPerGeneLine.ReadFromFile: unable to open file " + filename);
+                    return null;
+                }
 
                 string[] wantedFields = { "Hugo Symbol", "n Tumor Samples", "mean Tumor ASE",  "Tumor Fraction of RNA at Variant Sites", "standard deviation of Tumor ASE",
                     "n Normal Samples", "mean Normal ASE", "Normal Fraction of RNA at Variant Sites", "standard deviation of Normal ASE", "Tumor ASE minus Normal ASE",
@@ -13113,6 +13148,169 @@ namespace ASELib
             public readonly string ucsdId;
             public readonly int tumor, normal;
         } // IsoformReadCounts
+
+        public static char[] GeneticBases = { 'A', 'T', 'C', 'G' };
+        static public char GeneticCode(string codon)
+        {
+            codon = codon.ToUpper();
+
+            if (codon.Length != 3 || codon.ToArray().Any(_ => !GeneticBases.Contains(_)))
+            {
+                throw new Exception("GeneticCode: input isn't a codon: " + codon);
+            }
+
+            switch (codon)
+            {
+                case "AAA":
+                case "AAG":
+                    return 'K';
+                case "AAC":
+                case "AAT":
+                    return 'N';
+                case "ACA":
+                case "ACT":
+                case "ACG":
+                case "ACC":
+                    return 'T';
+                case "AGA":
+                case "AGG":
+                    return 'R';
+                case "AGC":
+                case "AGT":
+                    return 'S';
+                case "ATA":
+                case "ATC":
+                case "ATT":
+                    return 'I';
+                case "ATG":
+                    return 'M';
+                case "CAA":
+                case "CAG":
+                    return 'Q';
+                case "CAT":
+                case "CAC":
+                    return 'H';
+                case "CCA":
+                case "CCC":
+                case "CCG":
+                case "CCT":
+                    return 'P';
+                case "CGA":
+                case "CGC":
+                case "CGG":
+                case "CGT":
+                    return 'R';
+                case "CTA":
+                case "CTC":
+                case "CTG":
+                case "CTT":
+                    return 'L';
+                case "GAA":
+                case "GAG":
+                    return 'E';
+                case "GAC":
+                case "GAT":
+                    return 'D';
+                case "GCA":
+                case "GCC":
+                case "GCG":
+                case "GCT":
+                    return 'A';
+                case "GGA":
+                case "GGC":
+                case "GGG":
+                case "GGT":
+                    return 'G';
+                case "GTA":
+                case "GTC":
+                case "GTG":
+                case "GTT":
+                    return 'V';
+                case "TAA":
+                case "TAG":
+                    return '*';
+                case "TAC":
+                case "TAT":
+                    return 'Y';
+                case "TCA":
+                case "TCC":
+                case "TCG":
+                case "TCT":
+                    return 'S';
+                case "TGA":
+                    return '*';
+                case "TGC":
+                case "TGT":
+                    return 'C';
+                case "TGG":
+                    return 'W';
+                case "TTA":
+                case "TTG":
+                    return 'L';
+                case "TTC":
+                case "TTT":
+                    return 'F';
+
+            }
+
+            throw new Exception("GeneticCode: fell out bottom of switch, which shouldn't be possible.");
+        } // GeneticCode
+
+        public static string ReverseCompliment(string input)
+        {
+            string output = "";
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                switch (input[i])
+                {
+                    case 'A':
+                    case 'a':
+                        output = "T" + output;
+                        break;
+
+                    case 'T':
+                    case 't':
+                        output = "A" + output;
+                        break;
+
+                    case 'C':
+                    case 'c':
+                        output = "G" + output;
+                        break;
+
+                    case 'G':
+                    case 'g':
+                        output = "C" + output;
+                        break;
+
+                    case 'N':
+                    case 'n':
+                        output = "N" + output;
+                        break;
+
+                    default:
+                        throw new Exception("ReverseCompliment: input contains non-base (or N): " + input);
+                } // switch
+            } // for
+
+            return output;
+        }  // ReverseCompliment
+
+        //
+        // Generate the friendly description of an IDH1 R132 mutation
+        //
+        static public string IDH1MutantDescription(int locus, char newBase)
+        {
+            if (locus < 208248387 || locus > 208248389)
+            {
+                return "Other";
+            }
+
+            char[] codon = "AGC".ToArray();
+            codon[locus - 208438387] = newBase;
+            return "R132" + GeneticCode(ReverseCompliment(codon.ToString()));
+        }
 
     } // ASETools
 

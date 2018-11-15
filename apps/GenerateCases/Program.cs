@@ -68,8 +68,8 @@ namespace GenerateCases
 
             var diseaseSelector = new DiseaseSelector(configuration.commandLineArgs);
 
-            Dictionary<string, ASETools.DownloadedFile> downloadedFiles = new Dictionary<string,ASETools.DownloadedFile>();
-            Dictionary<string, List<ASETools.DerivedFile>> derivedFiles = new Dictionary<string,List<ASETools.DerivedFile>>();
+            Dictionary<string, ASETools.DownloadedFile> downloadedFiles = new Dictionary<string, ASETools.DownloadedFile>();
+            Dictionary<string, List<ASETools.DerivedFile>> derivedFiles = new Dictionary<string, List<ASETools.DerivedFile>>();
 
             ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles);
 
@@ -119,7 +119,7 @@ namespace GenerateCases
             int nDuplicateCases = 0;
 
             string tcgaFiltersString = "{\"op\":\"in\", \"content\": {\"field\": \"project.program.name\", \"value\": " + ASETools.generateFilterList(configuration.programNames) + "}}";
- 
+
             //Console.WriteLine("Encoded string is " + HttpUtility.UrlEncode(tcgaFiltersString));
 
             var periodicStopwatch = new Stopwatch();
@@ -131,7 +131,7 @@ namespace GenerateCases
             Console.Write("Loading cases...");
 
             int nProcessed = 0;
-            from = 1;
+            from = 0;
 
             while (true)
             {
@@ -158,15 +158,15 @@ namespace GenerateCases
                 {
                     Console.WriteLine("Pagination from server has count mismatch with returned data, " + pagination.count + " != " + caseData.data.hits.Count());
                     return;
-                } 
-                
+                }
+
                 foreach (var case_ in caseData.data.hits)
                 {
 
                     if (allCases.ContainsKey(case_.case_id))
                     {
                         nDuplicateCases++;
-                        Console.WriteLine("Duplicate caseID " + case_.case_id); 
+                        Console.WriteLine("Duplicate caseID " + case_.case_id);
                         Console.WriteLine(case_.debugString());
                         Console.WriteLine(allCases[case_.case_id].debugString());
                     }
@@ -198,7 +198,8 @@ namespace GenerateCases
 
                 if (allCases.Count() > 100 && false) break;  // BJB - debugging - just load a few.
             }
-            Console.WriteLine(allCases.Count() + " (plus " + nDuplicateCases + " duplicates) in " + ASETools.ElapsedTimeInSeconds(stopwatch) + ", " + allCases.Count() * 1000 / stopwatch.ElapsedMilliseconds + "/s");
+
+            Console.WriteLine(allCases.Count() + " (plus " + nDuplicateCases + " duplicates) in " + ASETools.ElapsedTimeInSeconds(stopwatch) + ", " + allCases.Count() * 1000 / stopwatch.ElapsedMilliseconds + @"/s");
 
             //
             // Now run through all of the cases looking to see which have files for tumor and matched normal DNA and tumor RNA and copy number.
@@ -225,7 +226,7 @@ namespace GenerateCases
             var cases = new Dictionary<string, ASETools.Case>();
 
 			// Load in old cases to get old maf lines
-			var pastCases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+			//var pastCases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
 			const string mafCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"MAF\"]}}";
             const string bamOrTxtCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"BAM\",\"TXT\"]}}";
@@ -246,8 +247,7 @@ namespace GenerateCases
 				ASETools.GDCFile tumorFPKM = null;
 				ASETools.GDCFile normalFPKM = null;
 
-				from = 1;
-
+				from = 0;
 
                 for (; ; )
                 {
@@ -309,7 +309,7 @@ namespace GenerateCases
                     {
                         foreach (var file in fileData.data.hits)
                         {
-                            if (file.state != "live" && file.state != "submitted" || configuration.excludedFileIDs.Contains(file.file_id))
+                            if (file.state != "live" && file.state != "submitted" && file.state != "released" || configuration.excludedFileIDs.Contains(file.file_id))
                             {
                                 continue;
                             }                         
@@ -459,10 +459,10 @@ namespace GenerateCases
 
 				// This is commented out because the MAF files from the TCGA server
 				// are now 7.0, and we are running on 6.0
-				//var mafFileIds = maf.Select(x => x.file_id);
+				var mafFileIds = maf.Select(x => x.file_id).ToList();
 
 				// get old maf file ids
-				var mafFileIds = pastCases.Where(r => r.Value.case_id == gdcCase.case_id).Select(r => r.Value.maf_file_id);
+				//var mafFileIds = pastCases.Where(r => r.Value.case_id == gdcCase.case_id).Select(r => r.Value.maf_file_id);
 
                 if (tumorDNA.Count() == 0)
                 {
@@ -655,8 +655,8 @@ namespace GenerateCases
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(periodicStopwatch));
 
             Console.WriteLine("Of " + allCases.Count() + ", " + nMissingTumorDNA + " don't have tumor DNA, " + nMissingNormalDNA + " don't have matched normal DNA, " + nMissingTumorRNA + " don't have tumor RNA, " 
-                + nMissingMAF + " don't have MAFs," + nMissingCopyNumber + " don't have copy number, and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA." 
-				+ nWithTumorMethylation + " have tumor methylation, and " + nWithTNMethylation + " have both normal and tumor methylation, and" 
+                + nMissingMAF + " don't have MAFs," + nMissingCopyNumber + " don't have copy number, and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA, " 
+				+ nWithTumorMethylation + " have tumor methylation, and " + nWithTNMethylation + " have both normal and tumor methylation, and " 
 				+ nWithNormalCopyNumber + " have normal copy number.");
 
 			ASETools.Case.SaveToFile(cases, configuration.casesFilePathname);

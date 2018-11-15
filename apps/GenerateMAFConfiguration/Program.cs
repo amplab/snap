@@ -50,6 +50,11 @@ namespace GenerateMAFConfiguration
 
             List<ASETools.GDCFile> selectedMAFs = new List<ASETools.GDCFile>();
 
+            Console.Write("Downloading file metadata...");
+
+            Stopwatch printoutTimer = new Stopwatch();
+            printoutTimer.Start();
+
             int from = 1;
             for (; ; )
             {
@@ -96,11 +101,21 @@ namespace GenerateMAFConfiguration
 
                 from += pagination.count;
 
-                if (from > pagination.total)
+                if (from >= pagination.total)
                 {
                     break;
                 }
+
+                if (printoutTimer.ElapsedMilliseconds >= 60000)
+                {
+                    Console.Write(" " + from + @"/" + pagination.total);
+                    printoutTimer.Stop();
+                    printoutTimer.Reset();
+                    printoutTimer.Start();
+                }
             } // for ever (pagination loop with internal exit)
+
+            Console.WriteLine();
 
 
             var manifestWriter = ASETools.CreateStreamWriterWithRetry(configuration.mafManifestPathname);

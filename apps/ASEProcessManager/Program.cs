@@ -553,8 +553,8 @@ namespace ASEProcessManager
                     {
                         nAddedToScript++;
                         string caseDirectory = ASETools.GetDirectoryFromPathname(stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_id + @"\";
-                        script.WriteLine("md " + caseDirectory);
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | gzip -9 > " +
+                        script.WriteLine("md " + caseDirectory + " & " +
+                            stateOfTheWorld.configuration.binariesDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | gzip -9 > " +
                             caseDirectory + file_id + extension);
 
                         hpcScript.WriteLine(jobAddString + 
@@ -1498,7 +1498,8 @@ namespace ASEProcessManager
 								}
 							}
 						}
-						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "" || (case_.tumor_copy_number_filename == "" && !stateOfTheWorld.configuration.isBeatAML))
+						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "" || (case_.tumor_copy_number_filename == "" && !stateOfTheWorld.configuration.isBeatAML) || 
+                            case_.extracted_maf_lines_filename == "")
 						{
 							nWaitingForPrerequisites++;
 							continue;
@@ -3424,7 +3425,7 @@ namespace ASEProcessManager
 
                 mafInfo = ASETools.MAFInfo.LoadMAFManifest(configuration.mafManifestPathname);
                 cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
-                listOfCases = cases.Select(_ => _.Value).ToList();
+                listOfCases = (cases == null) ? new List<ASETools.Case>() : cases.Select(_ => _.Value).ToList();
 
                 fileSizesFromGDC = new Dictionary<string, long>();
 
@@ -3479,14 +3480,19 @@ namespace ASEProcessManager
                             continue;
                         }
 
-                        Console.Write("There's a derived files directory for case id " + caseId + ", which isn't a known case.  It contains:");
+                        Console.Write("There are derived files directories for case id " + caseId + ", which isn't a known case.  They are:");
+                        var knownDirectories = new List<string>();
                         foreach (var badDrivedFile in derivedFilesForThisCase)
                         {
-                            Console.Write(" " + badDrivedFile.fileinfo.FullName);
-                            if (fileIdToCaseId.ContainsKey(badDrivedFile.derived_from_file_id))
+                            var containingDirectory = ASETools.GetDirectoryFromPathname(badDrivedFile.fileinfo.FullName);
+                            if (knownDirectories.Contains(containingDirectory))
                             {
-                                Console.WriteLine(" (derived from a fileID associated with case " + fileIdToCaseId[badDrivedFile.derived_from_file_id] + ")");
+                                continue;
                             }
+
+                            Console.Write(" " + containingDirectory);
+
+                            knownDirectories.Add(containingDirectory);
                         }
                         Console.WriteLine();
                     }
@@ -3599,7 +3605,7 @@ namespace ASEProcessManager
 
                 expressionFiles = new Dictionary<string, FileInfo>();
 
-                if (Directory.Exists(configuration.expressionFilesDirectory))
+                if (Directory.Exists(configuration.expressionFilesDirectory) && null != cases)
                 {
                     foreach (var filename in Directory.EnumerateFiles(configuration.expressionFilesDirectory, "expression_*")) {
                         var disease = filename.Substring(filename.LastIndexOf('_') + 1).ToLower();
@@ -3780,8 +3786,7 @@ namespace ASEProcessManager
                         string normalDNAFileId = ASETools.GetFileIdFromPathname(completedVCF);
 
                         var case_ = casesByNormalDNAId[normalDNAFileId];
-                        script.WriteLine("md " + destinationDirectory + case_.case_id);
-                        script.WriteLine("mv " + completedVCF + " " + destinationDirectory + case_.case_id + @"\" + ASETools.GetFileNameFromPathname(completedVCF));
+                        script.WriteLine("md " + destinationDirectory + case_.case_id + " & " + "mv " + completedVCF + " " + destinationDirectory + case_.case_id + @"\" + ASETools.GetFileNameFromPathname(completedVCF));
                     }
 
                     Console.WriteLine("Added " + vcfsToBeMoved.Count() + " vcfs to be moved from the completed_vcfs directory to their final locations.");
@@ -3984,7 +3989,11 @@ namespace ASEProcessManager
                     {
                         downloadScript.WriteLine(configuration.binariesDirectory + "gdc-client download --no-file-md5sum --token-file " + configuration.accessTokenPathname + " " + file);    // use the no MD5 sum option because we compute it ourselves later (and all a failed check does is print a message that we'll never see anyway)
                     }
-                    bytesToDownload += stateOfTheWorld.fileSizesFromGDC[file];
+
+                    if (stateOfTheWorld.fileSizesFromGDC.ContainsKey(file)) // MAF files aren't in here.
+                    {
+                        bytesToDownload += stateOfTheWorld.fileSizesFromGDC[file];
+                    }
                 }
 
                 downloadScript.Close();
