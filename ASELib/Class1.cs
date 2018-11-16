@@ -1937,7 +1937,7 @@ namespace ASELib
             public double repetitiveRegionConfidence = 0.95;   // 
             public int minDistanceBetweenGermlineVariants = 1000;
 
-            public int nWorkerMachines = 28;                 // Over how many machines would we like to evenly split our work?
+            public int nWorkerMachines = 116;                 // Over how many machines would we like to evenly split our work?
 
             public bool isBeatAML = false;
 

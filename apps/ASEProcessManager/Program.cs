@@ -54,11 +54,12 @@ namespace ASEProcessManager
             int maxCharsPerLine;
             int desiredParallelism;
 
-            public PerCaseProcessingStage(string stageName_, string binaryName_, string parametersBeforeCaseIds_, GetCaseFile[] getCaseFile, GetOneOffFile[] getOneOffFile, GetCaseFile[] getOutputFile, int desiredParallelism = 0, int maxCaseIdsPerLine_ = int.MaxValue, int maxCharsPerLine_ = 5000)
+            public PerCaseProcessingStage(string stageName_, string binaryName_, string parametersBeforeCaseIds_, GetCaseFile[] getCaseFile, GetOneOffFile[] getOneOffFile, GetCaseFile[] getOutputFile, int desiredParallelism_ = 0, int maxCaseIdsPerLine_ = int.MaxValue, int maxCharsPerLine_ = 5000)
             {
                 stageName = stageName_;
                 binaryName = binaryName_;
                 parametersBeforeCaseIds = parametersBeforeCaseIds_;
+                desiredParallelism = desiredParallelism_;
                 maxCaseIdsPerLine = maxCaseIdsPerLine_;
                 maxCharsPerLine = maxCharsPerLine_;
 
@@ -110,11 +111,17 @@ namespace ASEProcessManager
 
                 var casesToRun = stateOfTheWorld.cases.Select(_ => _.Value).Where(_ => !caseIsDone(_) && !caseNeedsPrerequisites(_)).ToList();
                 int nCasesToRun = casesToRun.Count();
+                
+                if (desiredParallelism == 0)
+                {
+                    desiredParallelism = stateOfTheWorld.configuration.nWorkerMachines;
+                }
 
                 int softNCasesPerLine;
                 if (desiredParallelism == 0)
                 {
-                    softNCasesPerLine = maxCaseIdsPerLine;
+                    softNCasesPerLine = Math.Min(maxCaseIdsPerLine, Math.Min(maxCaseIdsPerLine,
+                        (maxCharsPerLine - (stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString + parametersBeforeCaseIds).Length) / (ASETools.GuidStringLength + 1)));
                 } else
                 {
                     //
@@ -1442,6 +1449,7 @@ namespace ASEProcessManager
 
         } // RegionalExpressionProcessingStage
 
+#if false
         class ExpressionNearMutationsProcessingStage : ProcessingStage
         {
 			bool forAlleleSpecificExpression;
@@ -1628,6 +1636,34 @@ namespace ASEProcessManager
 			} // EvaluateDependencies
 
         } // ExpressionNearMutationsProcessingStage
+#endif
+
+        class AlleleSpecificExpressionNearMutationsProcessingStage : PerCaseProcessingStage
+        {
+            public AlleleSpecificExpressionNearMutationsProcessingStage() :
+                base("Allele Specific Expression Near Mutations", "ExpressionNearMutations.exe", "-a", getCaseFile, getOneOffFile, getOutputFile)
+            {
+            }
+
+            static GetCaseFile[] getCaseFile = {_ => _.maf_filename, _ => _.annotated_selected_variants_filename,
+                       _ => _.tumor_copy_number_filename, _ => _.extracted_maf_lines_filename};
+
+            static GetOneOffFile[] getOneOffFile = {stateOfTheWorld => stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename ,
+                                    stateOfTheWorld => stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename};
+
+            static GetCaseFile[] getOutputFile = {_ => _.tumor_allele_specific_gene_expression_filename,
+                                                  _ => _.normal_rna_filename == "" ? _.tumor_allele_specific_gene_expression_filename : _.normal_allele_specific_gene_expression_filename};
+        }// AlleleSpecificExpressionNearMutationsProcessingStage
+
+        class ExpressionNearMutationsProcessingStage : PerCaseProcessingStage
+        {
+            public ExpressionNearMutationsProcessingStage() : base("Expression Near Mutations", "ExpressionNearMutations.exe", "", getCaseFile, getOneOffFiles, getOutputFile)
+            { }
+
+            static GetCaseFile[] getCaseFile = { _ => _.maf_filename, _ => _.regional_expression_filename };
+            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.unfilteredCountsDirectory + "TP53" + ASETools.Configuration.unfilteredCountsExtention }; // Should really be all genes
+            static GetCaseFile[] getOutputFile = { _ => _.gene_expression_filename };
+        }
 
         class ExtractReadsProcessingStage : ProcessingStage
         {
@@ -1657,17 +1693,15 @@ namespace ASEProcessManager
 
                 if (readsAtTentativeSelectedVariantsFilename != "")
                 {
-                    if (false)  // This is off because it's slow
+#if false// This is off because it's slow
+                    var writeTime1 = new FileInfo(readsAtTentativeSelectedVariantsFilename).LastWriteTime;
+                    var writeTime2 = new FileInfo(readsAtTentativeSelectedVariantsIndexFilename).LastWriteTime;
+
+                    if (writeTime1 > writeTime2.AddDays(1) || writeTime2 > writeTime1.AddDays(1))
                     {
-                        var writeTime1 = new FileInfo(readsAtTentativeSelectedVariantsFilename).LastWriteTime;
-                        var writeTime2 = new FileInfo(readsAtTentativeSelectedVariantsIndexFilename).LastWriteTime;
-
-                        if (writeTime1 > writeTime2.AddDays(1) || writeTime2 > writeTime1.AddDays(1))
-                        {
-                            Console.WriteLine("Extracted reads and index files differ by more than one day: " + readsAtTentativeSelectedVariantsFilename + " " + readsAtTentativeSelectedVariantsIndexFilename);
-                        }
+                        Console.WriteLine("Extracted reads and index files differ by more than one day: " + readsAtTentativeSelectedVariantsFilename + " " + readsAtTentativeSelectedVariantsIndexFilename);
                     }
-
+#endif // false
                     nDone++;
                     return;
                 }
@@ -3807,8 +3841,8 @@ namespace ASEProcessManager
 			processingStages.Add(new ExpressionDistributionProcessingStage());
 			processingStages.Add(new ExtractMAFLinesProcessingStage());
 			processingStages.Add(new RegionalExpressionProcessingStage());
-            processingStages.Add(new ExpressionNearMutationsProcessingStage(true));
-            processingStages.Add(new ExpressionNearMutationsProcessingStage(false));
+            processingStages.Add(new ExpressionNearMutationsProcessingStage());
+            processingStages.Add(new AlleleSpecificExpressionNearMutationsProcessingStage());
             processingStages.Add(new ExtractReadsProcessingStage());
 			processingStages.Add(new SelectGenesProcessingStage());
 			processingStages.Add(new CountMappedBasesProcessingStage());
