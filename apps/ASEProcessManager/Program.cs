@@ -111,34 +111,32 @@ namespace ASEProcessManager
 
                 var casesToRun = stateOfTheWorld.cases.Select(_ => _.Value).Where(_ => !caseIsDone(_) && !caseNeedsPrerequisites(_)).ToList();
                 int nCasesToRun = casesToRun.Count();
-                
+
+                if (nCasesToRun == 0)
+                {
+                    return;
+                }
+
                 if (desiredParallelism == 0)
                 {
                     desiredParallelism = stateOfTheWorld.configuration.nWorkerMachines;
                 }
 
-                int softNCasesPerLine;
-                if (desiredParallelism == 0)
-                {
-                    softNCasesPerLine = Math.Min(maxCaseIdsPerLine, Math.Min(maxCaseIdsPerLine,
-                        (maxCharsPerLine - (stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString + parametersBeforeCaseIds).Length) / (ASETools.GuidStringLength + 1)));
-                } else
-                {
-                    //
-                    // Divide it up as equally as possible.
-                    //
-                    int realMaxPerLine = Math.Min(maxCaseIdsPerLine,
-                        (maxCharsPerLine - (stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString + parametersBeforeCaseIds).Length) / (ASETools.GuidStringLength + 1));
+                //
+                // Divide it up as equally as possible.
+                //
+                int realMaxPerLine = Math.Min(maxCaseIdsPerLine,
+                    ((maxCharsPerLine - (stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString + parametersBeforeCaseIds).Length)) / (ASETools.GuidStringLength + 1)); // +1 is for the space between guids
 
-                    int minLines = (nCasesToRun + realMaxPerLine - 1) / realMaxPerLine;
+                int minLines = (nCasesToRun + realMaxPerLine - 1) / realMaxPerLine;
 
-                    //
-                    // Now round up to a multiple of desiredParallelism
-                    //
-                    int desiredLines = ((minLines + desiredParallelism - 1) / desiredParallelism) * desiredParallelism;
+                //
+                // Now round up to a multiple of desiredParallelism
+                //
+                int desiredLines = ((minLines + desiredParallelism - 1) / desiredParallelism) * desiredParallelism;
 
-                    softNCasesPerLine = (nCasesToRun + desiredLines - 1) / desiredLines;
-                }
+                var softNCasesPerLine = (nCasesToRun + desiredLines - 1) / desiredLines;
+
 
                 foreach (var case_ in casesToRun)
                 {

@@ -1845,7 +1845,7 @@ namespace ASELib
             // If you add anything that references defaultBaseDirectory, be sure to add it to
             // reinitializeWithBaseDirectory()
 
-            public const string defaultBaseDirectory = @"\\msr-genomics-0\d$\gdc\";
+            public const string defaultBaseDirectory = @"\\air-k26-01\d$\gdc\";
             public const string defaultConfigurationFilePathame = defaultBaseDirectory + "configuration.txt";
 
             public string baseDirectory = defaultBaseDirectory;
@@ -1937,7 +1937,7 @@ namespace ASELib
             public double repetitiveRegionConfidence = 0.95;   // 
             public int minDistanceBetweenGermlineVariants = 1000;
 
-            public int nWorkerMachines = 116;                 // Over how many machines would we like to evenly split our work?
+            public int nWorkerMachines = 120;                 // Over how many machines would we like to evenly split our work?
 
             public bool isBeatAML = false;
 
@@ -1997,7 +1997,7 @@ namespace ASELib
             //
             public static Configuration loadFromFile(string[] args)
             {
-                string pathname = @"\\msr-genomics-0\d$\gdc\configuration.txt";
+                string pathname = @"\\air-k26-01\d$\gdc\configuration.txt";
 
                 bool fromCommandLine = false;
                 var nonConsumedArgs = new List<string>();
