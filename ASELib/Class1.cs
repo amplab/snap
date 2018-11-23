@@ -3152,7 +3152,7 @@ namespace ASELib
                 Console.Write(" ");
             }
 
-            Console.WriteLine(" Downloaded Files Derived Files Free Size Scan Time");
+            Console.WriteLine(" Downloaded Files Derived Files Free Size  Scan Time");
             for (int i = 0; i < directoryHeader.Count() + paddingLength; i++)
             {
                 Console.Write("-");

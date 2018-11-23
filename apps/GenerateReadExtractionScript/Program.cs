@@ -64,32 +64,55 @@ namespace GenerateScriptFromVariants
             // Copy the generate consolodated extracted reads and samtools binaries to be local, so that we don't have a problem with overused remote
             // shares.
             //
-            const string localSamtoolsPathname = @".\samtools.exe";
-            const string localGCERPathname = @".\GenerateConsolodatedExtractedReads.exe";
-            bool copyWorked = false;
-            for (int retryCount = 0; retryCount < 10; retryCount++)
-            {
-                try
-                {
-                    File.Copy(generateConsoldatedExtractedReadsPathname, localGCERPathname, true);
-                    File.Copy(samtoolsPathname, localSamtoolsPathname, true);
-                    copyWorked = true;
-                    break;
-                }
-                catch
-                {
-                    Console.WriteLine("Failed to copy binaries.  Sleeping 10s and retrying.");
-                    Thread.Sleep(10000);
-                }
-            }
+            string localSamtoolsPathname = @".\samtools.exe";
+            string localGCERPathname = @".\GenerateConsolodatedExtractedReads.exe";
 
-            if (!copyWorked)
+            bool copiedBinaries;
+
+            if (!samtoolsPathname.StartsWith(@"\") && !generateConsoldatedExtractedReadsPathname.StartsWith(@"\"))
             {
-                Console.WriteLine("Too many retries copying binaries.  Giving up.");
-                File.Delete(localSamtoolsPathname);
-                File.Delete(localGCERPathname);
-                return 1;
+                //
+                // They're already local, don't copy them.
+                //
+                localSamtoolsPathname = samtoolsPathname;
+                localGCERPathname = generateConsoldatedExtractedReadsPathname;
+                copiedBinaries = false;
             }
+            else
+            {
+                bool copyWorked = false;
+                for (int retryCount = 0; retryCount < 10; retryCount++)
+                {
+                    try
+                    {
+                        File.Copy(generateConsoldatedExtractedReadsPathname, localGCERPathname, true);
+                        File.Copy(samtoolsPathname, localSamtoolsPathname, true);
+                        copyWorked = true;
+                        break;
+                    }
+                    catch
+                    {
+                        Console.WriteLine("Failed to copy binaries.  Sleeping 10s and retrying.");
+                        Thread.Sleep(10000);
+                    }
+                }
+
+                if (!copyWorked)
+                {
+                    Console.WriteLine("Too many retries copying binaries.  Giving up.");
+                    try
+                    {
+                        File.Delete(localSamtoolsPathname);
+                        File.Delete(localGCERPathname);
+                    } catch (Exception e)
+                    {
+                        Console.WriteLine("Delete of local samtools and/or generate consolidated extracted reads after failed copy also failed: " + e.Message);
+                     }
+                    return 1;
+                }
+
+                copiedBinaries = true;
+            } // We had to copy locally
 
             foreach (var caseToProcess in casesToProcess)
             {
@@ -200,8 +223,11 @@ namespace GenerateScriptFromVariants
 
                 if (process.ExitCode != 0)
                 {
-                    File.Delete(localSamtoolsPathname);
-                    File.Delete(localGCERPathname);
+                    if (copiedBinaries)
+                    {
+                        File.Delete(localSamtoolsPathname);
+                        File.Delete(localGCERPathname);
+                    }
 
                     File.Delete(caseToProcess.outputFilename);
                     File.Delete(caseToProcess.outputFilename + ".index");
@@ -213,6 +239,6 @@ namespace GenerateScriptFromVariants
             File.Delete(localGCERPathname);
 
             return 0;
-        }
+        } // Main
     }
 }

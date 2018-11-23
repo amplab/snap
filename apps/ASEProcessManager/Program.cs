@@ -40,6 +40,7 @@ namespace ASEProcessManager
 
         delegate string GetCaseFile(ASETools.Case case_);
         delegate string GetOneOffFile(StateOfTheWorld stateOfTheWorld);
+        delegate string GenerateCaseIdOutput(string caseId, StateOfTheWorld stateOfTheWorld);
 
         class PerCaseProcessingStage : ProcessingStage  // a processing stage where an action is taken for every case.
         {
@@ -47,6 +48,7 @@ namespace ASEProcessManager
             List<GetCaseFile> caseFileInputGetters;
             List<GetOneOffFile> oneOffFileGetters;
             List<GetCaseFile> outputFileGetters;
+            GenerateCaseIdOutput generateCaseIdOutput;
 
             string binaryName;
             string parametersBeforeCaseIds;
@@ -54,7 +56,8 @@ namespace ASEProcessManager
             int maxCharsPerLine;
             int desiredParallelism;
 
-            public PerCaseProcessingStage(string stageName_, string binaryName_, string parametersBeforeCaseIds_, GetCaseFile[] getCaseFile, GetOneOffFile[] getOneOffFile, GetCaseFile[] getOutputFile, int desiredParallelism_ = 0, int maxCaseIdsPerLine_ = int.MaxValue, int maxCharsPerLine_ = 5000)
+            public PerCaseProcessingStage(string stageName_, string binaryName_, string parametersBeforeCaseIds_, GetCaseFile[] getCaseFile, GetOneOffFile[] getOneOffFile, GetCaseFile[] getOutputFile, int desiredParallelism_ = 0, int maxCaseIdsPerLine_ = int.MaxValue, int maxCharsPerLine_ = 5000,
+                GenerateCaseIdOutput generateCaseIdOutput_ = null)
             {
                 stageName = stageName_;
                 binaryName = binaryName_;
@@ -65,12 +68,20 @@ namespace ASEProcessManager
 
                 caseFileInputGetters = getCaseFile == null ? null : getCaseFile.ToList();
 
-                oneOffFileGetters = oneOffFileGetters == null ? null : getOneOffFile.ToList();
+                oneOffFileGetters = getOneOffFile == null ? null : getOneOffFile.ToList();
 
                 outputFileGetters = getOutputFile.ToList();
+
+                if (generateCaseIdOutput_ == null)
+                {
+                    generateCaseIdOutput = (caseId, stateOfTheWorld) => caseId; // Just directly use the case ID
+                } else
+                {
+                    generateCaseIdOutput = generateCaseIdOutput_;
+                }
             }
 
-
+ 
             public string GetStageName() { return stageName; }
             public bool NeedsCases() { return true; }
 
@@ -94,7 +105,7 @@ namespace ASEProcessManager
                 nAddedToScript = 0;
                 filesToDownload = null;
 
-                nDone = stateOfTheWorld.listOfCases.Where(case_ => outputFileGetters.All(getter => getter(case_) != "")).Count();
+                nDone = stateOfTheWorld.listOfCases.Where(case_ => caseIsDone(case_)).Count();
 
                 if (null != oneOffFileGetters && oneOffFileGetters.Any(getter => getter(stateOfTheWorld) == "" || !File.Exists(getter(stateOfTheWorld))))
                 {
@@ -102,14 +113,13 @@ namespace ASEProcessManager
                     return;
                 }
 
-                nWaitingForPrerequisites = stateOfTheWorld.cases.Where(_ => caseNeedsPrerequisites(_.Value) && !caseIsDone(_.Value)).Count(); // Explicitly check for done here, so cases don't wind up both needing prereqs and done.
-                nDone = stateOfTheWorld.cases.Where(_ => caseIsDone(_.Value)).Count();
+                nWaitingForPrerequisites = stateOfTheWorld.listOfCases.Where(_ => caseNeedsPrerequisites(_) && !caseIsDone(_)).Count(); // Explicitly check for done here, so cases don't wind up both needing prereqs and done.
                 nAddedToScript = 0;
 
                 string outputLine = "";
                 int nOnOutputLine = 0;
 
-                var casesToRun = stateOfTheWorld.cases.Select(_ => _.Value).Where(_ => !caseIsDone(_) && !caseNeedsPrerequisites(_)).ToList();
+                var casesToRun = stateOfTheWorld.listOfCases.Where(_ => !caseIsDone(_) && !caseNeedsPrerequisites(_)).ToList();
                 int nCasesToRun = casesToRun.Count();
 
                 if (nCasesToRun == 0)
@@ -145,7 +155,7 @@ namespace ASEProcessManager
                         outputLine = stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString;
                     }
 
-                    outputLine += " " + case_.case_id;
+                    outputLine += " " + generateCaseIdOutput(case_.case_id, stateOfTheWorld);
 
                     nOnOutputLine++;
 
@@ -365,11 +375,12 @@ namespace ASEProcessManager
 
         class ExtractIsoformReadCountsProcessingStage : PerCaseProcessingStage
         {
-            public ExtractIsoformReadCountsProcessingStage(StateOfTheWorld stateOfTheWorld) : base("Extract Isoform Read Counts", "ExtractIsoformReadCounts.exe", "", getCaseFiles, null, getOutputFile, stateOfTheWorld.configuration.nWorkerMachines)
+            public ExtractIsoformReadCountsProcessingStage(StateOfTheWorld stateOfTheWorld) : base("Extract Isoform Read Counts", "ExtractIsoformReadCounts.exe", "", getCaseFiles, getOneOffFiles, getOutputFile, stateOfTheWorld.configuration.nWorkerMachines)
             {
             }
 
             static GetCaseFile[] getCaseFiles = { _ => _.tumor_rna_allcount_filename, _ => _.normal_rna_file_id == "" ? _.tumor_rna_allcount_filename : _.normal_rna_file_id };
+            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };
             static GetCaseFile[] getOutputFile = { _ => _.isoform_read_counts_filename };
 
         } // ExtractIsoformReadCountsProcessingStage
@@ -559,7 +570,8 @@ namespace ASEProcessManager
                         nAddedToScript++;
                         string caseDirectory = ASETools.GetDirectoryFromPathname(stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_id + @"\";
                         script.WriteLine("md " + caseDirectory + " & " +
-                            stateOfTheWorld.configuration.binariesDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | gzip -9 > " +
+                            stateOfTheWorld.configuration.binariesDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | " + 
+                            stateOfTheWorld.configuration.binariesDirectory + "gzip -9 > " +
                             caseDirectory + file_id + extension);
 
                         hpcScript.WriteLine(jobAddString + 
@@ -1041,8 +1053,8 @@ namespace ASEProcessManager
 
 		} // MethylationProcessingStage
 
-
-		class SelectVariantsProcessingStage : ProcessingStage
+#if false
+        class SelectVariantsProcessingStage : ProcessingStage
         {
             public SelectVariantsProcessingStage() { }
 
@@ -1062,7 +1074,7 @@ namespace ASEProcessManager
 
                 int nOnCurrentLine = 0;
 
-                if (!File.Exists(stateOfTheWorld.configuration.redundantChromosomeRegionFilename))
+                if (!File.Exists(stateOfTheWorld.configuration.redundantChromosomeRegionFilename) || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -1154,9 +1166,20 @@ namespace ASEProcessManager
                 return true;
             } // checkOneDependency
         } // SelectVariantsProcessingStage
+#else
+        class SelectVariantsProcessingStage : PerCaseProcessingStage
+        {
+            public SelectVariantsProcessingStage() : base ("Select Tentative Germline Variants", "SelectGermlineVariants.exe", "", getCaseFiles, getOneOffFiles, getOutputFiles, 0, 100)
+            { }
+
+            static GetCaseFile[] getCaseFiles = { _ => _.vcf_filename, _ => _.tumor_rna_allcount_filename, _ => _.tumor_dna_allcount_filename, _ => _.all_maf_lines_filename };
+            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.redundantChromosomeRegionFilename, _ => _.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename };
+            static GetCaseFile[] getOutputFiles = { _ => _.tentative_selected_variants_filename };
+        } // SelectVariantsProcessingStage
+#endif
 
 
-		class ExpressionDistributionProcessingStage : ProcessingStage
+        class ExpressionDistributionProcessingStage : ProcessingStage
         {
             public ExpressionDistributionProcessingStage() { }
 
@@ -1659,9 +1682,136 @@ namespace ASEProcessManager
             { }
 
             static GetCaseFile[] getCaseFile = { _ => _.maf_filename, _ => _.regional_expression_filename };
-            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.unfilteredCountsDirectory + "TP53" + ASETools.Configuration.unfilteredCountsExtention }; // Should really be all genes
+            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.unfilteredCountsDirectory + "TP53" + ASETools.Configuration.unfilteredCountsExtention, _ => _.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename }; // Should really be all genes
             static GetCaseFile[] getOutputFile = { _ => _.gene_expression_filename };
         }
+
+#if false
+        class ExtractReadsProcessingStage : PerCaseProcessingStage
+        {
+            public ExtractReadsProcessingStage(bool tumor_, bool dna_, StateOfTheWorld stateOfTheWorld) :
+                base("Extract " + (tumor_ ? "tumor " : "normal ") + (dna_ ? "DNA " : "RNA ") + "reads", "GenerateReadExtractionScript.exe",
+                (dna_ ? "-d " : "-r ") + (tumor_ ? "-t" : "-n") + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + stateOfTheWorld.configuration.binariesDirectory + "samtools.exe ",
+                getCaseFiles, getOneOffFiles, this.getOutputFiles, 0, int.MaxValue, 2000, generateCaseIdAndOutputFile)
+            {
+                tumor = tumor_;
+                dna = dna_;
+                getOutputFiles = new GetCaseFile[2];
+                getOutputFiles[0] = _ => getOutputFile(_, true);
+                getOutputFiles[1] = _ => getOutputFile(_, false);
+
+                if (dna)
+                {
+                    if (tumor)
+                    {
+                        outputExtension = ASETools.tumorDNAReadsAtTentativeSelectedVariantsExtension;
+                    } else
+                    {
+                        outputExtension = ASETools.normalDNAReadsAtTentativeSelectedVariantsExtension;
+                    }
+                } else
+                {
+                    if (tumor)
+                    {
+                        outputExtension = ASETools.tumorRNAReadsAtTentativeSelectedVariantsExtension;
+                    } else
+                    {
+                        outputExtension = ASETools.normalRNAReadsAtTentativeSelectedVariantsExtension;
+                    }
+                }
+            }
+
+            string generateCaseIdAndOutputFile(string caseId, StateOfTheWorld stateOfTheWorld)
+            {
+                ASETools.Case case_ = stateOfTheWorld.cases[caseId];
+
+                return caseId + " " + ASETools.GoUpFilesystemLevels(ASETools.GetDirectoryFromPathname(getInputFilename(case_)), 2) + 
+                    stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + getFileId(case_) + outputExtension + " ";
+            }
+
+            string getMD5Checksum(ASETools.Case case_)
+            {
+                if (dna)
+                {
+                    if (tumor)
+                    {
+                        return case_.tumor_dna_file_bam_md5;
+                    } else
+                    {
+                        return case_.normal_dna_file_bam_md5;
+                    }
+                } else
+                {
+                    if (tumor)
+                    {
+                        return case_.tumor_rna_file_bam_md5;
+                    } else
+                    {
+                        return case_.normal_rna_file_bam_md5;
+                    }
+                    
+                }
+            } // getMD5Checksum
+
+            string getFileId(ASETools.Case case_)
+            {
+                if (dna)
+                {
+                    if (tumor)
+                    {
+                        return case_.tumor_dna_file_id;
+                    } else
+                    {
+                        return case_.normal_dna_file_id;
+                    }
+                } else
+                {
+                    if (tumor)
+                    {
+                        return case_.tumor_rna_file_id;
+                    } else
+                    {
+                        return case_.normal_rna_file_id;
+                    }
+                }
+            } // getFileId
+
+            string getInputFilename(ASETools.Case case_)
+            {
+                if (dna)
+                {
+                    if (tumor)
+                    {
+                        return case_.tumor_dna_filename;
+                    } else
+                    {
+                        return case_.normal_dna_filename;
+                    }
+                } else
+                {
+                    if (tumor)
+                    {
+                        return case_.tumor_rna_filename;
+                    } else
+                    {
+                        return case_.normal_rna_filename;
+                    }
+                }
+            } // getInputFilename
+
+            string getOutputFile(ASETools.Case case_, bool index)
+            {
+
+            }
+
+            GetCaseFile[] getOutputFiles; 
+
+            string outputExtension;
+            bool tumor;
+            bool dna;
+        }
+
+#else //false
 
         class ExtractReadsProcessingStage : ProcessingStage
         {
@@ -1788,6 +1938,8 @@ namespace ASEProcessManager
                 return true;
             } // EvaluateDependencies
         } // ExtractReadsProcessingStage
+        
+#endif // false
 
         class SelectGenesProcessingStage : ProcessingStage
         {
@@ -2672,6 +2824,7 @@ namespace ASEProcessManager
 
         } // MappedBaseCountDistributionProcessingStage
 
+#if false
         class AnnotateRegulatoryRegionsProcessingStage : ProcessingStage
         {
             public AnnotateRegulatoryRegionsProcessingStage() { }
@@ -2723,6 +2876,18 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
         } // AnnotateRegulatoryRegionsProcessingStage
+#else
+        class AnnotateRegulatoryRegionsProcessingStage : PerCaseProcessingStage
+        {
+            public AnnotateRegulatoryRegionsProcessingStage() : base("Annotate Regulatory Regions", "AnnotateRegulatoryRegions.exe", "", getCaseFiles, getOneOffFiles,
+                getOutputFiles, 0, 60)
+            { }
+
+            static GetCaseFile[] getCaseFiles = { _ => _.tumor_dna_allcount_filename, _ => _.selected_regulatory_maf_filename };
+            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.encodeBEDFile, _ => _.configuration.geneHancerFilename};
+            static GetCaseFile[] getOutputFiles = { _ => _.annotated_regulatory_regions_filename, _ => _.annotated_geneHancer_lines_filename };
+        } // AnnotateRegulatoryRegionsProcessingStage
+#endif
 
         class RegulatoryMutationsNearMutationsProcessingStage : ProcessingStage
         {
@@ -3841,8 +4006,15 @@ namespace ASEProcessManager
 			processingStages.Add(new RegionalExpressionProcessingStage());
             processingStages.Add(new ExpressionNearMutationsProcessingStage());
             processingStages.Add(new AlleleSpecificExpressionNearMutationsProcessingStage());
+#if false
+            processingStages.Add(new ExtractReadsProcessingStage(true, true, stateOfTheWorld));
+            processingStages.Add(new ExtractReadsProcessingStage(true, false, stateOfTheWorld));
+            processingStages.Add(new ExtractReadsProcessingStage(false, true, stateOfTheWorld));
+            processingStages.Add(new ExtractReadsProcessingStage(false, false, stateOfTheWorld));
+#else
             processingStages.Add(new ExtractReadsProcessingStage());
-			processingStages.Add(new SelectGenesProcessingStage());
+#endif
+            processingStages.Add(new SelectGenesProcessingStage());
 			processingStages.Add(new CountMappedBasesProcessingStage());
 			processingStages.Add(new GenerateScatterGraphsProcessingStage());
 			//processingStages.Add(new MethylationProcessingStage());
