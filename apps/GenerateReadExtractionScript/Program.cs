@@ -156,8 +156,11 @@ namespace GenerateScriptFromVariants
                 if (tentativeSelectedVariantsFilename == "" || extractedMAFLinesFilename == "" || inputBamFilename == "")
                 {
                     Console.WriteLine("GenerateScriptsFromVariants: at least one input is missing for case " + case_.case_id);
-                    File.Delete(localSamtoolsPathname);
-                    File.Delete(localGCERPathname);
+                    if (copiedBinaries)
+                    {
+                        File.Delete(localSamtoolsPathname);
+                        File.Delete(localGCERPathname);
+                    }
                     return 1;
                 }
 
@@ -207,7 +210,18 @@ namespace GenerateScriptFromVariants
                 var startInfo = new ProcessStartInfo(localGCERPathname, " - " + caseToProcess.outputFilename + " 0 " + localSamtoolsPathname);
                 startInfo.RedirectStandardInput = true;
                 startInfo.UseShellExecute = false;
-                var process = Process.Start(startInfo);
+
+                Process process;
+                try
+                {
+                    process = Process.Start(startInfo);
+                } catch (Exception e)
+                {
+                    Console.WriteLine("Error trying to start process " + localGCERPathname);
+                    Console.WriteLine("Exception message: " + e.Message);
+
+                    throw e;
+                }
 
                 foreach (var scriptLine in generatedScript)
                 {
@@ -235,8 +249,11 @@ namespace GenerateScriptFromVariants
                 }
             } // Foreach case we're processing
 
-            File.Delete(localSamtoolsPathname);
-            File.Delete(localGCERPathname);
+            if (copiedBinaries)
+            {
+                File.Delete(localSamtoolsPathname);
+                File.Delete(localGCERPathname);
+            }
 
             return 0;
         } // Main

@@ -1173,7 +1173,7 @@ namespace ASEProcessManager
             { }
 
             static GetCaseFile[] getCaseFiles = { _ => _.vcf_filename, _ => _.tumor_rna_allcount_filename, _ => _.tumor_dna_allcount_filename, _ => _.all_maf_lines_filename };
-            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.redundantChromosomeRegionFilename, _ => _.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename };
+            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.redundantChromosomeRegionFilename};
             static GetCaseFile[] getOutputFiles = { _ => _.tentative_selected_variants_filename };
         } // SelectVariantsProcessingStage
 #endif
@@ -3240,6 +3240,12 @@ namespace ASEProcessManager
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
 
+                if (!File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
                 foreach (var disease in stateOfTheWorld.diseases)
                 {
                     if (File.Exists(stateOfTheWorld.configuration.basesInKnownCodingRegionsDirectory + ASETools.basesInKnownCodingRegionsPrefix + disease + ".txt"))
@@ -3433,6 +3439,12 @@ namespace ASEProcessManager
                 if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ReadLengthHistogramFilename))
                 {
                     nDone = 1;
+                    return;
+                }
+
+                if (!File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))
+                {
+                    nWaitingForPrerequisites = 1;
                     return;
                 }
 

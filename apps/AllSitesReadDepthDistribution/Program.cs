@@ -16,7 +16,6 @@ namespace AllSitesReadDepthDistribution
         static Dictionary<bool, Dictionary<bool, ASETools.PreBucketedHistogram>> readDepth = new Dictionary<bool, Dictionary<bool, ASETools.PreBucketedHistogram>>();  // tumor, DNA in that order
 
         const int maxReadDepthInHistogram = 2000;
-        const int nCasesPerDot = 100;
 
         static void Main(string[] args)
         {
@@ -42,7 +41,8 @@ namespace AllSitesReadDepthDistribution
                 } // dna
             } // tumor
 
-            Console.Write("Processing " + nCases + " cases, " + nCasesPerDot + " cases/dot: ");
+            int nCasesPerDot;
+            ASETools.PrintMessageAndNumberBar("Processing", "cases", nCases, out nCasesPerDot);
 
             var threading = new ASETools.WorkerThreadHelper<ASETools.Case, int>(cases, HandleOneCase, null, null, nCasesPerDot);
             threading.run();

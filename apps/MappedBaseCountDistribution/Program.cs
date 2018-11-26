@@ -66,7 +66,9 @@ namespace MappedBaseCountDistribution
             var tumorRNAHistogram = new ASETools.PreBucketedHistogram(0, maxbases, increment);
             var normalRNAHistogram = new ASETools.PreBucketedHistogram(0, maxbases, increment);
 
-            Console.Write("Processing " + cases.Count() + " cases, 1 dot/100: ");
+            int nCasesPerDot;
+            ASETools.PrintMessageAndNumberBar("Processing", "cases", cases.Count(), out nCasesPerDot);
+
             int nCasesProcessed = 0;
 
             foreach (var case_ in cases)
@@ -77,7 +79,7 @@ namespace MappedBaseCountDistribution
                 HandleOne(case_.normal_rna_mapped_base_count_filename, normalRNAHistogram);
 
                 nCasesProcessed++;
-                if (nCasesProcessed % 100 == 0)
+                if (nCasesProcessed % nCasesPerDot == 0)
                 {
                     Console.Write(".");
                 }
