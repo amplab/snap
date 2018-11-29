@@ -319,14 +319,6 @@ namespace ExpressionNearMutations
 				Console.WriteLine("Unable to load cases file " + configuration.casesFilePathname + ".  You must generate cases before running ExpressionNearMutations.");
 			}
 
-            perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
-
-            if (null == perGeneASEMap)
-            {
-                Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
-                return;
-            }
-
             geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
             var ASECorrectionFilename = configuration.finalResultsDirectory + ASETools.ASECorrectionFilename;

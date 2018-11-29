@@ -101,11 +101,11 @@ namespace ChooseAnnotatedVariants
             Console.WriteLine();
             Console.WriteLine("Processed " + listOfCases.Count() + " cases with " + globalCounts.nTentativeVariants + " tentative variants in " + ASETools.ElapsedTimeInSeconds(timer));
 
-            Console.WriteLine("Accepted " + globalCounts.nIncluded + " germline and " + globalCounts.nSomatic + " somatic variants (" + globalCounts.nIncludedForNoObservedBias + " for lack of observed bias in either direction), rejected " + globalCounts.nExcludedByIsASE +
+            Console.WriteLine("Accepted " + globalCounts.nGermlineIncluded + " germline and " + globalCounts.nSomatic + " somatic variants (" + globalCounts.nIncludedForNoObservedBias + " for lack of observed bias in either direction), rejected " + globalCounts.nExcludedByIsASE +
                 " because of IsASE, " + globalCounts.nExcludedForObservedBias + " because of observed bias, " + globalCounts.nExcludedByMappedReads +
                 " because of repetitive mapped reads, and " + globalCounts.nExcludedByProximityToOtherVariants + " because of proximity to other variants.");
 
-            Console.WriteLine("Acceptance rate " + (double)globalCounts.nIncluded / globalCounts.nTentativeVariants);
+            Console.WriteLine("Acceptance rate among germline variants " + (double)globalCounts.nGermlineIncluded / (globalCounts.nTentativeVariants - globalCounts.nSomatic));
         }
 
         const int treeGranularity = 100;
@@ -251,7 +251,7 @@ namespace ChooseAnnotatedVariants
             public int nExcludedForObservedBias = 0;
             public int nExcludedByMappedReads = 0;
             public int nExcludedByProximityToOtherVariants = 0;
-            public int nIncluded = 0;
+            public int nGermlineIncluded = 0;
             public int nSomatic = 0;
 
             public void merge(SelectVariantsPerThreadState peer)
@@ -262,7 +262,7 @@ namespace ChooseAnnotatedVariants
                 nExcludedForObservedBias += peer.nExcludedForObservedBias;
                 nExcludedByMappedReads += peer.nExcludedByMappedReads;
                 nExcludedByProximityToOtherVariants += peer.nExcludedByProximityToOtherVariants;
-                nIncluded += peer.nIncluded;
+                nGermlineIncluded += peer.nGermlineIncluded;
                 nSomatic += peer.nSomatic;
             }
         }
@@ -296,6 +296,7 @@ namespace ChooseAnnotatedVariants
             state.nTentativeVariants += tentativeAnnotatedSelectedVariants.Count();
 
             var annotatedSelectedVariants = tentativeAnnotatedSelectedVariants.Where(_ => _.somaticMutation).ToList();  // The final result.  We take all somatic mutations, so we start with them.
+            state.nSomatic += annotatedSelectedVariants.Count();    // That's all we've got so far.
 
             //
             // Filter the ones with bad read counts, DNA imbalance or copy number variants.  We alrady put the somatic mutations in the final list, so cull them
@@ -382,7 +383,7 @@ namespace ChooseAnnotatedVariants
                 {
                     acceptedTree.Insert(candidate);
                     annotatedSelectedVariants.Add(candidate);
-                    state.nIncluded++;
+                    state.nGermlineIncluded++;
                 }
             }
 

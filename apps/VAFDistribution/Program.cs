@@ -119,6 +119,11 @@ namespace VAFDistribution
                 var mutation = particularMutation.Key;
                 var histogram = particularMutation.Value;
 
+                if (histogram.count() < 1)
+                {
+                    continue;
+                }
+
                 results.Add(new HistogramsAndPValue(ASETools.binomialTest((int)histogram.nLessThan(0.5), (int)histogram.count(), 0.5, ASETools.BinomalTestType.TwoSided) * bonferroniCorrection, histogram,
                     global_idh1_multiple_mutation_histograms[mutation], global_idh1_normal_histograms[mutation], new ASETools.PreBucketedHistogram(0, 1.01, 0.01), "IDH1:" + mutation));
             }
@@ -229,6 +234,7 @@ namespace VAFDistribution
                 if (mutationCount == 1 && mutations[0].IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !mutations[0].CausesNonsenseMediatedDecay() && !mutations[0].isSilent() && 
                     !repetitiveRegionMap.isInRepetitiveRegion(mutations[0].contig, mutations[0].locus))
                 {
+#if false
                     if (mutations[0].Hugo_symbol == "COL1A2")
                     {
                         Console.WriteLine("COL1A2 case " + case_.case_id + " single mutation, tumor DNA " + mutations[0].tumorDNAReadCounts.nMatchingReference + " matching reference, " + mutations[0].tumorDNAReadCounts.nMatchingAlt +
@@ -236,6 +242,7 @@ namespace VAFDistribution
                             " matching alt (" + mutations[0].alt_allele + "), locus " + 
                             mutations[0].contig + ":" + ASETools.NumberWithCommas(mutations[0].locus));
                     }
+#endif
                     histograms[0][hugo_symbol].addValue(mutations[0].GetTumorAltAlleleFraction());
 
                     if (hugo_symbol == "IDH1")
@@ -274,8 +281,10 @@ namespace VAFDistribution
 
                     if (hugo_symbol == "IDH1")
                     {
-                        if (!histograms[6].ContainsKey("Other"))
+                        if (!histograms[4].ContainsKey("Other"))
                         {
+                            histograms[4].Add("Other", new ASETools.PreBucketedHistogram(0, 1.01, .01));
+                            histograms[5].Add("Other", new ASETools.PreBucketedHistogram(0, 1.01, .01));
                             histograms[6].Add("Other", new ASETools.PreBucketedHistogram(0, 1.01, .01));
                         }
                         histograms[6]["Other"].addValue(vaf);

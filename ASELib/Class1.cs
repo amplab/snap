@@ -10110,21 +10110,20 @@ namespace ASELib
 
 		public class CopyNumberVariation
 		{
-			public string Sample;
+			//public string Sample; This changed to GDC_aliquot in the new data, but we're not using it, so I just deleted it.
 			public string Chromosome;
 			public int Start;
 			public int End;
 			public int Num_Probes;
 			public double Segment_Mean;
 
-			CopyNumberVariation(string Sample_,
+			CopyNumberVariation(
 				string Chromosome_,
 				int Start_,
 				int End_,
 				int Num_Probes_,
 				double Segment_Mean_)
 			{
-				Sample = Sample_;
 				Chromosome = Chromosome_;
 				Start = Start_;
 				End = End_;
@@ -10135,7 +10134,6 @@ namespace ASELib
 			{
 				// Start and End can be formatted in scientific notation, so we convert them accordingly
 				return new CopyNumberVariation(
-					fields[fieldMappings["Sample"]],
 					fields[fieldMappings["Chromosome"]],
 					Convert.ToInt32(Double.Parse(fields[fieldMappings["Start"]], System.Globalization.NumberStyles.Float)),
 					Convert.ToInt32(Double.Parse(fields[fieldMappings["End"]], System.Globalization.NumberStyles.Float)),
@@ -10178,7 +10176,6 @@ namespace ASELib
 				inputFile = CreateStreamReaderWithRetry(filename);
 
 				var neededFields = new List<string>();
-				neededFields.Add("Sample");
 				neededFields.Add("Chromosome");
 				neededFields.Add("Start");
 				neededFields.Add("End");
@@ -10218,9 +10215,9 @@ namespace ASELib
                 }
                 return retVal;
             }
-		}
+        } // CopyNumberVariation
 
-		public class IGV
+        public class IGV
 		{
 			// writes batch file that visualizes CNV, normal and tumor DNA, as well as tumor RNA
 			// specify case, output file and optional position, in the form of "Gene_name"
@@ -11884,84 +11881,94 @@ namespace ASELib
                 throw new InvalidParameterException();
             }
 
-            switch (alternative)
+            try
             {
-                case BinomalTestType.Less:
-                    return MathNet.Numerics.Distributions.Binomial.CDF(p, n, x);
+                switch (alternative)
+                {
+                    case BinomalTestType.Less:
+                        return MathNet.Numerics.Distributions.Binomial.CDF(p, n, x);
 
-                case BinomalTestType.Greater:
-                    return 1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, x - 1);
+                    case BinomalTestType.Greater:
+                        return 1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, x - 1);
 
-                case BinomalTestType.TwoSided:
-                    if (p == 0)
-                    {
-                        if (x == 0)
+                    case BinomalTestType.TwoSided:
+                        if (p == 0)
                         {
-                            return 1;
-                        } else
-                        {
-                            return 0;
-                        }
-                    }
-
-                    if (p == 1)
-                    {
-                        if (x == n)
-                        {
-                            return 1;
-                        } else
-                        {
-                            return 0;
-                        }
-                    }
-
-                    /*
-                        ## Do
-                        ##   d <- dbinom(0 : n, n, p)
-                        ##   sum(d[d <= dbinom(x, n, p)])
-                        ## a bit more efficiently ...
-
-                        ## Note that we need a little fuzz.
-                     */
-
-                    double d = MathNet.Numerics.Distributions.Binomial.PMF(p, n, x);
-                    double m = n * p;
-                    if (x == m) // As if floating point multiplication will ever do this
-                    {
-                        return 1;
-                    }
-
-                    double relErr = 1 + 1e-7;
-
-                    if (x < m)
-                    {
-                        int y = 0;
-                        for (int i = (int)Math.Ceiling(m); i <= n; i++)
-                        {
-                            if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
+                            if (x == 0)
                             {
-                                y++;
+                                return 1;
+                            } else
+                            {
+                                return 0;
                             }
                         }
 
-                        return MathNet.Numerics.Distributions.Binomial.CDF(p, n, x) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, n - y));
-                    } else
-                    {
-                        int y = 0;
-                        for (int i = 0; i <= Math.Floor(m); i++)
+                        if (p == 1)
                         {
-                            if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
+                            if (x == n)
                             {
-                                y++;
+                                return 1;
+                            } else
+                            {
+                                return 0;
                             }
                         }
 
-                        return MathNet.Numerics.Distributions.Binomial.CDF(p, n, y - 1) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, x - 1));
-                    }
+                        /*
+                            ## Do
+                            ##   d <- dbinom(0 : n, n, p)
+                            ##   sum(d[d <= dbinom(x, n, p)])
+                            ## a bit more efficiently ...
 
-                default:
-                    throw new InvalidParameterException();
-            }  // switch
+                            ## Note that we need a little fuzz.
+                         */
+
+
+                            double d = MathNet.Numerics.Distributions.Binomial.PMF(p, n, x);
+                            double m = n * p;
+                            if (x == m) // As if floating point multiplication will ever do this
+                            {
+                                return 1;
+                            }
+
+                            double relErr = 1 + 1e-7;
+
+                            if (x < m)
+                            {
+                                int y = 0;
+                                for (int i = (int)Math.Ceiling(m); i <= n; i++)
+                                {
+                                    if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
+                                    {
+                                        y++;
+                                    }
+                                }
+
+                                return MathNet.Numerics.Distributions.Binomial.CDF(p, n, x) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, n - y));
+                            }
+                            else
+                            {
+                                int y = 0;
+                                for (int i = 0; i <= Math.Floor(m); i++)
+                                {
+                                    if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
+                                    {
+                                        y++;
+                                    }
+                                }
+
+                                return MathNet.Numerics.Distributions.Binomial.CDF(p, n, y - 1) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, x - 1));
+                            }
+
+
+                    default:
+                        throw new InvalidParameterException();
+                }  // switch
+            } catch (Exception e)
+            {
+                Console.WriteLine("Binomial test: exception (probably in MathDotNet.Numerics), p = " + p + ", n = " + n + ", x = " + x + ".");
+                throw e;
+            }
         } // binomialTest
 
         // BED file format at http://uswest.ensembl.org/info/website/upload/bed.html
@@ -13307,8 +13314,8 @@ namespace ASELib
                 return "Other";
             }
 
-            char[] codon = "AGC".ToArray();
-            codon[locus - 208438387] = newBase;
+            StringBuilder codon = new StringBuilder("AGC");
+            codon[locus - 208248387] = newBase;
             return "R132" + GeneticCode(ReverseCompliment(codon.ToString()));
         }
 

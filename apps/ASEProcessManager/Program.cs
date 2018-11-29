@@ -40,6 +40,7 @@ namespace ASEProcessManager
 
         delegate string GetCaseFile(ASETools.Case case_);
         delegate string GetOneOffFile(StateOfTheWorld stateOfTheWorld);
+        delegate string GetPerDiseaseFile(StateOfTheWorld stateOfTheWorld, string disease);
         delegate string GenerateCaseIdOutput(string caseId, StateOfTheWorld stateOfTheWorld);
 
         class PerCaseProcessingStage : ProcessingStage  // a processing stage where an action is taken for every case.
@@ -152,7 +153,7 @@ namespace ASEProcessManager
                 {
                     if (nOnOutputLine == 0)
                     {
-                        outputLine = stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString;
+                        outputLine = stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString + " " + parametersBeforeCaseIds;
                     }
 
                     outputLine += " " + generateCaseIdOutput(case_.case_id, stateOfTheWorld);
@@ -189,21 +190,32 @@ namespace ASEProcessManager
                 DateTime newestPrerequisiteWriteTime = DateTime.MinValue;
                 string newestPrerequisite = "";
 
-                foreach (var prerequisiteFile in oneOffFileGetters.Select(getter => getter(stateOfTheWorld)))
+                if (oneOffFileGetters != null)
                 {
-                    if (!File.Exists(prerequisiteFile))
+                    foreach (var prerequisiteFile in oneOffFileGetters.Select(getter => getter(stateOfTheWorld)))
                     {
-                        Console.WriteLine("Processing stage " + stageName + " has completed files, but is missing generic prerequisite " + prerequisiteFile);
-                        allOK = false;
-                    }
+                        if (!File.Exists(prerequisiteFile))
+                        {
+                            Console.WriteLine("Processing stage " + stageName + " has completed files, but is missing generic prerequisite " + prerequisiteFile);
+                            allOK = false;
+                        }
 
-                    var prerequisiteWriteTime = File.GetLastWriteTime(prerequisiteFile);
-                    if (prerequisiteWriteTime > newestPrerequisiteWriteTime)
-                    {
-                        newestPrerequisiteWriteTime = prerequisiteWriteTime;
-                        newestPrerequisite = prerequisiteFile;
-                    }
-                }
+                        if (prerequisiteFile == stateOfTheWorld.configuration.redundantChromosomeRegionFilename)
+                        {
+                            //
+                            // Just skip this one, it will never vary since it only depends on the genome itself.
+                            //
+                            continue;
+                        }
+
+                        var prerequisiteWriteTime = File.GetLastWriteTime(prerequisiteFile);
+                        if (prerequisiteWriteTime > newestPrerequisiteWriteTime)
+                        {
+                            newestPrerequisiteWriteTime = prerequisiteWriteTime;
+                            newestPrerequisite = prerequisiteFile;
+                        }
+                    } // foreach
+                } // if there are one off file getters
 
                 if (!allOK)
                 {
@@ -219,18 +231,229 @@ namespace ASEProcessManager
 
                     foreach (var outputFile in outputFileGetters.Select(getter => getter(case_)).ToList())
                     {
-                        if (File.Exists(outputFile) && File.GetLastWriteTime(outputFile) < newestPrerequisiteWriteTime)
+                        if (!File.Exists(outputFile))
+                        {
+                            continue;
+                        }
+
+                        var outputFileLastWriteTime = File.GetLastWriteTime(outputFile);
+
+                        if (outputFileLastWriteTime < newestPrerequisiteWriteTime)
                         {
                             Console.WriteLine("Processing stage " + stageName + " has generated file " + outputFile + " older than its input " + newestPrerequisite);
                             allOK = false;
+                            continue;
                         }
-                    }
-                }
+
+                        if (caseFileInputGetters != null)
+                        {
+                            foreach (var inputGetter in caseFileInputGetters)
+                            {
+                                var inputFile = inputGetter(case_);
+                                if (inputFile == "")
+                                {
+                                    Console.WriteLine("Processing stage " + stageName + " has generated file " + outputFile + " with a missing input.");
+                                    allOK = false;
+                                    continue;
+                                }
+
+                                if (!File.Exists(inputFile))
+                                {
+                                    Console.WriteLine("Processing stage " + stageName + " has generated file " + outputFile + " with missing input " + inputFile);
+                                    allOK = false;
+                                    continue;
+                                }
+
+                                if (outputFileLastWriteTime < File.GetLastWriteTime(inputFile))
+                                {
+                                    Console.WriteLine("Processing stage " + stageName + " has generated file " + outputFile + " older than input " + inputFile);
+                                    allOK = false;
+                                    continue;
+                                }
+                            } // input getter
+                        } // if there are input getters at all
+                    } // output file
+                } // case
 
                 return allOK;
             } // EvaluateDependencies
 
         } // PerCaseProcessingStage
+
+        class PerDiseaseProcessingStage : ProcessingStage
+        {
+            string stageName;
+            string binaryName;
+            bool supplyConfigurationParameter;
+            string parametersBeforeDiseaseName;
+            List<GetCaseFile> getPerCaseInputs;
+            List<GetPerDiseaseFile> getPerDiseaseInputs;
+            List<GetOneOffFile> getOneOffInputs;
+            List<GetPerDiseaseFile> getOutputs;
+
+            public bool NeedsCases() { return true; }
+
+            public PerDiseaseProcessingStage(string stageName_, string binaryName_, bool supplyConfiguratonParameter_, string parametersBeforeDiseaseName_, GetCaseFile[] getPerCaseInputs_, GetPerDiseaseFile[] getPerDiseaseInputs_,
+                GetOneOffFile[] getOneOffInputs_, GetPerDiseaseFile[] getOutputs_)
+            {
+                stageName = stageName_;
+                binaryName = binaryName_;
+                supplyConfigurationParameter = supplyConfiguratonParameter_;
+                parametersBeforeDiseaseName = parametersBeforeDiseaseName_;
+
+                if (null == getPerCaseInputs_)
+                {
+                    getPerCaseInputs = new List<GetCaseFile>();
+                }
+                else
+                {
+                    getPerCaseInputs = getPerCaseInputs_.ToList();
+                }
+
+                if (null == getPerDiseaseInputs_)
+                {
+                    getPerDiseaseInputs = new List<GetPerDiseaseFile>();
+                }
+                else
+                {
+                    getPerDiseaseInputs = getPerDiseaseInputs_.ToList();
+                }
+
+                if (null == getOneOffInputs_)
+                {
+                    getOneOffInputs = new List<GetOneOffFile>();
+                }
+                else
+                {
+                    getOneOffInputs = getOneOffInputs_.ToList();
+                }
+
+                getOutputs = getOutputs_.ToList();
+            }
+
+
+            public string GetStageName() { return stageName; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nAddedToScript = 0;
+                filesToDownload = null;
+
+                nDone = stateOfTheWorld.diseases.Where(_ => diseaseIsDone(stateOfTheWorld, _)).Count();
+
+                if (!getOneOffInputs.All(_ => !File.Exists(_(stateOfTheWorld))))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                nWaitingForPrerequisites = 0;
+
+                foreach (var disease in stateOfTheWorld.diseases)
+                {
+                    if (diseaseIsDone(stateOfTheWorld, disease))
+                    {
+                        continue;
+                    }
+
+                    if (getPerDiseaseInputs.Any(_ => !File.Exists(_(stateOfTheWorld, disease))))
+                    {
+                        nWaitingForPrerequisites++;
+                        continue;
+                    }
+
+                    if (stateOfTheWorld.listOfCases.Where(case_ => case_.disease() == disease).Any(case_ => getPerCaseInputs.Any(perCaseInputGetter => perCaseInputGetter(case_) == "")))
+                    {
+                        nWaitingForPrerequisites++;
+                    } else
+                    {
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + binaryName + (supplyConfigurationParameter ? stateOfTheWorld.configurationString : "") + parametersBeforeDiseaseName + " " + disease);
+                        nAddedToScript++;
+                    }
+                } // disease
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                bool anyFailed = false;
+
+                foreach (var disease in stateOfTheWorld.diseases)
+                {
+                    if (!diseaseIsDone(stateOfTheWorld, disease))
+                    {
+                        continue;
+                    }
+
+                    foreach (var outputFile in getOutputs.Select(_ => _(stateOfTheWorld, disease)))
+                    {
+                        var outputDate = File.GetLastWriteTime(outputFile);
+
+                        foreach (var oneOffInput in getOneOffInputs.Select(_ => _(stateOfTheWorld)))
+                        {
+                            if (!File.Exists(oneOffInput))
+                            {
+                                Console.WriteLine(stageName + ": one-off input " + oneOffInput + " doesn't exist, while output " + outputFile + " does.  Disease: " + disease);
+                                anyFailed = true;
+                                break;
+                            }
+
+                            if (File.GetLastWriteTime(oneOffInput) > outputDate)
+                            {
+                                Console.WriteLine(stageName + ": one off input " + oneOffInput + " is newer than output " + outputFile + ".  Disease: " + disease);
+                                anyFailed = true;
+                                break;
+                            }
+                        } // one off input
+
+                        foreach (var perDiseaseInput in getPerDiseaseInputs.Select(_ => _(stateOfTheWorld, disease)))
+                        {
+                            if (!File.Exists(perDiseaseInput))
+                            {
+                                Console.WriteLine(stageName + ": output file " + outputFile + " exists, but per-disease input " + perDiseaseInput + " does not.  Disease: " + disease);
+                                anyFailed = true;
+                                break;
+                            }
+
+                            if (File.GetLastWriteTime(perDiseaseInput) > outputDate)
+                            {
+                                Console.WriteLine(stageName + ": output file " + outputFile + " is older than per-disease input file " + perDiseaseInput + ".  Disease: " + disease);
+                                anyFailed = true;
+                                break;
+                            }
+                        }
+
+                        foreach (var perCaseInputGetter in getPerCaseInputs)
+                        {
+                            foreach (var case_ in stateOfTheWorld.listOfCases.Where(_ => _.disease() == disease))
+                            {
+                                string input = perCaseInputGetter(case_);
+
+                                if (input == "")
+                                {
+                                    Console.WriteLine(stageName + ": output file " + outputFile + " exists, while a per-case input for case " + case_.case_id + " does not.  Disease: " + disease);
+                                    anyFailed = true;
+                                    break;
+                                }
+
+                                if (File.GetLastWriteTime(input) > outputDate)
+                                {
+                                    Console.WriteLine(stageName + ": output file " + outputFile + " is newer than per-case input file " + input + ".  Disease: " + disease);
+                                    anyFailed = true;
+                                    break;
+                                }
+                            } // case 
+                        } // per case input
+                    } // output file
+                } // disease
+
+                return !anyFailed;
+            } // EvaluateDependencies
+
+            bool diseaseIsDone(StateOfTheWorld stateOfTheWorld, string disease)
+            {
+                return getOutputs.All(_ => File.Exists(_(stateOfTheWorld, disease)));
+            }
+        } // PerDiseaseProcessingStage
 
         class SingleOutputProcessingStage : ProcessingStage
         {
@@ -880,7 +1103,7 @@ namespace ASEProcessManager
             static GetCaseFile[] getCaseFile =
             {
                 _ => _.extracted_maf_lines_filename,
-                _ => _.tentative_annotated_selected_variants_filename,
+                _ => _.tentative_selected_variants_filename,
                 _ => _.tumor_dna_reads_at_tentative_selected_variants_filename,
                 _ => _.tumor_dna_reads_at_tentative_selected_variants_index_filename,
                 _ => _.tumor_rna_reads_at_tentative_selected_variants_filename,
@@ -996,7 +1219,7 @@ namespace ASEProcessManager
 		} // AnnotateVariantsProcessingStage
 #endif
 
-
+#if false // This one isn't used, and this version isn't even completely written.
         class MethylationProcessingStage : ProcessingStage
 		{
 
@@ -1052,6 +1275,7 @@ namespace ASEProcessManager
 			} // EvaluateDependencies
 
 		} // MethylationProcessingStage
+#endif
 
 #if false
         class SelectVariantsProcessingStage : ProcessingStage
@@ -1178,7 +1402,18 @@ namespace ASEProcessManager
         } // SelectVariantsProcessingStage
 #endif
 
+#if true
+        class ExpressionDistributionProcessingStage : PerDiseaseProcessingStage
+        {
+            public ExpressionDistributionProcessingStage(StateOfTheWorld stateOfTheWorld) : base("Per-disease mRNA expression distribution", "ExpressionDistribution.exe", false,
+                stateOfTheWorld.configuration.casesFilePathname + " " + stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + 
+                ASETools.Case.TumorRNAAllcountFilenameColumn + " " + ASETools.Case.TumorRNAMappedBaseCountColumn, getPerCaseInputs, null, null, getOutputs)
+            { }
 
+            static GetCaseFile[] getPerCaseInputs = { _ => _.tumor_rna_allcount_filename, _ => _.tumor_rna_mapped_base_count_filename };
+            static GetPerDiseaseFile[] getOutputs = { (stateOfTheWorld, disease) => stateOfTheWorld.configuration.expressionFilesDirectory + "expression_" + disease };
+        }
+#else
         class ExpressionDistributionProcessingStage : ProcessingStage
         {
             public ExpressionDistributionProcessingStage() { }
@@ -1278,6 +1513,7 @@ namespace ASEProcessManager
                 return worked;
             } // EvaluateDependencies
         } // ExpressionDistributionProcessingStage
+#endif
 
         class ExtractMAFLinesProcessingStage : ProcessingStage
         {
@@ -1678,11 +1914,10 @@ namespace ASEProcessManager
 
         class ExpressionNearMutationsProcessingStage : PerCaseProcessingStage
         {
-            public ExpressionNearMutationsProcessingStage() : base("Expression Near Mutations", "ExpressionNearMutations.exe", "", getCaseFile, getOneOffFiles, getOutputFile)
+            public ExpressionNearMutationsProcessingStage() : base("Expression Near Mutations", "ExpressionNearMutations.exe", "", getCaseFile, null, getOutputFile)
             { }
 
             static GetCaseFile[] getCaseFile = { _ => _.maf_filename, _ => _.regional_expression_filename };
-            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.unfilteredCountsDirectory + "TP53" + ASETools.Configuration.unfilteredCountsExtention, _ => _.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename }; // Should really be all genes
             static GetCaseFile[] getOutputFile = { _ => _.gene_expression_filename };
         }
 
@@ -4013,7 +4248,7 @@ namespace ASEProcessManager
 			processingStages.Add(new GermlineVariantCallingProcessingStage());
 			processingStages.Add(new SelectVariantsProcessingStage());
 			processingStages.Add(new AnnotateVariantsProcessingStage(stateOfTheWorld));
-			processingStages.Add(new ExpressionDistributionProcessingStage());
+			processingStages.Add(new ExpressionDistributionProcessingStage(stateOfTheWorld));
 			processingStages.Add(new ExtractMAFLinesProcessingStage());
 			processingStages.Add(new RegionalExpressionProcessingStage());
             processingStages.Add(new ExpressionNearMutationsProcessingStage());
@@ -4064,7 +4299,6 @@ namespace ASEProcessManager
             processingStages.Add(new ReadLengthDistributionProcessingStage());
             processingStages.Add(new ChooseAnnotatedVariantsProcessingStage());
             processingStages.Add(new ExtractIsoformReadCountsProcessingStage(stateOfTheWorld));
-            processingStages.Add(new SpliceosomeAllelicImbalanceProcessingStage());
 
             if (checkDependencies)
             {
