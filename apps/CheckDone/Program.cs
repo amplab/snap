@@ -224,6 +224,13 @@ namespace CheckDone
                 HandleFilename(case_.isoform_read_counts_filename, "IsoformReadCounts", fileTypesToUse);
             }
 
+            foreach (var disease in ASETools.GetListOfDiseases(cases))
+            {
+                HandleFilename(configuration.expressionFilesDirectory + ASETools.Expression_filename_base + disease, "Expression", fileTypesToUse);
+                HandleFilename(configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + disease, "ExpressionDistribution", fileTypesToUse);
+
+            }
+
             ASETools.PrintMessageAndNumberBar("Processing", "files in " + FilenamesByDataDirectory.Count() + " data directories", totalFiles, out nPerDot);
 
             //

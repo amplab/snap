@@ -10,7 +10,7 @@ namespace AnalyzeBeatAMLCases
 {
     class Program
     {
-        static void processOne(StreamWriter outputFile, string header, List<ASETools.ClinicalSummaryLine> clinicalLines)
+        static void processOne(StreamWriter outputFile, string header, List<ASETools.BeatAMLClinicalSummaryLine> clinicalLines)
         {
             int n;
             var km = ASETools.KaplanMeier(clinicalLines, out n);
@@ -21,11 +21,13 @@ namespace AnalyzeBeatAMLCases
         }
         static void Main(string[] args)
         {
-            var clinicalLines = ASETools.ClinicalSummaryLine.readFile(@"\sequence\BeatAML\Wave 2 FINAL data lock (Jun 2017)\Functional & clinical\clinical-summary-20170703_143804.txt");
-            var mappings = ASETools.BeatAMLSampleMapping.readFromFile(@"\sequence\beatAML\Wave 2 FINAL data lock (Jun 2017)\BeatAML_sample_mapping_file_8_17_2017.txt");
+            var clinicalLines = ASETools.BeatAMLClinicalSummaryLine.readFile(/*@"w:\BeatAML Datawave 3\box\clinical and functional\Clinical_Summary_Wave_3_9-19-18.txt"*/@"w:\BeatAML Datawave 3\box\clinical and functional\Clinical_Summary_Sup_Table_5_Submitted.txt");
+            
+            //var mappings = ASETools.BeatAMLSampleMapping.readFromFile(@"\sequence\beatAML\Wave 2 FINAL data lock (Jun 2017)\BeatAML_sample_mapping_file_8_17_2017.txt");
             var amlOnly = clinicalLines.Where(x => x.dxAtInclusion.ToUpper().Contains("ACUTE MYELOID LEUKAEMIA")).ToList();
             var myelodisplastic = clinicalLines.Where(x => x.dxAtInclusion.ToUpper().Contains("MYELODYSPLASTIC")).ToList();
 
+#if false
             int nWithDataAndTP53 = 0;
             foreach (var caseEntry in mappings)
             {
@@ -48,6 +50,7 @@ namespace AnalyzeBeatAMLCases
             }
 
             Console.WriteLine("There are " + nWithDataAndTP53 + " AML cases with TP53 mutations and all three BAM files.");
+#endif
 
             var outputFile = ASETools.CreateStreamWriterWithRetry(@"\temp\BeatAML.txt");
 
@@ -60,6 +63,16 @@ namespace AnalyzeBeatAMLCases
             !(x.priorTreatmentRegimens.ToLower().Contains("azacitidine") || x.priorTreatmentRegimens.ToLower().Contains("decitibine") ||
             x.currentRegimen.ToLower().Contains("azacitidine") || x.currentRegimen.ToLower().Contains("decitibine"))).ToList());
             processOne(outputFile, "Myelodysplastic (all)", myelodisplastic);
+            processOne(outputFile, "AML (dead only)", amlOnly.Where(x => x.vitalStatus == "Dead").ToList());
+
+            //
+            // For living AML patients we can't use a K-M curve, because it's all 100%, since they're all still alive.  So, hack it to make them all seem dead.
+            //
+
+            var amlAlive = amlOnly.Where(x => x.vitalStatus != "Dead").ToList();
+            amlAlive.ForEach(x => x.vitalStatus = "Dead");
+            processOne(outputFile, "AML (alive only)", amlAlive);
+
 
             outputFile.Close();
         }

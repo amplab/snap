@@ -1977,6 +1977,38 @@ namespace ASELib
                 dataDirectories.Add(baseDirectory + @"downloaded_files\");
             }
 
+            public List<string> neededPerReplicaDirectories()
+            {
+                var neededDirectories = new List<string>();
+
+                foreach (var dataDirectory in dataDirectories)
+                {
+                    neededDirectories.Add(dataDirectory);
+                    neededDirectories.Add(dataDirectory + @"..\" + derivedFilesDirectory);
+                }
+
+                return neededDirectories;
+            }
+
+            public List<string> neededGlobalDirectories()
+            {
+                var neededDirectories = new List<string>();
+
+                neededDirectories.Add(zero_one_two_directory);
+                neededDirectories.Add(basesInKnownCodingRegionsDirectory);
+                neededDirectories.Add(chromosomeMapsDirectory);
+                neededDirectories.Add(completedVCFsDirectory);
+                neededDirectories.Add(GetDirectoryFromPathname(encodeBEDFile));
+                neededDirectories.Add(expressionFilesDirectory);
+                neededDirectories.Add(finalResultsDirectory);
+                neededDirectories.Add(unfilteredCountsDirectory);
+                neededDirectories.Add(geneScatterGraphsDirectory);
+                neededDirectories.Add(indexDirectory + @"..\");  // One level up, because indexDirectory includes hg38-20, which we don't want here.
+                neededDirectories.Add(regionalExpressionDirectory);
+
+                return neededDirectories;
+            }
+
             public int getMinReadCoverage(bool dna)
             {
                 if (dna) return minDNAReadCoverage;
@@ -2849,6 +2881,7 @@ namespace ASELib
         public const string generatedTranscriptomeIndexName = "TranscriptomeSNAPIndex";
         public const string AllSitesReadDepthFilename = "AllSitesReadDepth.txt";
         public const string Expression_distribution_filename_base = "expression_distribution_";
+        public const string Expression_filename_base = "expression_";
         public const string annotated_scatter_graph_filename_extension = "_annotated_scatter_lines.txt";
         public const string raw_median_data_extension = "_raw_median_data.txt";
         public const string annotated_scatter_graphs_histogram_filename = "_annotated_scatter_graphs_histograms.txt";
@@ -10503,14 +10536,21 @@ namespace ASELib
             public readonly int maxLocus;
         } // ASEMapPerGeneLine
 
+
+        public interface ClinicalSummaryLine
+        {
+            string getVitalStatus();
+            int getOverallSurvivalInDays();
+            string getPatientId();
+        }
         //
         // This for the BeatAML data, not TCGA
         //
-        public class ClinicalSummaryLine
+        public class BeatAMLClinicalSummaryLine : ClinicalSummaryLine
         {
-            static ClinicalSummaryLine Parse(HeaderizedFile<ClinicalSummaryLine>.FieldGrabber fieldGrabber)
+            static BeatAMLClinicalSummaryLine Parse(HeaderizedFile<BeatAMLClinicalSummaryLine>.FieldGrabber fieldGrabber)
             {
-                return new ClinicalSummaryLine(
+                return new BeatAMLClinicalSummaryLine(
                     fieldGrabber.AsString("patientId"),
                     fieldGrabber.AsString("labId"),
                     fieldGrabber.AsString("gender"),
@@ -10534,7 +10574,23 @@ namespace ASELib
                     fieldGrabber.AsString("currentRegimen")
                     );
             }
-            public static List<ClinicalSummaryLine> readFile(string filename)
+
+            public int getOverallSurvivalInDays()
+            {
+                return overallSurvival;
+            }
+
+            public string getVitalStatus()
+            {
+                return vitalStatus;
+            }
+
+            public string getPatientId()
+            {
+                return patientId;
+            }
+
+            public static List<BeatAMLClinicalSummaryLine> readFile(string filename)
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
 
@@ -10759,9 +10815,9 @@ namespace ASELib
                     "PML_RARA_Quantitivate"
                 };
 
-                var headerizedFile = new HeaderizedFile<ClinicalSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
+                var headerizedFile = new HeaderizedFile<BeatAMLClinicalSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
 
-                List<ClinicalSummaryLine> result;
+                List<BeatAMLClinicalSummaryLine> result;
                 headerizedFile.ParseFile(Parse, out result);
 
                 inputFile.Close();
@@ -10771,7 +10827,7 @@ namespace ASELib
 
 
 
-            ClinicalSummaryLine(
+            BeatAMLClinicalSummaryLine(
                 string patientId_,
                 string labId_,
                 string gender_,
@@ -10837,7 +10893,7 @@ namespace ASELib
             public readonly int timeOfSampleCollectionRelativeToInclusion;
             public readonly bool rnaSeq;
             public readonly bool exomeSeq;
-            public readonly string vitalStatus;
+            public /*readonly*/ string vitalStatus; // Turn off readonly for a hack in AnalyzeBeatAMLCases
             public readonly int overallSurvival;
             public readonly string causeOfDeath;
             public readonly string TP53;
@@ -10845,6 +10901,42 @@ namespace ASELib
             public readonly string priorTreatmentRegimens;  // This is actually a list separated by "|", but for now we just get the raw string
             public readonly string currentRegimen;
         } // ClinicalSummaryLine
+
+#if false
+        public class TCGAClinicalSummaryLine : ClinicalSummaryLine
+        {
+            public static List<TCGAClinicalSummaryLine> readFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (null == inputFile)
+                {
+                    return null;
+                }
+
+                // 
+                // These files are weird: they have two copies of the header line and then a second, slightly different header, and then a third really weird line with CDE_ID on it.
+                // So we skip the two weird ones after parsing.
+                //
+
+                string[] wantedFields =
+                {
+                    "bcr_patient_uuid",
+                    "vital_status",
+                    "death_days_to"
+                };  // Tons more stuff we could include.
+
+                var headerizedFile = new HeaderizedFile<TCGAClinicalSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
+                List<TCGAClinicalSummaryLine> result;
+                headerizedFile.ParseFile(parse, out result);
+
+                result = result.Where(_ => _.)
+
+            }
+
+            public readonly string 
+        } // TCGAClinicalSummaryLine
+#endif
 
         public class KaplanMeierPoint
         {
@@ -10860,18 +10952,18 @@ namespace ASELib
 
         static public List<KaplanMeierPoint> KaplanMeier(List<ClinicalSummaryLine> summaryLines, out int n)
         {
-            var oneLinePerPatient = summaryLines.GroupByToDict<ClinicalSummaryLine, string>(x => x.patientId).Select(x => x.Value[0]).Where(x => x.overallSurvival > 0).ToList();
+            var oneLinePerPatient = summaryLines.GroupByToDict<ClinicalSummaryLine, string>(x => x.getPatientId()).Select(x => x.Value[0]).Where(x => x.getOverallSurvivalInDays() > 0).ToList();
             n = oneLinePerPatient.Count();
-            oneLinePerPatient.Sort((x, y) => x.overallSurvival.CompareTo(y.overallSurvival));   // This isn't necessary, but it's nice for debugging 
+            oneLinePerPatient.Sort((x, y) => x.getOverallSurvivalInDays().CompareTo(y.getOverallSurvivalInDays()));   // This isn't necessary, but it's nice for debugging 
 
-            var longestSurvivor = summaryLines.Select(x => x.overallSurvival).Max();
+            var longestSurvivor = summaryLines.Select(x => x.getOverallSurvivalInDays()).Max();
 
             var fractionAliveByDay = new double[longestSurvivor + 1];
             fractionAliveByDay[0] = 1;
 
             for (int day = 1; day <= longestSurvivor; day++)
             {
-                fractionAliveByDay[day] = (double)oneLinePerPatient.Where(x => x.overallSurvival >= day).Count() / oneLinePerPatient.Where(x => x.overallSurvival >= day || x.vitalStatus == "Dead").Count();
+                fractionAliveByDay[day] = (double)oneLinePerPatient.Where(x => x.getOverallSurvivalInDays() >= day).Count() / oneLinePerPatient.Where(x => x.getOverallSurvivalInDays() >= day || x.getVitalStatus() == "Dead").Count();
             }
 
             var retVal = new List<KaplanMeierPoint>();
@@ -11855,23 +11947,23 @@ namespace ASELib
         //
 
         /*
-        #  File src/library/stats/R/binom.test.R
-        #  Part of the R package, https://www.R-project.org
-        #
-        #  Copyright (C) 1995-2012 The R Core Team
-        #
-        #  This program is free software; you can redistribute it and/or modify
-        #  it under the terms of the GNU General Public License as published by
-        #  the Free Software Foundation; either version 2 of the License, or
-        #  (at your option) any later version.
-        #
-        #  This program is distributed in the hope that it will be useful,
-        #  but WITHOUT ANY WARRANTY; without even the implied warranty of
-        #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-        #  GNU General Public License for more details.
-        #
-        #  A copy of the GNU General Public License is available at
-        #  https://www.R-project.org/Licenses/
+# File src/library/stats/R/binom.test.R
+# Part of the R package, https://www.R-project.org
+#
+# Copyright (C) 1995-2012 The R Core Team
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available at
+# https://www.R-project.org/Licenses/
          */ 
 
         public static double binomialTest(int x, int n, double p, BinomalTestType alternative)
@@ -11915,12 +12007,12 @@ namespace ASELib
                         }
 
                         /*
-                            ## Do
-                            ##   d <- dbinom(0 : n, n, p)
-                            ##   sum(d[d <= dbinom(x, n, p)])
-                            ## a bit more efficiently ...
+## Do
+##   d <- dbinom(0 : n, n, p)
+##   sum(d[d <= dbinom(x, n, p)])
+## a bit more efficiently ...
 
-                            ## Note that we need a little fuzz.
+## Note that we need a little fuzz.
                          */
 
 
@@ -12430,7 +12522,7 @@ namespace ASELib
             Console.WriteLine();
         } // PrintNumberBar
 
-        public static void PrintMessageAndNumberBar(string messageBeforeCount, string messageAfterCount, int count, out int nPerDot)
+        public static void PrintMessageAndNumberBar(string messageBeforeCount, string messageAfterCount, long count, out int nPerDot)
         {
             nPerDot = 1;
             int maxDots = 200;
@@ -12441,7 +12533,7 @@ namespace ASELib
             }
 
             Console.WriteLine(messageBeforeCount + " " + count + " " + messageAfterCount + " (one dot/" + nPerDot + ")");
-            PrintNumberBar(count / nPerDot);
+            PrintNumberBar((int)(count / nPerDot));
         }
 
         public static string PadStringToGuidLength(string inputString)

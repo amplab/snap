@@ -47,7 +47,7 @@ namespace ComputeBasesInCodingAndKnownExpressionRegions
 
             selectedGenes = selectedGenes.Where(x => x.Hugo_Symbol != "Y_RNA").ToList();    // Y_RNA isn't really a gene, but there are many instances of it all over.  We should have excluded it earlier.
 
-            var expressionFilename = commonData.configuration.expressionFilesDirectory + "expression_" + disease;
+            var expressionFilename = commonData.configuration.expressionFilesDirectory + ASETools.Expression_filename_base + disease;
 
             Console.Write("Loading expression file...");
             try

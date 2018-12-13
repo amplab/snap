@@ -42,7 +42,7 @@ namespace ExpressionByGene
                 return;
             }
 
-            var expressionFilename = commonData.configuration.expressionFilesDirectory + "expression_" + disease;
+            var expressionFilename = commonData.configuration.expressionFilesDirectory + ASETools.Expression_filename_base + disease;
             if (!File.Exists(expressionFilename))
             {
                 Console.WriteLine("expression file " + expressionFilename + " doesn't exist.");

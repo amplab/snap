@@ -457,12 +457,7 @@ namespace GenerateCases
 
                 } // forever (looping over file pagination)
 
-				// This is commented out because the MAF files from the TCGA server
-				// are now 7.0, and we are running on 6.0
 				var mafFileIds = maf.Select(x => x.file_id).ToList();
-
-				// get old maf file ids
-				//var mafFileIds = pastCases.Where(r => r.Value.case_id == gdcCase.case_id).Select(r => r.Value.maf_file_id);
 
                 if (tumorDNA.Count() == 0)
                 {

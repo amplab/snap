@@ -1411,7 +1411,7 @@ namespace ASEProcessManager
             { }
 
             static GetCaseFile[] getPerCaseInputs = { _ => _.tumor_rna_allcount_filename, _ => _.tumor_rna_mapped_base_count_filename };
-            static GetPerDiseaseFile[] getOutputs = { (stateOfTheWorld, disease) => stateOfTheWorld.configuration.expressionFilesDirectory + "expression_" + disease };
+            static GetPerDiseaseFile[] getOutputs = { (stateOfTheWorld, disease) => stateOfTheWorld.configuration.expressionFilesDirectory + ASETools.Expression_filename_base + disease };
         }
 #else
         class ExpressionDistributionProcessingStage : ProcessingStage
@@ -3696,6 +3696,16 @@ namespace ASEProcessManager
             } // EvaluateStage
         } // ReadLengthDistributionProcessingStage
 
+        class ExpressionDecilesProcessingStage : PerDiseaseProcessingStage
+        {
+            public ExpressionDecilesProcessingStage() : base("Expression Deciles", "ComputeExpressionDistribution.exe", true, "", getPerCaseInputs, null, null, getOutputs)
+            { }
+
+            static GetCaseFile[] getPerCaseInputs = { _ => _.tumor_rna_allcount_filename };
+            static GetPerDiseaseFile[] getOutputs = { (stateOfTheWorld, disease) => stateOfTheWorld.configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + disease };
+
+        } // ExpressionDecilesProcessingStage
+
         class ChooseAnnotatedVariantsProcessingStage : ProcessingStage
         {
             public ChooseAnnotatedVariantsProcessingStage() { }
@@ -4133,6 +4143,11 @@ namespace ASEProcessManager
             var stateOfTheWorld = new StateOfTheWorld(configuration);
             stateOfTheWorld.DetermineTheStateOfTheWorld();
 
+            foreach (var directoryToEnsure in stateOfTheWorld.configuration.neededGlobalDirectories())
+            {
+                Directory.CreateDirectory(directoryToEnsure);
+            }
+
             jobAddString = @"job add %1 /exclusive /numnodes:1-1 /scheduler:" + stateOfTheWorld.configuration.hpcScheduler + " ";
             
             Console.WriteLine();
@@ -4299,6 +4314,7 @@ namespace ASEProcessManager
             processingStages.Add(new ReadLengthDistributionProcessingStage());
             processingStages.Add(new ChooseAnnotatedVariantsProcessingStage());
             processingStages.Add(new ExtractIsoformReadCountsProcessingStage(stateOfTheWorld));
+            processingStages.Add(new ExpressionDecilesProcessingStage());
 
             if (checkDependencies)
             {

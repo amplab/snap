@@ -455,7 +455,7 @@ namespace GenerateScatterGraphs
 
             foreach (var disease in ASETools.GetListOfDiseases(cases))
             {
-                var expressionFilename = configuration.expressionFilesDirectory + "expression_" + disease;
+                var expressionFilename = configuration.expressionFilesDirectory + ASETools.Expression_filename_base + disease;
                 if (!File.Exists(expressionFilename))
                 {
                     Console.WriteLine("Can't find expression file " + expressionFilename + ", skipping " + disease);
