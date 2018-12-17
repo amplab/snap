@@ -10902,7 +10902,6 @@ namespace ASELib
             public readonly string currentRegimen;
         } // ClinicalSummaryLine
 
-#if false
         public class TCGAClinicalSummaryLine : ClinicalSummaryLine
         {
             public static List<TCGAClinicalSummaryLine> readFromFile(string filename)
@@ -10914,29 +10913,31 @@ namespace ASELib
                     return null;
                 }
 
-                // 
-                // These files are weird: they have two copies of the header line and then a second, slightly different header, and then a third really weird line with CDE_ID on it.
-                // So we skip the two weird ones after parsing.
-                //
+
 
                 string[] wantedFields =
                 {
                     "bcr_patient_uuid",
                     "vital_status",
-                    "death_days_to"
+                    "death_days_to" 
                 };  // Tons more stuff we could include.
 
                 var headerizedFile = new HeaderizedFile<TCGAClinicalSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
                 List<TCGAClinicalSummaryLine> result;
                 headerizedFile.ParseFile(parse, out result);
 
-                result = result.Where(_ => _.)
+                // 
+                // These files are weird: they have two copies of the header line and then a second, slightly different header, and then a third really weird line with CDE_ID on it.
+                // So we skip the two weird ones after parsing.
+                //
+                result = result.Where(_ => _.patientId != "bcr_patient_uuid" && _.patientId != "CDE_ID:").ToList();
 
             }
 
-            public readonly string 
+            public readonly string patientId;
+            public readonly int days_to_death;
+            public readonly string vitalStatus;
         } // TCGAClinicalSummaryLine
-#endif
 
         public class KaplanMeierPoint
         {
