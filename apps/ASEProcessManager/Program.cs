@@ -41,6 +41,7 @@ namespace ASEProcessManager
         delegate string GetCaseFile(ASETools.Case case_);
         delegate string GetOneOffFile(StateOfTheWorld stateOfTheWorld);
         delegate string GetPerDiseaseFile(StateOfTheWorld stateOfTheWorld, string disease);
+        delegate string GetPerChromosomePerDiseaseFile(StateOfTheWorld stateOfTheWorld, string chromosome, string disease);
         delegate string GenerateCaseIdOutput(string caseId, StateOfTheWorld stateOfTheWorld);
 
         class PerCaseProcessingStage : ProcessingStage  // a processing stage where an action is taken for every case.
@@ -343,7 +344,7 @@ namespace ASEProcessManager
 
                 if (!getOneOffInputs.All(_ => !File.Exists(_(stateOfTheWorld))))
                 {
-                    nWaitingForPrerequisites = 1;
+                    nWaitingForPrerequisites = getOneOffInputs.Where(_ => !File.Exists(_(stateOfTheWorld))).Count();
                     return;
                 }
 
@@ -367,7 +368,7 @@ namespace ASEProcessManager
                         nWaitingForPrerequisites++;
                     } else
                     {
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + binaryName + (supplyConfigurationParameter ? stateOfTheWorld.configurationString : "") + parametersBeforeDiseaseName + " " + disease);
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + binaryName + " " +(supplyConfigurationParameter ? stateOfTheWorld.configurationString : "") + parametersBeforeDiseaseName + " " + disease);
                         nAddedToScript++;
                     }
                 } // disease
@@ -454,6 +455,188 @@ namespace ASEProcessManager
                 return getOutputs.All(_ => File.Exists(_(stateOfTheWorld, disease)));
             }
         } // PerDiseaseProcessingStage
+
+        class PerChromosomePerDiseaseProcessingStage : ProcessingStage
+        {
+            string stageName;
+            string binaryName;
+            bool supplyConfigurationParameter;
+            string parametersBeforeChromosomeAndDiseaseName;
+            List<GetCaseFile> getPerCaseInputs;
+            List<GetPerChromosomePerDiseaseFile> getPerDiseaseInputs;
+            List<GetOneOffFile> getOneOffInputs;
+            List<GetPerChromosomePerDiseaseFile> getOutputs;
+
+            public bool NeedsCases() { return true; }
+
+            public PerChromosomePerDiseaseProcessingStage(string stageName_, string binaryName_, bool supplyConfiguratonParameter_, string parametersBeforeChromosomeAndDiseaseName_, GetCaseFile[] getPerCaseInputs_, GetPerChromosomePerDiseaseFile[] getPerDiseaseInputs_,
+                GetOneOffFile[] getOneOffInputs_, GetPerChromosomePerDiseaseFile[] getOutputs_)
+            {
+                stageName = stageName_;
+                binaryName = binaryName_;
+                supplyConfigurationParameter = supplyConfiguratonParameter_;
+                parametersBeforeChromosomeAndDiseaseName = parametersBeforeChromosomeAndDiseaseName_;
+
+                if (null == getPerCaseInputs_)
+                {
+                    getPerCaseInputs = new List<GetCaseFile>();
+                }
+                else
+                {
+                    getPerCaseInputs = getPerCaseInputs_.ToList();
+                }
+
+                if (null == getPerDiseaseInputs_)
+                {
+                    getPerDiseaseInputs = new List<GetPerChromosomePerDiseaseFile>();
+                }
+                else
+                {
+                    getPerDiseaseInputs = getPerDiseaseInputs_.ToList();
+                }
+
+                if (null == getOneOffInputs_)
+                {
+                    getOneOffInputs = new List<GetOneOffFile>();
+                }
+                else
+                {
+                    getOneOffInputs = getOneOffInputs_.ToList();
+                }
+
+                getOutputs = getOutputs_.ToList();
+            }
+
+
+            public string GetStageName() { return stageName; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nAddedToScript = 0;
+                filesToDownload = null;
+
+                nDone = ASETools.chromosomes.Sum(chromosome => stateOfTheWorld.diseases.Where(disease => chromosomeAndDiseaseIsDone(stateOfTheWorld, chromosome, disease)).Count());
+
+                if (!getOneOffInputs.All(_ => File.Exists(_(stateOfTheWorld))))
+                {
+                    nWaitingForPrerequisites = getOneOffInputs.Where(_ => !File.Exists(_(stateOfTheWorld))).Count();
+                    return;
+                }
+
+                nWaitingForPrerequisites = 0;
+
+                foreach (var chromosome in ASETools.chromosomes)
+                {
+                    foreach (var disease in stateOfTheWorld.diseases)
+                    {
+                        if (chromosomeAndDiseaseIsDone(stateOfTheWorld, chromosome, disease))
+                        {
+                            continue;
+                        }
+
+                        if (getPerDiseaseInputs.Any(_ => _(stateOfTheWorld, chromosome, disease) == "" ||  !File.Exists(_(stateOfTheWorld, chromosome, disease))))
+                        {
+                            nWaitingForPrerequisites++;
+                            continue;
+                        }
+
+                        if (stateOfTheWorld.listOfCases.Where(case_ => case_.disease() == disease).Any(case_ => getPerCaseInputs.Any(perCaseInputGetter => perCaseInputGetter(case_) == "")))
+                        {
+                            nWaitingForPrerequisites++;
+                        }
+                        else
+                        {
+                            script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + binaryName + " " + (supplyConfigurationParameter ? stateOfTheWorld.configurationString : "") + parametersBeforeChromosomeAndDiseaseName + " " + chromosome + " " + disease);
+                            nAddedToScript++;
+                        }
+                    } // disease
+                } // chromosome
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                bool anyFailed = false;
+
+                foreach (var chromosome in ASETools.chromosomes)
+                {
+                    foreach (var disease in stateOfTheWorld.diseases)
+                    {
+                        if (!chromosomeAndDiseaseIsDone(stateOfTheWorld, chromosome, disease))
+                        {
+                            continue;
+                        }
+
+                        foreach (var outputFile in getOutputs.Select(_ => _(stateOfTheWorld, chromosome, disease)))
+                        {
+                            var outputDate = File.GetLastWriteTime(outputFile);
+
+                            foreach (var oneOffInput in getOneOffInputs.Select(_ => _(stateOfTheWorld)))
+                            {
+                                if (!File.Exists(oneOffInput))
+                                {
+                                    Console.WriteLine(stageName + ": one-off input " + oneOffInput + " doesn't exist, while output " + outputFile + " does.  Disease: " + disease);
+                                    anyFailed = true;
+                                    break;
+                                }
+
+                                if (File.GetLastWriteTime(oneOffInput) > outputDate)
+                                {
+                                    Console.WriteLine(stageName + ": one off input " + oneOffInput + " is newer than output " + outputFile + ".  Disease: " + disease);
+                                    anyFailed = true;
+                                    break;
+                                }
+                            } // one off input
+
+                            foreach (var perDiseaseInput in getPerDiseaseInputs.Select(_ => _(stateOfTheWorld, chromosome, disease)))
+                            {
+                                if (!File.Exists(perDiseaseInput))
+                                {
+                                    Console.WriteLine(stageName + ": output file " + outputFile + " exists, but per-chromosome per-disease input " + perDiseaseInput + " does not.  Disease: " + disease);
+                                    anyFailed = true;
+                                    break;
+                                }
+
+                                if (File.GetLastWriteTime(perDiseaseInput) > outputDate)
+                                {
+                                    Console.WriteLine(stageName + ": output file " + outputFile + " is older than per-chromosome per-disease input file " + perDiseaseInput + ".  Disease: " + disease);
+                                    anyFailed = true;
+                                    break;
+                                }
+                            }
+
+                            foreach (var perCaseInputGetter in getPerCaseInputs)
+                            {
+                                foreach (var case_ in stateOfTheWorld.listOfCases.Where(_ => _.disease() == disease))
+                                {
+                                    string input = perCaseInputGetter(case_);
+
+                                    if (input == "")
+                                    {
+                                        Console.WriteLine(stageName + ": output file " + outputFile + " exists, while a per-case input for case " + case_.case_id + " does not.  Disease: " + disease);
+                                        anyFailed = true;
+                                        break;
+                                    }
+
+                                    if (File.GetLastWriteTime(input) > outputDate)
+                                    {
+                                        Console.WriteLine(stageName + ": output file " + outputFile + " is newer than per-case input file " + input + ".  Disease: " + disease);
+                                        anyFailed = true;
+                                        break;
+                                    }
+                                } // case 
+                            } // per case input
+                        } // output file
+                    } // disease
+                } // chromosome
+
+                return !anyFailed;
+            } // EvaluateDependencies
+
+            bool chromosomeAndDiseaseIsDone(StateOfTheWorld stateOfTheWorld, string chromosome, string disease)
+            {
+                return getOutputs.All(_ => _(stateOfTheWorld, chromosome, disease) != "" &&  File.Exists(_(stateOfTheWorld, chromosome, disease)));
+            }
+        } // PerDiseasePerChromosomeProcessingStage
 
         class SingleOutputProcessingStage : ProcessingStage
         {
@@ -3620,6 +3803,7 @@ namespace ASEProcessManager
              } // EvaluateStage
         } // GenerateTranscriptomeIndexProcessingStage
 
+
         class AnnotateScatterGraphsProcessingStage : ProcessingStage
         {
             public AnnotateScatterGraphsProcessingStage() { }
@@ -3643,7 +3827,8 @@ namespace ASEProcessManager
                 }
 
                 if (!File.Exists(stateOfTheWorld.configuration.geneScatterGraphsDirectory + ASETools.scatterGraphsSummaryFilename) || 
-                    stateOfTheWorld.diseases.Any(x => !File.Exists(stateOfTheWorld.configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + x)))
+                    stateOfTheWorld.diseases.Any(disease => ASETools.chromosomes.Any(chromosome => 
+                        !File.Exists(stateOfTheWorld.configuration.geneScatterGraphsLinesWithPercentilesDirectory + ASETools.GeneScatterGraphLinesWithPercentilesPrefix + disease + "_" + ASETools.chromosomeNameToNonChrForm(chromosome)))))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -3696,15 +3881,25 @@ namespace ASEProcessManager
             } // EvaluateStage
         } // ReadLengthDistributionProcessingStage
 
-        class ExpressionDecilesProcessingStage : PerDiseaseProcessingStage
+        class ExpressionDecilesByChromosomeProcessingStage : PerChromosomePerDiseaseProcessingStage
         {
-            public ExpressionDecilesProcessingStage() : base("Expression Deciles", "ComputeExpressionDistribution.exe", true, "", getPerCaseInputs, null, null, getOutputs)
+            public ExpressionDecilesByChromosomeProcessingStage() : base ("Expression Deciles by Chromosome", "ComputeExpressionDistribution.exe", true, "", getPerCaseInputs, null, null, getOutputs)
             { }
 
-            static GetCaseFile[] getPerCaseInputs = { _ => _.tumor_rna_allcount_filename };
-            static GetPerDiseaseFile[] getOutputs = { (stateOfTheWorld, disease) => stateOfTheWorld.configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + disease };
+            static GetCaseFile[] getPerCaseInputs = { _ => _.tumor_rna_allcount_filename , _ => _.tumor_rna_mapped_base_count_filename};
+            static GetPerChromosomePerDiseaseFile[] getOutputs = { (stateOfTheWorld, chromosome, disease) => getOutput(stateOfTheWorld, chromosome, disease) };
 
-        } // ExpressionDecilesProcessingStage
+            static string getOutput(StateOfTheWorld stateOfTheWorld, string chromosome, string disease)
+            {
+                if (stateOfTheWorld.expressionDistributionByChromosomeMap.map[disease].ContainsKey(ASETools.chromosomeNameToNonChrForm(chromosome)))
+                {
+                    return stateOfTheWorld.expressionDistributionByChromosomeMap.map[disease][ASETools.chromosomeNameToNonChrForm(chromosome)];
+                }
+
+                return "";
+            }
+
+        } // ExpressionDecilesByChromosomeProcessingStage
 
         class ChooseAnnotatedVariantsProcessingStage : ProcessingStage
         {
@@ -3825,10 +4020,39 @@ namespace ASEProcessManager
 
 		} // FPKMProcessingStage
 
-		//
-		// This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
-		//
-		class StateOfTheWorld
+        class DistanceBetweenMutationsProcessingStage : SingleOutputProcessingStage
+        {
+            public DistanceBetweenMutationsProcessingStage() : base("Distance Between Mutations", true, "DistanceBetweenMutations.exe", "", null, getInputFile, getOutputFile)
+            { }
+
+            static GetOneOffFile[] getInputFile = { stateOfTheWorld => stateOfTheWorld.scatterGraphsSummaryFile };
+            static GetOneOffFile[] getOutputFile = { stateOfTheWorld => stateOfTheWorld.configuration.finalResultsDirectory + ASETools.DistanceBetweenMutationsFilename };
+        } // DistanceBetweenMutationsProcessingStage
+
+        class AddPercentilesToScatterGraphLinesProcessingStage : PerChromosomePerDiseaseProcessingStage
+        {
+            public AddPercentilesToScatterGraphLinesProcessingStage() : base("Add Percentiles to Scatter Graphs", "AddPercentilesToScatterGraphLines.exe", true, "", getPerCaseInputs, getPerChromosomePerDiseaseInputs, getOneOffInputs, getOutputs)
+            { }
+
+            static GetCaseFile[] getPerCaseInputs = { _ => _.tumor_rna_mapped_base_count_filename };
+            static GetPerChromosomePerDiseaseFile[] getPerChromosomePerDiseaseInputs = { (stateOfTheWorld, chromosome, disease) => getExpressionDistributionInput(stateOfTheWorld, chromosome, disease)  };
+            static GetOneOffFile[] getOneOffInputs = { _ => _.configuration.geneScatterGraphsDirectory + ASETools.scatterGraphsSummaryFilename };
+            static GetPerChromosomePerDiseaseFile[] getOutputs = { (stateOfTheWorld, chromosome, disease) => stateOfTheWorld.configuration.geneScatterGraphsLinesWithPercentilesDirectory + ASETools.GeneScatterGraphLinesWithPercentilesPrefix + disease + "_" + ASETools.chromosomeNameToNonChrForm(chromosome) };
+
+            static string getExpressionDistributionInput(StateOfTheWorld stateOfTheWorld, string chromosome, string disease)
+            {
+                if (!stateOfTheWorld.expressionDistributionByChromosomeMap.map[disease].ContainsKey(ASETools.chromosomeNameToNonChrForm(chromosome)))
+                {
+                    return "";
+                }
+                return stateOfTheWorld.expressionDistributionByChromosomeMap.map[disease][ASETools.chromosomeNameToNonChrForm(chromosome)];
+            }
+        } // AddPercentilesToScatterGraphLinesProcessingStage
+
+        //
+        // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
+        //
+        class StateOfTheWorld
         {
             public StateOfTheWorld(ASETools.Configuration configuration_) 
             {
@@ -3852,11 +4076,14 @@ namespace ASEProcessManager
             public List<ASETools.SelectedGene> selectedGenes = null;
             public string scatterGraphsSummaryFile = "";
             public Dictionary<string, string> scatterGraphsByHugoSymbol = new Dictionary<string, string>();
+            public ASETools.ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap = new ASETools.ExpressionDistributionByChromosomeMap();
 
             public readonly string configurationString = "";
 
             public void DetermineTheStateOfTheWorld()
             {
+
+
                 ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles);
 
                 if (File.Exists(configuration.selectedGenesFilename))
@@ -3896,6 +4123,52 @@ namespace ASEProcessManager
                             diseases.Add(case_.disease());
                         }
                     }
+
+                    foreach (var disease in diseases)
+                    {
+                        expressionDistributionByChromosomeMap.map.Add(disease, new Dictionary<string, string>());
+                    }
+
+                    foreach (var dataDirectory in configuration.dataDirectories)
+                    {
+                        if (Directory.Exists(dataDirectory))
+                        {
+                            var expressionDistributionDirectory = dataDirectory + @"..\" + ASETools.ExpressionDistrbutionByChromosomeDirectory;
+                            if (!Directory.Exists(expressionDistributionDirectory))
+                            {
+                                Directory.CreateDirectory(expressionDistributionDirectory);
+                            }
+                            else
+                            {
+                                foreach (var file in Directory.GetFiles(expressionDistributionDirectory, ASETools.Expression_distribution_filename_base + "*"))
+                                {
+                                    var fields = ASETools.GetFileNameFromPathname(file).Substring(ASETools.Expression_distribution_filename_base.Count()).Split('_');
+                                    if (fields.Count() != 2)
+                                    {
+                                        Console.WriteLine("Malformed filename in expression distribution by chromosome directory: " + file);
+                                        continue;
+                                    }
+
+                                    var disease = fields[1];
+                                    var chromosome = fields[0];
+
+                                    if (!diseases.Contains(disease))
+                                    {
+                                        Console.WriteLine("Expression distribution by chromosome directory contains a file with an unknown disease " + file);
+                                        continue;
+                                    }
+
+                                    if (expressionDistributionByChromosomeMap.map[disease].ContainsKey(chromosome))
+                                    {
+                                        Console.WriteLine("Duplicate expression distribution by chromosome files: " + file + " and " + expressionDistributionByChromosomeMap.map[disease][chromosome]);
+                                        continue;
+                                    }
+
+                                    expressionDistributionByChromosomeMap.map[disease].Add(chromosome, file);
+                                } // file
+                            } // if the directory existed
+                        } // if the data directory exists
+                    } // data directory (expresionDistributionByChromosomeMap)
 
                     fileIdToCaseId = new Dictionary<string, string>();
 
@@ -4103,6 +4376,15 @@ namespace ASEProcessManager
             }
         } // StateOfTheWorld
 
+        class SingleReadPhasingProcessingStage : SingleOutputProcessingStage
+        {
+            public SingleReadPhasingProcessingStage() : base("Single Read-Based Phasing", true, "SingleReadPairPhasing.exe", "", getCaseFiles, null, getOutputFile)
+            { }
+
+            static GetCaseFile[] getCaseFiles = { _ => _.tumor_dna_reads_at_tentative_selected_variants_filename, _ => _.tumor_rna_reads_at_tentative_selected_variants_filename, _ => _.extracted_maf_lines_filename };
+            static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename };
+        }
+
 
         static void Main(string[] args)
         {
@@ -4276,6 +4558,7 @@ namespace ASEProcessManager
 #else
             processingStages.Add(new ExtractReadsProcessingStage());
 #endif
+            processingStages.Add(new AddPercentilesToScatterGraphLinesProcessingStage());
             processingStages.Add(new SelectGenesProcessingStage());
 			processingStages.Add(new CountMappedBasesProcessingStage());
 			processingStages.Add(new GenerateScatterGraphsProcessingStage());
@@ -4314,7 +4597,9 @@ namespace ASEProcessManager
             processingStages.Add(new ReadLengthDistributionProcessingStage());
             processingStages.Add(new ChooseAnnotatedVariantsProcessingStage());
             processingStages.Add(new ExtractIsoformReadCountsProcessingStage(stateOfTheWorld));
-            processingStages.Add(new ExpressionDecilesProcessingStage());
+            processingStages.Add(new ExpressionDecilesByChromosomeProcessingStage());
+            processingStages.Add(new DistanceBetweenMutationsProcessingStage());
+            processingStages.Add(new SingleReadPhasingProcessingStage());
 
             if (checkDependencies)
             {
@@ -4383,7 +4668,7 @@ namespace ASEProcessManager
             }
             Console.WriteLine(" ------  -------  ---------  -----------");
 
-
+            int totalDone = 0, totalAdded = 0, totalWaiting = 0, totalDownloads = 0;
 
             foreach (var processingStage in processingStages)
             {
@@ -4419,7 +4704,24 @@ namespace ASEProcessManager
 
                 Console.WriteLine(String.Format("{0," + (stageNameHeader.Count() + paddingSize) + "}", processingStage.GetStageName()) + " " + String.Format("{0,6}", nDone) + " " + String.Format("{0,8}", nAddedToScript) + " " +
                     String.Format("{0,10}", nWaitingForPrerequisites) + " " + String.Format("{0,11}", nDownloadsRequested));
+
+                totalDone += nDone;
+                totalAdded += nAddedToScript;
+                totalWaiting += nWaitingForPrerequisites;
+                totalDownloads += nDownloadsRequested;
             } // foreach stage
+
+            for (int i = 0; i < stageNameHeader.Count() + paddingSize; i++)
+            {
+                Console.Write(" ");
+            }
+            Console.WriteLine(" ------  -------  ---------  -----------");
+            for (int i = 0; i < stageNameHeader.Count() + paddingSize; i++)
+            {
+                Console.Write(" ");
+            }
+            Console.WriteLine(" " + String.Format("{0,6}", totalDone) + " " + String.Format("{0,8}", totalAdded) + " " +
+                String.Format("{0,10}", totalWaiting) + " " + String.Format("{0,11}", totalDownloads));
 
             //
             // Now put downloads in their own script. They're separated out because they need to be run in one of the download
@@ -4469,6 +4771,8 @@ namespace ASEProcessManager
             hpcScript.Close();
             linuxScript.Close();
             azureScript.Close();
+
+            stateOfTheWorld.expressionDistributionByChromosomeMap.WriteToFile(configuration.expression_distribution_by_chromosome_map_filename);
 
             Console.WriteLine();
             Console.WriteLine("Downloading " + ASETools.SizeToUnits((ulong)bytesToDownload) + "B in " + allFilesToDownload.Count() + " files.");

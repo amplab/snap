@@ -12,16 +12,40 @@ namespace AnalyzeBeatAMLCases
     {
         static void processOne(StreamWriter outputFile, string header, List<ASETools.BeatAMLClinicalSummaryLine> clinicalLines)
         {
-            int n;
-            var km = ASETools.KaplanMeier(clinicalLines, out n);
-
-            outputFile.WriteLine(header + " (n= " + n + ")");
-            outputFile.WriteLine("Days\tFraction Alive");
-            km.ForEach(x => outputFile.WriteLine(x.daysSinceInclusion + "\t" + x.fractionAlive));
+            processOne(outputFile, header, clinicalLines.Select(x => (ASETools.ClinicalSummaryLine)x).ToList());
         }
+
+        static void processOne(StreamWriter outputFile, string header, List<ASETools.TCGAClinicalSummaryLine> clinicalLines)
+        {
+            processOne(outputFile, header, clinicalLines.Select(x => (ASETools.ClinicalSummaryLine)x).ToList());
+        }
+
+        static void processOne(StreamWriter outputFile, string header, List<ASETools.ClinicalSummaryLine> clinicalLines)
+        {
+            int n;
+            double slope, rSquared;
+            var km = ASETools.KaplanMeier(clinicalLines, out n, out slope, out rSquared);
+
+            var headerLine = header + " (n= " + n + "), slope = " + slope + " (half-life " + -1 / slope + " days), R^2 = " + rSquared;
+            Console.WriteLine(headerLine);
+            outputFile.WriteLine(headerLine);
+            outputFile.WriteLine("Days\tFraction Alive\tlog2(Fraction Alive)");
+            km.ForEach(x => outputFile.WriteLine(x.daysSinceInclusion + "\t" + x.fractionAlive + "\t" + log2OrStar(x.fractionAlive)));
+        }
+
+        static string log2OrStar(double value)
+        {
+            if (value <= 0)
+            {
+                return "*";
+            }
+
+            return Math.Log(value, 2).ToString();
+        }
+
         static void Main(string[] args)
         {
-            var clinicalLines = ASETools.BeatAMLClinicalSummaryLine.readFile(/*@"w:\BeatAML Datawave 3\box\clinical and functional\Clinical_Summary_Wave_3_9-19-18.txt"*/@"w:\BeatAML Datawave 3\box\clinical and functional\Clinical_Summary_Sup_Table_5_Submitted.txt");
+            var clinicalLines = ASETools.BeatAMLClinicalSummaryLine.readFile(/*@"w:\BeatAML Datawave 3\box\clinical and functional\Clinical_Summary_Wave_3_9-19-18.txt"*/@"\\fds-k24-04\d$\BeatAML Datawave 3\box\clinical and functional\Clinical_Summary_Sup_Table_5_Submitted.txt");
             
             //var mappings = ASETools.BeatAMLSampleMapping.readFromFile(@"\sequence\beatAML\Wave 2 FINAL data lock (Jun 2017)\BeatAML_sample_mapping_file_8_17_2017.txt");
             var amlOnly = clinicalLines.Where(x => x.dxAtInclusion.ToUpper().Contains("ACUTE MYELOID LEUKAEMIA")).ToList();
@@ -72,6 +96,22 @@ namespace AnalyzeBeatAMLCases
             var amlAlive = amlOnly.Where(x => x.vitalStatus != "Dead").ToList();
             amlAlive.ForEach(x => x.vitalStatus = "Dead");
             processOne(outputFile, "AML (alive only)", amlAlive);
+
+            //
+            // Now do the various diseases in TCGA.
+            //
+            foreach (var filename in Directory.EnumerateFiles(@"f:\temp\clinical\","nationwide*.txt"))
+            {
+                var tcgaClinicalLines = ASETools.TCGAClinicalSummaryLine.readFromFile(filename).Where(x => x.getVitalStatus() == "Dead" && x.getOverallSurvivalInDays() != -1).ToList();
+                if (tcgaClinicalLines.Count() < 50)
+                {
+                    //
+                    // Skip the ones with insufficient data.
+                    //
+                    continue;
+                }
+                processOne(outputFile, filename, tcgaClinicalLines);
+            }
 
 
             outputFile.Close();

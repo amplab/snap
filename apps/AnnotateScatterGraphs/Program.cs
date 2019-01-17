@@ -9,6 +9,41 @@ using ASELib;
 
 namespace AnnotateScatterGraphs
 {
+#if false
+    public class DiseaseAndChromosome : IComparable<DiseaseAndChromosome>
+    {
+        public readonly string disease;
+        public readonly string chromosome;   // in short form
+
+        public DiseaseAndChromosome(string disease_, string chromosome_)
+        {
+            disease = disease_;
+            chromosome = chromosome_;
+        }
+
+        public int CompareTo(DiseaseAndChromosome peer)
+        {
+            if (disease != peer.disease)
+            {
+                return disease.CompareTo(peer.disease);
+            }
+
+            return chromosome.CompareTo(peer.chromosome);
+        } // CompareTo
+
+
+    } // DiseaseAndChromosome
+
+
+    static class Extensions
+    {
+        public static DiseaseAndChromosome getDiseaseAndChromosome(this ASETools.GeneScatterGraphLine geneScatterGraphLine)
+        {
+            return new DiseaseAndChromosome(geneScatterGraphLine.disease, geneScatterGraphLine.Chromosome);
+        }
+    }
+#endif // false
+
     class Program
     {
         static ASETools.Configuration configuration;
@@ -45,35 +80,32 @@ namespace AnnotateScatterGraphs
             }
         }
 
+        static ASETools.CommonData commonData;
+        static List<ASETools.GeneScatterGraphLine> scatterGraphLines;
+        static Dictionary<string, ASETools.MappedBaseCount> tumorRNAMappedBaseCounts;
+
         static void Main(string[] args)
         {
-            var timer = new Stopwatch();
-            timer.Start();
-
-            configuration = ASETools.Configuration.loadFromFile(args);
-
-            if (configuration == null)
+            commonData = ASETools.CommonData.LoadCommonData(args);
+            if (null == commonData)
             {
-                Console.WriteLine("Unable to load configuration.");
                 return;
             }
+
+            configuration = commonData.configuration;
 
             var subTimer = new Stopwatch();
             subTimer.Start();
-            Console.Write("Loading cases...");
-            var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Select(x => x.Value).ToList();
-            if (cases == null)
+            var cases = commonData.listOfCases;
+
+            if (commonData.diseases.Any(disease => ASETools.chromosomes.Any(chromosome => !File.Exists(commonData.configuration.geneScatterGraphsLinesWithPercentilesDirectory + ASETools.GeneScatterGraphLinesWithPercentilesPrefix + disease + "_" + ASETools.chromosomeNameToNonChrForm(chromosome)))))
             {
-                Console.WriteLine("Unable to load cases.");
+                Console.WriteLine("Not all of the gene scatter lines by disease and chromsome (the percentile ones) exist.  Create them and try again.");
                 return;
             }
-            Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
-            subTimer.Stop();
-            subTimer.Reset();
-            subTimer.Start();
             Console.Write("Loading RNA mapped base counts...");
-            var tumorRNAMappedBaseCounts = new Dictionary<string, ASETools.MappedBaseCount>();
+            tumorRNAMappedBaseCounts = new Dictionary<string, ASETools.MappedBaseCount>();
             foreach (var case_ in cases)
             {
                 if (case_.tumor_rna_mapped_base_count_filename != "")
@@ -83,12 +115,7 @@ namespace AnnotateScatterGraphs
             }
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
-            subTimer.Stop();
-            subTimer.Reset();
-            subTimer.Start();
-            Console.Write("Loading gene and per-gene ASE maps...");
-
-            var perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+            var perGeneASEMap = commonData.perGeneASEMap;
 
             if (null == perGeneASEMap)
             {
@@ -96,9 +123,8 @@ namespace AnnotateScatterGraphs
                 return;
             }
 
-            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
-            var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
-            Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
+            var geneLocationInformation = commonData.geneLocationInformation;
+            var geneMap = commonData.geneMap;
 
             subTimer.Stop();
             subTimer.Reset();
@@ -111,20 +137,14 @@ namespace AnnotateScatterGraphs
             }
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
-            subTimer.Stop();
-            subTimer.Reset();
-            subTimer.Start();
-            Console.Write("Loading repetitive region map...");
-            var repetitiveRegionMap = ASETools.ASERepetitiveRegionMap.loadFromFile(configuration.redundantChromosomeRegionFilename);
-            repetitiveRegionMap = null; // Don't use this exclusion criterion here.
-            Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
+            ASETools.ASERepetitiveRegionMap repetitiveRegionMap = null; // Don't use this exclusion criterion here.
 
             subTimer.Stop();
             subTimer.Reset();
             subTimer.Start();
             Console.Write("Loading scatter graph lines...");
-            var scatterGraphLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphLines(configuration.geneScatterGraphsDirectory, false, "*");
+            scatterGraphLines = ASETools.GeneScatterGraphLine.LoadAllLinesFromPercentilesDirectory(configuration.geneScatterGraphsLinesWithPercentilesDirectory);
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(subTimer));
 
             if (scatterGraphLines == null)
@@ -132,56 +152,6 @@ namespace AnnotateScatterGraphs
                 Console.WriteLine("Unable to load scatter graph lines");
                 return;
             }
-
-            scatterGraphLines.Sort((x, y) => x.disease.CompareTo(y.disease));   // Sorted by disease so we don't have to load the expression distributions more than once.
-            var nScatterGraphLines = scatterGraphLines.Count();
-
-            ASETools.ExpressionDistributionMap expressionDistributionMap = null;
-            string loadedDisease = "";
-
-            for (int i = 0; i < nScatterGraphLines; i++)
-            {
-                var scatterGraphLine = scatterGraphLines[i];
-
-                if (scatterGraphLine.disease != loadedDisease)
-                {
-                    var filename = configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + scatterGraphLine.disease;
-                    Console.Write("Loading expression map for " + scatterGraphLine.disease + "...");
-                    var loadTimer = new Stopwatch();
-                    loadTimer.Start();
-
-                    expressionDistributionMap = null;   // So GC can get it while we're loading the next one
-                    expressionDistributionMap = new ASETools.ExpressionDistributionMap(filename);
-                    Console.WriteLine(ASETools.ElapsedTimeInSeconds(loadTimer));
-                    loadedDisease = scatterGraphLine.disease;
-                }
-
-                if (expressionDistributionMap.map.ContainsKey(scatterGraphLine.Chromosome) && expressionDistributionMap.map[scatterGraphLine.Chromosome].ContainsKey(scatterGraphLine.Start_Position)) {
-                    var percentiles = expressionDistributionMap.map[scatterGraphLine.Chromosome][scatterGraphLine.Start_Position];
-                    if (scatterGraphLine.tumorRNAReadCounts != null && tumorRNAMappedBaseCounts.ContainsKey(scatterGraphLine.case_id))
-                    {
-                        scatterGraphLine.tumorRNAFracAltPercentile = new double[11];
-                        scatterGraphLine.tumorRNAFracRefPercentile = new double[11];
-                        scatterGraphLine.tumorRNAFracAllPercentile = new double[11];
-
-                        for (int j = 0; j < 11; j++)
-                        {
-                            if (percentiles.getPercentile(j * 10) == 0)
-                            {
-                                scatterGraphLine.tumorRNAFracAltPercentile[j] = double.NegativeInfinity;
-                                scatterGraphLine.tumorRNAFracRefPercentile[j] = double.NegativeInfinity;
-                                scatterGraphLine.tumorRNAFracAllPercentile[j] = double.NegativeInfinity;
-                            } else
-                            {
-                                scatterGraphLine.tumorRNAFracAltPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingAlt / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
-                                scatterGraphLine.tumorRNAFracRefPercentile[j] = ((double)scatterGraphLine.tumorRNAReadCounts.nMatchingReference / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
-                                scatterGraphLine.tumorRNAFracAllPercentile[j] = (((double)scatterGraphLine.tumorRNAReadCounts.totalReads()) / tumorRNAMappedBaseCounts[scatterGraphLine.case_id].mappedBaseCount) / percentiles.getPercentile(j * 10);
-                            }
-                        }
-                    }
-                }
-            } // for each scatter graph line.
-
 
             var scatterGraphLinesByGene = scatterGraphLines.GroupByToDict(x => x.Hugo_Symbol);
 
@@ -251,62 +221,21 @@ namespace AnnotateScatterGraphs
                     string whyNotIgnoringNMD = whyNot;
                     var aseCandidateIgnoringNMD = aseCandidate || line.isASECandidate(out whyNotIgnoringNMD, copyNumberByCase[line.case_id], configuration, perGeneASEMap, geneMap, repetitiveRegionMap, true);
 
-                    outputFile.Write("\t" + aseCandidate + "\t" + whyNot + "\t" + whyNotIgnoringNMD);
+                    outputFile.WriteLine("\t" + aseCandidate + "\t" + whyNot + "\t" + whyNotIgnoringNMD);
 
-                    for (int i = 0; i < 11; i++)
+                    refHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracRefPercentile[5]);
+                    if (!line.MultipleMutationsInThisGene)
                     {
-                        if (line.tumorRNAFracAltPercentile[i] == double.NegativeInfinity)
-                        {
-                            outputFile.Write("\t*");
-                        }
-                        else
-                        {
-                            outputFile.Write("\t" + line.tumorRNAFracRefPercentile[i]);
-                            if (5 == i && aseCandidateIgnoringNMD)
-                            {
-                                refHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracRefPercentile[5]);
-                                if (!line.MultipleMutationsInThisGene)
-                                {
-                                    singleMutationDataPoints.Add(new DataPoint(line.tumorRNAFracRefPercentile[5], false));
-                                }
-                            }
-                        }
-                    };
-                    for (int i = 0; i < 11; i++)
-                    {
-                        if (line.tumorRNAFracAltPercentile[i] == double.NegativeInfinity)
-                        {
-                            outputFile.Write("\t*");
-                        }
-                        else
-                        {
-                            outputFile.Write("\t" + line.tumorRNAFracAltPercentile[i]);
-                            if (5 == i && aseCandidate)
-                            {
-                                altHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracAltPercentile[5]);
-                                if (!line.MultipleMutationsInThisGene)
-                                {
-                                    singleMutationDataPoints.Add(new DataPoint(line.tumorRNAFracAltPercentile[5], true));
-                                }
-                            }
-                        }
+                        singleMutationDataPoints.Add(new DataPoint(line.tumorRNAFracRefPercentile[5], false));
                     }
-                    for (int i = 0; i < 11; i++)
+
+                    altHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracAltPercentile[5]);
+                    if (!line.MultipleMutationsInThisGene)
                     {
-                        if (line.tumorRNAFracAltPercentile[i] == double.NegativeInfinity)
-                        {
-                            outputFile.Write("\t*");
-                        }
-                        else
-                        {
-                            outputFile.Write("\t" + line.tumorRNAFracAllPercentile[i]);
-                            if (5 == i && aseCandidate)
-                            {
-                                allHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracAllPercentile[5]);
-                            }
-                        }
+                        singleMutationDataPoints.Add(new DataPoint(line.tumorRNAFracAltPercentile[5], true));
                     }
-                    outputFile.WriteLine();
+
+                    allHistograms[line.MultipleMutationsInThisGene].addValue(line.tumorRNAFracAllPercentile[5]);
                 } // foreach line
 
 
@@ -424,7 +353,7 @@ namespace AnnotateScatterGraphs
                 ", nBadCopyNumber = " + ASETools.nBadCopyNumber + ", nRepetitive = " + ASETools.nRepetitive + ", nCandidate = " + ASETools.nCandidate);
             Console.WriteLine("Total of " + nCandidates + " Mann-Whitney computations by this program");
 
-            Console.WriteLine("Overall run time " + ASETools.ElapsedTimeInSeconds(timer));
+            Console.WriteLine("Overall run time " + ASETools.ElapsedTimeInSeconds(commonData.timer));
         } // Main
 
         static int CompareScatterGraphLines(ASETools.GeneScatterGraphLine a, ASETools.GeneScatterGraphLine b, Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap, ASETools.GeneMap geneMap, 
@@ -449,6 +378,6 @@ namespace AnnotateScatterGraphs
             }
 
             return a.tumorRNAFracAllPercentile[5].CompareTo(b.tumorRNAFracAllPercentile[5]);
-        }
+        } // CompareScatterGraphLines
     }
 }

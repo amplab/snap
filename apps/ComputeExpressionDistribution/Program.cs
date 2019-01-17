@@ -39,6 +39,9 @@ namespace ComputeExpressionDistribution
             }
         }
 
+        static string chromosome; // This is in non-chr form.
+        static int basesInChromosome;
+
         static void Main(string[] args)
         {
             commonData = ASETools.CommonData.LoadCommonData(args);
@@ -47,23 +50,31 @@ namespace ComputeExpressionDistribution
                 return;
             }
 
-            if (commonData.configuration.commandLineArgs.Count() != 1 || !commonData.cases.Any(x => x.Value.disease() == commonData.configuration.commandLineArgs[0]))
+            if (commonData.configuration.commandLineArgs.Count() != 2 || !commonData.cases.Any(x => x.Value.disease() == commonData.configuration.commandLineArgs[1]))
             {
-                Console.WriteLine("usage: ComputeExpressionDistribution disease");
+                Console.WriteLine("usage: ComputeExpressionDistribution chromosome disease");
                 return;
             }
 
-            var disease = commonData.configuration.commandLineArgs[0];
+            var disease = commonData.configuration.commandLineArgs[1];
+            chromosome = ASETools.chromosomeNameToNonChrForm(commonData.configuration.commandLineArgs[0]);
+            basesInChromosome = ASETools.chromosomeSizesByName[chromosome].size;
 
-            if (commonData.cases.Select(x => x.Value).Any(x => x.disease() == disease && x.tumor_rna_allcount_filename == ""))
+            if (commonData.cases.Select(x => x.Value).Any(x => x.disease() == disease && x.tumor_rna_allcount_filename == "" || x.tumor_rna_mapped_base_count_filename == ""))
             {
-                Console.WriteLine("Some cases don't have a tumor RNA allcount file.");
+                Console.WriteLine("Some cases don't have a tumor RNA allcount or mapped base count file.");
                 return;
             }
 
             var casesToProcess = commonData.cases.Select(x => x.Value).Where(x => x.disease() == disease).Select(x => new CaseAndResultQueue(x)).ToList();
-casesToProcess = casesToProcess.Take(3).ToList(); // BJB
-            var outputFile = ASETools.CreateStreamWriterWithRetry(commonData.configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + disease);
+            //
+            // Choose an output directory randomly.
+            //
+            var random = new Random();
+            var whichServer = random.Next() % commonData.configuration.dataDirectories.Count();
+            var outputFilename = commonData.configuration.dataDirectories[whichServer] + @"..\" + ASETools.ExpressionDistrbutionByChromosomeDirectory + ASETools.Expression_distribution_filename_base + chromosome + "_" + disease;
+
+            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename, 16*1024*1024); // The 16M parameter sets the output buffer size to avoid the horrid fragmentation that happens with the default 64K
 
             outputFile.Write("Chromosome\tLocus\tmin\tmax");
             for (int i = 1; i <= 9; i++)
@@ -85,6 +96,8 @@ casesToProcess = casesToProcess.Take(3).ToList(); // BJB
 
             outputFile.WriteLine("**done**");
             outputFile.Close();
+
+            Console.WriteLine("Run time " + ASETools.ElapsedTimeInSeconds(commonData.timer));
         } // Main
 
         static void HandleOneCase(CaseAndResultQueue caseAndResultQueue, int state)
@@ -99,14 +112,19 @@ casesToProcess = casesToProcess.Take(3).ToList(); // BJB
                 throw new Exception("Unable to open allcount file " + caseAndResultQueue.case_.tumor_rna_allcount_filename);
             }
 
-            allcountReader.ReadAllcountFile((contig, locus, readCount) => processBase(caseAndResultQueue, nMappedHQNuclearReads, contig, locus, readCount));
+            var mappedBaseCount = ASETools.MappedBaseCount.readFromFile(caseAndResultQueue.case_.tumor_rna_mapped_base_count_filename);
+
+            if (!allcountReader.ReadAllcountFile((contig, locus, readCount) => processBase(caseAndResultQueue, mappedBaseCount.mappedBaseCount, contig, locus, readCount), chromosome))  // Only reads the chromosome we want
+            { 
+                throw new Exception("allcount reader failed for " + caseAndResultQueue.case_.tumor_rna_allcount_filename);
+            }
 
             caseAndResultQueue.queue.TerminateWriter();
         }
 
-        static void processBase(CaseAndResultQueue caseAndResultQueue, long nMappedHQNuclearReads, string contig, int locus, int readCount)
+        static void processBase(CaseAndResultQueue caseAndResultQueue, long mappedBaseCount, string contig, int locus, int readCount)
         {
-            caseAndResultQueue.queue.Enqueue(new ReadDepth(contig, locus, ((double)readCount / nMappedHQNuclearReads)));
+                caseAndResultQueue.queue.Enqueue(new ReadDepth(contig, locus, ((double)readCount / mappedBaseCount)));
         }
 
         class QueueAndNextReadDepth : IComparable<QueueAndNextReadDepth>
@@ -176,12 +194,12 @@ casesToProcess = casesToProcess.Take(3).ToList(); // BJB
             int nCases = casesToProcess.Count();
             int minCasesForValue = (nCases * 3) / 10;    // Need at least 30% to make a call at all.
 
-            int nBasesPerDot;
-            ASETools.PrintMessageAndNumberBar("Processing genome", "bases", /*(long)3234830000*/ 248956422, out nBasesPerDot);
+            int nBasesPerDot = 1;
             long nBasesProcessed = 0;
             long lastDotAt = 0;
             long lastChromosomeBoundaryAt = 0;
             int lastBaseProcessed = 0;
+            bool anyProcessed = false;
 
             while (true)
             {
@@ -193,7 +211,16 @@ casesToProcess = casesToProcess.Take(3).ToList(); // BJB
                     // An element that's done always compares greater to any other element, so if the
                     // min is done, there's no more data to process.
                     //
+                    Console.WriteLine();
                     return;
+                }
+
+                if (!anyProcessed)
+                {
+                    Console.WriteLine("First base processed at " + ASETools.ElapsedTimeInSeconds(commonData.timer));
+                    ASETools.PrintMessageAndNumberBar("Processing chromosome " + chromosome, "bases", basesInChromosome, out nBasesPerDot);
+
+                    anyProcessed = true;
                 }
 
                 if (minElement.nextElement.location < lastBaseProcessed)
@@ -216,9 +243,7 @@ casesToProcess = casesToProcess.Take(3).ToList(); // BJB
 
                 var queuesAtThisLocus = inputQueues.Where(_ => _.CompareTo(minElement) == 0).ToList();
                 int nAtThisLocus = queuesAtThisLocus.Count();
-                if (nAtThisLocus >= minCasesForValue 
-&& minElement.nextElement.contig != "chr1" /*BJB*/ 
-                    )
+                if (nAtThisLocus >= minCasesForValue)
                 {
                     var depthsAtThisLocus = queuesAtThisLocus.Select(_ => _.nextElement.fractionOfHQMappedBases).ToList();
                     depthsAtThisLocus.Sort();

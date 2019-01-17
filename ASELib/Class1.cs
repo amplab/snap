@@ -20,6 +20,9 @@ namespace ASELib
         {
             tumorToString.Add(true, "Tumor");
             tumorToString.Add(false, "Normal");
+
+            chromosomeSizes.ToList().ForEach(x => chromosomeSizesByName.Add(x.name, x));
+            chromosomeSizes.ToList().ForEach(x => chromosomeSizesByName.Add(chromosomeNameToNonChrForm(x.name), x));
         }
 
         public const string urlPrefix = @"https://api.gdc.cancer.gov/";
@@ -28,6 +31,8 @@ namespace ASELib
 
         public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
         public const int nHumanAutosomes = 22;
+
+        public static readonly string[] chromosomes = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrx", "chry" };// Leaves off the mitochondrial genes
 
         // Used for writing out Bonferroni corrected p values in Mann Whitney tests
         public class OutputLine
@@ -225,6 +230,13 @@ namespace ASELib
 
             public readonly string rawInputLine;
 
+            //
+            // This is only filled in in the annotated and semi-annotated version.
+            //
+            public double[] tumorRNAFracAltPercentile = null;  // min, 10th%ile, 20th%ile...90th%ile, max
+            public double[] tumorRNAFracRefPercentile = null;
+            public double[] tumorRNAFracAllPercentile = null;
+
             public const string unfilteredHeaderLine = "Hugo_Symbol\tChromosome\tStart_Position\tVariant_Classification\tVariant_Type\tReference_Allele\tAlt_Allele\tdisease\t" +
                     "Case Id\tTumor DNA File ID\tTumor RNA File ID\tNormal DNA File ID\tNormal RNA File ID\t" +
                     "n_normal_DNA_Matching_Reference\tn_normal_DNA_Matching_Alt\tn_normal_DNA_Matching_Neither\tn_normal_DNA_Matching_Both\t" +
@@ -236,23 +248,97 @@ namespace ASELib
             public const string filteredHeaderLine = unfilteredHeaderLine +
                     "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
 
-            public const string annotatedHeaderLine = filteredHeaderLine + "ase candidate?\twhy not?\twhy not (other than nonsense mediated decay)?\t" +
+            public const string percentileHeaderLine = filteredHeaderLine + 
                 "frac min 2ref\tfrac 10th %ile 2ref\tfrac 20th %ile 2ref\tfrac 30th %ile 2ref\tfrac 40th %ile 2ref\tfrac 50th %ile 2ref\tfrac 60th %ile 2ref\tfrac 70th %ile 2ref\tfrac 80th %ile 2ref\tfrac 90th %ile 2ref\tfrac max 2ref\t" +
                 "frac min 2alt\tfrac 10th %ile 2alt\tfrac 20th %ile 2alt\tfrac 30th %ile 2alt\tfrac 40th %ile 2alt\tfrac 50th %ile 2alt\tfrac 60th %ile 2alt\tfrac 70th %ile 2alt\tfrac 80th %ile 2alt\tfrac 90th %ile 2alt\tfrac max 2alt\t" +
                 "frac min all\tfrac 10th %ile all\tfrac 20th %ile all\tfrac 30th %ile all\tfrac 40th %ile all\tfrac 50th %ile all\tfrac 60th %ile all\tfrac 70th %ile all\tfrac 80th %ile all\tfrac 90th %ile all\tfrac max all";
 
-            //
-            // This is only filled in in the annotated version.
-            //
-            public double[] tumorRNAFracAltPercentile = null;  // min, 10th%ile, 20th%ile...90th%ile, max
-            public double[] tumorRNAFracRefPercentile = null;
-            public double[] tumorRNAFracAllPercentile = null;
+            public const string annotatedHeaderLine = percentileHeaderLine + "\tase candidate?\twhy not?\twhy not (other than nonsense mediated decay)?\t";
+
+
+
+            public string toUnfilteredLine()
+            {
+                var line = ASETools.ConvertToExcelString(Hugo_Symbol) + "\t" + Chromosome + "\t" + Start_Position + "\t" + Variant_Classification + "\t" + Variant_Type + "\t" +
+                    Reference_Allele + "\t" + Alt_Allele + "\t" + disease + "\t" + case_id + "\t" + tumor_dna_file_id + "\t" + tumor_rna_file_id + "\t" + normal_dna_file_id + "\t" + normal_rna_file_id + "\t" +
+                    normalDNAReadCounts.nMatchingReference + "\t" + normalDNAReadCounts.nMatchingAlt + "\t" + normalDNAReadCounts.nMatchingNeither + "\t" + normalDNAReadCounts.nMatchingBoth + "\t" +
+                    tumorDNAReadCounts.nMatchingReference + "\t" + tumorDNAReadCounts.nMatchingAlt + "\t" + tumorDNAReadCounts.nMatchingNeither + "\t" + tumorDNAReadCounts.nMatchingBoth + "\t";
+
+
+                if (normalRNAReadCounts != null)
+                {
+                    line += normalRNAReadCounts.nMatchingReference + "\t" + normalRNAReadCounts.nMatchingAlt + "\t" + normalRNAReadCounts.nMatchingNeither + "\t" + normalRNAReadCounts.nMatchingBoth;
+                }
+                else
+                {
+                    line += "\t\t\t";
+                }
+
+                line += "\t" +
+                    tumorRNAReadCounts.nMatchingReference + "\t" + tumorRNAReadCounts.nMatchingAlt + "\t" + tumorRNAReadCounts.nMatchingNeither + "\t" + tumorRNAReadCounts.nMatchingBoth + "\t" +
+                    (nMutationsThisGene > 1) + "\t" + nMutationsThisGene;
+
+                return line;
+            }
+
+            public string toFilteredLine()
+            {
+                var line = toUnfilteredLine() + "\t" + tumorDNAFraction + "\t" + tumorRNAFraction + "\t" + tumorDNAMultiple + "\t" + tumorRNAMultiple + "\t" + tumorDNARatio + "\t" + tumorRNARatio + "\t" + ratioOfRatios + "\t";
+
+                if (zKnown)
+                {
+                    line += zTumor + "\t" + zNormal + "\t" + z2Tumor + "\t" + z2Normal + "\t" + percentMeanTumor + "\t" + percentMeanNormal + "\t";
+
+                }
+                else
+                {
+                    line += "\t\t\t\t\t\t";
+                }
+
+                return line;
+            }
+
+            static string lineForPercentiles(double[] percentiles)
+            {
+                string line = "";
+
+                for (int i = 0; i < 11; i++)
+                {
+                    if (percentiles[i] == double.NegativeInfinity)
+                    {
+                        line += "\t*";
+                    }
+                    else
+                    {
+                        line += "\t" + percentiles[i];
+                    }
+                }
+                return line;
+            }
+
+            public string toPercentileLine()
+            {
+                return toFilteredLine() + lineForPercentiles(tumorRNAFracRefPercentile) + lineForPercentiles(tumorRNAFracAltPercentile) + lineForPercentiles(tumorRNAFracAllPercentile);
+            }
+
+
+ 
+
+            public int CompareByDiseaseAndChromosome(GeneScatterGraphLine peer)
+            {
+                if (disease != peer.disease)
+                {
+                    return disease.CompareTo(peer.disease);
+                }
+
+                return (Chromosome.CompareTo(peer.Chromosome));
+            }
 
             GeneScatterGraphLine(string Hugo_Symbol_, string Chromosome_, int Start_Position_, string Variant_Classification_, string Variant_Type_, string Reference_Allele_, string Alt_Allele_, string disease_,
                 string case_id_, string normal_dna_file_id_, string tumor_dna_file_id_, string normal_rna_file_id_, string tumor_rna_file_id_, ReadCounts normalDNAReadCounts_, ReadCounts tumorDNAReadCounts_,
                 ReadCounts normalRNAReadCounts_, ReadCounts tumorRNAReadCounts_, bool MultipleMutationsInThisGene_, int nMutationsThisGene_, double tumorDNAFraction_, double tumorRNAFraction_, double tumorDNAMultiple_, double tumorRNAMultiple_, double tumorDNARatio_,
                 double tumorRNARatio_, double ratioOfRatios_, bool zKnown_, double zTumor_, double zNormal_, double z2Tumor_, double z2Normal_, double percentMeanTumor_,
-                double percentMeanNormal_, bool fromUnfilteredFile_, string rawInputLine_)
+                double percentMeanNormal_, bool fromUnfilteredFile_, string rawInputLine_, double[] refPercentiles_, double[] altPercentiles_, double[] allPercentiles_)
             {
                 Hugo_Symbol = Hugo_Symbol_;
                 Chromosome = Chromosome_;
@@ -289,15 +375,13 @@ namespace ASELib
                 percentMeanNormal = percentMeanNormal_;
                 fromUnfilteredFile = fromUnfilteredFile_;
                 rawInputLine = rawInputLine_;
+                tumorRNAFracRefPercentile = refPercentiles_;
+                tumorRNAFracAltPercentile = altPercentiles_;
+                tumorRNAFracAllPercentile = allPercentiles_;
             }
 
-
-            public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphLines(string directoryName, bool fromUnfiltered, string hugoSymbol /* this may be * to load all*/)
-            {
-                var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
-
-                string[] wantedFieldsArrayUnfilteredVersion =
-                {
+            static string[] wantedFieldsArrayUnfilteredVersion =
+ {
                     "Hugo_Symbol",
                     "Chromosome",
                     "Start_Position",
@@ -329,10 +413,10 @@ namespace ASELib
                     "n_tumor_RNA_Matching_Both",
                     "Multiple Mutations in this Gene",
                     "n Mutations in this gene",
-                };
+            };
 
-                string[] wantedFieldsArrayAdditionalFields =
-                {
+            static string[] wantedFieldsArrayFieldsAdditionalForFiltered =
+            {
                     "tumorDNAFraction",
                     "tumorRNAFraction",
                     "tumorDNAMultiple",
@@ -346,13 +430,53 @@ namespace ASELib
                     "z2Normal",
                     "%MeanTumor",
                     "%MeanNormal",
-                };
+            };
 
-                var wantedFieldsFullVersion = wantedFieldsArrayUnfilteredVersion.ToList();
-                wantedFieldsFullVersion.AddRange(wantedFieldsArrayAdditionalFields.ToList());
+            static string[] wantedFieldsArrayFieldsAdditionalForPercentiles =
+            {
+                @"frac min 2ref",
+                @"frac 10th %ile 2ref",
+                @"frac 20th %ile 2ref",
+                @"frac 30th %ile 2ref",
+                @"frac 40th %ile 2ref",
+                @"frac 50th %ile 2ref",
+                @"frac 60th %ile 2ref",
+                @"frac 70th %ile 2ref",
+                @"frac 80th %ile 2ref",
+                @"frac 90th %ile 2ref",
+                @"frac max 2ref",
+                @"frac min 2alt",
+                @"frac 10th %ile 2alt",
+                @"frac 20th %ile 2alt",
+                @"frac 30th %ile 2alt",
+                @"frac 40th %ile 2alt",
+                @"frac 50th %ile 2alt",
+                @"frac 60th %ile 2alt",
+                @"frac 70th %ile 2alt",
+                @"frac 80th %ile 2alt",
+                @"frac 90th %ile 2alt",
+                @"frac max 2alt",
+                @"frac min all",
+                @"frac 10th %ile all",
+                @"frac 20th %ile all",
+                @"frac 30th %ile all",
+                @"frac 40th %ile all",
+                @"frac 50th %ile all",
+                @"frac 60th %ile all",
+                @"frac 70th %ile all",
+                @"frac 80th %ile all",
+                @"frac 90th %ile all",
+                @"frac max all"
+            };
 
+            public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphLines(string directoryName, bool fromUnfiltered, string hugoSymbol /* this may be * to load all*/, bool includePercentiles = false)
+            {
+                var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
 
-                var wantedFields = fromUnfiltered ? wantedFieldsArrayUnfilteredVersion.ToList() : wantedFieldsFullVersion;
+                var wantedFieldsFilteredVersion = wantedFieldsArrayUnfilteredVersion.ToList();
+                wantedFieldsFilteredVersion.AddRange(wantedFieldsArrayFieldsAdditionalForFiltered.ToList());
+
+                var wantedFields = fromUnfiltered ? wantedFieldsArrayUnfilteredVersion.ToList() : wantedFieldsFilteredVersion;
 
                 foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? Configuration.unfilteredCountsExtention : ".txt")))
                 {
@@ -381,7 +505,7 @@ namespace ASELib
 
                     List<GeneScatterGraphLine> linesFromThisFile;
 
-                    headerizedFile.ParseFile(x => ParseLine(x, fromUnfiltered), out linesFromThisFile);
+                    headerizedFile.ParseFile(x => ParseLine(x, fromUnfiltered, includePercentiles), out linesFromThisFile);
 
                     geneScatterGraphEntries.AddRange(linesFromThisFile);
                 }
@@ -389,8 +513,43 @@ namespace ASELib
                 return geneScatterGraphEntries;
             }
 
-            static GeneScatterGraphLine ParseLine(ASETools.HeaderizedFile<GeneScatterGraphLine>.FieldGrabber fieldGrabber, bool fromUnfilteredFile)
+            public static List<GeneScatterGraphLine> LoadAllLinesFromPercentilesDirectory(string directoryName)
             {
+                var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
+
+                var wantedFields = wantedFieldsArrayUnfilteredVersion.ToList();
+                wantedFields.AddRange(wantedFieldsArrayFieldsAdditionalForFiltered.ToList());
+                wantedFields.AddRange(wantedFieldsArrayFieldsAdditionalForPercentiles.ToList());
+
+                foreach (var filename in Directory.EnumerateFiles(directoryName, GeneScatterGraphLinesWithPercentilesPrefix +  "*"))
+                {
+                    if (filename == "")
+                    {
+                        continue;
+                    }
+
+                    var inputFile = CreateStreamReaderWithRetry(filename);
+                    if (null == inputFile)
+                    {
+                        throw new Exception("Unable to open input file " + filename);
+                    }
+
+                    var headerizedFile = new HeaderizedFile<GeneScatterGraphLine>(inputFile, false, true, "", wantedFields, inputFilename_: filename);
+                    List<GeneScatterGraphLine> linesFromThisFile;
+
+                    headerizedFile.ParseFile(x => ParseLine(x, false, true), out linesFromThisFile);
+                    geneScatterGraphEntries.AddRange(linesFromThisFile);
+                } // each file
+
+                return geneScatterGraphEntries;
+            }
+
+            static GeneScatterGraphLine ParseLine(ASETools.HeaderizedFile<GeneScatterGraphLine>.FieldGrabber fieldGrabber, bool fromUnfilteredFile, bool includePercentiles)
+            {
+                double[] refPercentiles = null;
+                double[] altPercentiles = null;
+                double[] allPercentiles = null;
+
                 ReadCounts normalRNAReadCounts;
 
                 if (fieldGrabber.AsString("n_normal_RNA_Matching_Reference") != "")
@@ -421,8 +580,15 @@ namespace ASELib
                         z2Tumor = fieldGrabber.AsDouble("z2Tumor");
                         z2Normal = fieldGrabber.AsDouble("z2Normal");
                         percentMeanTumor = fieldGrabber.AsDouble("%MeanTumor");
-                        percentMeanNormal = fieldGrabber.AsDouble("%MeanNormal");
+                        percentMeanNormal = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("%MeanNormal");
                     }
+                }
+
+                if (includePercentiles)
+                {
+                    refPercentiles = LoadPercentileSet(fieldGrabber, "2ref");
+                    altPercentiles = LoadPercentileSet(fieldGrabber, "2alt");
+                    allPercentiles = LoadPercentileSet(fieldGrabber, "all");
                 }
 
                 return new GeneScatterGraphLine(
@@ -437,8 +603,24 @@ namespace ASELib
                     new ReadCounts(fieldGrabber.AsInt("n_tumor_RNA_Matching_Reference"), fieldGrabber.AsInt("n_tumor_RNA_Matching_Alt"), fieldGrabber.AsInt("n_tumor_RNA_Matching_Neither"),
                         fieldGrabber.AsInt("n_tumor_RNA_Matching_Both")),
                     fieldGrabber.AsBool("Multiple Mutations in this Gene"), fieldGrabber.AsInt("n Mutations in this gene"), tumorDNAFraction, tumorRNAFraction, tumorDNAMultiple, tumorRNAMultiple, tumorDNARatio, tumorRNARatio,
-                    ratioOfRatios, zKnown, zTumor, zNormal, z2Tumor, z2Normal, percentMeanTumor, percentMeanNormal, fromUnfilteredFile, fieldGrabber.rawLine());
+                    ratioOfRatios, zKnown, zTumor, zNormal, z2Tumor, z2Normal, percentMeanTumor, percentMeanNormal, fromUnfilteredFile, fieldGrabber.rawLine(), refPercentiles, altPercentiles, allPercentiles);
             } // ParseLine
+
+            static double[] LoadPercentileSet(ASETools.HeaderizedFile<GeneScatterGraphLine>.FieldGrabber fieldGrabber, string fieldSuffix)
+            {
+                double[] percentiles = new double[11];
+
+                percentiles[0] = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("frac min " + fieldSuffix);
+
+                for (int i = 1; i < 10; i++)
+                {
+                    percentiles[i] = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("frac " + i + "0th %ile " + fieldSuffix);
+                }
+
+                percentiles[10] = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("frac max " + fieldSuffix);
+
+                return percentiles;
+            }
 
             public bool isASECandidate(List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, ASERepetitiveRegionMap repetitiveRegionMap)
             {
@@ -518,7 +700,7 @@ namespace ASELib
                     nBadCopyNumber++;
                     return false;
                 }
-            }
+            } // isASECandidate
         } // GeneScatterGraphLine
 
         public static int nNonsenseMediatedDecay = 0, nNoReadCounts = 0, nBadReadCounts = 0, nBadGene = 0, nNoCopyNumber = 0, nBadCopyNumber = 0, nRepetitive = 0, nCandidate = 0; // BJB
@@ -1746,14 +1928,19 @@ namespace ASELib
             }
         }
 
-        public static StreamWriter CreateStreamWriterWithRetry(string filename)
+        public static StreamWriter CreateStreamWriterWithRetry(string filename, int bufferSize = 0)
         {
             while (true)
             {
                 try
                 {
-                    var writer = new StreamWriter(filename);
-                    return writer;
+                    if (bufferSize == 0)
+                    {
+                        return new StreamWriter(filename);
+                    } else
+                    {
+                        return new StreamWriter(filename, false, new  UTF8Encoding(), bufferSize);  // false means don't append
+                    }
                 }
                 catch (IOException e)
                 {
@@ -1893,6 +2080,7 @@ namespace ASELib
             public string synapseDirectory = @"\\fds-k24-09\d$\BeatAML-20180411\";
 
             public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
+            public string geneScatterGraphsLinesWithPercentilesDirectory = defaultBaseDirectory + @"gene_scatter_graphs_with_percentiles\";
             public string encodeBEDFile = defaultBaseDirectory + @"encode\ENCFF621SFC_hg38.bed";
             // items used in bisulfite analysis
             public string bisulfiteDirectory = defaultBaseDirectory + @"bisulfate\";
@@ -1916,7 +2104,9 @@ namespace ASELib
             public const string geneCategorizationFilename = "GeneCategorization.txt";
 
             public string zero_one_two_directory = defaultBaseDirectory + @"012graphs\";
-            public string expression_distribution_directory = defaultBaseDirectory + @"expression_distribution\";
+            //public string expression_distribution_directory = defaultBaseDirectory + @"expression_distribution\";
+            // string expression_distribution_by_chromosome_directory = defaultBaseDirectory + @"expression_distribution_by_chromosome\";
+            public string expression_distribution_by_chromosome_map_filename = defaultBaseDirectory + @"expression_distribution_by_chromosomes_map.txt";
 
             public string geneHancerFilename = defaultBaseDirectory + @"genehancer.txt";
 
@@ -1941,7 +2131,7 @@ namespace ASELib
 
             public bool isBeatAML = false;
 
-            void reinitialzeWithBaseDirectory()
+            void reinitialzieWithBaseDirectory()
             {
                 accessTokenPathname = baseDirectory + @"access_token.txt";
                 ensemblToGeneFilename = baseDirectory + @"ensemblGeneNames.txt";
@@ -1958,6 +2148,7 @@ namespace ASELib
                 finalResultsDirectory = baseDirectory + @"final_results\";
                 geneLocationInformationFilename = baseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
                 geneScatterGraphsDirectory = baseDirectory + @"gene_scatter_graphs\";
+                geneScatterGraphsLinesWithPercentilesDirectory = baseDirectory + @"gene_scatter_graphs_with_percentiles\";
                 encodeBEDFile = baseDirectory + @"encode\ENCFF621SFC_hg38.bed";
                 bisulfiteDirectory = baseDirectory + @"bisulfate\";
                 bisulfiteCasesFilePathname = baseDirectory + @"bisulfite\cases_bisulfite.txt";
@@ -1969,7 +2160,6 @@ namespace ASELib
                 unfilteredCountsDirectory = baseDirectory + @"gene_mutations_with_counts\";
                 methylationREFsFilename = baseDirectory + "compositeREFs450.txt";
                 zero_one_two_directory = baseDirectory + @"012graphs\";
-                expression_distribution_directory = baseDirectory + @"expression_distribution\";
                 geneHancerFilename = baseDirectory + @"genehancer.txt";
 
 
@@ -2003,6 +2193,7 @@ namespace ASELib
                 neededDirectories.Add(finalResultsDirectory);
                 neededDirectories.Add(unfilteredCountsDirectory);
                 neededDirectories.Add(geneScatterGraphsDirectory);
+                neededDirectories.Add(geneScatterGraphsLinesWithPercentilesDirectory);
                 neededDirectories.Add(indexDirectory + @"..\");  // One level up, because indexDirectory includes hg38-20, which we don't want here.
                 neededDirectories.Add(regionalExpressionDirectory);
 
@@ -2075,6 +2266,11 @@ namespace ASELib
 
                 foreach (var line in lines)
                 {
+                    if (line.Count() == 0 || line[0] == '#')
+                    {
+                        continue;   // Ignore blank lines or comments.
+                    }
+
                     var fields = line.Split('\t');
                     if (fields.Count() != 2) {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line that doesn't have exactly two tab separated fields: " + line + ".  Ignoring.");
@@ -2143,6 +2339,8 @@ namespace ASELib
                         retVal.finalResultsDirectory = fields[1];
                     } else if (type == "gene scatter graphs directory") {
                         retVal.geneScatterGraphsDirectory = fields[1];
+                    } else if (type == "gene scatter graphs with percentiles directory") {
+                        retVal.geneScatterGraphsLinesWithPercentilesDirectory = fields[1];
                     } else if (type == "read count to include variant") {
                         retVal.nReadsToIncludeVariant = Convert.ToInt32(fields[1]);
                     } else if (type == "regional expression directory") {
@@ -2190,7 +2388,7 @@ namespace ASELib
                             return null;
                         }
                         retVal.baseDirectory = fields[1];
-                        retVal.reinitialzeWithBaseDirectory();
+                        retVal.reinitialzieWithBaseDirectory();
                     } else if (type == "synapse directory") {
                         retVal.synapseDirectory = fields[1];
                     } else if (type == "genehancer filename") {
@@ -2226,6 +2424,111 @@ namespace ASELib
                 return retVal;
             }
         } // Configuration
+
+        class ExpressionDistributionByChromosomeMapLine
+        {
+            public readonly string disease;
+            public readonly string chromosome;
+            public readonly string filename;
+
+            public ExpressionDistributionByChromosomeMapLine(string disease_, string chromosome_, string filename_)
+            {
+                disease = disease_;
+                chromosome = chromosome_;
+                filename = filename_;
+            }
+        }
+        public class ExpressionDistributionByChromosomeMap
+        {
+            public static ExpressionDistributionByChromosomeMap LoadFromFile(string filename)
+            {
+                var retVal = new ExpressionDistributionByChromosomeMap();
+
+                if (!File.Exists(filename))
+                {
+                    return retVal;  // No file -> empty map
+                }
+
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    return null;
+                }
+
+                var headerizedFile = new HeaderizedFile<ExpressionDistributionByChromosomeMapLine>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<ExpressionDistributionByChromosomeMapLine> lines;
+                headerizedFile.ParseFile(ParseOneLine, out lines);
+
+                foreach (var line in lines)
+                {
+                    if (!retVal.map.ContainsKey(line.disease))
+                    {
+                        retVal.map.Add(line.disease, new Dictionary<string, string>());
+                    }
+
+                    retVal.map[line.disease].Add(line.chromosome, line.filename);
+                }
+
+                return retVal;
+            }
+
+            static ExpressionDistributionByChromosomeMap LoadFromFile(Configuration configuration)
+            {
+                return LoadFromFile(configuration.expression_distribution_by_chromosome_map_filename);
+            }
+
+            static ExpressionDistributionByChromosomeMapLine ParseOneLine(HeaderizedFile<ExpressionDistributionByChromosomeMapLine>.FieldGrabber fieldGrabber)
+            {
+                return new ExpressionDistributionByChromosomeMapLine(fieldGrabber.AsString("disease"), fieldGrabber.AsString("chromosome"), fieldGrabber.AsString("filename"));
+            }
+
+            public void WriteToFile(string outputFilename)
+            {
+                var outputFile = CreateStreamWriterWithRetry(outputFilename);
+
+                if (null == outputFile)
+                {
+                    throw new Exception("ExpressionDistributionByChromosomeMap.WriteToFile: unable to open output file " + outputFilename);
+                }
+
+                outputFile.WriteLine("disease\tchromosome\tfilename");
+
+                foreach (var diseaseEntry in map)
+                {
+                    var disease = diseaseEntry.Key;
+                    foreach (var chromosomeEntry in diseaseEntry.Value)
+                    {
+                        var chromosome = chromosomeEntry.Key;
+                        var filename = chromosomeEntry.Value;
+                        outputFile.WriteLine(disease + "\t" + chromosome + "\t" + filename);
+                    } // chromsome
+                } // disease
+
+                outputFile.WriteLine("**done**");
+                outputFile.Close();
+            } // WriteToFile
+
+            public List<string> allFiles()
+            {
+                var retVal = new List<string>();
+
+                foreach (var diseaseEntry in map)
+                {
+                    foreach (var chromosomeEntry in diseaseEntry.Value)
+                    {
+                        retVal.Add(chromosomeEntry.Value);
+                    }
+                }
+
+                return retVal;
+            } // allFiles()
+
+            public Dictionary<string, Dictionary<string, string>> map = new Dictionary<string, Dictionary<string, string>>(); // disease->chromsome->filename
+
+            static string[] wantedFields = { "disease", "chromosome", "filename"};
+
+        } // ExpressionDistributionByChromosomeMap
 
         public class SelectedGene
         {
@@ -2899,6 +3202,10 @@ namespace ASELib
         public const string IsoformBalancePValueHistogramFilename = "IsoformBalance-pValueHistogram.txt";
         public const string ReadLengthHistogramFilename = "ReadLengthHistograms.txt";
         public const string variantSelectionSummaryFilename = "VariantSelectionSummary.txt";
+        public const string DistanceBetweenMutationsFilename = "DistanceBetweenMutations.txt";
+        public const string SingleReadPhasingFilename = "SingleReadPhasing.txt";
+        public const string GeneScatterGraphLinesWithPercentilesPrefix = "GeneScatterGraphsWithPercentiles_";   // Followed by disease _ chromosome
+        public const string ExpressionDistrbutionByChromosomeDirectory = @"expression_distribution_by_chromosome\";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -3369,10 +3676,11 @@ namespace ASELib
         {
             public delegate outputType Parse(Dictionary<string, int> fieldMappings, string[] fields);
             public delegate outputType FieldGrabberParser(FieldGrabber fieldGrabber);
+            public delegate void ProcessNewItem(outputType newItem);
 
             public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_,
                 bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0, bool allowMissingRowsInData_ = false,
-                char separator_ = '\t', bool stopAtBlankLine_ = false, string inputFilename_ = "")
+                char separator_ = '\t', bool stopAtBlankLine_ = false, string inputFilename_ = "", int rowsToSkipAfterHeader_ = 0, List<string> additionalValuesToTreatAsStar_ = null)
             {
                 inputFile = inputFile_;
                 hasVersion = hasVersion_;
@@ -3386,6 +3694,18 @@ namespace ASELib
                 separator = separator_;
                 stopAtBlankLine = stopAtBlankLine_;
                 inputFilename = inputFilename_;
+                rowsToSkipAfterHeader = rowsToSkipAfterHeader_;
+                if (additionalValuesToTreatAsStar_ != null)
+                {
+                    additionalValuesToTreatAsStar = additionalValuesToTreatAsStar_;
+                }
+            }
+
+            public bool ParseFile(FieldGrabberParser parser, ProcessNewItem processNewItem)
+            {
+                Dictionary<string, int> fieldMappings;
+
+                return ParseFile(null, parser, out fieldMappings, processNewItem);
             }
 
             //
@@ -3417,6 +3737,21 @@ namespace ASELib
 
             bool ParseFile(Parse parser, FieldGrabberParser fieldGrabbingParser, out List<outputType> result, out Dictionary<string, int> fieldMappings_out)
             {
+                result = new List<outputType>();
+                var resultCopy = result;    // This is necessary because you can't use an out parameter in a lambda
+
+                bool retVal = ParseFile(parser, fieldGrabbingParser, out fieldMappings_out, x => resultCopy.Add(x));
+
+                if (!retVal)
+                {
+                    result = null;
+                }
+
+                return retVal;
+            }
+
+            bool ParseFile(Parse parser, FieldGrabberParser fieldGrabbingParser, out Dictionary<string, int> fieldMappings_out, ProcessNewItem processNewItem)
+            { 
                 fieldMappings_out = null;
 
                 if (hasVersion)
@@ -3425,7 +3760,6 @@ namespace ASELib
 
                     if (versionString == null || expectedVersion != null && versionString != expectedVersion)
                     {
-                        result = null;
                         return false;
                     }
                 }
@@ -3447,8 +3781,12 @@ namespace ASELib
 
                 if (null == header)
                 {
-                    result = null;
                     return false;
+                }
+
+                for (int i = 0; i < rowsToSkipAfterHeader; i++)
+                {
+                    inputFile.ReadLine();
                 }
 
                 var columns = header.Split(separator);
@@ -3462,7 +3800,6 @@ namespace ASELib
                         if (fieldMappings.ContainsKey(columns[i]))
                         {
                             Console.WriteLine("Duplicate needed column in headerized file " + inputFilename + " (or code bug or something): " + columns[i]);
-                            result = null;
                             return false;
                         }
 
@@ -3485,7 +3822,6 @@ namespace ASELib
                     if (fieldMappings.Count() + missingColumns.Count() != wantedFields.Count())
                     {
                         Console.WriteLine("Got the wrong number of missing fields.  Code bug.");
-                        result = null;
                         return false;
 
                     }
@@ -3501,11 +3837,9 @@ namespace ASELib
 
                 string inputLine;
                 bool sawDone = false;
-                result = new List<outputType>();
                 while (null != (inputLine = inputFile.ReadLine())) {
                     if (sawDone) {
                         Console.WriteLine("HeaderizedFile (" + inputFilename + "): Saw data after **done**");
-                        result = null;
                         return false;
                     }
 
@@ -3523,7 +3857,6 @@ namespace ASELib
                     if (fields.Count() <= maxNeededField && !allowMissingColumnsInData)
                     {
                         Console.WriteLine("HeaderizedFile.Parse (" + inputFilename + "): input line didn't include a needed field " + inputLine);
-                        result = null;
                         return false;
                     }
                     else if ((hasMissingFields || allowMissingColumnsInData) && fields.Count() <= maxNeededField + 1)
@@ -3549,26 +3882,23 @@ namespace ASELib
 
                     if (null != parser)
                     {
-                        result.Add(parser(fieldMappings, fields));
+                        processNewItem(parser(fieldMappings, fields));
                     } else
                     {
-                        result.Add(fieldGrabbingParser(new FieldGrabber(fieldMappings, fields, inputLine)));
+                        processNewItem(fieldGrabbingParser(new FieldGrabber(fieldMappings, fields, inputLine, additionalValuesToTreatAsStar)));
                     }
                 }
 
                 if (hasDone && !sawDone)
                 {
                     Console.WriteLine("HeaderizedFile.Parse (" + inputFilename + "): missing **done**");
-                    result = null;
                     return false;
                 }
                 else if (!hasDone && sawDone)
                 {
                     Console.WriteLine(inputFilename + "Saw unepected **done**.  Ignoring.");
-                    result = null;
                     return false;
                 }
-
 
                 fieldMappings_out = fieldMappings;
                 return true;
@@ -3576,11 +3906,12 @@ namespace ASELib
 
             public class FieldGrabber
             {
-                public FieldGrabber(Dictionary<string, int> fieldMappings_, string[] fields_, string rawInputLine_)
+                public FieldGrabber(Dictionary<string, int> fieldMappings_, string[] fields_, string rawInputLine_, List<string> additionalValuesToTreatAsStar_)
                 {
                     fieldMappings = fieldMappings_;
                     fields = fields_;
                     rawInputLine = rawInputLine_;
+                    additionalValuesToTreatAsStar = additionalValuesToTreatAsStar_;
                 }
 
                 public string AsString(string fieldName)
@@ -3659,7 +3990,8 @@ namespace ASELib
 
                 public int AsIntMinusOneIfStarOrEmptyString(string fieldName)
                 {
-                    if (fields[fieldMappings[fieldName]] == "*" || fields[fieldMappings[fieldName]] == "")
+                    var value = fields[fieldMappings[fieldName]];
+                    if (value == "*" || value == "" || additionalValuesToTreatAsStar.Contains(value))
                     {
                         return -1;
                     }
@@ -3674,7 +4006,8 @@ namespace ASELib
 
                 public double AsDoubleNegativeInfinityIfStarOrEmptyString(string fieldName)
                 {
-                    if (fields[fieldMappings[fieldName]] == "*" || fields[fieldMappings[fieldName]] == "")
+                    var value = fields[fieldMappings[fieldName]];
+                    if (value == "*" || value == "" || additionalValuesToTreatAsStar.Contains(value))
                     {
                         return double.NegativeInfinity;
                     }
@@ -3716,7 +4049,7 @@ namespace ASELib
                 Dictionary<string, int> fieldMappings;
                 string[] fields;
                 readonly string rawInputLine;
-
+                List<string> additionalValuesToTreatAsStar;
             } // FieldGrabber
 
             StreamReader inputFile;
@@ -3732,6 +4065,8 @@ namespace ASELib
             char separator;
             bool stopAtBlankLine;
             string inputFilename;
+            int rowsToSkipAfterHeader;
+            List<string> additionalValuesToTreatAsStar = new List<string>();
         } // HeaderizedFile
 
         public static int ConvertToInt32TreatingNullStringAsZero(string value)
@@ -4502,15 +4837,41 @@ namespace ASELib
         {
             if (size < 1024) return "" + size;
 
-            if (size < 1024 * 1024) return "" + ((size + 512) / 1024) + "K";
+            ulong divisor;
 
-            if (size < 1024 * 1024 * 1024) return "" + ((size + 512 * 1024) / (1024 * 1024)) + "M";
+            string suffix;
 
-            if (size < (ulong)1024 * 1024 * 1024 * 1024) return "" + ((size + 512 * 1024 * 1024) / (1024 * 1024 * 1024)) + "G";
+            if (size < 1024 * 1024)
+            {
+                divisor = 1024;
+                suffix = "K";
+            }
+            else if (size < 1024 * 1024 * 1024)
+            {
+                divisor = 1024 * 1024;
+                suffix = "M";
+            }
+            else if (size < (ulong)1024 * 1024 * 1024 * 1024)
+            {
+                divisor = 1024 * 1024 * 1024;
+                suffix = "G";
+            }
+            else if (size < (ulong)1024 * 1024 * 1024 * 1024 * 1024)
+            {
+                divisor = (ulong)1024 * 1024 * 1024 * 1024;
+                suffix = "T";
+            } else
+            {
+                divisor = (ulong)1024 * 1024 * 1024 * 1024 * 1024;
+                suffix = "P";
+            }
 
-            if (size < (ulong)1024 * 1024 * 1024 * 1024 * 1024) return "" + ((size + (ulong)512 * 1024 * 1204 * 1024) / ((ulong)1024 * 1024 * 1024 * 1024)) + "T";
+            if (size / divisor > 9)
+            {
+                return "" + (size + divisor/2) / divisor + suffix;
+            }
 
-            return "" + ((size + (ulong)512 * 1024 * 1204 * 1024 * 1024) / ((ulong)1024 * 1024 * 1024 * 1024 * 1024)) + "P";
+            return "" + size / divisor + "." + ((size * 10 + divisor / 20) / divisor) % 10 + suffix;
         }
 
         public class AllcountReader
@@ -4701,7 +5062,7 @@ namespace ASELib
 
             public delegate void ProcessBase(string contigName, int location, int currentMappedReadCount);
 
-            public bool ReadAllcountFile(ProcessBase processBase)
+            public bool ReadAllcountFile(ProcessBase processBase, string onlyThisContig = null)
             {
                 int currentOffset = -1;
                 int currentMappedReadCount = -1;
@@ -4709,6 +5070,8 @@ namespace ASELib
 
                 bool sawDone = false;
                 string contigName = "";
+
+                bool processThisContig = onlyThisContig == null;
 
                 string line;
 
@@ -4747,8 +5110,17 @@ namespace ASELib
                             return false;
                         }
 
+                        if (onlyThisContig != null && chromosomeNameToNonChrForm(contigName) == chromosomeNameToNonChrForm(onlyThisContig))
+                        {
+                            //
+                            // We've finished the one contig we're supposed to read.  Just quit now.
+                            //
+                            return true;
+                        }
 
                         contigName = line.Substring(1).ToLower();
+
+                        processThisContig = onlyThisContig == null || chromosomeNameToNonChrForm(onlyThisContig) == chromosomeNameToNonChrForm(contigName);
 
                         currentOffset = -1;
                         currentMappedReadCount = -1;
@@ -4759,6 +5131,11 @@ namespace ASELib
                     {
                         Console.WriteLine("Expected contig line after list of contigs, got " + line);
                         return false;
+                    }
+
+                    if (!processThisContig)
+                    {
+                        continue;
                     }
 
                     var fields = line.Split('\t');
@@ -5236,7 +5613,7 @@ namespace ASELib
         //
         // Maps chromosomeName -> (offset -> MeanAndStdDev)
         //
-        struct ChromosomeSize : IComparable<ChromosomeSize>
+        public struct ChromosomeSize : IComparable<ChromosomeSize>
         {
             public ChromosomeSize(string name_, int size_)
             {
@@ -5257,7 +5634,19 @@ namespace ASELib
 
             public string name;
             public int size;
-        }
+        } // ChromosomeSize
+
+        // GRCh38 chromosome sizes
+        static public readonly ChromosomeSize[] chromosomeSizes = {new ChromosomeSize("chr1",  248956422), new ChromosomeSize("chr2",  242193529), new ChromosomeSize("chr3",  198295559),
+                                                                   new ChromosomeSize("chr4",  190214555), new ChromosomeSize("chr5",  181538259), new ChromosomeSize("chr6",  170805979),
+                                                                   new ChromosomeSize("chr7",  159345973), new ChromosomeSize("chr8",  145138636), new ChromosomeSize("chr9",  138394717),
+                                                                   new ChromosomeSize("chr10", 133797422), new ChromosomeSize("chr11", 135086622), new ChromosomeSize("chr12", 133275309),
+                                                                   new ChromosomeSize("chr13", 114364328), new ChromosomeSize("chr14", 107043718), new ChromosomeSize("chr15", 101991189),
+                                                                   new ChromosomeSize("chr16",  90338345), new ChromosomeSize("chr17",  83257441), new ChromosomeSize("chr18",  80373285),
+                                                                   new ChromosomeSize("chr19",  58617616), new ChromosomeSize("chr20",  64444167), new ChromosomeSize("chr21",  46709983),
+                                                                   new ChromosomeSize("chr22",  50818468), new ChromosomeSize("chrx",  156040895), new ChromosomeSize("chry",   57227415) };
+
+        static public readonly Dictionary<string, ChromosomeSize> chromosomeSizesByName = new Dictionary<string, ChromosomeSize>();
 
         public class GeneExpression
         {
@@ -7850,6 +8239,19 @@ namespace ASELib
 
         public class SAMLine
         {
+            static public List<SAMLine> ReadFromFile(StreamReader inputFile)
+            {
+                var retVal = new List<SAMLine>();
+
+                string rawLine;
+                while (null != (rawLine = inputFile.ReadLine()))
+                {
+                    retVal.Add(new SAMLine(rawLine));
+                }
+
+                return retVal;
+            }
+
             public SAMLine(string rawline)
             {
                 var fields = rawline.Split('\t');
@@ -10913,25 +11315,87 @@ namespace ASELib
                     return null;
                 }
 
+                //
+                // These things don't have consistent headers, of course.  So, read the first line, see what it has, then choose the appropriate option.
+                //
 
+                string daysToDeathFieldName;
+                var header = inputFile.ReadLine();
+                if (header == null)
+                {
+                    return null;
+                }
+
+                if (header.Contains("days_to_death"))
+                {
+                    daysToDeathFieldName = "days_to_death";
+                } else if (header.Contains("death_days_to"))
+                {
+                    daysToDeathFieldName = "death_days_to";
+                } else
+                {
+                    Console.Write("No recognized days to death field name in header.  These are the fields that contain the word 'death':");
+                    header.Split('\t').Where(x => x.Contains("death")).ToList().ForEach(x => Console.WriteLine(" " + x));
+                    return null;
+                }
+
+                //
+                // Now reopen the input file.
+                //
+                inputFile.Close();
+                inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (null == inputFile)
+                {
+                    return null;
+                }
 
                 string[] wantedFields =
                 {
                     "bcr_patient_uuid",
                     "vital_status",
-                    "death_days_to" 
                 };  // Tons more stuff we could include.
 
-                var headerizedFile = new HeaderizedFile<TCGAClinicalSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
-                List<TCGAClinicalSummaryLine> result;
-                headerizedFile.ParseFile(parse, out result);
+                var wantedFieldsList = wantedFields.ToList();
+                wantedFieldsList.Add(daysToDeathFieldName);
 
                 // 
                 // These files are weird: they have two copies of the header line and then a second, slightly different header, and then a third really weird line with CDE_ID on it.
-                // So we skip the two weird ones after parsing.
+                // So we skip the two weird ones.
                 //
-                result = result.Where(_ => _.patientId != "bcr_patient_uuid" && _.patientId != "CDE_ID:").ToList();
+                string[] additionalValuesToTreatAsStar = { "[Not Applicable]", "[Discrepancy]", "[Not Available]", "[Completed]" };
+                var headerizedFile = new HeaderizedFile<TCGAClinicalSummaryLine>(inputFile, false, false, "", wantedFieldsList, rowsToSkipAfterHeader_: 2, additionalValuesToTreatAsStar_: additionalValuesToTreatAsStar.ToList());
+                List<TCGAClinicalSummaryLine> result;
+                headerizedFile.ParseFile(x => parse(x, daysToDeathFieldName), out result);
 
+                return result;
+            }
+
+            static TCGAClinicalSummaryLine parse(HeaderizedFile<TCGAClinicalSummaryLine>.FieldGrabber fieldGrabber, string daysToDeathFieldName)
+            {
+                return new TCGAClinicalSummaryLine(fieldGrabber.AsString("bcr_patient_uuid"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString(daysToDeathFieldName), fieldGrabber.AsString("vital_status"));
+            }
+
+            TCGAClinicalSummaryLine(string patientId_, int days_to_death_, string vitalStatus_)
+            {
+                patientId = patientId_;
+                days_to_death = days_to_death_;
+                vitalStatus = vitalStatus_;
+            }
+
+            public string getPatientId()
+            {
+                return patientId;
+            }
+
+            public int getOverallSurvivalInDays()
+            {
+                return days_to_death;
+            }
+
+            public string getVitalStatus()
+            {
+                return vitalStatus;
             }
 
             public readonly string patientId;
@@ -10951,7 +11415,7 @@ namespace ASELib
             public double fractionAlive;
         }
 
-        static public List<KaplanMeierPoint> KaplanMeier(List<ClinicalSummaryLine> summaryLines, out int n)
+        static public List<KaplanMeierPoint> KaplanMeier(List<ClinicalSummaryLine> summaryLines, out int n, out double slope, out double rSquared)
         {
             var oneLinePerPatient = summaryLines.GroupByToDict<ClinicalSummaryLine, string>(x => x.getPatientId()).Select(x => x.Value[0]).Where(x => x.getOverallSurvivalInDays() > 0).ToList();
             n = oneLinePerPatient.Count();
@@ -10974,6 +11438,19 @@ namespace ASELib
                     retVal.Add(new KaplanMeierPoint(day, fractionAliveByDay[day]));
                 }
             }
+
+            var nonZeroLogPoints = new List<Tuple<double, double>>();   // Maps days since inclusion -> log2(fractionAlive), excluding fractionAlive = 0 point if any (since you can't take a log of 0).
+            for (int i = 0; i < retVal.Count(); i++)
+            {
+                if (retVal[i].fractionAlive > 0)
+                {
+                    nonZeroLogPoints.Add(new Tuple<double, double>(retVal[i].daysSinceInclusion, Math.Log(retVal[i].fractionAlive, 2)));
+                }
+            }
+
+            double slopeValue = MathNet.Numerics.LinearRegression.SimpleRegression.FitThroughOrigin(nonZeroLogPoints); // slopeValue is here because you can't pass an out parameter to a method as its value (in this case CoefficientToDetermination)
+            slope = slopeValue;
+            rSquared = MathNet.Numerics.GoodnessOfFit.CoefficientOfDetermination(nonZeroLogPoints.Select(x => x.Item1 * slopeValue), nonZeroLogPoints.Select(x => x.Item2));
 
             return retVal;
         } // KaplanMeier
@@ -11817,6 +12294,16 @@ namespace ASELib
 
         public class ExpressionDistribution
         {
+            static List<string> wantedFields()
+            {
+                string[] wantedFieldsArray = { "Chromosome", "Locus", "min", "max" };
+                var wantedFields = wantedFieldsArray.ToList();
+                for (int i = 10; i < 100; i += 10)
+                {
+                    wantedFields.Add(i + "th %ile");
+                }
+                return wantedFields;
+            }
             public static List<ExpressionDistribution> ReadFromFile(string filename)
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
@@ -11827,18 +12314,27 @@ namespace ASELib
                     return null;
                 }
 
-                string[] wantedFieldsArray = { "Chromosome", "Locus", "min", "max" };
-                var wantedFields = wantedFieldsArray.ToList();
-                for (int i = 10; i < 100; i+= 10)
-                {
-                    wantedFields.Add(i + "th %ile");
-                }
-                var headerizedFile = new HeaderizedFile<ExpressionDistribution>(inputFile, false, true, "", wantedFields);
+                var headerizedFile = new HeaderizedFile<ExpressionDistribution>(inputFile, false, true, "", wantedFields());
 
                 List<ExpressionDistribution> result;
                 headerizedFile.ParseFile(Parse, out result);
 
                 return result;
+            }
+
+            public static bool ReadFromFile(string filename, HeaderizedFile<ExpressionDistribution>.ProcessNewItem processNewItem)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (null == inputFile)
+                {
+                    Console.WriteLine("ExpressionDistribution: unable to open input file " + filename);
+                    return false;
+                }
+
+                var headerizedFile = new HeaderizedFile<ExpressionDistribution>(inputFile, false, true, "", wantedFields());
+
+                return headerizedFile.ParseFile(Parse, processNewItem);
             }
 
             static ExpressionDistribution Parse(HeaderizedFile<ExpressionDistribution>.FieldGrabber fieldGrabber)
@@ -11891,24 +12387,24 @@ namespace ASELib
 
         public class ExpressionDistributionMap
         {
+            void addToMap(ExpressionDistribution line)
+            {
+                if (!map.ContainsKey(line.chr))
+                {
+                    map.Add(line.chr, new Dictionary<int, ExpressionDistribution>());
+                }
+
+                map[line.chr].Add(line.locus, line);    // Assumes that each locus occurs at most once in the input.
+            } // addToMap
+
             public ExpressionDistributionMap(string filename_)
             {
                 filename = filename_;
 
-                var lines = ExpressionDistribution.ReadFromFile(filename);
-                if (lines == null)
+                var worked = ExpressionDistribution.ReadFromFile(filename, x => this.addToMap(x));
+                if (!worked)
                 {
-                    throw new FileNotFoundException(filename);
-                }
-
-                foreach (var line in lines)
-                {
-                    if (!map.ContainsKey(line.chr))
-                    {
-                        map.Add(line.chr, new Dictionary<int, ExpressionDistribution>());
-                    }
-
-                    map[line.chr].Add(line.locus, line);    // Assumes that each locus occurs at most once in the input.
+                    throw new Exception("Failed to load ExpressionDistributionMap.");
                 }
             }
 
@@ -12533,7 +13029,7 @@ namespace ASELib
                 nPerDot *= 10;
             }
 
-            Console.WriteLine(messageBeforeCount + " " + count + " " + messageAfterCount + " (one dot/" + nPerDot + ")");
+            Console.WriteLine(messageBeforeCount + " " + NumberWithCommas(count) + " " + messageAfterCount + " (one dot/" + NumberWithCommas(nPerDot) + ")");
             PrintNumberBar((int)(count / nPerDot));
         }
 
@@ -12823,6 +13319,8 @@ namespace ASELib
             public readonly GeneMap geneMap;
             public readonly Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
             public readonly ASECorrection aseCorrection;
+            public ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap;
+            public List<string> diseases;
             public Stopwatch timer; // Starts running as soon as this is created
 
             public static CommonData LoadCommonData(string[] args)
@@ -12863,11 +13361,33 @@ namespace ASELib
                     return null;
                 }
 
-                return new CommonData(cases, configuration, geneLocationInformation, geneMap, perGeneASEMap, aseCorrection, timer);
+                var diseases = new List<string>();
+
+                foreach (var caseEntry in cases)
+                {
+                    var case_ = caseEntry.Value;
+
+                    if (!diseases.Contains(case_.disease()))
+                    {
+                        diseases.Add(case_.disease());
+                    }
+                } // case
+
+                ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap;
+
+                if (configuration.expression_distribution_by_chromosome_map_filename == "")
+                {
+                    expressionDistributionByChromosomeMap = null;
+                } else
+                {
+                    expressionDistributionByChromosomeMap = ASETools.ExpressionDistributionByChromosomeMap.LoadFromFile(configuration.expression_distribution_by_chromosome_map_filename);
+                }
+
+                return new CommonData(cases, configuration, geneLocationInformation, geneMap, perGeneASEMap, aseCorrection, diseases, timer, expressionDistributionByChromosomeMap);
             } // LoadCommonData
 
             CommonData(Dictionary<string, Case> cases_, Configuration configuration_, GeneLocationsByNameAndChromosome geneLocationInformation_, GeneMap geneMap_,
-                Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap_, ASECorrection aseCorrection_, Stopwatch timer_)
+                Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap_, ASECorrection aseCorrection_, List<string> diseases_, Stopwatch timer_, ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap_)
             {
                 cases = cases_;
                 listOfCases = cases.Select(x => x.Value).ToList();
@@ -12876,7 +13396,9 @@ namespace ASELib
                 geneMap = geneMap_;
                 perGeneASEMap = perGeneASEMap_;
                 aseCorrection = aseCorrection_;
+                diseases = diseases_;
                 timer = timer_;
+                expressionDistributionByChromosomeMap = expressionDistributionByChromosomeMap_;
             }
         } // CommonData
 
@@ -13410,6 +13932,11 @@ namespace ASELib
             StringBuilder codon = new StringBuilder("AGC");
             codon[locus - 208248387] = newBase;
             return "R132" + GeneticCode(ReverseCompliment(codon.ToString()));
+        } // IDH1MutantDescription
+
+        static public int ratioToPercentage(int numerator, int denominator)
+        {
+            return (int)(100 * (double)numerator / denominator);
         }
 
     } // ASETools

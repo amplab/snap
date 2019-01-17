@@ -224,11 +224,22 @@ namespace CheckDone
                 HandleFilename(case_.isoform_read_counts_filename, "IsoformReadCounts", fileTypesToUse);
             }
 
+            HandleFilenameIfExists(configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename, "SingleReadPhasing", fileTypesToUse);
+
+            var expressionByChromosomeMap = ASETools.ExpressionDistributionByChromosomeMap.LoadFromFile(configuration.expression_distribution_by_chromosome_map_filename);
+            foreach (var file in expressionByChromosomeMap.allFiles())
+            {
+                HandleFilename(file, "ExpressionDistribution", fileTypesToUse);
+            }
+
             foreach (var disease in ASETools.GetListOfDiseases(cases))
             {
-                HandleFilename(configuration.expressionFilesDirectory + ASETools.Expression_filename_base + disease, "Expression", fileTypesToUse);
-                HandleFilename(configuration.expression_distribution_directory + ASETools.Expression_distribution_filename_base + disease, "ExpressionDistribution", fileTypesToUse);
+                // these don't have **done** for some reason.  They should! HandleFilenameIfExists(configuration.expressionFilesDirectory + ASETools.Expression_filename_base + disease, "Expression", fileTypesToUse);
 
+                foreach (var chromosome in ASETools.chromosomes)
+                {
+                    HandleFilenameIfExists(configuration.geneScatterGraphsLinesWithPercentilesDirectory + ASETools.GeneScatterGraphLinesWithPercentilesPrefix + disease + "_" + ASETools.chromosomeNameToNonChrForm(chromosome), "ScatterGraphLinesWithPercentiles", fileTypesToUse);
+                }
             }
 
             ASETools.PrintMessageAndNumberBar("Processing", "files in " + FilenamesByDataDirectory.Count() + " data directories", totalFiles, out nPerDot);
@@ -249,6 +260,14 @@ namespace CheckDone
             Console.WriteLine();
             Console.WriteLine("Processed " + totalFiles + " files in " + ASETools.ElapsedTimeInSeconds(timer));
         } // Main
+
+        static void HandleFilenameIfExists(string filename, string fileType, string [] fileTypesToUse)
+        {
+            if (File.Exists(filename))
+            {
+                HandleFilename(filename, fileType, fileTypesToUse);
+            }
+        }
 
         static void HandleFilename(string filename, string fileType, string [] fileTypesToUse)
         {

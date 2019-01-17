@@ -691,7 +691,7 @@ if (false)
 
                     outputLine += "\t" +
                         annotatedVariant.tumorRNAReadCounts.nMatchingReference + "\t" + annotatedVariant.tumorRNAReadCounts.nMatchingAlt + "\t" + annotatedVariant.tumorRNAReadCounts.nMatchingNeither + "\t" + annotatedVariant.tumorRNAReadCounts.nMatchingBoth + "\t" +
-                        (nMutationsThisGene > 1) + "\t" + nMutationsThisGene;
+                        (nMutationsThisGene > 1) + "\t" + nMutationsThisGene + "\t";
 
                     localGeneState.outputUnfiltered.Add(outputLine);
 
