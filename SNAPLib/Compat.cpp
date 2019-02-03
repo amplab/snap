@@ -1119,6 +1119,7 @@ public:
     bool destroy() {
         pthread_cond_destroy(&cond);
         pthread_mutex_destroy(&lock);
+	return true;
     }
 };
 
