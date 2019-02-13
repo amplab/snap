@@ -12,9 +12,10 @@ namespace DumpSubfile
     {
         static void Main(string[] args)
         {
-            if (args.Count() != 2 && args.Count() != 3)
+            if (args.Count() != 1 && args.Count() != 2 && args.Count() != 3)
             {
-                Console.WriteLine("usage: DumpSubfile compositeFileName subfileName {outputFile}");
+                Console.WriteLine("usage: DumpSubfile compositeFileName {subfileName {outputFile}}");
+                Console.WriteLine("If you omit subfileName, then the list of subfiles will be written to stdout.");
                 Console.WriteLine("If you omit outputfile, then the subfile will be written to stdout.");
                 return;
             }
@@ -24,6 +25,12 @@ namespace DumpSubfile
             if (!reader.open(args[0]))
             {
                 Console.WriteLine("Unable to open containing file " + args[0]);
+                return;
+            }
+
+            if (args.Count() ==1)
+            {
+                reader.allSubfiles().ForEach(_ => Console.WriteLine(_));
                 return;
             }
 

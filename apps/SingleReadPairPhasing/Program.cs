@@ -16,20 +16,45 @@ namespace SingleReadPairPhasing
 
         class Phase
         {
-            public int inPhase = 0;
-            public int outOfPhase = 0;
-            public int other = 0;
+            public enum WhichPhase { inPhase, outOfPhase, other};
+            public Dictionary<WhichPhase, int> counts = new Dictionary<WhichPhase, int>();
+            public Dictionary<WhichPhase, List<string>> casesByPhase = new Dictionary<WhichPhase, List<string>>();
+
+            static List<WhichPhase> allPhases = new List<WhichPhase>();
+            static Phase()
+            {
+                allPhases.Add(WhichPhase.inPhase);
+                allPhases.Add(WhichPhase.outOfPhase);
+                allPhases.Add(WhichPhase.other);
+            }
+
+            public Phase()
+            {
+                foreach (var phase in allPhases)
+                {
+                    counts.Add(phase, 0);
+                    casesByPhase.Add(phase, new List<string>());
+                }
+            }
 
             public void mergeWith(Phase peer)
             {
-                inPhase += peer.inPhase;
-                outOfPhase += peer.outOfPhase;
-                other += peer.other;
+                foreach (var phase in allPhases)
+                {
+                    counts[phase] += peer.counts[phase];
+                    casesByPhase[phase].AddRange(peer.casesByPhase[phase]);
+                }
             } // mergeWith
 
             public int totalCases()
             {
-                return inPhase + outOfPhase + other;
+                return allPhases.Sum(_ => counts[_]);
+            }
+
+            public void addCase(string caseId, WhichPhase phase)
+            {
+                counts[phase]++;
+                casesByPhase[phase].Add(caseId);
             }
         } // Phase
 
@@ -61,9 +86,9 @@ namespace SingleReadPairPhasing
 
             public void counts(out int totalInPhase, out int totalOutOfPhase, out int totalOther)
             {
-                totalInPhase = phasesByRange.Select(_ => _.Value.inPhase).Sum();
-                totalOutOfPhase = phasesByRange.Select(_ => _.Value.outOfPhase).Sum();
-                totalOther = phasesByRange.Select(_ => _.Value.other).Sum();
+                totalInPhase = phasesByRange.Select(_ => _.Value.counts[Phase.WhichPhase.inPhase]).Sum();
+                totalOutOfPhase = phasesByRange.Select(_ => _.Value.counts[Phase.WhichPhase.outOfPhase]).Sum();
+                totalOther = phasesByRange.Select(_ => _.Value.counts[Phase.WhichPhase.other]).Sum();
             }
         } // SingleGenePhasing
 
@@ -159,10 +184,13 @@ namespace SingleReadPairPhasing
                     }
 
                     var totalCasesInRangeGroup = inRangeGroup.Select(_ => _.Value.totalCases()).Sum();
-                    outputFile.WriteLine(rangeGroup + "\t" + inRangeGroup.Select(_ => _.Value.inPhase).Sum() + "\t" + inRangeGroup.Select(_ => _.Value.outOfPhase).Sum() + "\t" + inRangeGroup.Select(_ => _.Value.other).Sum() + "\t" +
-                        ASETools.ratioToPercentage(inRangeGroup.Select(_ => _.Value.inPhase).Sum(), totalCasesInRangeGroup) + "%\t" + ASETools.ratioToPercentage(inRangeGroup.Select(_ => _.Value.outOfPhase).Sum(), totalCasesInRangeGroup) + "%\t" +
-                        ASETools.ratioToPercentage(inRangeGroup.Select(_ => _.Value.other).Sum(), totalCasesInRangeGroup) + "%");
+                    outputFile.WriteLine(rangeGroup + "\t" + inRangeGroup.Select(_ => _.Value.counts[Phase.WhichPhase.inPhase]).Sum() + "\t" + inRangeGroup.Select(_ => _.Value.counts[Phase.WhichPhase.outOfPhase]).Sum() + "\t" + inRangeGroup.Select(_ => _.Value.counts[Phase.WhichPhase.other]).Sum() + "\t" +
+                        ASETools.ratioToPercentage(inRangeGroup.Select(_ => _.Value.counts[Phase.WhichPhase.inPhase]).Sum(), totalCasesInRangeGroup) + "%\t" + ASETools.ratioToPercentage(inRangeGroup.Select(_ => _.Value.counts[Phase.WhichPhase.outOfPhase]).Sum(), totalCasesInRangeGroup) + "%\t" +
+                        ASETools.ratioToPercentage(inRangeGroup.Select(_ => _.Value.counts[Phase.WhichPhase.other]).Sum(), totalCasesInRangeGroup) + "%");
                 } // for each range group
+
+                writeCases(outputFile, singleGenePhasing, Phase.WhichPhase.inPhase);
+                writeCases(outputFile, singleGenePhasing, Phase.WhichPhase.outOfPhase);
                 outputFile.WriteLine();
             } // for each gene
 
@@ -175,6 +203,22 @@ namespace SingleReadPairPhasing
 
             Console.WriteLine("Run time " + ASETools.ElapsedTimeInSeconds(commonData.timer));
         } // Main
+
+        static void writeCases(StreamWriter outputFile, SingleGenePhasing singleGenePhasing, Phase.WhichPhase whichPhase)
+        {
+            var caseIds = new List<string>();
+
+            singleGenePhasing.phasesByRange.ToList().ForEach(_ => caseIds.AddRange(_.Value.casesByPhase[whichPhase]));
+
+            if (caseIds.Count() == 0)
+            {
+                return;
+            }
+
+            outputFile.Write(whichPhase + ":");
+            caseIds.ForEach(_ => outputFile.Write("\t" + _));
+            outputFile.WriteLine();
+        }
 
         static void HandleOneCase(ASETools.Case case_, AllGenesPhasing state)
         {
@@ -292,7 +336,7 @@ namespace SingleReadPairPhasing
                         // At least one of the mutations is floating (not at least 90% one allele), so this is an other.  Since this is essentially a pair of reads (with maybe some duplicates), this really means that either a read
                         // shows something other than ref or alt, or both reads of a paired end cover a mutation and have opposite values (which indicates a sequencing error, since it should be the same R/DNA).
                         //
-                        phaseCounts.other++;
+                        phaseCounts.addCase(case_.case_id, Phase.WhichPhase.other);
                     }
                     else
                     {
@@ -307,7 +351,7 @@ namespace SingleReadPairPhasing
                         //
                         if (mutationIsRef[0] == mutationIsRef[1])
                         {
-                            phaseCounts.inPhase++;
+                            phaseCounts.addCase(case_.case_id, Phase.WhichPhase.inPhase);
                             if (mutationIsRef[0])
                             {
                                 nInPhaseRef++;
@@ -317,7 +361,7 @@ namespace SingleReadPairPhasing
                             }
                         } else
                         {
-                            phaseCounts.outOfPhase++;
+                            phaseCounts.addCase(case_.case_id, Phase.WhichPhase.outOfPhase);
                         }
                     }
                 } // for each set of reads (essentially, two paired-end reads)
@@ -342,7 +386,7 @@ namespace SingleReadPairPhasing
                     state.allGenes[hugo_symbol].phasesByRange.Add(mutationsRange, new Phase());
                 }
 
-                if ((double)phaseCounts.inPhase >= phaseCounts.totalCases() * 0.9)
+                if ((double)phaseCounts.counts[Phase.WhichPhase.inPhase] >= phaseCounts.totalCases() * 0.9)
                 {
                     double altFraction = (double)nInPhaseAlt / (nInPhaseAlt + nInPhaseRef);
                     if (altFraction < 0.4 || altFraction > 0.6)
@@ -350,24 +394,21 @@ namespace SingleReadPairPhasing
                         //
                         // Too many one or the other is suspicious.  Bounce it.
                         //
-                        state.allGenes[hugo_symbol].phasesByRange[mutationsRange].other++;
+                        state.allGenes[hugo_symbol].phasesByRange[mutationsRange].addCase(case_.case_id, Phase.WhichPhase.other);
                     }
                     else
                     {
-                        state.allGenes[hugo_symbol].phasesByRange[mutationsRange].inPhase++;
+                        state.allGenes[hugo_symbol].phasesByRange[mutationsRange].addCase(case_.case_id, Phase.WhichPhase.inPhase);
                     }
-                } else if ((double)phaseCounts.outOfPhase >= phaseCounts.totalCases() * 0.9)
+                } else if ((double)phaseCounts.counts[Phase.WhichPhase.outOfPhase] >= phaseCounts.totalCases() * 0.9)
                 {
-                    state.allGenes[hugo_symbol].phasesByRange[mutationsRange].outOfPhase++;
+                    state.allGenes[hugo_symbol].phasesByRange[mutationsRange].addCase(case_.case_id, Phase.WhichPhase.outOfPhase);
                 } else
                 {
-                    state.allGenes[hugo_symbol].phasesByRange[mutationsRange].other++;
+                    state.allGenes[hugo_symbol].phasesByRange[mutationsRange].addCase(case_.case_id, Phase.WhichPhase.other);
                 }
 
             } // gene
-
-
-
         } // HandleOneCase
 
         static void FinishUp(AllGenesPhasing state)

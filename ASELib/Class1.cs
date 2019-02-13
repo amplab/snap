@@ -1263,6 +1263,7 @@ namespace ASELib
             public string normal_rna_filename = "";
             public string tumor_rna_filename = "";
             public string maf_filename = "";
+            public string decompressed_maf_filename = "";
             public string tumor_methylation_filename = "";
             public string normal_methylation_filename = "";
             public string tumor_copy_number_filename = "";
@@ -1322,6 +1323,8 @@ namespace ASELib
             public string regulatory_mutations_near_mutations_filename = "";
             public string expression_by_gene_filename = "";
             public string isoform_read_counts_filename = "";
+            public string compressed_vcf_filename = "";
+            public string case_metadata_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -1385,6 +1388,8 @@ namespace ASELib
             public long regulatory_mutations_near_mutations_size = 0;
             public long expression_by_gene_size = 0;
             public long isoform_read_counts_file_size = 0;
+            public long compressed_vcf_file_size = 0;
+            public long case_metadata_file_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1549,6 +1554,7 @@ namespace ASELib
                 new FieldInformation("Tumor FPKM Filename",                                 c => c.tumor_fpkm_filename, (c,v) => c.tumor_fpkm_filename = v),
                 new FieldInformation("Normal FPKM Filename",                                c => c.normal_fpkm_filename, (c,v) => c.normal_fpkm_filename = v),
                 new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
+                new FieldInformation("Decompressed MAF Filename",                           c => c.decompressed_maf_filename, (c,v) => c.decompressed_maf_filename = v),
 
                 new FieldInformation("Normal DNA Size",                                     c => Convert.ToString(c.normal_dna_size), (c,v) => c.normal_dna_size = LongFromString(v)),
                 new FieldInformation("Tumor DNA Size",                                      c => Convert.ToString(c.tumor_dna_size), (c,v) => c.tumor_dna_size = LongFromString(v)),
@@ -1596,6 +1602,8 @@ namespace ASELib
                 new FieldInformation("Regulatory Mutations Near Mutations Filename",        c => c.regulatory_mutations_near_mutations_filename, (c, v) => c.regulatory_mutations_near_mutations_filename = v, DerivedFile.Type.RegulatoryMutationsNearMutations, regulatoryMutationsNearMutationsExtension, c => c.case_id, "Regulatory Mutations Near Mutations Size", c => c.regulatory_mutations_near_mutations_size, (c, v) => c.regulatory_mutations_near_mutations_size = v),
                 new FieldInformation("Expression By Gene",                                  c => c.expression_by_gene_filename, (c, v) => c.expression_by_gene_filename = v, DerivedFile.Type.ExpressionByGene, expressionByGeneExtension, c => c.case_id, "Expression By Gene Size", c => c.expression_by_gene_size, (c, v) => c.expression_by_gene_size = v),
                 new FieldInformation("Isoform Read Counts",                                 c => c.isoform_read_counts_filename, (c, v) => c.isoform_read_counts_filename = v, DerivedFile.Type.IsoformReadCounts, isoformReadCountsExtension, c => c.case_id, "Isoform Gene Counts Size", c => c.isoform_read_counts_file_size, (c, v) => c.isoform_read_counts_file_size = v),
+                new FieldInformation("Compressed VCF",                                      c => c.compressed_vcf_filename, (c, v) => c.compressed_vcf_filename = v, DerivedFile.Type.CompressedVCF, compressedVCFExtension, c => c.normal_dna_file_id, "Compressed VCF Size", c => c.compressed_vcf_file_size, (c, v) => c.compressed_vcf_file_size = v),
+                new FieldInformation("Case Metadata",                                       c => c.case_metadata_filename, (c, v) => c.case_metadata_filename = v, DerivedFile.Type.CaseMetadata, caseMetadataExtension, c => c.case_id, "Case Metadata Size", c => c.case_metadata_file_size, (c, v) => c.case_metadata_file_size = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -1760,6 +1768,11 @@ namespace ASELib
                     {
                         maf_filename = "";
                     }
+
+                    if (downloadedFiles.ContainsKey(disease() + ".maf"))
+                    {
+                        decompressed_maf_filename = downloadedFiles[disease() + ".maf"].fileInfo.FullName;
+                    }
                 }
 
                 if (tumor_methylation_file_id != "" && downloadedFiles.ContainsKey(tumor_methylation_file_id))
@@ -1910,6 +1923,19 @@ namespace ASELib
                     return normal_rna_file_id;
                 }
             } // getDownloadedReadsFileId
+
+            public string getDownloadedReadsFilename(bool tumor, bool dna)
+            {
+                if (tumor)
+                {
+                    if (dna) return tumor_dna_filename;
+                    return tumor_rna_filename;
+                } else
+                {
+                    if (dna) return normal_dna_filename;
+                    return normal_rna_filename;
+                }
+            } // getDownloadedReadsFilename
 
         } // Case
 
@@ -3148,6 +3174,8 @@ namespace ASELib
         public const string regulatoryMutationsNearMutationsExtension = ".regulatory_mutations_near_mutations.txt";
         public const string expressionByGeneExtension = ".expressionByGene";
         public const string isoformReadCountsExtension = ".isoformReadCounts";
+        public const string compressedVCFExtension = ".vcf.gz";
+        public const string caseMetadataExtension = ".case_metadata.txt";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
@@ -3255,7 +3283,7 @@ namespace ASELib
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
-                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts
+                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata
             };
         } // DerivedFile
 
@@ -3307,13 +3335,14 @@ namespace ASELib
 
                     //
                     // Look through the subdirectory to find the downloaded file and also any .md5 versions of it.
+                    // Also look for decompressed MAF files
                     //
                     string candidatePathname = null;
                     string md5Pathname = null;
                     bool sawBAI = false;
                     bool sawBAM = false;
-                    bool sawUnsortedBAM = false;
                     string unsortedBAMPathmame = null;
+                    string extraMAF = null;
                     foreach (var pathname in Directory.EnumerateFiles(subdir))
                     {
                         var filename = GetFileNameFromPathname(pathname).ToLower();
@@ -3342,8 +3371,13 @@ namespace ASELib
 
                         if (filename.EndsWith(".unsorted-bam") && configuration.isBeatAML)
                         {
-                            sawUnsortedBAM = true;
                             unsortedBAMPathmame = pathname;
+                            continue;
+                        }
+
+                        if (filename.EndsWith(".maf"))
+                        {
+                            extraMAF = pathname;
                             continue;
                         }
 
@@ -3415,6 +3449,18 @@ namespace ASELib
                     {
                         nDownloadedFiles++;
                         var downloadedFile = new DownloadedFile(file_id, candidatePathname, md5Value, md5Pathname);
+                        downloadedFiles.Add(downloadedFile);
+
+                        totalBytesInDownloadedFiles += (ulong)downloadedFile.fileInfo.Length;
+                    }
+
+                    if (extraMAF != null)
+                    {
+                        nDownloadedFiles++;
+                        var filename = GetFileNameFromPathname(extraMAF);
+                        var disease = filename.Substring(0, filename.Length - 4);   // -1 is for .maf.  These files are named disease.maf
+                        var downloadedFile = new DownloadedFile(disease + ".maf", extraMAF, "", "");
+
                         downloadedFiles.Add(downloadedFile);
 
                         totalBytesInDownloadedFiles += (ulong)downloadedFile.fileInfo.Length;
@@ -6663,6 +6709,11 @@ namespace ASELib
                 public long size;
             }
 
+            public List<string> allSubfiles()
+            {
+                return subfiles.Select(_ => _.Key).ToList();
+            }
+
             FileStream filestream;
             Dictionary<string, SubFile> subfiles = new Dictionary<string, SubFile>();
             string filename;
@@ -8397,6 +8448,16 @@ namespace ASELib
                 return (flag & Duplicate) == Duplicate;
             }
 
+            public bool isPaired()
+            {
+                return (flag & MultipleSegments) == MultipleSegments;
+            }
+
+            public bool isNextUnmapped()
+            {
+                return (flag & NextUnmapped) == NextUnmapped;
+            }
+
             public readonly string qname;
             public readonly int flag;
             public readonly string rname;
@@ -8410,7 +8471,9 @@ namespace ASELib
             public readonly string qual;
             public readonly int nonclippedBases;
 
+            public const int MultipleSegments = 0x1;    // i.e., paired
             public const int Unmapped = 0x4;
+            public const int NextUnmapped = 0x8;
             public const int SecondaryAligment = 0x100;
             public const int Duplicate = 0x400;
 
@@ -13939,6 +14002,402 @@ namespace ASELib
             return (int)(100 * (double)numerator / denominator);
         }
 
+        public class BAMMetadata
+        {
+            public bool isPaired;
+            public int minReadLength;
+            public int maxReadLength;
+            public double meanReadLength;
+            public double medianReadLength;
+            public int minInsert;
+            public int maxInsert;
+            public double meanInsert;
+            public double medianInsert;
+
+            public BAMMetadata(bool isPaired_, int minReadLength_, int maxReadLength_, double meanReadLength_, double medianReadLength_, int minInsert_, int maxInsert_, double meanInsert_, double medianInsert_)
+            {
+                isPaired = isPaired_;
+                minReadLength = minReadLength_;
+                maxReadLength = maxReadLength_;
+                meanReadLength = meanReadLength_;
+                medianReadLength = medianReadLength_;
+                minInsert = minInsert_;
+                maxInsert = maxInsert_;
+                meanInsert = meanInsert_;
+                medianInsert = medianInsert_;
+            }
+        } // BAMMetadata
+
+        public class CaseMetadata
+        {
+            public readonly string caseID;
+            Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata = null; // tumor->dna=>metadata
+            Dictionary<bool, Dictionary<bool,  string>> sample = null; // tumor->dna->sample ID
+
+            public CaseMetadata(string caseID_, Dictionary<bool, Dictionary<bool, string>> sample_, Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata_)
+            {
+                caseID = caseID_;
+                sample = sample_;
+                bamMetadata = bamMetadata_;
+            }
+
+            public BAMMetadata getBAMMetadata(bool tumor, bool dna)
+            {
+                return bamMetadata[tumor][dna];
+            }
+
+            public string getSample(bool tumor, bool dna)
+            {
+                return sample[tumor][dna];
+            }
+
+            static List<CaseMetadata> ReadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (null == inputFile)
+                {
+                    throw new Exception("CaseMetadata.ReadFromFile: unable to open " + filename);
+                }
+
+                List<string> neededFields = new List<string>();
+                neededFields.Add("Case ID");
+
+                foreach (var tumor in BothBools)
+                {
+                    foreach (var dna in BothBools)
+                    {
+                        string specifier = getSpecifier(tumor, dna);
+
+                        neededFields.Add(specifier + "is paired");
+                        neededFields.Add(specifier + "min read length");
+                        neededFields.Add(specifier + "max read length");
+                        neededFields.Add(specifier + "mean read length");
+                        neededFields.Add(specifier + "min insert");
+                        neededFields.Add(specifier + "max insert");
+                        neededFields.Add(specifier + "median insert");
+
+                        neededFields.Add(specifier + "Sample");
+                    } // dna
+
+                } // tumor
+
+                var headerizedFile = new HeaderizedFile<CaseMetadata>(inputFile, false, true, "", neededFields);
+                List<CaseMetadata> parsedMetadata;
+                headerizedFile.ParseFile(parser, out parsedMetadata);
+
+                inputFile.Close();
+
+                if (parsedMetadata.Count() != 1)
+                {
+                    throw new Exception("CaseMetadata.ReadFromFile: file " + filename + " has wrong line count: " + parsedMetadata.Count());
+                }
+
+                return parsedMetadata;
+            } // ReadFromFile
+
+            public static string getSpecifier(bool tumor, bool dna)
+            {
+                string specifier;
+
+                if (tumor)
+                {
+                    specifier = "Tumor ";
+                }
+                else
+                {
+                    specifier = "Normal ";
+                }
+
+                if (dna)
+                {
+                    specifier += "DNA ";
+                }
+                else
+                {
+                    specifier += "RNA ";
+                }
+
+                return specifier;
+            }
+
+            static CaseMetadata parser(HeaderizedFile<CaseMetadata>.FieldGrabber fieldGrabber)
+            {
+                Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata = new Dictionary<bool, Dictionary<bool, BAMMetadata>>();
+                Dictionary<bool, Dictionary<bool, string>> sample = new Dictionary<bool, Dictionary<bool, string>>();
+ 
+                foreach (var tumor in BothBools)
+                {
+                    bamMetadata.Add(tumor, new Dictionary<bool, BAMMetadata>());
+                    sample.Add(tumor, new Dictionary<bool, string>());
+
+                    foreach (var dna in BothBools)
+                    {
+                        string specifier = getSpecifier(tumor, dna);
+
+                        bamMetadata[tumor].Add(dna, new BAMMetadata(
+                                                        fieldGrabber.AsBool(specifier + "is paired"),
+                                                        fieldGrabber.AsInt(specifier + "min read length"),
+                                                        fieldGrabber.AsInt(specifier + "max read length"),
+                                                        fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(specifier + "mean read length"),
+                                                        fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(specifier + "median read length"),
+                                                        fieldGrabber.AsInt(specifier + "min insert"),
+                                                        fieldGrabber.AsInt(specifier + "max insert"),
+                                                        fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(specifier + "mean insert"),
+                                                        fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(specifier + "median insert")));
+
+                        if (bamMetadata[tumor][dna].minReadLength == -1)
+                        {
+                            //
+                            // This is a missing normal RNA sample.
+                            //
+                            if (tumor || dna)
+                            {
+                                throw new Exception("CaseMetadata.parser: other than normal RNA has missing read length");
+                            }
+                            bamMetadata[tumor][dna] = null;
+                        }
+
+                        sample[tumor].Add(dna, fieldGrabber.AsString(specifier + "Sample"));
+                    } // dna
+                } // tumor
+
+                return new CaseMetadata(fieldGrabber.AsString("Case ID"), sample, bamMetadata);
+            } // parser
+        }// CaseMetadata
+
+        public static void RunAndWaitForProcess(string binaryName, string commandLine)
+        {
+            var startInfo = new ProcessStartInfo(binaryName, commandLine);
+
+            startInfo.UseShellExecute = false;
+
+            Process process;
+            try
+            {
+                process = Process.Start(startInfo);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error trying to start process cmd.exe");
+                Console.WriteLine("Exception message: " + e.Message);
+
+                throw e;
+            }
+
+            process.WaitForExit();
+        } // RunAndWaitForProcess
+        public static List<string> RunProcessAndGetOutput(string binaryName, string commandLine)
+        {
+            var output = new List<string>();
+
+            var startInfo = new ProcessStartInfo(binaryName, commandLine);
+
+            startInfo.UseShellExecute = false;
+            startInfo.RedirectStandardOutput = true;
+
+            Process process;
+            try
+            {
+                process = Process.Start(startInfo);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error trying to start process cmd.exe");
+                Console.WriteLine("Exception message: " + e.Message);
+
+                throw e;
+            }
+
+            string outputLine;
+            while (null != (outputLine = process.StandardOutput.ReadLine()))
+            {
+                output.Add(outputLine);
+            }
+
+            process.WaitForExit();
+
+            return output;
+        } // RunProcessAndGetOutput
+
+#if false
+        public static string ParsePossiblyQuotedString(string inputString, string terminatingCharacters, out int nCharacters)
+        {
+            //
+            // Trim leading spaces.
+            //
+            nCharacters = 0;
+            while (nCharacters < inputString.Length && inputString[nCharacters] == ' ')
+            {
+                nCharacters++;
+            }
+
+            if (inputString.Substring(nCharacters) == "")
+            {
+                return "";
+            }
+
+            var retVal = "";
+            bool isQuoted = inputString[nCharacters] == '\"';
+            if (isQuoted)
+            {
+                nCharacters++;
+                int beginNonSpace = nCharacters;
+                while (nCharacters < inputString.Length)
+                {
+                    if (inputString[nCharacters] == '\"')
+                    {
+                        nCharacters++;
+                        return inputString.Substring()
+                    }
+                }
+            }
+
+        }
+
+        public static string ParsePossiblyQuotedString(string inputString, string terminatingCharacters = "")
+        {
+            int nCharacters;
+            return ParsePossiblyQuotedString(inputString, terminatingCharacters, out nCharacters);
+        }
+
+        public class VCFFile
+        {
+            public static VCFFile ReadFromFile(string filename)
+            {
+
+            }
+
+            public class Info
+            {
+                public readonly string ID;
+                public readonly string number;
+
+                public enum Type { Integer, Float, Flag, Character, String};
+                public readonly Type type;
+
+                public readonly string description;
+
+                class MetaInformationField
+                {
+                    public readonly string key;
+                    public readonly string value;
+                    public readonly int charsConsumed;  // How many characters of the input line were used in this field?
+
+                    public MetaInformationField(string inputLine)
+                    {
+                        int firstEqual = inputLine.IndexOf('=');
+                        if (firstEqual == -1)
+                        {
+                            throw new Exception("MetaInformationField: input line didn't contain an =: " + inputLine);
+                        }
+
+                        key = inputLine.Substring(0, firstEqual);
+
+
+                    }
+                }
+
+
+                class MetaInformationLine
+                {
+                    public MetaInformationLine(string line)
+                    {
+                        if (!line.StartsWith("##") || !line.Contains("=") || line.Length == line.IndexOf('=') || line[line.IndexOf('=') + 1] == '<' && !line.EndsWith(">"))
+                        {
+                            throw new Exception("ASETools.VCFile.MetaInformationLine constructor: line is not properly formatted: " + line);
+                        }
+
+                        var indexOfEqualSign = line.IndexOf('=');
+                        key = line.Substring(2, indexOfEqualSign - 2);
+                        if (line[indexOfEqualSign+1] != '<')
+                        {
+                            //
+                            // Single value line.
+                            //
+                            values.Add("", line.Substring(indexOfEqualSign + 1));
+                            return;
+                        }
+
+                        var lineGuts = line.Substring(indexOfEqualSign + 2, line.Length - indexOfEqualSign - 3);
+
+                        while (lineGuts.Length != 0)
+                        {
+                            var fields = lineGuts.Split('=');
+                            
+                        }
+                    }
+
+                    public readonly Dictionary<string, string> values = new Dictionary<string, string>();   // If there is only one value, then it's at the empty string key.
+                }
+
+                public Info(string infoLine)
+                {
+                    if (!infoLine.ToLower().StartsWith("##info=<") || !infoLine.EndsWith(">"))
+                    {
+                        throw new Exception("ASETools.VCFFile.Info constructor called with a non-info line");
+                    }
+
+                    string guts = infoLine.Substring(8, infoLine.Length - 9);
+                    var fields = guts.Split(',');
+
+                    var idFields = fields.Where(_ => _.ToLower().StartsWith("id=")).ToList();
+                    var numberFields = fields.Where(_ => _.ToLower().StartsWith("number=")).ToList();
+                    var typeFields = fields.Where(_ => _.ToLower().StartsWith("type=")).ToList();
+                    var descriptionFields = fields.Where(_ => _.ToLower().StartsWith("description=\"") && _.EndsWith("\"")).ToList();
+
+                    if (idFields.Count() != 1 || numberFields.Count() != 1 || typeFields.Count() != 1 || descriptionFields.Count() != 1)
+                    {
+                        throw new Exception("ASETools.VCFFIle.Info constructor: no (or more than one) of ID, Type, Number or Description fields.");
+                    }
+
+                    ID = idFields[0].Substring(3);
+                    number = numberFields[0].Substring(7);
+                    var typeString = typeFields[0].Substring(5);
+                    switch (typeString.ToLower())
+                    {
+                        case "integer": type = Type.Integer; break;
+                        case "float": type = Type.Float; break;
+                        case "flag": type = Type.Flag; break;
+                        case "characher": type = Type.Character; break;
+                        case "string": type = Type.String; break;
+                        default:
+                            throw new Exception("ASETools.VCFFile.Info constructor: type field is of unknown value: " + typeString);
+                    }
+
+                    description = descriptionFields[0].Substring(13, descriptionFields[0].Length - 14); // Probably should check for internal quotes, escape sequences and properly handle quoted commas.  But not until it comes up.
+                } // Info ctor
+            } // Info class
+
+            public class Filter
+            {
+                public readonly string ID;
+                public readonly string description;
+
+                public Filter(string filterLine)
+                {
+                    if (!filterLine.ToLower().StartsWith("##filter=<") || !filterLine.EndsWith("<"))
+                    {
+                        throw new Exception()
+                    }
+                }
+            }
+
+            Dictionary<string, Info> info = new Dictionary<string, Info>(); // Indexed by ID
+
+            public readonly string fileFormat;
+            public readonly string 
+        }
+
+        public class VCFLine
+        {
+            public static List<VCFLine> ReadFromFile(StreamReader inputFile, VCFFile file)
+            {
+
+            }
+        }
+#endif // false
+
     } // ASETools
 
     //
@@ -14034,22 +14493,43 @@ namespace ASELib
     {
         public static double Median(this IEnumerable<double> input) 
         {
-        var list = input.ToList();
-        var n = list.Count();
-        if (n == 0)
-        {
-            return 0;
-        }
+            var list = input.ToList();
+            var n = list.Count();
+            if (n == 0)
+            {
+                return 0;
+            }
 
-        list.Sort();
+            list.Sort();
 
-        if (n % 2 == 1)
+            if (n % 2 == 1)
+            {
+                return list[n / 2];
+            } else
+            {
+                return (list[n / 2] + list[n / 2 - 1]) / 2;
+            }
+        } // Median
+
+        public static double Median(this IEnumerable<int> input)
         {
-            return list[n / 2];
-        } else
-        {
-            return (list[n / 2] + list[n / 2 - 1]) / 2;
-        }
-    }
-}
+            var list = input.ToList();
+            var n = list.Count();
+            if (n == 0)
+            {
+                return 0;
+            }
+
+            list.Sort();
+
+            if (n % 2 == 1)
+            {
+                return list[n / 2];
+            }
+            else
+            {
+                return ((double)list[n / 2] + list[n / 2 - 1]) / 2;
+            }
+        } // Median 
+    } // EnumerableMedian
 }

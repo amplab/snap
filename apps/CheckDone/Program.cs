@@ -222,6 +222,7 @@ namespace CheckDone
                 HandleFilename(case_.annotated_geneHancer_lines_filename, "AnnotatedGeneHancerLines", fileTypesToUse);
                 HandleFilename(case_.expression_by_gene_filename, "ExpressionByGene", fileTypesToUse);
                 HandleFilename(case_.isoform_read_counts_filename, "IsoformReadCounts", fileTypesToUse);
+                HandleFilename(case_.case_metadata_filename, "CaseMetadata", fileTypesToUse);
             }
 
             HandleFilenameIfExists(configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename, "SingleReadPhasing", fileTypesToUse);

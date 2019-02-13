@@ -43,7 +43,7 @@ namespace ASEProcessManager
         delegate string GetPerDiseaseFile(StateOfTheWorld stateOfTheWorld, string disease);
         delegate string GetPerChromosomePerDiseaseFile(StateOfTheWorld stateOfTheWorld, string chromosome, string disease);
         delegate string GenerateCaseIdOutput(string caseId, StateOfTheWorld stateOfTheWorld);
-
+ 
         class PerCaseProcessingStage : ProcessingStage  // a processing stage where an action is taken for every case.
         {
             string stageName;
@@ -3935,6 +3935,18 @@ namespace ASEProcessManager
             } // EvaluateStage
         } // ChooseAnnotatedVariantsProcessingStage
 
+        class CaseMetadataProcessingStage : PerCaseProcessingStage
+        {
+            public CaseMetadataProcessingStage(): base("Compute Case Metadata", "MakeCaseMetadata.exe", "", getInputFiles, null, getOutputFile)
+            { }
+
+            static GetCaseFile[] getInputFiles = { _ => _.normal_dna_filename, _ => _.tumor_dna_filename, _ => _.tumor_rna_filename, _ => (_.normal_rna_file_id == "") ? _.tumor_dna_filename : _.normal_rna_filename,
+                                                   _ => _.normal_dna_reads_at_tentative_selected_variants_filename, _ => _.tumor_dna_reads_at_tentative_selected_variants_filename, _ => _.tumor_rna_reads_at_tentative_selected_variants_filename,
+                                                   _ => (_.normal_rna_file_id == "") ? _.tumor_dna_reads_at_tentative_selected_variants_filename : _.normal_rna_reads_at_tentative_selected_variants_filename};
+
+            static GetCaseFile[] getOutputFile = { _ => _.case_metadata_filename };
+        }
+
         class FPKMProcessingStage : ProcessingStage
 		{
 			public FPKMProcessingStage() { }
@@ -4385,6 +4397,14 @@ namespace ASEProcessManager
             static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename };
         }
 
+        class CompressVCFProcessingStage : PerCaseProcessingStage
+        {
+            public CompressVCFProcessingStage() : base("Compress VCFs", "CompressVCF.exe", "", getInputFile, null, getOutputFile) { }
+
+            static GetCaseFile[] getInputFile = { _ => _.vcf_filename };
+            static GetCaseFile[] getOutputFile = { _ => _.compressed_vcf_filename };
+        }
+
 
         static void Main(string[] args)
         {
@@ -4600,6 +4620,8 @@ namespace ASEProcessManager
             processingStages.Add(new ExpressionDecilesByChromosomeProcessingStage());
             processingStages.Add(new DistanceBetweenMutationsProcessingStage());
             processingStages.Add(new SingleReadPhasingProcessingStage());
+            processingStages.Add(new CompressVCFProcessingStage());
+            processingStages.Add(new CaseMetadataProcessingStage());
 
             if (checkDependencies)
             {
