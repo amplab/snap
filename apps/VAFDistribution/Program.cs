@@ -19,10 +19,10 @@ namespace VAFDistribution
 
         static Dictionary<string, ASETools.PreBucketedHistogram> global_one_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
         static Dictionary<string, ASETools.PreBucketedHistogram> global_multiple_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
-        static Dictionary<string, ASETools.PreBucketedHistogram> global_normal_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
+        static Dictionary<string, ASETools.PreBucketedHistogram> global_germline_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
         static Dictionary<string, ASETools.PreBucketedHistogram> global_silent_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
         static Dictionary<string, ASETools.PreBucketedHistogram> global_idh1_one_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();  // Maps IDH1 mutation type->historgam
-        static Dictionary<string, ASETools.PreBucketedHistogram> global_idh1_normal_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();  // Maps IDH1 mutation type->historgam
+        static Dictionary<string, ASETools.PreBucketedHistogram> global_idh1_germline_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();  // Maps IDH1 mutation type->historgam
         static Dictionary<string, ASETools.PreBucketedHistogram> global_idh1_multiple_mutation_histograms = new Dictionary<string, ASETools.PreBucketedHistogram>();  // Maps IDH1 mutation type->historgam
 
         class HistogramsAndPValue : IComparable<HistogramsAndPValue>
@@ -30,7 +30,7 @@ namespace VAFDistribution
             public readonly double p;
             public readonly ASETools.PreBucketedHistogram oneMutationHistogram;
             public readonly ASETools.PreBucketedHistogram multipleMutationHistogram;
-            public readonly ASETools.PreBucketedHistogram normalHistogram;
+            public readonly ASETools.PreBucketedHistogram germlineHistogram;
             public readonly ASETools.PreBucketedHistogram silentHistogram;
             public readonly string hugo_symbol;
 
@@ -44,12 +44,12 @@ namespace VAFDistribution
                 return p.CompareTo(peer.p);
             }
 
-            public HistogramsAndPValue(double p_, ASETools.PreBucketedHistogram oneMutationHistogram_, ASETools.PreBucketedHistogram multipleMutationHistogram_, ASETools.PreBucketedHistogram normalHistogram_, ASETools.PreBucketedHistogram silentHistogram_, string hugo_symbol_)
+            public HistogramsAndPValue(double p_, ASETools.PreBucketedHistogram oneMutationHistogram_, ASETools.PreBucketedHistogram multipleMutationHistogram_, ASETools.PreBucketedHistogram germlineHistogram_, ASETools.PreBucketedHistogram silentHistogram_, string hugo_symbol_)
             {
                 p = p_;
                 oneMutationHistogram = oneMutationHistogram_;
                 multipleMutationHistogram = multipleMutationHistogram_;
-                normalHistogram = normalHistogram_;
+                germlineHistogram = germlineHistogram_;
                 silentHistogram = silentHistogram_;
                 hugo_symbol = hugo_symbol_;
             }
@@ -110,7 +110,7 @@ namespace VAFDistribution
                 var histogram = geneEntry.Value;
 
                 results.Add(new HistogramsAndPValue(ASETools.binomialTest((int)histogram.nLessThan(0.5), (int)histogram.count(), 0.5, ASETools.BinomalTestType.TwoSided) * bonferroniCorrection, histogram, 
-                    global_multiple_mutation_histograms[hugo_symbol], global_normal_histograms[hugo_symbol], global_silent_histograms[hugo_symbol], hugo_symbol));
+                    global_multiple_mutation_histograms[hugo_symbol], global_germline_histograms[hugo_symbol], global_silent_histograms[hugo_symbol], hugo_symbol));
 
             }
 
@@ -125,7 +125,7 @@ namespace VAFDistribution
                 }
 
                 results.Add(new HistogramsAndPValue(ASETools.binomialTest((int)histogram.nLessThan(0.5), (int)histogram.count(), 0.5, ASETools.BinomalTestType.TwoSided) * bonferroniCorrection, histogram,
-                    global_idh1_multiple_mutation_histograms[mutation], global_idh1_normal_histograms[mutation], new ASETools.PreBucketedHistogram(0, 1.01, 0.01), "IDH1:" + mutation));
+                    global_idh1_multiple_mutation_histograms[mutation], global_idh1_germline_histograms[mutation], new ASETools.PreBucketedHistogram(0, 1.01, 0.01), "IDH1:" + mutation));
             }
 
             results.Sort();
@@ -141,16 +141,16 @@ namespace VAFDistribution
 
                 var oneMutationLines = result.oneMutationHistogram.ComputeHistogram();
                 var multiMutationLines = result.multipleMutationHistogram.ComputeHistogram();
-                var normalLines = result.normalHistogram.ComputeHistogram();
+                var germlineLines = result.germlineHistogram.ComputeHistogram();
                 var silentLines = result.silentHistogram.ComputeHistogram();
 
                 outputFile.WriteLine("hugo_symbol\tp (one mutation not coin flip by binomial test, bonferroni corrected)\tn (one mutation)\tmean (one mutation)");
                 outputFile.WriteLine(result.hugo_symbol + "\t" + result.p + "\t" + result.oneMutationHistogram.count() + "\t" + result.oneMutationHistogram.mean());
-                outputFile.WriteLine("minValue\tone mutation (n = " + result.oneMutationHistogram.count() + ")\tmultiple mutations (n = " + result.multipleMutationHistogram.count() + ")\tnormal (n = " + result.normalHistogram.count() + 
+                outputFile.WriteLine("minValue\tone mutation (n = " + result.oneMutationHistogram.count() + ")\tmultiple mutations (n = " + result.multipleMutationHistogram.count() + ")\tgermline variants (n = " + result.germlineHistogram.count() + 
                     ")\tsilent (n = " + result.silentHistogram.count() + ")");
                 for (int i = 0; i < oneMutationLines.Count(); i++)
                 {
-                    outputFile.WriteLine(oneMutationLines[i].minValue + "\t" + oneMutationLines[i].cdfValue + "\t" + multiMutationLines[i].cdfValue + "\t" + normalLines[i].cdfValue + "\t" + silentLines[i].cdfValue);
+                    outputFile.WriteLine(oneMutationLines[i].minValue + "\t" + oneMutationLines[i].cdfValue + "\t" + multiMutationLines[i].cdfValue + "\t" + germlineLines[i].cdfValue + "\t" + silentLines[i].cdfValue);
                 }
  
                 outputFile.WriteLine();
@@ -322,11 +322,11 @@ namespace VAFDistribution
             {
                 mergeHistograms(global_one_mutation_histograms, histograms[0]);
                 mergeHistograms(global_multiple_mutation_histograms, histograms[1]);
-                mergeHistograms(global_normal_histograms, histograms[2]);
+                mergeHistograms(global_germline_histograms, histograms[2]);
                 mergeHistograms(global_silent_histograms, histograms[3]);
                 mergeHistograms(global_idh1_one_mutation_histograms, histograms[4]);
                 mergeHistograms(global_idh1_multiple_mutation_histograms, histograms[5]);
-                mergeHistograms(global_idh1_normal_histograms, histograms[6]);
+                mergeHistograms(global_idh1_germline_histograms, histograms[6]);
             } // lock
         } // FinishUp
     }

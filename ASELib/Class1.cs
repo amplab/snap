@@ -3234,6 +3234,8 @@ namespace ASELib
         public const string SingleReadPhasingFilename = "SingleReadPhasing.txt";
         public const string GeneScatterGraphLinesWithPercentilesPrefix = "GeneScatterGraphsWithPercentiles_";   // Followed by disease _ chromosome
         public const string ExpressionDistrbutionByChromosomeDirectory = @"expression_distribution_by_chromosome\";
+        public const string UniparentalDisomyFilename = "UniparentalDisomy.txt";
+        public const string UniparentalDisomyHistogramsFilename = "UniparentalDisomyHistograms.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -8158,7 +8160,6 @@ namespace ASELib
                 {
                     throw new Exception(isTumor ? "tumor " : "normal " + "read counts are null");
                 }
-
 
                 return checkReadCountsForASECandidacy(out whyNot, DNAReadCounts, RNAReadCounts, minDNACoverage, minRNACoverage);
             }
