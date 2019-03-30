@@ -226,6 +226,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MergeVCFs", "apps\MergeVCFs
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniparentalDisomy", "apps\UniparentalDisomy\UniparentalDisomy.csproj", "{41767E85-6ED5-4F6A-9B8C-BB6172C6D80F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateTentativeASVsWithoutCNVs", "apps\GenerateTentativeASVsWithoutCNVs\GenerateTentativeASVsWithoutCNVs.csproj", "{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1718,6 +1720,22 @@ Global
 		{41767E85-6ED5-4F6A-9B8C-BB6172C6D80F}.Release|Win32.Build.0 = Release|Any CPU
 		{41767E85-6ED5-4F6A-9B8C-BB6172C6D80F}.Release|x64.ActiveCfg = Release|x64
 		{41767E85-6ED5-4F6A-9B8C-BB6172C6D80F}.Release|x64.Build.0 = Release|x64
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Debug|Win32.Build.0 = Debug|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Debug|x64.ActiveCfg = Debug|x64
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Debug|x64.Build.0 = Debug|x64
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|Any CPU.Build.0 = Release|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|Win32.ActiveCfg = Release|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|Win32.Build.0 = Release|Any CPU
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|x64.ActiveCfg = Release|x64
+		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

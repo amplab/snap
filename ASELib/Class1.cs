@@ -32,7 +32,11 @@ namespace ASELib
         public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
         public const int nHumanAutosomes = 22;
 
+        public const int Million = 1000000;
+        public const int Billion = 1000000000;
+
         public static readonly string[] chromosomes = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrx", "chry" };// Leaves off the mitochondrial genes
+        public static readonly string[] autosomes = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22" };
 
         // Used for writing out Bonferroni corrected p values in Mann Whitney tests
         public class OutputLine
@@ -187,6 +191,62 @@ namespace ASELib
                 return p;
             }
         } // MannWhitney
+
+        public class WelchsTTest
+        {
+            public static double T(IEnumerable<double> X1, IEnumerable<double> X2)   // Using 1 and 2 to correspond to the notation in Wikipedia: https://en.wikipedia.org/wiki/Welch%27s_t-test
+            {
+                var X1bar = MathNet.Numerics.Statistics.Statistics.Mean(X1);
+                var X2bar = MathNet.Numerics.Statistics.Statistics.Mean(X2);
+
+                var s1Squared = MathNet.Numerics.Statistics.Statistics.Variance(X1);    // s is standard deviation, so s^2 is variance, which we get directly from the library
+                var s2Squared = MathNet.Numerics.Statistics.Statistics.Variance(X2);    // s is standard deviation, so s^2 is variance, which we get directly from the library
+
+                var N1 = X1.Count();
+                var N2 = X2.Count();
+
+                return T(X1bar, X2bar, s1Squared, s2Squared, N1, N2);
+            }
+
+            static double T(double X1bar, double X2bar, double s1Squared, double s2Squared, int N1, int N2)
+            {
+                return (X1bar - X2bar) / Math.Sqrt(s1Squared / N1 + s2Squared / N2);
+            }
+
+            public static double OneSidedTTest(IEnumerable<double> X1, IEnumerable<double> X2)
+            {
+
+                var X1bar = MathNet.Numerics.Statistics.Statistics.Mean(X1);
+                var X2bar = MathNet.Numerics.Statistics.Statistics.Mean(X2);
+
+                var s1Squared = MathNet.Numerics.Statistics.Statistics.Variance(X1);    // s is standard deviation, so s^2 is variance, which we get directly from the library
+                var s2Squared = MathNet.Numerics.Statistics.Statistics.Variance(X2);    // s is standard deviation, so s^2 is variance, which we get directly from the library
+
+                var N1 = X1.Count();
+                var N2 = X2.Count();
+
+                var t = T(X1bar, X2bar, s1Squared, s2Squared, N1, N2);
+                var nu = Math.Pow((s1Squared / N1 + s2Squared / N2), 2) / (s1Squared * s1Squared / ((double)N1 * N1 * (N1 - 1) * (N1 - 1)) + s2Squared * s2Squared / ((double)N2 * N2 * (N2 - 1) * (N2 - 1))); // Casting N1 and N2 to double avoids integer overflow
+
+                double p = MathNet.Numerics.Distributions.StudentT.CDF(0, 1, nu, t);
+
+                return p;
+            }
+
+            public static double TwoSidedTTest(IEnumerable<double> X1, IEnumerable<double> X2)
+            {
+                var p = OneSidedTTest(X1, X2);
+
+                if (p > 0.5)
+                {
+                    p = 1.0 - p;
+                }
+
+                p *= 2; // Because 2 tailed
+
+                return p;
+            }
+        } // WelchsTTest
 
         public class GeneScatterGraphLine
         {
@@ -1253,6 +1313,7 @@ namespace ASELib
             public string tumor_fpkm_file_id = "";
             public string normal_fpkm_file_id = "";
             public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
+            public string clinical_supplement_file_id = "";
             public List<string> sample_ids = new List<string>();
 
             //
@@ -1270,6 +1331,7 @@ namespace ASELib
             public string normal_copy_number_filename = "";
             public string tumor_fpkm_filename = "";
             public string normal_fpkm_filename = "";
+            public string clinical_supplement_filename = "";
 
             //
             // Sizes for downloaded files.
@@ -1284,6 +1346,7 @@ namespace ASELib
             public long normal_copy_number_size = 0;
             public long tumor_fpkm_size = 0;
             public long normal_fpkm_size = 0;
+            public long clinical_supplement_size = 0;
 
             //
             // Pathnames for derived files.
@@ -1325,6 +1388,7 @@ namespace ASELib
             public string isoform_read_counts_filename = "";
             public string compressed_vcf_filename = "";
             public string case_metadata_filename = "";
+            public string tentative_asv_without_cnvs_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -1347,6 +1411,7 @@ namespace ASELib
             public string normal_copy_number_file_md5 = "";
             public string tumor_fpkm_file_md5 = "";
             public string normal_fpkm_file_md5 = "";
+            public string clinical_supplement_md5 = "";
 
             //
             // Sizes for derived files.
@@ -1390,6 +1455,7 @@ namespace ASELib
             public long isoform_read_counts_file_size = 0;
             public long compressed_vcf_file_size = 0;
             public long case_metadata_file_size = 0;
+            public long tentative_asv_without_cnvs_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1540,6 +1606,7 @@ namespace ASELib
                 new FieldInformation("Normal Copy Number File ID",                          c => c.normal_copy_number_file_id, (c,v) => c.normal_copy_number_file_id = v),
                 new FieldInformation("Tumor FPKM File ID",                                  c => c.tumor_fpkm_file_id, (c,v) => c.tumor_fpkm_file_id = v),
                 new FieldInformation("Normal FPKM File ID",                                 c => c.normal_fpkm_file_id, (c,v) => c.normal_fpkm_file_id = v),
+                new FieldInformation("Clinical Supplement File ID",                  c => c.clinical_supplement_file_id, (c, v) => c.clinical_supplement_file_id = v),
                 new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
                 new FieldInformation("Sample IDs",                                          c => c.sampleIdsInCommaSeparatedList(), (c,v) => c.sample_ids = v.Split(',').ToList()),
 
@@ -1555,6 +1622,7 @@ namespace ASELib
                 new FieldInformation("Normal FPKM Filename",                                c => c.normal_fpkm_filename, (c,v) => c.normal_fpkm_filename = v),
                 new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
                 new FieldInformation("Decompressed MAF Filename",                           c => c.decompressed_maf_filename, (c,v) => c.decompressed_maf_filename = v),
+                new FieldInformation("Clinical Supplement Filename",                 c => c.clinical_supplement_filename, (c, v) => c.clinical_supplement_filename = v),
 
                 new FieldInformation("Normal DNA Size",                                     c => Convert.ToString(c.normal_dna_size), (c,v) => c.normal_dna_size = LongFromString(v)),
                 new FieldInformation("Tumor DNA Size",                                      c => Convert.ToString(c.tumor_dna_size), (c,v) => c.tumor_dna_size = LongFromString(v)),
@@ -1566,6 +1634,7 @@ namespace ASELib
                 new FieldInformation("Normal Copy Number Size",                             c => Convert.ToString(c.normal_copy_number_size), (c,v) => c.normal_copy_number_size = LongFromString(v)),
                 new FieldInformation("Tumor FPKM Size",                                     c => Convert.ToString(c.tumor_fpkm_size), (c,v) => c.tumor_fpkm_size = LongFromString(v)),
                 new FieldInformation("Normal FPKM Size",                                    c => Convert.ToString(c.normal_fpkm_size), (c,v) => c.normal_fpkm_size = LongFromString(v)),
+                new FieldInformation("Clinical Supplement Size",                            c => Convert.ToString(c.clinical_supplement_size), (c, v) => c.clinical_supplement_size = LongFromString(v)),
 
                 new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, "Normal DNA Allcount File Size", c => c.normal_dna_allcount_size, (c,v) => c.normal_dna_allcount_size = v),
                 new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, "Tumor DNA Allcount File Size", c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v),
@@ -1604,6 +1673,7 @@ namespace ASELib
                 new FieldInformation("Isoform Read Counts",                                 c => c.isoform_read_counts_filename, (c, v) => c.isoform_read_counts_filename = v, DerivedFile.Type.IsoformReadCounts, isoformReadCountsExtension, c => c.case_id, "Isoform Gene Counts Size", c => c.isoform_read_counts_file_size, (c, v) => c.isoform_read_counts_file_size = v),
                 new FieldInformation("Compressed VCF",                                      c => c.compressed_vcf_filename, (c, v) => c.compressed_vcf_filename = v, DerivedFile.Type.CompressedVCF, compressedVCFExtension, c => c.normal_dna_file_id, "Compressed VCF Size", c => c.compressed_vcf_file_size, (c, v) => c.compressed_vcf_file_size = v),
                 new FieldInformation("Case Metadata",                                       c => c.case_metadata_filename, (c, v) => c.case_metadata_filename = v, DerivedFile.Type.CaseMetadata, caseMetadataExtension, c => c.case_id, "Case Metadata Size", c => c.case_metadata_file_size, (c, v) => c.case_metadata_file_size = v),
+                new FieldInformation("Tentative ASVs without CNVs Filename",                c => c.tentative_asv_without_cnvs_filename, (c, v) => c.tentative_asv_without_cnvs_filename = v, DerivedFile.Type.TentativeASVsWithoutCNVs, tentativeASVsWithoutCNVsExtension, c => c.case_id, "Tentative ASVs Without CNVs Size", c => c.tentative_asv_without_cnvs_size, (c, v) => c.tentative_asv_without_cnvs_size = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -1619,6 +1689,7 @@ namespace ASELib
                 new FieldInformation("Normal Copy Number MD5",                              c => c.normal_copy_number_file_md5, (c,v) => c.normal_copy_number_file_md5 = v),
                 new FieldInformation("Tumor FPKM MD5",                                      c => c.tumor_fpkm_file_md5, (c,v) => c.tumor_fpkm_file_md5 = v),
                 new FieldInformation("Normal FPKM MD5",                                     c => c.normal_fpkm_file_md5, (c,v) => c.normal_fpkm_file_md5 = v),
+                new FieldInformation("Clinical Supplement MD5",                             c => c.clinical_supplement_md5, (c,v) => c.clinical_supplement_md5 = v),
 
             }; // fieldInformation
 
@@ -2104,6 +2175,7 @@ namespace ASELib
             public bool downloadedFilesHaveMD5Sums = true;  // The BeatAML data set doesn't have them (though the synapse client does internally).
             public string samplesSummaryPathname = @"\\fds-k24-09\d$\BeatAML-20180411\Samples Summary.txt";
             public string synapseDirectory = @"\\fds-k24-09\d$\BeatAML-20180411\";
+            public string patient_metadata_directory = defaultBaseDirectory + @"patient_metadata\";
 
             public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
             public string geneScatterGraphsLinesWithPercentilesDirectory = defaultBaseDirectory + @"gene_scatter_graphs_with_percentiles\";
@@ -2187,6 +2259,7 @@ namespace ASELib
                 methylationREFsFilename = baseDirectory + "compositeREFs450.txt";
                 zero_one_two_directory = baseDirectory + @"012graphs\";
                 geneHancerFilename = baseDirectory + @"genehancer.txt";
+                patient_metadata_directory = baseDirectory + @"patient_metadata\";
 
 
                 dataDirectories = new List<string>();
@@ -3176,6 +3249,7 @@ namespace ASELib
         public const string isoformReadCountsExtension = ".isoformReadCounts";
         public const string compressedVCFExtension = ".vcf.gz";
         public const string caseMetadataExtension = ".case_metadata.txt";
+        public const string tentativeASVsWithoutCNVsExtension = ".tentative_asvs_without_cnvs.txt";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
@@ -3285,7 +3359,7 @@ namespace ASELib
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
-                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata
+                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs
             };
         } // DerivedFile
 
@@ -5663,10 +5737,11 @@ namespace ASELib
         //
         public struct ChromosomeSize : IComparable<ChromosomeSize>
         {
-            public ChromosomeSize(string name_, int size_)
+            public ChromosomeSize(string name_, int size_, int centromere_)
             {
                 name = name_;
                 size = size_;
+                centromere = centromere_;
             }
 
             public int CompareTo(ChromosomeSize other)
@@ -5680,19 +5755,20 @@ namespace ASELib
                 return 1;
             }
 
-            public string name;
-            public int size;
+            public readonly string name;
+            public readonly int size;
+            public readonly int centromere;
         } // ChromosomeSize
 
-        // GRCh38 chromosome sizes
-        static public readonly ChromosomeSize[] chromosomeSizes = {new ChromosomeSize("chr1",  248956422), new ChromosomeSize("chr2",  242193529), new ChromosomeSize("chr3",  198295559),
-                                                                   new ChromosomeSize("chr4",  190214555), new ChromosomeSize("chr5",  181538259), new ChromosomeSize("chr6",  170805979),
-                                                                   new ChromosomeSize("chr7",  159345973), new ChromosomeSize("chr8",  145138636), new ChromosomeSize("chr9",  138394717),
-                                                                   new ChromosomeSize("chr10", 133797422), new ChromosomeSize("chr11", 135086622), new ChromosomeSize("chr12", 133275309),
-                                                                   new ChromosomeSize("chr13", 114364328), new ChromosomeSize("chr14", 107043718), new ChromosomeSize("chr15", 101991189),
-                                                                   new ChromosomeSize("chr16",  90338345), new ChromosomeSize("chr17",  83257441), new ChromosomeSize("chr18",  80373285),
-                                                                   new ChromosomeSize("chr19",  58617616), new ChromosomeSize("chr20",  64444167), new ChromosomeSize("chr21",  46709983),
-                                                                   new ChromosomeSize("chr22",  50818468), new ChromosomeSize("chrx",  156040895), new ChromosomeSize("chry",   57227415) };
+        // GRCh38 chromosome sizes.  Centromere locations from Wikipedia.
+        static public readonly ChromosomeSize[] chromosomeSizes = {new ChromosomeSize("chr1",  248956422, 123400000), new ChromosomeSize("chr2",  242193529, 93900000), new ChromosomeSize("chr3",  198295559, 90900000),
+                                                                   new ChromosomeSize("chr4",  190214555,  50000000), new ChromosomeSize("chr5",  181538259, 48800000), new ChromosomeSize("chr6",  170805979, 59800000),
+                                                                   new ChromosomeSize("chr7",  159345973,  60100000), new ChromosomeSize("chr8",  145138636, 45200000), new ChromosomeSize("chr9",  138394717, 43000000),
+                                                                   new ChromosomeSize("chr10", 133797422,  39800000), new ChromosomeSize("chr11", 135086622, 53400000), new ChromosomeSize("chr12", 133275309, 35500000),
+                                                                   new ChromosomeSize("chr13", 114364328,  17700000), new ChromosomeSize("chr14", 107043718, 17200000), new ChromosomeSize("chr15", 101991189, 19000000),
+                                                                   new ChromosomeSize("chr16",  90338345,  36800000), new ChromosomeSize("chr17",  83257441, 25100000), new ChromosomeSize("chr18",  80373285, 18500000),
+                                                                   new ChromosomeSize("chr19",  58617616,  26200000), new ChromosomeSize("chr20",  64444167, 28100000), new ChromosomeSize("chr21",  46709983, 12000000),
+                                                                   new ChromosomeSize("chr22",  50818468,  15000000), new ChromosomeSize("chrx",  156040895, 61000000), new ChromosomeSize("chry",   57227415, 10400000) };
 
         static public readonly Dictionary<string, ChromosomeSize> chromosomeSizesByName = new Dictionary<string, ChromosomeSize>();
 
@@ -8887,6 +8963,7 @@ namespace ASELib
 
         public static bool[] BothBools = { true, false };   // There's probably something like this in the runtime, but whatever.
         public static Dictionary<bool, string> tumorToString = new Dictionary<bool, string>();  // true -> Tumor, false -> Normal
+        public static string[] BothGenders = { "male", "female" };
 
         public class HistogramResultLine
         {
@@ -9266,6 +9343,57 @@ namespace ASELib
 
                 return result;
             }// ComputeHistogram
+
+            public void WriteHistogram(StreamWriter outputFile, string format = "G")
+            {
+                outputFile.WriteLine(HistogramResultLine.Header());
+                ComputeHistogram(format).ToList().ForEach(_ => outputFile.WriteLine(_));
+            }
+
+            public delegate double ValueGetter(HistogramResultLine h);
+            static public void WriteBatchOfHistogramValues(StreamWriter outputFile, List<KeyValuePair<string, PreBucketedHistogram>> headersAndHistograms, ValueGetter valueGetter)
+            {
+                if (headersAndHistograms.Count() == 0)
+                {
+                    return; // No histograms, no output.
+                }
+
+                var first = headersAndHistograms[0].Value;
+                if (headersAndHistograms.Select(_ => _.Value).Any(_ => _.minBucket != first.minBucket || _.maxBucket != first.maxBucket || _.increment != first.increment))
+                {
+                    throw new Exception("ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs: not all input histograms have the same shape.");
+                }
+
+                outputFile.Write("minValue");
+                foreach (var headerAndHistogram in headersAndHistograms)
+                {
+                    outputFile.Write("\t" + headerAndHistogram.Key + " (n = " + headerAndHistogram.Value.count() + ")");
+                }
+                outputFile.WriteLine();
+
+                var lines = new HistogramResultLine[headersAndHistograms.Count][];
+                for (int i = 0; i < headersAndHistograms.Count(); i++)
+                {
+                    lines[i] = headersAndHistograms[i].Value.ComputeHistogram();
+                }
+
+                for (int whichLine = 0; whichLine < lines[0].Count(); whichLine++)
+                {
+                    outputFile.Write(lines[0][whichLine].minValue);
+
+                    for (int whichHistogram = 0; whichHistogram < headersAndHistograms.Count(); whichHistogram++)
+                    {
+                        outputFile.Write("\t" + valueGetter(lines[whichHistogram][whichLine]));
+                    } // which histogram
+                    outputFile.WriteLine();
+                } // Which line
+
+            } // WriteBatchOfHistogramValues
+
+            static public void WriteBatchOfHistogramCDFs(StreamWriter outputFile, List<KeyValuePair<string, PreBucketedHistogram>> headersAndHistograms)
+            {
+                WriteBatchOfHistogramValues(outputFile, headersAndHistograms, line => line.cdfValue);
+            } // WriteBatchOfHistogramCDFs
 
         } // PreBucketedHistogram
 
@@ -11008,6 +11136,7 @@ namespace ASELib
             string getVitalStatus();
             int getOverallSurvivalInDays();
             string getPatientId();
+            string getGender();
         }
         //
         // This for the BeatAML data, not TCGA
@@ -11054,6 +11183,11 @@ namespace ASELib
             public string getPatientId()
             {
                 return patientId;
+            }
+
+            public string getGender()
+            {
+                return gender;
             }
 
             public static List<BeatAMLClinicalSummaryLine> readFile(string filename)
@@ -11376,7 +11510,7 @@ namespace ASELib
 
                 if (null == inputFile)
                 {
-                    return null;
+                    throw new Exception("TCGAClinicalSummaryLine.readFromFile(" + filename + "): unable to open file.");
                 }
 
                 //
@@ -11418,6 +11552,7 @@ namespace ASELib
                 {
                     "bcr_patient_uuid",
                     "vital_status",
+                    "gender"
                 };  // Tons more stuff we could include.
 
                 var wantedFieldsList = wantedFields.ToList();
@@ -11437,14 +11572,15 @@ namespace ASELib
 
             static TCGAClinicalSummaryLine parse(HeaderizedFile<TCGAClinicalSummaryLine>.FieldGrabber fieldGrabber, string daysToDeathFieldName)
             {
-                return new TCGAClinicalSummaryLine(fieldGrabber.AsString("bcr_patient_uuid"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString(daysToDeathFieldName), fieldGrabber.AsString("vital_status"));
+                return new TCGAClinicalSummaryLine(fieldGrabber.AsString("bcr_patient_uuid").ToLower(), fieldGrabber.AsIntMinusOneIfStarOrEmptyString(daysToDeathFieldName), fieldGrabber.AsString("vital_status"), fieldGrabber.AsString("gender").ToLower());
             }
 
-            TCGAClinicalSummaryLine(string patientId_, int days_to_death_, string vitalStatus_)
+            TCGAClinicalSummaryLine(string patientId_, int days_to_death_, string vitalStatus_, string gender_)
             {
                 patientId = patientId_;
                 days_to_death = days_to_death_;
                 vitalStatus = vitalStatus_;
+                gender = gender_;
             }
 
             public string getPatientId()
@@ -11462,9 +11598,32 @@ namespace ASELib
                 return vitalStatus;
             }
 
+            public string getGender()
+            {
+                return gender;
+            }
+
+            public static Dictionary<string, TCGAClinicalSummaryLine> readAllToDictionary(Configuration configuration)
+            {
+                var retVal = new Dictionary<string, TCGAClinicalSummaryLine>();
+
+                foreach (var file in Directory.EnumerateFiles(configuration.patient_metadata_directory))
+                {
+                    if (!file.EndsWith(".txt"))
+                    {
+                        continue;   // ., .., etc.
+                    }
+
+                    readFromFile(file).ForEach(_ => retVal.Add(_.getPatientId(), _));
+                }
+
+                return retVal;
+            }
+
             public readonly string patientId;
             public readonly int days_to_death;
             public readonly string vitalStatus;
+            public readonly string gender;
         } // TCGAClinicalSummaryLine
 
         public class KaplanMeierPoint
@@ -11704,6 +11863,10 @@ namespace ASELib
 
             public void run(int nThreads)
             {
+                if (nThreads <= 0)
+                {
+                    throw new Exception("ASETools.WorkerThreadHelper.run: thread count must be strictly positive.");
+                }
                 start(nThreads);
                 join();
             }
@@ -13386,6 +13549,7 @@ namespace ASELib
             public ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap;
             public List<string> diseases;
             public Stopwatch timer; // Starts running as soon as this is created
+            public Dictionary<string, TCGAClinicalSummaryLine> clinicalSummariesByPatientId;
 
             public static CommonData LoadCommonData(string[] args)
             {
@@ -13397,6 +13561,15 @@ namespace ASELib
                 {
                     Console.WriteLine("Unable to load configuration.");
                     return null;
+                }
+
+                Dictionary<string, TCGAClinicalSummaryLine> clinicalSummariesByPatientId;
+                if (configuration.isBeatAML)
+                {
+                    clinicalSummariesByPatientId = null;
+                } else
+                {
+                    clinicalSummariesByPatientId = TCGAClinicalSummaryLine.readAllToDictionary(configuration);
                 }
 
                 var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
@@ -13447,11 +13620,12 @@ namespace ASELib
                     expressionDistributionByChromosomeMap = ASETools.ExpressionDistributionByChromosomeMap.LoadFromFile(configuration.expression_distribution_by_chromosome_map_filename);
                 }
 
-                return new CommonData(cases, configuration, geneLocationInformation, geneMap, perGeneASEMap, aseCorrection, diseases, timer, expressionDistributionByChromosomeMap);
+                return new CommonData(cases, configuration, geneLocationInformation, geneMap, perGeneASEMap, aseCorrection, diseases, timer, expressionDistributionByChromosomeMap, clinicalSummariesByPatientId);
             } // LoadCommonData
 
             CommonData(Dictionary<string, Case> cases_, Configuration configuration_, GeneLocationsByNameAndChromosome geneLocationInformation_, GeneMap geneMap_,
-                Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap_, ASECorrection aseCorrection_, List<string> diseases_, Stopwatch timer_, ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap_)
+                Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap_, ASECorrection aseCorrection_, List<string> diseases_, Stopwatch timer_, ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap_,
+                Dictionary<string, TCGAClinicalSummaryLine> clinicalSummariesByPatientId_)
             {
                 cases = cases_;
                 listOfCases = cases.Select(x => x.Value).ToList();
@@ -13463,6 +13637,7 @@ namespace ASELib
                 diseases = diseases_;
                 timer = timer_;
                 expressionDistributionByChromosomeMap = expressionDistributionByChromosomeMap_;
+                clinicalSummariesByPatientId = clinicalSummariesByPatientId_;
             }
         } // CommonData
 
@@ -14398,7 +14573,6 @@ namespace ASELib
             }
         }
 #endif // false
-
     } // ASETools
 
     //

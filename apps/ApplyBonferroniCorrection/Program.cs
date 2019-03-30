@@ -300,7 +300,7 @@ namespace ApplyBonferroniCorrection
                 // gene size
                 if (geneLocationInformation.genesByName.ContainsKey(result.hugo_symbol))
                 {
-                    outputLine += "\t" + geneLocationInformation.genesByName[result.hugo_symbol].size() + "\t" + geneLocationInformation.genesByName[result.hugo_symbol].codingSizeOfLargestIsoform();
+                    outputLine += "\t" + ASETools.NumberWithCommas(geneLocationInformation.genesByName[result.hugo_symbol].size()) + "\t" + ASETools.NumberWithCommas(geneLocationInformation.genesByName[result.hugo_symbol].codingSizeOfLargestIsoform());
                 } else
                 {
                     outputLine += "\t*\t*";

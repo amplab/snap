@@ -3952,7 +3952,7 @@ namespace ASEProcessManager
             public UniparentalDisomyProcessingStage() : base("Uniparental Disomy", true, "UniparentalDisomy.exe", "", getInputFiles, null, getOutputFile)
             { }
 
-            static GetCaseFile[] getInputFiles = { _ => _.tentative_annotated_selected_variants_filename, _ => (_.tumor_copy_number_file_id == "") ? _.tentative_annotated_selected_variants_filename : _.tumor_copy_number_filename };
+            static GetCaseFile[] getInputFiles = { _ => _.tentative_asv_without_cnvs_filename };
             static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.UniparentalDisomyFilename };
         } // UniparentalDisomyProcessingStage
 
@@ -4406,6 +4406,15 @@ namespace ASEProcessManager
             static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename };
         }
 
+        class TentativeASVWithoutCNVsProcessingStage : PerCaseProcessingStage
+        {
+            public TentativeASVWithoutCNVsProcessingStage() : base("Tentative ASV without CNVs", "GenerateTentativeASVsWithoutCNVs.exe", "", getCaseFiles, null, getOutputFile)
+            { }
+
+            static GetCaseFile[] getCaseFiles = { _ => _.tentative_annotated_selected_variants_filename, _ => _.tumor_copy_number_filename };
+            static GetCaseFile[] getOutputFile = { _ => _.tentative_asv_without_cnvs_filename };
+        }
+
         class CompressVCFProcessingStage : PerCaseProcessingStage
         {
             public CompressVCFProcessingStage() : base("Compress VCFs", "CompressVCF.exe", "", getInputFile, null, getOutputFile) { }
@@ -4632,6 +4641,7 @@ namespace ASEProcessManager
             processingStages.Add(new CompressVCFProcessingStage());
             processingStages.Add(new CaseMetadataProcessingStage());
             processingStages.Add(new UniparentalDisomyProcessingStage());
+            processingStages.Add(new TentativeASVWithoutCNVsProcessingStage());
 
             if (checkDependencies)
             {
