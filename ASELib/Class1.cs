@@ -50,6 +50,7 @@ namespace ASELib
             string lowerChromosome = chromosome.ToLower();
             return lowerChromosome == "m" || lowerChromosome == "mt" || lowerChromosome == "chrm" || lowerChromosome == "chrmt";
         }
+
         static public bool isChromosomeSex(string chromosome)
         {
             string lowerChromosome = chromosome.ToLower();
@@ -58,7 +59,8 @@ namespace ASELib
 
         static public bool isChromosomeAutosomal(string chromosome)
         {
-            return !isChromosomeSex(chromosome) && !isChromosomeMitochondrial(chromosome);
+            string lowerChromosome = chromosome.ToLower();
+            return autosomes.Contains(lowerChromosome) || autosomes.Contains("chr" + lowerChromosome);
         }
 
         public static int ChromosomeNameToIndex(string chromosomeName)
@@ -7518,7 +7520,7 @@ namespace ASELib
                         continue;
                     }
 
-                    if (contig != samLine.rname)
+                    if (contig.ToLower() != samLine.rname.ToLower())
                     {
                         // Wrong contig. Ignore it.
                         continue;
@@ -8249,6 +8251,11 @@ namespace ASELib
                 return IsASECandidate(out whyNot, isTumor, copyNumber, configuration, perGeneASEMap, geneMap, inputMinRNACoverage, inputMinDNACoverage);
             }
 
+            public bool IsASECandidate(bool isTumor, Dictionary<bool, List<CopyNumberVariation>> copyNumber, CommonData commonData)
+            {
+                return IsASECandidate(isTumor, copyNumber, commonData.configuration, commonData.perGeneASEMap, commonData.geneMap);
+            }
+
             public bool IsASECandidate(out string whyNot, bool isTumor, Dictionary<bool, List<CopyNumberVariation>> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int inputMinRNACoverage = -1, int inputMinDNACoverage = -1)
             { 
                 if (!isTumor && normalRNAReadCounts == null)
@@ -8286,7 +8293,7 @@ namespace ASELib
                     }
                 }
 
-                if (copyNumber[isTumor] == null)
+                if (copyNumber == null || copyNumber[isTumor] == null)
                 {
                     whyNot = "ASE Candidate";
                     return true;
@@ -11518,6 +11525,7 @@ namespace ASELib
                 //
 
                 string daysToDeathFieldName;
+                string ageAtDiagnosisFieldName;
                 var header = inputFile.ReadLine();
                 if (header == null)
                 {
@@ -11537,6 +11545,19 @@ namespace ASELib
                     return null;
                 }
 
+                if (header.Contains("age_at_diagnosis"))
+                {
+                    ageAtDiagnosisFieldName = "age_at_diagnosis";
+                } else if (header.Contains("age_at_initial_pathologic_diagnosis"))
+                {
+                    ageAtDiagnosisFieldName = "age_at_initial_pathologic_diagnosis";
+                } else
+                {
+                    Console.Write("No recognized age at diagnosis field name in header.  These are the fields that contain the word 'age':");
+                    header.Split('\t').Where(x => x.Contains("age")).ToList().ForEach(x => Console.WriteLine(" " + x));
+                    return null;
+                }
+
                 //
                 // Now reopen the input file.
                 //
@@ -11552,11 +11573,12 @@ namespace ASELib
                 {
                     "bcr_patient_uuid",
                     "vital_status",
-                    "gender"
+                    "gender",
                 };  // Tons more stuff we could include.
 
                 var wantedFieldsList = wantedFields.ToList();
                 wantedFieldsList.Add(daysToDeathFieldName);
+                wantedFieldsList.Add(ageAtDiagnosisFieldName);
 
                 // 
                 // These files are weird: they have two copies of the header line and then a second, slightly different header, and then a third really weird line with CDE_ID on it.
@@ -11565,22 +11587,24 @@ namespace ASELib
                 string[] additionalValuesToTreatAsStar = { "[Not Applicable]", "[Discrepancy]", "[Not Available]", "[Completed]" };
                 var headerizedFile = new HeaderizedFile<TCGAClinicalSummaryLine>(inputFile, false, false, "", wantedFieldsList, rowsToSkipAfterHeader_: 2, additionalValuesToTreatAsStar_: additionalValuesToTreatAsStar.ToList());
                 List<TCGAClinicalSummaryLine> result;
-                headerizedFile.ParseFile(x => parse(x, daysToDeathFieldName), out result);
+                headerizedFile.ParseFile(x => parse(x, daysToDeathFieldName, ageAtDiagnosisFieldName), out result);
 
                 return result;
             }
 
-            static TCGAClinicalSummaryLine parse(HeaderizedFile<TCGAClinicalSummaryLine>.FieldGrabber fieldGrabber, string daysToDeathFieldName)
+            static TCGAClinicalSummaryLine parse(HeaderizedFile<TCGAClinicalSummaryLine>.FieldGrabber fieldGrabber, string daysToDeathFieldName, string ageAtDiagnosisFieldName)
             {
-                return new TCGAClinicalSummaryLine(fieldGrabber.AsString("bcr_patient_uuid").ToLower(), fieldGrabber.AsIntMinusOneIfStarOrEmptyString(daysToDeathFieldName), fieldGrabber.AsString("vital_status"), fieldGrabber.AsString("gender").ToLower());
+                return new TCGAClinicalSummaryLine(fieldGrabber.AsString("bcr_patient_uuid").ToLower(), fieldGrabber.AsIntMinusOneIfStarOrEmptyString(daysToDeathFieldName), fieldGrabber.AsString("vital_status"), fieldGrabber.AsString("gender").ToLower(),
+                    fieldGrabber.AsIntMinusOneIfStarOrEmptyString(ageAtDiagnosisFieldName));
             }
 
-            TCGAClinicalSummaryLine(string patientId_, int days_to_death_, string vitalStatus_, string gender_)
+            TCGAClinicalSummaryLine(string patientId_, int days_to_death_, string vitalStatus_, string gender_, int age_at_diagnosis_)
             {
                 patientId = patientId_;
                 days_to_death = days_to_death_;
                 vitalStatus = vitalStatus_;
                 gender = gender_;
+                age_at_diagnosis = age_at_diagnosis_;
             }
 
             public string getPatientId()
@@ -11624,6 +11648,7 @@ namespace ASELib
             public readonly int days_to_death;
             public readonly string vitalStatus;
             public readonly string gender;
+            public readonly int age_at_diagnosis;
         } // TCGAClinicalSummaryLine
 
         public class KaplanMeierPoint

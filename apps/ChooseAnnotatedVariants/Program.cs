@@ -90,6 +90,7 @@ namespace ChooseAnnotatedVariants
                 nearbyHistogram.ComputeHistogram().ToList().ForEach(_ => summaryFile.WriteLine(_.ToString()));
 
                 summaryFile.WriteLine("**done**");
+                summaryFile.Close();
             }
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
@@ -99,11 +100,12 @@ namespace ChooseAnnotatedVariants
             threading2.run();
 
             Console.WriteLine();
-            Console.WriteLine("Processed " + listOfCases.Count() + " cases with " + globalCounts.nTentativeVariants + " tentative variants in " + ASETools.ElapsedTimeInSeconds(timer));
+            Console.WriteLine("Processed " + ASETools.NumberWithCommas(listOfCases.Count()) + " cases with " + ASETools.NumberWithCommas(globalCounts.nTentativeVariants) + " tentative variants in " + ASETools.ElapsedTimeInSeconds(timer));
 
-            Console.WriteLine("Accepted " + globalCounts.nGermlineIncluded + " germline and " + globalCounts.nSomatic + " somatic variants (" + globalCounts.nIncludedForNoObservedBias + " for lack of observed bias in either direction), rejected " + globalCounts.nExcludedByIsASE +
-                " because of IsASE, " + globalCounts.nExcludedForObservedBias + " because of observed bias, " + globalCounts.nExcludedByMappedReads +
-                " because of repetitive mapped reads, and " + globalCounts.nExcludedByProximityToOtherVariants + " because of proximity to other variants.");
+            Console.WriteLine("Accepted " + ASETools.NumberWithCommas(globalCounts.nGermlineIncluded) + " germline and " + ASETools.NumberWithCommas(globalCounts.nSomatic) + " somatic variants (" + ASETools.NumberWithCommas(globalCounts.nIncludedForNoObservedBias) + " for lack of observed bias in either direction), rejected " + 
+                ASETools.NumberWithCommas(globalCounts.nExcludedByIsASE) +
+                " because of IsASE, " + ASETools.NumberWithCommas(globalCounts.nExcludedForObservedBias) + " because of observed bias, " + ASETools.NumberWithCommas(globalCounts.nExcludedByMappedReads) +
+                " because of repetitive mapped reads, and " + ASETools.NumberWithCommas(globalCounts.nExcludedByProximityToOtherVariants) + " because of proximity to other variants.");
 
             Console.WriteLine("Acceptance rate among germline variants " + (double)globalCounts.nGermlineIncluded / (globalCounts.nTentativeVariants - globalCounts.nSomatic));
         }
@@ -122,12 +124,14 @@ namespace ChooseAnnotatedVariants
                     variantMap.Add("chr" + chr, new Dictionary<int, Dictionary<int, List<double>>>());
                 }
 
-                variantMap.Add("chrX", new Dictionary<int, Dictionary<int, List<double>>>());
-                variantMap.Add("chrY", new Dictionary<int, Dictionary<int, List<double>>>());
+                variantMap.Add("chrx", new Dictionary<int, Dictionary<int, List<double>>>());
+                variantMap.Add("chry", new Dictionary<int, Dictionary<int, List<double>>>());
             }
 
             public List<double> getVariantsInProximityToALocus(string chr, int locus, int maxDistance, int minNeeded, out int actualDistance)
             {
+                chr = chr.ToLower();
+
                 if (maxDistance > treeGranularity)
                 {
                     throw new Exception("getVariantsInProximityToALocus: looking too far afield: " + maxDistance + " > " + treeGranularity);
@@ -228,18 +232,26 @@ namespace ChooseAnnotatedVariants
                     continue;
                 }
 
+                if (!ASETools.chromosomes.Contains(annotatedVariant.contig.ToLower()))
+                {
+                    //
+                    // MT or one of the chrun things.  Skip it.
+                    //
+                    continue;
+                }
+
                 int roundedLocus = (annotatedVariant.locus / treeGranularity) * treeGranularity;
 
-                if (!perThreadState.variantMap[annotatedVariant.contig].ContainsKey(roundedLocus))
+                if (!perThreadState.variantMap[annotatedVariant.contig.ToLower()].ContainsKey(roundedLocus))
                 {
-                    perThreadState.variantMap[annotatedVariant.contig].Add(roundedLocus, new Dictionary<int, List<double>>());
+                    perThreadState.variantMap[annotatedVariant.contig.ToLower()].Add(roundedLocus, new Dictionary<int, List<double>>());
                 }
 
-                if (!perThreadState.variantMap[annotatedVariant.contig][roundedLocus].ContainsKey(annotatedVariant.locus))
+                if (!perThreadState.variantMap[annotatedVariant.contig.ToLower()][roundedLocus].ContainsKey(annotatedVariant.locus))
                 {
-                    perThreadState.variantMap[annotatedVariant.contig][roundedLocus].Add(annotatedVariant.locus, new List<double>());
+                    perThreadState.variantMap[annotatedVariant.contig.ToLower()][roundedLocus].Add(annotatedVariant.locus, new List<double>());
                 }
-                perThreadState.variantMap[annotatedVariant.contig][roundedLocus][annotatedVariant.locus].Add(annotatedVariant.GetTumorAltAlleleFraction());
+                perThreadState.variantMap[annotatedVariant.contig.ToLower()][roundedLocus][annotatedVariant.locus].Add(annotatedVariant.GetTumorAltAlleleFraction());
             } // variant
         } // HandleOneCase
 
@@ -273,8 +285,8 @@ namespace ChooseAnnotatedVariants
         {
             //
             // Now go back through the tentative variants and select the ones that we want to actually keep.  We throw them
-            // out on three bases: being in reference-biased regions; being otherwise not ASE-quality (for instance for copy number
-            // variations or DNA read counts being off) and being too close to other selected variants.  The other conditions were already
+            // out on four bases: being in reference-biased regions; being otherwise not ASE-quality (for instance for copy number
+            // variations or DNA read counts being off), not being in an autosome and being too close to other selected variants.  The other conditions were already
             // checked when the variants were initially selected.
             //
 
@@ -300,9 +312,9 @@ namespace ChooseAnnotatedVariants
 
             //
             // Filter the ones with bad read counts, DNA imbalance or copy number variants.  We alrady put the somatic mutations in the final list, so cull them
-            // here for the rest of the processing.
+            // here for the rest of the processing.  Also filter germline variants that are not autosomal.
             //
-            var aseCandidates = tentativeAnnotatedSelectedVariants.Where(_ => _.IsASECandidate(true, copyNumber, configuration, null, geneMap) && !_.somaticMutation).ToList();
+            var aseCandidates = tentativeAnnotatedSelectedVariants.Where(_ => _.IsASECandidate(true, copyNumber, configuration, null, geneMap)  && ASETools.isChromosomeAutosomal(_.contig) && !_.somaticMutation).ToList();
             state.nExcludedByIsASE += tentativeAnnotatedSelectedVariants.Where(_ => !_.somaticMutation).Count() - aseCandidates.Count();
 
             var afterRepetitiveFilter = new List<ASETools.AnnotatedVariant>();

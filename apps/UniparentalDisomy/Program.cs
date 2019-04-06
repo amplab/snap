@@ -64,10 +64,15 @@ namespace UniparentalDisomy
         static Dictionary<string, Dictionary<bool, ASETools.PreBucketedHistogram>> globalWithAndWithoutGeneDistanceSoftBeginningToFirstNonhomozygous = new Dictionary<string, Dictionary<bool, ASETools.PreBucketedHistogram>>(); // Gene -> mutated -> Histogram  (only the chromosome containing the gene)
         static Dictionary<string, Dictionary<bool, ASETools.PreBucketedHistogram>> globalWithAndWithoutGeneDistanceSoftEndToFirstNonhomozygous = new Dictionary<string, Dictionary<bool, ASETools.PreBucketedHistogram>>(); // Gene -> mutated -> Histogram  (only the chromosome containing the gene)
 
+        static Dictionary<int, ASETools.RunningMeanAndStdDev> globalExpressionOfMostCommonAlleleByAgeAtDiagnosis = new Dictionary<int, ASETools.RunningMeanAndStdDev>();
+
         static Dictionary<string, Dictionary<int, Dictionary<int, int>>> globalGeneByFlankingHomozygousSites = new Dictionary<string, Dictionary<int, Dictionary<int, int>>>();     // Maps hugo symbol -> 0,1,2 (mutation count) -> {0,1,2} flanking homozygous sites -> count
 
+        static Dictionary<string, ASETools.PreBucketedHistogram> globalChr6ByDisease = new Dictionary<string, ASETools.PreBucketedHistogram>();
 
-        static string[] genesToConsider = { "TP53", "VHL", "SAMD9", "KEAP1", "KRAS", "CDKN2A", "SAMD9L", "ATM", "SMAD4", "STK11", "PTEN", "CDH1", "PBRM1", "MUC16", "TTN", "ACTB"};
+
+        static string[] genesToConsider = { "TP53", "VHL", "SAMD9", "KEAP1", "KRAS", "CDKN2A", "SAMD9L", "ATM", "SMAD4", "STK11", "PTEN", "CDH1", "PBRM1", "MUC16", "TTN", "ACTB", "HLA-A", "HLA-B", "HLA-C"};
+
 
         static List<string> chromosomesToUse = new List<string>();
 
@@ -76,11 +81,23 @@ namespace UniparentalDisomy
 
         const int minReads = 10;
 
+        delegate ASETools.ReadCounts ReadCountGetter(ASETools.AnnotatedVariant variant);
+
+        static ReadCountGetter GetReadCount = _ => _.tumorDNAReadCounts;
+
         static void Main(string[] args)
         {
             commonData = ASETools.CommonData.LoadCommonData(args);
 
             if (null == commonData) return;
+
+            var minAgeAtDiagnosis = commonData.clinicalSummariesByPatientId.Where(_ => _.Value.age_at_diagnosis != -1).Select(_ => _.Value.age_at_diagnosis).Min();
+            var maxAgeAtDiagnosis = commonData.clinicalSummariesByPatientId.Where(_ => _.Value.age_at_diagnosis != -1).Select(_ => _.Value.age_at_diagnosis).Max();
+
+            for (int i = minAgeAtDiagnosis; i <= maxAgeAtDiagnosis; i++)
+            {
+                globalExpressionOfMostCommonAlleleByAgeAtDiagnosis.Add(i, new ASETools.RunningMeanAndStdDev());
+            }
 
             ASETools.autosomes.ToList().ForEach(_ => chromosomesToUse.Add(_));
             chromosomesToUse.Add("chrx");
@@ -145,6 +162,7 @@ namespace UniparentalDisomy
                 globalEndOfChromosomeFractionByDisease.Add(disease, new ASETools.PreBucketedHistogram(0, 1, 0.01));
                 globalBeginningOfChromosomeDistanceByDisease.Add(disease, new ASETools.PreBucketedHistogram(0, largestChromosomeInMegabases, 1));
                 globalEndOfChromosomeDistanceByDisease.Add(disease, new ASETools.PreBucketedHistogram(0, largestChromosomeInMegabases, 1));
+                globalChr6ByDisease.Add(disease, new ASETools.PreBucketedHistogram(0, 1, 0.01));
             }
 
             outputFile = ASETools.CreateStreamWriterWithRetry(commonData.configuration.finalResultsDirectory + ASETools.UniparentalDisomyFilename);
@@ -156,7 +174,7 @@ namespace UniparentalDisomy
                 return;
             }
 
-            outputFile.Write("Case ID\tgender\tdisease\tchromosome\tn Germline Variant Sites\tn Tested Normal\tn Tested Tumor\tfrac 0.9 one allele normal\tfrac 0.9 one allele tumor" +
+            outputFile.Write("Case ID\tgender\tvital status\tage at diagnosis\tdays to death\tdisease\tchromosome\tn Germline Variant Sites\tn Tested Normal\tn Tested Tumor\tfrac 0.9 one allele normal\tfrac 0.9 one allele tumor" +
                 "\tfraction of bases consecutive from beginning with all at least 0.9 one allele\tfraction of bases consecutive from end with all at least 0.9 one allele\tn Consecutive tumor beginning\tn Consecutive tumor end\tMean ASV tumor" +
                 "\tbeginning fraction soft consecutive\tend fraction soft consecutive");
             foreach (var gene in genesToConsider)
@@ -259,7 +277,7 @@ namespace UniparentalDisomy
             var headersAndHistograms = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
             headersAndHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("overall", globalTumorHistogram));
 
-            ASETools.chromosomes.ToList().ForEach(_ => headersAndHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>(_, globalTumorPerChromosomeHistograms[_])));
+            chromosomesToUse.ToList().ForEach(_ => headersAndHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>(_, globalTumorPerChromosomeHistograms[_])));
 
             ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(histogramsFile, headersAndHistograms);
 
@@ -325,6 +343,16 @@ namespace UniparentalDisomy
             histogramsFile.WriteLine("Overall ASV");
             globalASVHistogram.WriteHistogram(histogramsFile);
 
+            writePerDiseaseHistograms("Chromosome 6 by disease", histogramsFile, globalChr6ByDisease);
+
+            histogramsFile.WriteLine();
+            histogramsFile.WriteLine("Mean expression of more common allele at heterozygous germline sites that are still heterozygous in the tumor by age.");
+            histogramsFile.WriteLine("age\tn\tmean\tstd deviation");
+            for (int i = minAgeAtDiagnosis; i <= maxAgeAtDiagnosis; i++)
+            {
+                var x = globalExpressionOfMostCommonAlleleByAgeAtDiagnosis[i];
+                histogramsFile.WriteLine(i + "\t" + x.getCount() + "\t" + x.getMeanAndStdDev().mean + "\t" + x.getMeanAndStdDev().stddev);
+            }
 
 
             histogramsFile.WriteLine("**done**");
@@ -343,7 +371,7 @@ namespace UniparentalDisomy
         static void writePerChromsomeHistograms(string headerString, StreamWriter histogramsFile, Dictionary<string, ASETools.PreBucketedHistogram> histograms)
         {
             histogramsFile.WriteLine(headerString);
-            ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(histogramsFile, ASETools.autosomes.Select(_ => new KeyValuePair<string, ASETools.PreBucketedHistogram>(_, histograms[_])).ToList());
+            ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(histogramsFile, chromosomesToUse.Select(_ => new KeyValuePair<string, ASETools.PreBucketedHistogram>(_, histograms[_])).ToList());
             histogramsFile.WriteLine();
         }
         static void HandleOneCase(ASETools.Case case_, int state)
@@ -357,6 +385,9 @@ namespace UniparentalDisomy
             var perGeneHistograms = new Dictionary<string, ASETools.PreBucketedHistogram>();
             var outputLines = new List<string>();
 
+            var aseCandidates = annotatedSelectedVariants.Where(_ => !_.somaticMutation && _.IsASECandidate(true, null, commonData)).ToList();   // Don't need copy number, since our input is pre-filtered
+            var nASECandidates = aseCandidates.Count();
+            var totalASE = aseCandidates.Select(_ => _.tumorRNAReadCounts.AlleleSpecificValue()).Sum();
 
             foreach (var chromosome in chromosomesToUse)
             {
@@ -368,12 +399,16 @@ namespace UniparentalDisomy
                     continue;
                 }
 
+
+
                 var variantsForThisChromosome = annotatedSelectedVariants.Where(_ => _.contig.ToLower() == chromosome && !_.somaticMutation).ToList();
                 var chromosomeSize = ASETools.chromosomeSizesByName[chromosome].size;
 
+
+
                 var nVariants = variantsForThisChromosome.Count();
                 var normalUseful = variantsForThisChromosome.Where(_ => _.normalDNAReadCounts.usefulReads() >= minReads).ToList();
-                var tumorUseful = variantsForThisChromosome.Where(_ => _.tumorDNAReadCounts.usefulReads() >= minReads).ToList(); // Exclude CNVs
+                var tumorUseful = variantsForThisChromosome.Where(_ => GetReadCount(_).usefulReads() >= minReads).ToList(); // Exclude CNVs
                 var nTumorUseful = tumorUseful.Count();
 
                 if (nTumorUseful < 10)
@@ -383,7 +418,7 @@ namespace UniparentalDisomy
 
                 tumorUseful.Sort((x, y) => x.locus.CompareTo(y.locus));
        
-                var tumor90PercentFraction = (double)tumorUseful.Where(_ => _.tumorDNAReadCounts.AlleleSpecificValue() >= .8).Count() / nTumorUseful;
+                var tumor90PercentFraction = (double)tumorUseful.Where(_ => GetReadCount(_).AlleleSpecificValue() >= .8).Count() / nTumorUseful;
 
                 //
                 // I suspect there's some more C# way of doing this, but something that's not O(n^2) isn't occurring to me, so a loop it is.
@@ -392,7 +427,7 @@ namespace UniparentalDisomy
                 double fractionOfBasesTumor90PercentConsecutiveBeginning = 1;
                 for (int i = 0; i < nTumorUseful; i++)
                 {
-                    if (tumorUseful[i].tumorDNAReadCounts.AlleleSpecificValue() < 0.8)
+                    if (GetReadCount(tumorUseful[i]).AlleleSpecificValue() < 0.8)
                     {
                         nTumor90PercentConsecutiveBeginning = i;
 
@@ -411,7 +446,7 @@ namespace UniparentalDisomy
                 double fractionOfBasesTumor90PercentConsecutiveEnd = 1;
                 for (int i = nTumorUseful - 1; i >= 0; i--)
                 {
-                    if (tumorUseful[i].tumorDNAReadCounts.AlleleSpecificValue() >= 0.8)
+                    if (GetReadCount(tumorUseful[i]).AlleleSpecificValue() >= 0.8)
                     {
                         continue;
                     }
@@ -436,7 +471,7 @@ namespace UniparentalDisomy
                 double totalASVSoFar = 0;
                 for (int i = 0; i < nTumorUseful; i++)
                 {
-                    double asv = tumorUseful[i].tumorDNAReadCounts.AlleleSpecificValue();
+                    double asv = GetReadCount(tumorUseful[i]).AlleleSpecificValue();
                     totalASVSoFar += asv;
                     if (asv >= 0.8 && totalASVSoFar / (i + 1) >= 0.8)
                     {
@@ -471,7 +506,7 @@ namespace UniparentalDisomy
                 totalASVSoFar = -1;
                 for (int i = nTumorUseful - 1; i >= 0; i--)
                 {
-                    var asv = tumorUseful[i].tumorDNAReadCounts.AlleleSpecificValue();
+                    var asv = GetReadCount(tumorUseful[i]).AlleleSpecificValue();
                     totalASVSoFar += asv;
                     if (asv >= 0.8 && totalASVSoFar / (nTumorUseful - i) >= 0.8)
                     {
@@ -517,7 +552,7 @@ namespace UniparentalDisomy
                     {
                         if (tumorUseful[i].locus > minLocus)
                         {
-                            int nHomozygous = tumorUseful[i].tumorDNAReadCounts.AlleleSpecificValue() >= 0.8 ? 1 : 0;
+                            int nHomozygous = GetReadCount(tumorUseful[i]).AlleleSpecificValue() >= 0.8 ? 1 : 0;
                             if (previousMutationIsHomozygous)
                             {
                                 nHomozygous++;
@@ -527,7 +562,7 @@ namespace UniparentalDisomy
                             break;
                         }
 
-                        previousMutationIsHomozygous = tumorUseful[i].tumorDNAReadCounts.AlleleSpecificValue() >= 0.8;
+                        previousMutationIsHomozygous = GetReadCount(tumorUseful[i]).AlleleSpecificValue() >= 0.8;
                     }
 
                     if (!foundBothLoci)
@@ -546,15 +581,16 @@ namespace UniparentalDisomy
                 } // genesToConsider
 
 
-                var meanASV = tumorUseful.Select(_ => _.tumorDNAReadCounts.AlleleSpecificValue()).Average();
+                var meanASV = tumorUseful.Select(_ => GetReadCount(_).AlleleSpecificValue()).Average();
 
                 string outputLine = case_.case_id + "\t";
                 if (commonData.clinicalSummariesByPatientId.ContainsKey(case_.case_id))
                 {
-                    outputLine += commonData.clinicalSummariesByPatientId[case_.case_id].getGender();
+                    var summary = commonData.clinicalSummariesByPatientId[case_.case_id];
+                    outputLine += summary.getGender() + "\t" + summary.vitalStatus + "\t" + summary.age_at_diagnosis + "\t" + summary.days_to_death;
                 } else
                 {
-                    outputLine += "unknown";
+                    outputLine += "unknown\tunknown\tunknown\tunknown";
                 }
 
                 outputLine += "\t" +
@@ -570,7 +606,7 @@ namespace UniparentalDisomy
                 outputLine += "=\"";
                 for (int i = 0; i < nTumorUseful; i++)
                 {
-                    if (tumorUseful[i].tumorDNAReadCounts.AlleleSpecificValue() >= 0.8)
+                    if (GetReadCount(tumorUseful[i]).AlleleSpecificValue() >= 0.8)
                     {
                         outputLine += "+";
                     } else
@@ -598,7 +634,7 @@ namespace UniparentalDisomy
                         continue;
                     }
 
-                    var meanInThisMegabase = inThisMegabase.Select(_ => _.tumorDNAReadCounts.AlleleSpecificValue()).Average();
+                    var meanInThisMegabase = inThisMegabase.Select(_ => GetReadCount(_).AlleleSpecificValue()).Average();
                     if (meanInThisMegabase < 0.4)
                     {
                         outputLine += "-";
@@ -657,6 +693,11 @@ namespace UniparentalDisomy
                     globalSoftDistanceFromEndOfChromosome[chromosome].addValue(distanceSoftEndInclusiveInMegabases);
                     globalEndOfChromosomeDistanceToFirstNonHomozygousByChromosomeSoft[chromosome].addValue(distanceToSoftEndFirstNonHomozygousInMegabases);
 
+                    if (chromosome == "chr6")
+                    {
+                        globalChr6ByDisease[case_.disease()].addValue(tumor90PercentFraction);
+                    }
+
                     foreach (var geneToConsider in genesToConsider)
                     {
                         if (chromosome != commonData.geneLocationInformation.genesByName[geneToConsider].chromosome)
@@ -694,6 +735,12 @@ namespace UniparentalDisomy
                         globalPerGeneHistograms[hugo_symbol].merge(histogram);
                     } 
                 } // genes
+
+                int age_at_diagnosis;
+                if (nASECandidates != 0 && commonData.clinicalSummariesByPatientId.ContainsKey(case_.case_id) && (age_at_diagnosis = commonData.clinicalSummariesByPatientId[case_.case_id].age_at_diagnosis) != -1)
+                {
+                    globalExpressionOfMostCommonAlleleByAgeAtDiagnosis[age_at_diagnosis].addValue(.5 + totalASE / nASECandidates / 2);   // The math converts from ASV to fraction of most common allele.
+                }
 
                 foreach (var outputLine in outputLines)
                 {
