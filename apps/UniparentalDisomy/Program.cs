@@ -70,6 +70,11 @@ namespace UniparentalDisomy
 
         static Dictionary<string, ASETools.PreBucketedHistogram> globalChr6ByDisease = new Dictionary<string, ASETools.PreBucketedHistogram>();
 
+        const int ScatterGraphGranularity = 26;    // Essentially, 0-100%
+
+        static int[,] globalScatterGraphByCase = new int[ScatterGraphGranularity, ScatterGraphGranularity];
+        static int[,] globalScatterGraphByChromosome = new int[ScatterGraphGranularity, ScatterGraphGranularity];
+        static ASETools.PreBucketedHistogram globalDistributionOfTumorsByCountOfAutosomesWithASEorCNLOH = new ASETools.PreBucketedHistogram(0, ASETools.nHumanAutosomes +1 /*+1 so that 22 doesn't wind up in "more" */, 1);
 
         static string[] genesToConsider = { "TP53", "VHL", "SAMD9", "KEAP1", "KRAS", "CDKN2A", "SAMD9L", "ATM", "SMAD4", "STK11", "PTEN", "CDH1", "PBRM1", "MUC16", "TTN", "ACTB", "HLA-A", "HLA-B", "HLA-C"};
 
@@ -354,12 +359,23 @@ namespace UniparentalDisomy
                 histogramsFile.WriteLine(i + "\t" + x.getCount() + "\t" + x.getMeanAndStdDev().mean + "\t" + x.getMeanAndStdDev().stddev);
             }
 
+            histogramsFile.WriteLine();
+            ASETools.WriteMatrixWithPercentages(histogramsFile, "%DNA LOH (x) vs %no LOH ASE (y), by case", globalScatterGraphByCase, true);
+
+            histogramsFile.WriteLine();
+            ASETools.WriteMatrixWithPercentages(histogramsFile, "%DNA LOH (x) vs %no LOH ASE (y), by autosome", globalScatterGraphByChromosome, true);
+
+            histogramsFile.WriteLine();
+            histogramsFile.WriteLine("Distribution of tumors by count of chromosomes that have cnLOH or ASE");
+            globalDistributionOfTumorsByCountOfAutosomesWithASEorCNLOH.WriteHistogram(histogramsFile);
 
             histogramsFile.WriteLine("**done**");
             histogramsFile.Close();
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(commonData.timer));
         } // Main
+
+
 
         static void writePerDiseaseHistograms(string headerString, StreamWriter histogramsFile, Dictionary<string, ASETools.PreBucketedHistogram> histograms)
         {
@@ -389,6 +405,11 @@ namespace UniparentalDisomy
             var nASECandidates = aseCandidates.Count();
             var totalASE = aseCandidates.Select(_ => _.tumorRNAReadCounts.AlleleSpecificValue()).Sum();
 
+            int totalTumorUseful = 0;
+            int totalTumorCNLOH = 0;
+
+            int countOfChromosomesWithASEorCNLOH = 0;
+
             foreach (var chromosome in chromosomesToUse)
             {
                 if (chromosome == "chrx" && (!commonData.clinicalSummariesByPatientId.ContainsKey(case_.case_id) || commonData.clinicalSummariesByPatientId[case_.case_id].getGender() != "female"))
@@ -399,17 +420,16 @@ namespace UniparentalDisomy
                     continue;
                 }
 
-
-
                 var variantsForThisChromosome = annotatedSelectedVariants.Where(_ => _.contig.ToLower() == chromosome && !_.somaticMutation).ToList();
                 var chromosomeSize = ASETools.chromosomeSizesByName[chromosome].size;
-
-
 
                 var nVariants = variantsForThisChromosome.Count();
                 var normalUseful = variantsForThisChromosome.Where(_ => _.normalDNAReadCounts.usefulReads() >= minReads).ToList();
                 var tumorUseful = variantsForThisChromosome.Where(_ => GetReadCount(_).usefulReads() >= minReads).ToList(); // Exclude CNVs
                 var nTumorUseful = tumorUseful.Count();
+
+                totalTumorUseful += nTumorUseful;
+                totalTumorCNLOH += tumorUseful.Where(_ => _.tumorDNAReadCounts.AlleleSpecificValue() >= 0.8).Count();
 
                 if (nTumorUseful < 10)
                 {
@@ -606,12 +626,15 @@ namespace UniparentalDisomy
                 outputLine += "=\"";
                 for (int i = 0; i < nTumorUseful; i++)
                 {
-                    if (GetReadCount(tumorUseful[i]).AlleleSpecificValue() >= 0.8)
-                    {
-                        outputLine += "+";
-                    } else
+                    if (GetReadCount(tumorUseful[i]).AlleleSpecificValue() < 0.8)
                     {
                         outputLine += "-";
+                    } else if (GetReadCount(tumorUseful[i]).AltFraction() >= 0.9)
+                    {
+                        outputLine += "A";
+                    } else
+                    {
+                        outputLine += "R";
                     }
                 }
                 outputLine += "\"\t=\"";
@@ -635,6 +658,7 @@ namespace UniparentalDisomy
                     }
 
                     var meanInThisMegabase = inThisMegabase.Select(_ => GetReadCount(_).AlleleSpecificValue()).Average();
+                    var altInThisMegabase = inThisMegabase.Select(_ => GetReadCount(_).AltFraction()).Average();
                     if (meanInThisMegabase < 0.4)
                     {
                         outputLine += "-";
@@ -643,9 +667,25 @@ namespace UniparentalDisomy
                         outputLine += "~";
                     } else
                     {
-                        outputLine += "+";
+                        if (altInThisMegabase >= 0.9)
+                        {
+                            outputLine += "A";
+                        }
+                        else if (altInThisMegabase <= 0.1)
+                        {
+                            outputLine += "R";
+                        }
+                        else
+                        {
+                            outputLine += "+";
+                        }
                     }
                 } // for each megabase
+
+                int nCNLOH = tumorUseful.Where(_ => _.tumorDNAReadCounts.AlleleSpecificValue() >= 0.8).Count();
+                var aseCandidatesThisChromosome = tumorUseful.Where(_ => _.IsASECandidate(true, null, commonData));
+                var nASECandidatesThisChromosome = aseCandidatesThisChromosome.Count();
+
 
                 outputLine += "\"";
 
@@ -716,8 +756,24 @@ namespace UniparentalDisomy
                         {
                             globalGeneByFlankingHomozygousSites[geneToConsider][ASETools.ZeroOneMany(mutationCount)][flankingMutationsByGene[geneToConsider]]++;
                         }
-                    }
-                }
+                    } // geneToConsider
+
+                    if (ASETools.isChromosomeAutosomal(chromosome) && nASECandidatesThisChromosome >= 10)
+                    {
+                        int fracCNLOH = (int)((double)nCNLOH / nTumorUseful * (ScatterGraphGranularity - 1));
+                        int fracASE = (int)((double)aseCandidatesThisChromosome.Where(_ => _.tumorRNAReadCounts.AlleleSpecificValue() >= 0.8).Count() / nASECandidatesThisChromosome * (ScatterGraphGranularity - 1));
+                        globalScatterGraphByChromosome[fracCNLOH, fracASE]++;
+
+                        if ((fracASE > 0 || fracCNLOH > 0) && ASETools.isChromosomeAutosomal(chromosome))
+                        {
+                            countOfChromosomesWithASEorCNLOH++;
+if (countOfChromosomesWithASEorCNLOH >= 23)
+{
+    Console.WriteLine("Here!");
+}
+                        }
+                    } // candidate for scatter graph
+                } // lock
             } // foreach chromosome
 
             lock (globalPerGeneHistograms)
@@ -736,6 +792,12 @@ namespace UniparentalDisomy
                     } 
                 } // genes
 
+                if (totalTumorUseful >= 10 && nASECandidates >= 0)
+                {
+                    globalScatterGraphByCase[(int)((double)totalTumorCNLOH * (ScatterGraphGranularity - 1) / totalTumorUseful), 
+                                             (int)((double)aseCandidates.Where(_ => _.tumorRNAReadCounts.AlleleSpecificValue() >= 0.8).Count() * (ScatterGraphGranularity - 1) / nASECandidates)]++;
+                }
+
                 int age_at_diagnosis;
                 if (nASECandidates != 0 && commonData.clinicalSummariesByPatientId.ContainsKey(case_.case_id) && (age_at_diagnosis = commonData.clinicalSummariesByPatientId[case_.case_id].age_at_diagnosis) != -1)
                 {
@@ -746,6 +808,12 @@ namespace UniparentalDisomy
                 {
                     outputFile.WriteLine(outputLine);
                 }
+
+if (countOfChromosomesWithASEorCNLOH >= 23)
+{
+    Console.WriteLine("Here!");
+}
+                globalDistributionOfTumorsByCountOfAutosomesWithASEorCNLOH.addValue(countOfChromosomesWithASEorCNLOH);
             } // lock
         } // HandleOneCase
     }

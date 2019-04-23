@@ -14598,6 +14598,41 @@ namespace ASELib
             }
         }
 #endif // false
+
+        public static void WriteMatrixWithPercentages(StreamWriter outputFile, string title, int[,] matrix, bool normalize)
+        {
+            outputFile.WriteLine(title);
+
+            var total = matrix.Cast<int>().Sum();  // https://stackoverflow.com/questions/19034970/sum-multidimensional-array-c-sharp
+
+            for (int y = matrix.GetLength(1) - 1; y >= 0; y--)
+            {
+                outputFile.Write((double)y / (matrix.GetLength(1) - 1));
+                for (int x = 0; x < matrix.GetLength(1); x++)
+                {
+                    if (normalize)
+                    {
+                        outputFile.Write("\t" + (double)matrix[x, y] / total);
+                    }
+                    else
+                    {
+                        outputFile.Write("\t" + matrix[x, y]);
+                    }
+                }
+                outputFile.WriteLine();
+            }
+
+            //
+            // Now write the column footers.
+            //
+            for (int x = 0; x < matrix.GetLength(0); x++)
+            {
+                outputFile.Write("\t" + (double)x / (matrix.GetLength(0) - 1));
+            }
+            outputFile.WriteLine();
+        } // WriteMatrixWithPercentages
+
+
     } // ASETools
 
     //

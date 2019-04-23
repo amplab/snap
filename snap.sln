@@ -228,6 +228,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniparentalDisomy", "apps\U
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateTentativeASVsWithoutCNVs", "apps\GenerateTentativeASVsWithoutCNVs\GenerateTentativeASVsWithoutCNVs.csproj", "{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PhylogenyFromASE", "apps\PhylogenyFromASE\PhylogenyFromASE.csproj", "{7A351292-DF93-4DC0-B00C-54CF4F2A6625}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1736,6 +1738,22 @@ Global
 		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|Win32.Build.0 = Release|Any CPU
 		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|x64.ActiveCfg = Release|x64
 		{93DCBC27-E0BB-4AFE-A0A5-BE7EF6D3C270}.Release|x64.Build.0 = Release|x64
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Debug|Win32.Build.0 = Debug|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Debug|x64.ActiveCfg = Debug|x64
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Debug|x64.Build.0 = Debug|x64
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Release|Win32.ActiveCfg = Release|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Release|Win32.Build.0 = Release|Any CPU
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Release|x64.ActiveCfg = Release|x64
+		{7A351292-DF93-4DC0-B00C-54CF4F2A6625}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
