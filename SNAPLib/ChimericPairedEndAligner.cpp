@@ -217,7 +217,7 @@ bool ChimericPairedEndAligner::align(
 
 #ifdef _DEBUG
     if (_DumpAlignments) {
-        printf("ChimericPairedEndAligner: (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n",result->location[0].location, result->location[1].location,
+        printf("ChimericPairedEndAligner: (%llu, %llu) score (%d, %d), MAPQ (%d, %d)\n\n\n",result->location[0].location, result->location[1].location,
             result->score[0], result->score[1], result->mapq[0], result->mapq[1]);
     }
 #endif // _DEBUG

@@ -195,8 +195,10 @@ int main(int argc, char* argv[])
                 }
                 seenStdin = true;
             }
+
             InputFile *inputFile = new InputFile;
             inputFile->fileName = argv[i];
+
             if (lastInputFile == NULL) {
                 inputFiles = lastInputFile = inputFile;
             } else {

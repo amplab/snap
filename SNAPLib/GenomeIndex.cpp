@@ -682,7 +682,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                 fprintf(histogramFile,"%d\t%d\n", i, histogram[i]);
             }
         }
-        fprintf(histogramFile, "%d larger than %d with %d total genome locations, largest seed %d\n", countOfTooBigForHistogram, maxHistogramEntry, sumOfTooBigForHistogram, largestSeed);
+        fprintf(histogramFile, "%lld larger than %d with %lld total genome locations, largest seed %lld\n", countOfTooBigForHistogram, maxHistogramEntry, sumOfTooBigForHistogram, largestSeed);
         fclose(histogramFile);
         delete [] histogram;
     }

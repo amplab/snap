@@ -38,6 +38,7 @@ obj
 *.pdb
 *.log
 *.unsuccessfulbuild
+.vs
 
 # Compiled binaries
 /snap

@@ -411,7 +411,7 @@ AlignerContext::printStats()
         );
 
     if (NULL != perfFile) {
-        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%lld\tt%.0f\n",
+        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%0.2f%%\t%lld\tt%.0f\n",
                 maxHits_, maxDist_, 
                 100.0 * (stats->totalReads - stats->uselessReads) / max(stats->totalReads, (_int64) 1),
 				100.0 * stats->singleHits / stats->totalReads,

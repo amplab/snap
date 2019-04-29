@@ -1023,7 +1023,7 @@ SAMFormat::writeHeader(
         for (int i = 0; i < numContigs; i++) {
             GenomeLocation start = contigs[i].beginningLocation;
             GenomeLocation end = ((i + 1 < numContigs) ? contigs[i+1].beginningLocation : genomeLen) - context.genome->getChromosomePadding();
-            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", contigs[i].name, end - start);
+            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%llu\n", contigs[i].name, end - start);
 
             if (bytesConsumed >= headerBufferSize) {
                 // todo: increase buffer size (or change to write in batch
@@ -1367,8 +1367,8 @@ SAMFormat::writeRead(
         internalScoreBuffer[0] = '\0';
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
-        qnameLen, read->getId(),
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
+        (unsigned)qnameLen, read->getId(),
         flags,
         contigName,
         positionInContig,

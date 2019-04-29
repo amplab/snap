@@ -384,7 +384,7 @@ IntersectingPairedEndAligner::align(
 
 #ifdef  _DEBUG
     if (_DumpAlignments) {
-        printf("Read 0 has %d hits, read 1 has %d hits\n", totalHashTableHits[0][FORWARD] + totalHashTableHits[0][RC], totalHashTableHits[1][FORWARD] + totalHashTableHits[1][RC]);
+        printf("Read 0 has %lld hits, read 1 has %lld hits\n", totalHashTableHits[0][FORWARD] + totalHashTableHits[0][RC], totalHashTableHits[1][FORWARD] + totalHashTableHits[1][RC]);
     }
 #endif  // _DEBUG
 
@@ -496,7 +496,7 @@ IntersectingPairedEndAligner::align(
 
 #ifdef _DEBUG
                 if (_DumpAlignments) {
-                    printf("SetPair %d, added more hits candidate %d at genome location %u, bestPossibleScore %d, seedOffset %d\n",
+                    printf("SetPair %d, added more hits candidate %d at genome location %llu, bestPossibleScore %d, seedOffset %d\n",
                             whichSetPair, lowestFreeScoringMateCandidate[whichSetPair], lastGenomeLocationForReadWithMoreHits.location,
                             bestPossibleScoreForReadWithMoreHits,
                             lastSeedOffsetForReadWithMoreHits);
@@ -559,7 +559,7 @@ IntersectingPairedEndAligner::align(
 
 #ifdef _DEBUG
                 if (_DumpAlignments) {
-                    printf("SetPair %d, added fewer hits candidate %d at genome location %u, bestPossibleScore %d, seedOffset %d\n",
+                    printf("SetPair %d, added fewer hits candidate %d at genome location %llu, bestPossibleScore %d, seedOffset %d\n",
                             whichSetPair, lowestFreeScoringCandidatePoolEntry, lastGenomeLocationForReadWithFewerHits.location,
                             lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits,
                             lastSeedOffsetForReadWithFewerHits);
@@ -611,7 +611,7 @@ IntersectingPairedEndAligner::align(
 
 #ifdef _DEBUG
         if (_DumpAlignments) {
-            printf("Scored fewer end candidate %d, set pair %d, read %d, location %u, seed offset %d, score limit %d, score %d, offset %d\n", (int)(candidate - scoringCandidatePool),
+            printf("Scored fewer end candidate %d, set pair %d, read %d, location %llu, seed offset %d, score limit %d, score %d, offset %d\n", (int)(candidate - scoringCandidatePool),
                 candidate->whichSetPair, readWithFewerHits, candidate->readWithFewerHitsGenomeLocation.location, candidate->seedOffset,
                 scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset);
         }
@@ -642,7 +642,7 @@ IntersectingPairedEndAligner::align(
                             &mate->genomeOffset);
 #ifdef _DEBUG
                         if (_DumpAlignments) {
-                            printf("Scored mate candidate %d, set pair %d, read %d, location %u, seed offset %d, score limit %d, score %d, offset %d\n",
+                            printf("Scored mate candidate %d, set pair %d, read %d, location %llu, seed offset %d, score limit %d, score %d, offset %d\n",
                                 (int)(mate - scoringMateCandidates[candidate->whichSetPair]), candidate->whichSetPair, readWithMoreHits, mate->readWithMoreHitsGenomeLocation.location,
                                 mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset);
                         }
@@ -802,7 +802,7 @@ IntersectingPairedEndAligner::align(
                             probabilityOfAllPairs += pairProbability;
     #ifdef  _DEBUG
                             if (_DumpAlignments) {
-                                printf("Added %e (= %e * %e) @ (%u, %u), giving new probability of all pairs %e, score %d = %d + %d%s\n",
+                                printf("Added %e (= %e * %e) @ (%llu, %llu), giving new probability of all pairs %e, score %d = %d + %d%s\n",
                                     pairProbability, mate->matchProbability , fewerEndMatchProbability,
                                     candidate->readWithFewerHitsGenomeLocation.location + fewerEndGenomeLocationOffset, mate->readWithMoreHitsGenomeLocation.location + mate->genomeOffset,
                                     probabilityOfAllPairs,
@@ -866,7 +866,7 @@ doneScoring:
         }
 #ifdef  _DEBUG
             if (_DumpAlignments) {
-                printf("Returned %u %s %u %s with MAPQ %d and %d, probability of all pairs %e, probability of best pair %e\n",
+                printf("Returned %llu %s %llu %s with MAPQ %d and %d, probability of all pairs %e, probability of best pair %e\n",
                     result->location[0].location, result->direction[0] == RC ? "RC" : "", result->location[1].location, result->direction[1] == RC ? "RC" : "", result->mapq[0], result->mapq[1],
                     probabilityOfAllPairs, probabilityOfBestPair);
             }
@@ -1407,7 +1407,7 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
         if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
 #ifdef _DEBUG
             if (_DumpAlignments) {
-                printf("Merge replacement at anchor (%u, %u), loc (%u, %u), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",
+                printf("Merge replacement at anchor (%llu, %llu), loc (%llu, %llu), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",
                     locationForReadWithMoreHits.location, locationForReadWithFewerHits.location, newMoreHitLocation.location, newFewerHitLocation.location,
                     matchProbability, newMatchProbability, pairScore, newPairScore);
             }
@@ -1423,7 +1423,7 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
             //
 #ifdef _DEBUG
             if (_DumpAlignments) {
-                printf("Merged at anchor (%u, %u), loc (%u, %u), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",
+                printf("Merged at anchor (%llu, %llu), loc (%llu, %llu), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",
                     locationForReadWithMoreHits.location, locationForReadWithFewerHits.location, newMoreHitLocation.location, newFewerHitLocation.location,
                     matchProbability, newMatchProbability, pairScore, newPairScore);
             }

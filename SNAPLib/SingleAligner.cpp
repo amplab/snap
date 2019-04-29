@@ -167,7 +167,7 @@ SingleAlignerContext::runIterationThread()
         stats->totalReads++;
 
         if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
-            fprintf(stderr,"reporter:counter:SNAP,readsAligned,%lu\n",stats->totalReads - readsWhenLastReported);
+            fprintf(stderr,"reporter:counter:SNAP,readsAligned,%llu\n",stats->totalReads - readsWhenLastReported);
             readsWhenLastReported = stats->totalReads;
             lastReportTime = timeInMillis();
         }
