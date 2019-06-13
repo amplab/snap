@@ -268,7 +268,7 @@ int computeScore(
             }
         }
         
-        if (score > 0) {
+        if (score > scoreInit) {
             int rowIdx = *o_textOffset, colIdx = patternLen - 1, matrixIdx = 0;
             char action = 'M', prevAction = 'M';
             int actionCount = 1; 
@@ -277,6 +277,7 @@ int computeScore(
             // Start traceback from the cell (i,j) with the maximum score
             while (rowIdx >= 0 && colIdx >= 0) {
                 int actionIdx = (rowIdx > w) ? colIdx - (rowIdx - w) : colIdx; // Colidx can span patternLen, while backtrack actions are stored only within band w.
+                _ASSERT(actionIdx >= 0);
                 action = backtraceAction[rowIdx][actionIdx][matrixIdx];
                 if (action == 'M') {
                     if (pattern[colIdx] != text[rowIdx * TEXT_DIRECTION]) {

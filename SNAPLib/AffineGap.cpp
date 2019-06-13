@@ -261,6 +261,7 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
         // Start traceback from the cell (i,j) with the maximum score
         while (rowIdx >= 0 && colIdx >= 0) {
             int actionIdx = (rowIdx > w) ? colIdx - (rowIdx - w) : colIdx; // ColIdx can span patternLen, while backtrack actions are stored only within band w.
+            _ASSERT(actionIdx >= 0);
             action = backtraceAction[rowIdx][actionIdx][matrixIdx];
             if (action == 'M') {
                 rowIdx--;
