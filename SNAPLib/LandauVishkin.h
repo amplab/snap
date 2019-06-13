@@ -493,6 +493,9 @@ public:
         char* cigar, int cigarSize, char* sample, int sampleSize);
 
     static void printLinear(char* buffer, int bufferSize, unsigned variant);
+
+    bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format);
+
 private:
     int L[MAX_K+1][2 * MAX_K + 1];
     

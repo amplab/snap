@@ -43,11 +43,17 @@ public:
         bool                noUkkonen,
         bool                noOrderedEvaluation,
 		bool				noTruncation,
+        bool                useAffineGap,
         bool                ignoreALignmentAdjustmentsForOm,
         PairedEndAligner    *underlyingPairedEndAligner_,
 		unsigned			minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
-        BigAllocator        *allocator);
+        unsigned            matchReward = 1,
+        unsigned            subPenalty = 4,
+        unsigned            gapOpenPenalty = 6,
+        unsigned            gapExtendPenalty = 1,
+        unsigned            minAGScore = 30,
+        BigAllocator        *allocator = NULL);
     
     virtual ~ChimericPairedEndAligner();
     
@@ -91,6 +97,9 @@ private:
 
     LandauVishkin<1> lv;
     LandauVishkin<-1> reverseLV;
+
+    AffineGap<1> ag;
+    AffineGap<-1> reverseAG;
 
 	GenomeIndex *index;
 	unsigned	minReadLength;

@@ -51,18 +51,33 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         bool                noUkkonen,
         bool                noOrderedEvaluation,
 		bool				noTruncation,
+        bool                useAffineGap,
         bool                ignoreAlignmentAdjustmentsForOm,
         PairedEndAligner    *underlyingPairedEndAligner_,
 	    unsigned            minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
+        unsigned            matchReward,
+        unsigned            subPenalty,
+        unsigned            gapOpenPenalty,
+        unsigned            gapExtendPenalty,
+        unsigned            minAGScore,
         BigAllocator        *allocator)
 		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-        maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, &lv, &reverseLV, NULL, allocator);
+                                                maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, 
+                                                noUkkonen, noOrderedEvaluation, noTruncation, useAffineGap, 
+                                                ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, &lv, &reverseLV, 
+                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore,
+                                                NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
+
+    ag.init(matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
+    reverseAG.init(matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
+
+    underlyingPairedEndAligner->setAffineGap(&ag, &reverseAG);
 
     singleSecondary[0] = singleSecondary[1] = NULL;
 }

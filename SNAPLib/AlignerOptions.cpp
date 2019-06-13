@@ -72,6 +72,12 @@ AlignerOptions::AlignerOptions(
     noUkkonen(false),
     noOrderedEvaluation(false),
 	noTruncation(false),
+    useAffineGap(false),
+    matchReward(1),
+    subPenalty(4),
+    gapOpenPenalty(6),
+    gapExtendPenalty(1),
+    minAGScore(30),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(false),
@@ -148,7 +154,6 @@ AlignerOptions::usageMessage()
         "  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
         "       match) rather than = and X (sequence (mis-)match).  This is the default\n"
         "  -=   use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
-        "  -G   specify a gap penalty to use when generating CIGAR strings\n"
         "  -pf  specify the name of a file to contain the run speed\n"
         "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)  This is the default\n"
         "  -hp  Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
@@ -210,6 +215,13 @@ AlignerOptions::usageMessage()
         "       value starting with X, Y or Z.  So, -is ZQ will cause SNAP to write ZQ:i:3 on a read with internal score 3.  Generally, the internal scores\n"
         "       are the same as the NM values, except that they contain penalties for soft clipping reads that hang over the end of contigs (but not for\n"
         "       soft clipping that's due to # quality scores or that was present in the input SAM/BAM file and retained due to -pc)\n"
+        "  -G   enable affine gap scoring (default: false)\n"
+        "       Scoring parameters (works only when -G is used)\n"
+        "           cost for match -gm (default: %u)\n"
+        "           cost for substitution -gs (default: %u)\n"
+        "           cost for opening a gap -go (default: %u)\n"
+        "           cost for extending a gap -ge (default: %u)\n"
+        "           minimum score threshold for read -gt (default: %u)\n"
 		,
             commandLine,
             maxDist,
@@ -217,7 +229,12 @@ AlignerOptions::usageMessage()
 			minWeightToCheck,
             MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
             expansionFactor,
-			DEFAULT_MIN_READ_LENGTH);
+			DEFAULT_MIN_READ_LENGTH,
+            matchReward,
+            subPenalty,
+            gapOpenPenalty,
+            gapExtendPenalty,
+            minAGScore);
 
     if (extra != NULL) {
         extra->usageMessage();
@@ -578,17 +595,68 @@ AlignerOptions::parse(
         profile = true;
         return true;
     } else if (strcmp(argv[n], "-G") == 0) {
-        if (n + 1 < argc) {
-            gapPenalty = atoi(argv[n+1]);
-            if (gapPenalty < 1) {
-                WriteErrorMessage("Gap penalty must be at least 1.\n");
-                soft_exit(1);
-            }
-            n++;
-            return true;
-        } else {
-            WriteErrorMessage("Must have the gap penalty value after -G\n");
+        useAffineGap = true;
+        return true;
+    } else if (strcmp(argv[n], "-gm") == 0) {
+        if (n + 1 >= argc) {
+            WriteErrorMessage("-gm requires an additional value\n");
+            return false;
         }
+        n++;
+        matchReward = atoi(argv[n]);
+        if (matchReward <= 0) {
+            WriteErrorMessage("-gm must be greater than zero");
+            return false;
+        }
+        return true;
+    } else if (strcmp(argv[n], "-gs") == 0) {
+        if (n + 1 >= argc) {
+            WriteErrorMessage("-gs requires an additional value\n");
+            return false;
+        }
+        n++;
+        subPenalty = atoi(argv[n]);
+        if (subPenalty <= 0) {
+            WriteErrorMessage("-gs must be greater than zero");
+            return false;
+        }
+        return true;
+    } else if (strcmp(argv[n], "-go") == 0) {
+        if (n + 1 >= argc) {
+            WriteErrorMessage("-go requires an additional value\n");
+            return false;
+        }
+        n++;
+        gapOpenPenalty = atoi(argv[n]);
+        if (gapOpenPenalty <= 0) {
+            WriteErrorMessage("-go must be greater than zero");
+            return false;
+        }
+        return true;
+    } else if (strcmp(argv[n], "-ge") == 0) {
+        if (n + 1 >= argc) {
+            WriteErrorMessage("-ge requires an additional value\n");
+            return false;
+        }
+        n++;
+        gapExtendPenalty = atoi(argv[n]);
+        if (gapExtendPenalty <= 0) {
+            WriteErrorMessage("-ge must be greater than zero");
+            return false;
+        }
+        return true;
+    } else if (strcmp(argv[n], "-gt") == 0) {
+        if (n + 1 >= argc) {
+            WriteErrorMessage("-gt requires an additional value\n");
+            return false;
+        }
+        n++;
+        minAGScore = atoi(argv[n]);
+        if (minAGScore <= 0) {
+            WriteErrorMessage("-gt must be greater than zero");
+            return false;
+        }
+        return true;
     } else if (strcmp(argv[n], "-mrl") == 0) {
         if (n + 1 < argc) {
             n++;

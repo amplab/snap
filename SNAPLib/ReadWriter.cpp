@@ -55,10 +55,10 @@ public:
 
 	virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines);
 
-    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, _int64 nResults, bool firstIsPrimary);
+    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, _int64 nResults, bool firstIsPrimary, bool useAffineGap = false);
 
     virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, _int64 nResults, 
-        SingleAlignmentResult **singleResults /* array of size 2*/, _int64 *nSingleResults /* array of size 2*/, bool firstIsPrimary);
+        SingleAlignmentResult **singleResults /* array of size 2*/, _int64 *nSingleResults /* array of size 2*/, bool firstIsPrimary, bool useAffineGap = false);
 
     virtual void close();
 
@@ -67,6 +67,7 @@ private:
     DataWriter* writer;
     const Genome* genome;
     LandauVishkinWithCigar lvc;
+    AffineGapWithCigar agc;
 
     void checkIfTooSlow();
     bool killIfTooSlow;
@@ -164,7 +165,8 @@ SimpleReadWriter::writeReads(
     Read *read, 
     SingleAlignmentResult *results, 
     _int64 nResults,
-    bool firstIsPrimary)
+    bool firstIsPrimary,
+    bool useAffineGap)
 {
     char* buffer;
     size_t size;
@@ -213,46 +215,92 @@ SimpleReadWriter::writeReads(
         for (_int64 whichResult = 0; whichResult < nResults; whichResult++) {
             int addFrontClipping = 0;
             read->setAdditionalFrontClipping(results[whichResult].clippingForReadAdjustment);
-            int cumulativeAddFrontClipping = 0;
+            int cumulativeAddFrontClipping = 0, cumulativeAddBackClipping = 0;
             finalLocations[whichResult] = results[whichResult].location;
 
             unsigned nAdjustments = 0;
 
-            while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
-                results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping,
-                results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+            if (useAffineGap) {
+                while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
+                    results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping,
+                    results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
 
-                _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster.
+                    _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster.
 
-                nAdjustments++;
+                    nAdjustments++;
 
-                if (0 == addFrontClipping) {
-                    blewBuffer = true;
-                    break;
-                }
-
-                // redo if read modified (e.g. to add soft clipping, or move alignment for a leading I.
-                const Genome::Contig *originalContig = results[whichResult].status == NotFound ? NULL
-                    : genome->getContigAtLocation(results[whichResult].location);
-                const Genome::Contig *newContig = results[whichResult].status == NotFound ? NULL
-                    : genome->getContigAtLocation(results[whichResult].location + addFrontClipping);
-                if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding() ||
-                    nAdjustments > read->getDataLength()) {
-                    //
-                    // Altering this would push us over a contig boundary, or we're stuck in a loop.  Just give up on the read.
-                    //
-                    results[whichResult].status = NotFound;
-                    results[whichResult].location = InvalidGenomeLocation;
-                    finalLocations[whichResult] = InvalidGenomeLocation;
-                } else {
-                    cumulativeAddFrontClipping += addFrontClipping;
-                    if (addFrontClipping > 0) {
-                        read->setAdditionalFrontClipping(cumulativeAddFrontClipping);
+                    if (0 == addFrontClipping) {
+                        blewBuffer = true;
+                        break;
                     }
-                    finalLocations[whichResult] = results[whichResult].location + cumulativeAddFrontClipping;
-                }
-            } // while formatting doesn't work
 
+                    // redo if read modified (e.g. to add soft clipping, or move alignment for a leading I.
+                    const Genome::Contig *originalContig = results[whichResult].status == NotFound ? NULL
+                        : genome->getContigAtLocation(results[whichResult].location);
+                    const Genome::Contig *newContig = results[whichResult].status == NotFound ? NULL
+                        : genome->getContigAtLocation(results[whichResult].location + addFrontClipping);
+                    if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding() ||
+                        nAdjustments > read->getDataLength()) {
+                        //
+                        // Altering this would push us over a contig boundary, or we're stuck in a loop.  Just give up on the read.
+                        //
+                        results[whichResult].status = NotFound;
+                        results[whichResult].location = InvalidGenomeLocation;
+                        finalLocations[whichResult] = InvalidGenomeLocation;
+                    }
+                    else {
+                        if (addFrontClipping < 0) { // Insertion (soft-clip)
+                            cumulativeAddFrontClipping += addFrontClipping;
+                            if (results[whichResult].direction == FORWARD) {
+                                read->setAdditionalFrontClipping(-cumulativeAddFrontClipping);
+                            }
+                            else {
+                                read->setAdditionalBackClipping(-cumulativeAddFrontClipping);
+                            }
+                        }
+                        else { // Deletion
+                            finalLocations[whichResult] = results[whichResult].location + addFrontClipping;
+                        }
+                    }
+                } // while formatting doesn't work
+            }
+            else {
+                while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
+                    results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping,
+                    results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+
+                    _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster.
+
+                    nAdjustments++;
+
+                    if (0 == addFrontClipping) {
+                        blewBuffer = true;
+                        break;
+                    }
+
+                    // redo if read modified (e.g. to add soft clipping, or move alignment for a leading I.
+                    const Genome::Contig *originalContig = results[whichResult].status == NotFound ? NULL
+                        : genome->getContigAtLocation(results[whichResult].location);
+                    const Genome::Contig *newContig = results[whichResult].status == NotFound ? NULL
+                        : genome->getContigAtLocation(results[whichResult].location + addFrontClipping);
+                    if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding() ||
+                        nAdjustments > read->getDataLength()) {
+                        //
+                        // Altering this would push us over a contig boundary, or we're stuck in a loop.  Just give up on the read.
+                        //
+                        results[whichResult].status = NotFound;
+                        results[whichResult].location = InvalidGenomeLocation;
+                        finalLocations[whichResult] = InvalidGenomeLocation;
+                    }
+                    else {
+                        if (addFrontClipping > 0) {
+                            cumulativeAddFrontClipping += addFrontClipping;
+                            read->setAdditionalFrontClipping(cumulativeAddFrontClipping);
+                        }
+                        finalLocations[whichResult] += addFrontClipping;
+                    }
+                } // while formatting doesn't work
+            }
             if (blewBuffer) {
                 break;
             }
@@ -309,7 +357,8 @@ SimpleReadWriter::writePairs(
     _int64 nResults,
     SingleAlignmentResult **singleResults /* array of size NUM_READS_PER_PAIR*/, 
     _int64 *nSingleResults /* array of size NUM_READS_PER_PAIR*/, 
-    bool firstIsPrimary)
+    bool firstIsPrimary,
+    bool useAffineGap)
 {
     bool retVal = false;
     //
@@ -405,47 +454,99 @@ SimpleReadWriter::writePairs(
                     //
                     int addFrontClipping = 0;
 
+                    if (useAffineGap) {
+                        while (!format->writeRead(context, &agc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
+                            idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
+                            whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag,
+                            true, writeOrder[firstOrSecond] == 0,
+                            reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
+                            result[whichAlignmentPair].alignedAsPair)) {
 
-                    while (!format->writeRead(context, &lvc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
-                        idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
-                        whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag, 
-                        true, writeOrder[firstOrSecond] == 0,
-                        reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
-                        result[whichAlignmentPair].alignedAsPair)) {
+                            _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster
 
-                        _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster
-
-                        if (0 == addFrontClipping || locations[whichRead] == InvalidGenomeLocation) {
-                            //
-                            // We failed because we ran out of buffer.
-                            //
-                            goto blownBuffer;
-                        }
-
-                        if (1 == firstOrSecond) {
-                            //
-                            // If the location of the second read changed, we need to redo the first one as well, because it includes an offset to the second read
-                            //
-                            secondReadLocationChanged = true;
-                        }
-
-                        const Genome::Contig *originalContig = genome->getContigAtLocation(locations[whichRead]);
-                        const Genome::Contig *newContig = genome->getContigAtLocation(locations[whichRead] + addFrontClipping);
-                        if (newContig != originalContig || NULL == newContig || locations[whichRead] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
-                            //
-                            // Altering this would push us over a contig boundary.  Just give up on the read.
-                            //
-                            result[whichAlignmentPair].status[whichRead] = NotFound;
-                            result[whichAlignmentPair].location[whichRead] = InvalidGenomeLocation;
-                            locations[whichRead] = InvalidGenomeLocation;
-                        } else {
-                            if (addFrontClipping > 0) {
-                                cumulativePositiveAddFrontClipping[firstOrSecond] += addFrontClipping;
-                                reads[whichRead]->setAdditionalFrontClipping(cumulativePositiveAddFrontClipping[firstOrSecond]);
+                            if (0 == addFrontClipping || locations[whichRead] == InvalidGenomeLocation) {
+                                //
+                                // We failed because we ran out of buffer.
+                                //
+                                goto blownBuffer;
                             }
-                            locations[whichRead] += addFrontClipping;
-                        }
-                    } // While formatting didn't work
+
+                            if (1 == firstOrSecond) {
+                                //
+                                // If the location of the second read changed, we need to redo the first one as well, because it includes an offset to the second read
+                                //
+                                secondReadLocationChanged = true;
+                            }
+
+                            const Genome::Contig *originalContig = genome->getContigAtLocation(locations[whichRead]);
+                            const Genome::Contig *newContig = genome->getContigAtLocation(locations[whichRead] + addFrontClipping);
+                            if (newContig != originalContig || NULL == newContig || locations[whichRead] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+                                //
+                                // Altering this would push us over a contig boundary.  Just give up on the read.
+                                //
+                                result[whichAlignmentPair].status[whichRead] = NotFound;
+                                result[whichAlignmentPair].location[whichRead] = InvalidGenomeLocation;
+                                locations[whichRead] = InvalidGenomeLocation;
+                            }
+                            else {
+                                if (addFrontClipping < 0) { // Insertion (soft-clip)
+                                    cumulativePositiveAddFrontClipping[firstOrSecond] += addFrontClipping;
+                                    if (result[whichAlignmentPair].direction[whichRead] == FORWARD) {
+                                        reads[whichRead]->setAdditionalFrontClipping(-cumulativePositiveAddFrontClipping[firstOrSecond]);
+                                    }
+                                    else {
+                                        reads[whichRead]->setAdditionalBackClipping(-cumulativePositiveAddFrontClipping[firstOrSecond]);
+                                    }
+                                }
+                                else { // Deletion
+                                    locations[whichRead] += addFrontClipping;
+                                }
+                            }
+                        } // While formatting didn't work
+                    }
+                    else {
+                        while (!format->writeRead(context, &lvc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
+                            idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
+                            whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag,
+                            true, writeOrder[firstOrSecond] == 0,
+                            reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
+                            result[whichAlignmentPair].alignedAsPair)) {
+
+                            _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster
+
+                            if (0 == addFrontClipping || locations[whichRead] == InvalidGenomeLocation) {
+                                //
+                                // We failed because we ran out of buffer.
+                                //
+                                goto blownBuffer;
+                            }
+
+                            if (1 == firstOrSecond) {
+                                //
+                                // If the location of the second read changed, we need to redo the first one as well, because it includes an offset to the second read
+                                //
+                                secondReadLocationChanged = true;
+                            }
+
+                            const Genome::Contig *originalContig = genome->getContigAtLocation(locations[whichRead]);
+                            const Genome::Contig *newContig = genome->getContigAtLocation(locations[whichRead] + addFrontClipping);
+                            if (newContig != originalContig || NULL == newContig || locations[whichRead] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+                                //
+                                // Altering this would push us over a contig boundary.  Just give up on the read.
+                                //
+                                result[whichAlignmentPair].status[whichRead] = NotFound;
+                                result[whichAlignmentPair].location[whichRead] = InvalidGenomeLocation;
+                                locations[whichRead] = InvalidGenomeLocation;
+                            }
+                            else {
+                                if (addFrontClipping > 0) {
+                                    cumulativePositiveAddFrontClipping[firstOrSecond] += addFrontClipping;
+                                    reads[whichRead]->setAdditionalFrontClipping(cumulativePositiveAddFrontClipping[firstOrSecond]);
+                                }
+                                locations[whichRead] += addFrontClipping;
+                            }
+                        } // While formatting didn't work
+                    }
                     tentativeUsed += usedBuffer[firstOrSecond][whichAlignmentPair];
                 } // for first or second read
 
@@ -470,30 +571,67 @@ SimpleReadWriter::writePairs(
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
 
-                while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
-                    reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
-                    true, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+                if (useAffineGap) {
+                    while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
+                        reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
+                        true, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
 
-                    if (0 == addFrontClipping) {
-                        goto blownBuffer;
-                    }
-
-                    const Genome::Contig *originalContig = genome->getContigAtLocation(location);
-                    const Genome::Contig *newContig = genome->getContigAtLocation(location + addFrontClipping);
-                    if (newContig != originalContig || NULL == newContig || location + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
-                        //
-                        // Altering this would push us over a contig boundary.  Just give up on the read.
-                        //
-                        singleResults[whichRead][whichAlignment].status = NotFound;
-                        location = InvalidGenomeLocation;
-                    } else {
-                        if (addFrontClipping > 0) {
-                            cumulativePositiveAddFrontClipping += addFrontClipping;
-                            reads[whichRead]->setAdditionalFrontClipping(cumulativePositiveAddFrontClipping);
+                        if (0 == addFrontClipping) {
+                            goto blownBuffer;
                         }
-                        location += addFrontClipping;
+
+                        const Genome::Contig *originalContig = genome->getContigAtLocation(location);
+                        const Genome::Contig *newContig = genome->getContigAtLocation(location + addFrontClipping);
+                        if (newContig != originalContig || NULL == newContig || location + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+                            //
+                            // Altering this would push us over a contig boundary.  Just give up on the read.
+                            //
+                            singleResults[whichRead][whichAlignment].status = NotFound;
+                            location = InvalidGenomeLocation;
+                        }
+                        else {
+                            if (addFrontClipping < 0) { // Insertion (soft-clip)
+                                cumulativePositiveAddFrontClipping += addFrontClipping;
+                                if (singleResults[whichRead][whichAlignment].direction == FORWARD) {
+                                    reads[whichRead]->setAdditionalFrontClipping(-cumulativePositiveAddFrontClipping);
+                                }
+                                else {
+                                    reads[whichRead]->setAdditionalBackClipping(-cumulativePositiveAddFrontClipping);
+                                }
+                            }
+                            else { // Deletion
+                                location += addFrontClipping;
+                            }
+                        }
                     }
-                } 
+                }
+                else {
+                    while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
+                        reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
+                        true, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+
+                        if (0 == addFrontClipping) {
+                            goto blownBuffer;
+                        }
+
+                        const Genome::Contig *originalContig = genome->getContigAtLocation(location);
+                        const Genome::Contig *newContig = genome->getContigAtLocation(location + addFrontClipping);
+                        if (newContig != originalContig || NULL == newContig || location + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+                            //
+                            // Altering this would push us over a contig boundary.  Just give up on the read.
+                            //
+                            singleResults[whichRead][whichAlignment].status = NotFound;
+                            location = InvalidGenomeLocation;
+                        }
+                        else {
+                            if (addFrontClipping > 0) {
+                                cumulativePositiveAddFrontClipping += addFrontClipping;
+                                reads[whichRead]->setAdditionalFrontClipping(cumulativePositiveAddFrontClipping);
+                            }
+                            location += addFrontClipping;
+                        }
+                    }
+                }
 
                 finalLocations[whichRead][nResults + whichAlignment] = location;
                 used += usedBuffer[whichRead][nResults + whichAlignment];

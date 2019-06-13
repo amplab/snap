@@ -25,6 +25,7 @@ Revision History:
 #include "AlignmentResult.h"
 #include "directions.h"
 #include "LandauVishkin.h"
+#include "AffineGap.h"
 #include "Read.h"
 
 
@@ -55,6 +56,12 @@ public:
     virtual void setLandauVishkin(
         LandauVishkin<1>        *landauVishkin,
         LandauVishkin<-1>       *reverseLandauVishkin)
+    {
+    }
+
+    virtual void setAffineGap(
+        AffineGap<1>        *affineGap,
+        AffineGap<-1>       *reverseAffineGap)
     {
     }
 

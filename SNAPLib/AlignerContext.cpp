@@ -179,6 +179,12 @@ AlignerContext::initialize()
     maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
 	maxSecondaryAlignments = options->maxSecondaryAlignments;
     maxSecondaryAlignmentsPerContig = options->maxSecondaryAlignmentsPerContig;
+    useAffineGap = options->useAffineGap;
+    matchReward = options->matchReward;
+    subPenalty = options->subPenalty;
+    gapOpenPenalty = options->gapOpenPenalty;
+    gapExtendPenalty = options->gapExtendPenalty;
+    minAGScore = options->minAGScore;
 
     if (maxSecondaryAlignmentAdditionalEditDistance < 0 && (maxSecondaryAlignments < 1000000 || maxSecondaryAlignmentsPerContig > 0)) {
         WriteErrorMessage("You set -omax and/or -mpc without setting -om.  They're meaningful only in the context of -om, so you probably didn't really mean to do that.\n");

@@ -127,10 +127,16 @@ SingleAlignerContext::runIterationThread()
             noUkkonen,
             noOrderedEvaluation,
 			noTruncation,
+            useAffineGap,
             ignoreAlignmentAdjustmentForOm,
             maxSecondaryAlignmentsPerContig,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
+            matchReward,
+            subPenalty,
+            gapOpenPenalty,
+            gapExtendPenalty,
+            minAGScore,
             stats,
             allocator);
 
@@ -184,7 +190,7 @@ SingleAlignerContext::runIterationThread()
                     result.mapq = 0;
                     result.direction = FORWARD;
                     result.clippingForReadAdjustment = 0;
-                    readWriter->writeReads(readerContext, read, &result, 1, true);
+                    readWriter->writeReads(readerContext, read, &result, 1, true, useAffineGap);
                 }
                 stats->uselessReads++;
             }
@@ -261,7 +267,7 @@ SingleAlignerContext::runIterationThread()
             } // For each result
 
             stats->extraAlignments += nSecondaryResults + (containsPrimary ? 0 : 1);    // If it doesn't contain the primary, then it's a secondary.
-            readWriter->writeReads(readerContext, read, alignmentResults, nSecondaryResults + 1, containsPrimary);
+            readWriter->writeReads(readerContext, read, alignmentResults, nSecondaryResults + 1, containsPrimary, useAffineGap);
 
         }
 

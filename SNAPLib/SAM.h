@@ -21,6 +21,7 @@ Environment:
 
 #include "Compat.h"
 #include "LandauVishkin.h"
+#include "AffineGap.h"
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
@@ -170,6 +171,15 @@ public:
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false) const; 
 
+    // Affine gap version
+    virtual bool writeRead(
+        const ReaderContext& context, AffineGapWithCigar * ag, char * buffer, size_t bufferSpace,
+        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
+        int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
+        bool alignedAsPair = false) const;
+
     // calculate data needed to write SAM/BAM record
     // very long argument list since this was extracted from
     // original SAM record writing routine so it could be shared with BAM
@@ -213,16 +223,67 @@ public:
         Direction mateDirection,
         GenomeDistance *extraBasesClippedBefore);
 
+    static bool
+        createSAMLine(
+            const Genome * genome,
+            AffineGapWithCigar * ag,
+            // output data
+            char* data,
+            char* quality,
+            GenomeDistance dataSize,
+            const char*& contigName,
+            int& contigIndex,
+            int& flags,
+            GenomeDistance& positionInContig,
+            int& mapQuality,
+            const char*& mateContigName,
+            int& mateContigIndex,
+            GenomeDistance& matePositionInContig,
+            _int64& templateLength,
+            unsigned& fullLength,
+            const char*& clippedData,
+            unsigned& clippedLength,
+            unsigned& basesClippedBefore,
+            unsigned& basesClippedAfter,
+            // input data
+            size_t& qnameLen,
+            Read * read,
+            AlignmentResult result,
+            GenomeLocation genomeLocation,
+            Direction direction,
+            bool secondaryAlignment,
+            bool useM,
+            bool hasMate,
+            bool firstInPair,
+            bool alignedAsPair,
+            Read * mate,
+            AlignmentResult mateResult,
+            GenomeLocation mateLocation,
+            Direction mateDirection,
+            GenomeDistance *extraBasesClippedBefore);
+
     static void computeCigar(CigarFormat cigarFormat, const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
         GenomeDistance *o_extraBasesClippedAfter, 
         GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping);
 
+    static void computeCigar(CigarFormat cigarFormat, const Genome * genome, AffineGapWithCigar * lv,
+        char * cigarBuf, int cigarBufLen,
+        const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
+        GenomeDistance *o_extraBasesClippedAfter,
+        GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping);
+
 private:
     static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter, 
+        unsigned frontHardClipped, unsigned backHardClipped,
+        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping);
+
+    static const char * computeCigarString(const Genome * genome, AffineGapWithCigar * lv,
+        char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
+        const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned frontHardClipped, unsigned backHardClipped,
         GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping);
 

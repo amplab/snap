@@ -53,7 +53,13 @@ public:
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
 		bool		  noTruncation_,
-        bool          ignoreAlignmentAdjustmentsForOm_);
+        bool          useAffineGap_,
+        bool          ignoreAlignmentAdjustmentsForOm_,
+        unsigned      matchReward_,
+        unsigned      subPenalty_,
+        unsigned      gapOpenPenalty_,
+        unsigned      gapExtendPenalty_,
+        unsigned      minAGScore_);
 
      void setLandauVishkin(
         LandauVishkin<1> *landauVishkin_,
@@ -63,6 +69,14 @@ public:
         reverseLandauVishkin = reverseLandauVishkin_;
     }
     
+     void setAffineGap(
+         AffineGap<1> *affineGap_,
+         AffineGap<-1> *reverseAffineGap_)
+     {
+         affineGap = affineGap_;
+         reverseAffineGap = reverseAffineGap_;
+     }
+
     virtual ~IntersectingPairedEndAligner();
     
     virtual bool align(
@@ -124,7 +138,15 @@ private:
     bool            noUkkonen;
     bool            noOrderedEvaluation;
 	bool			noTruncation;
+    bool            useAffineGap;
     bool            ignoreAlignmentAdjustmentsForOm;
+
+    // Affine gap scoring parameters
+    int             matchReward;
+    int             subPenalty;
+    int             gapOpenPenalty;
+    int             gapExtendPenalty;
+    unsigned        minAGScore;
 
     AlignmentAdjuster   alignmentAdjuster;
 
@@ -301,6 +323,9 @@ private:
 
     LandauVishkin<> *landauVishkin;
     LandauVishkin<-1> *reverseLandauVishkin;
+
+    AffineGap<> *affineGap;
+    AffineGap<-1> *reverseAffineGap;
 
     char rcTranslationTable[256];
     unsigned nTable[256];

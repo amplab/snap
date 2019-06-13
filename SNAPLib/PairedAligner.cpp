@@ -382,7 +382,7 @@ void PairedAlignerContext::runIterationThread()
             if (pass) {
                 stats->notFound++;
                 if (NULL != readWriter) {
-                    readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
+                    readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true, useAffineGap);
                 }
             } else {
                 stats->uselessReads++;
@@ -423,7 +423,9 @@ void PairedAlignerContext::runIterationThread()
     
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
+                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
+                                                                useAffineGap, ignoreAlignmentAdjustmentForOm,
+                                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore);
 
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
@@ -439,10 +441,16 @@ void PairedAlignerContext::runIterationThread()
         noUkkonen,
         noOrderedEvaluation,
 		noTruncation,
+        useAffineGap,
         ignoreAlignmentAdjustmentForOm,
         intersectingAligner,
 		minReadLength,
         maxSecondaryAlignmentsPerContig,
+        matchReward,
+        subPenalty,
+        gapOpenPenalty,
+        gapExtendPenalty,
+        minAGScore,
         allocator);
 
     allocator->checkCanaries();
@@ -508,7 +516,7 @@ void PairedAlignerContext::runIterationThread()
 
             if (pass) {
                 if (NULL != readWriter) {
-                    readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
+                    readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true, useAffineGap);
                 }
                 stats->uselessReads += 2;
             }
@@ -609,7 +617,7 @@ void PairedAlignerContext::runIterationThread()
         }
 
         if (NULL != readWriter) {
-            readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary);
+            readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary, useAffineGap);
         }
 
         if (options->profile) {

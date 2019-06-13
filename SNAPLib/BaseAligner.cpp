@@ -38,6 +38,8 @@ Revision History:
 
 using std::min;
 
+// #define TRACE_ALIGNER 1
+
 #ifdef TRACE_ALIGNER    // If you turn this on, then stdout writing won't work.
 #define TRACE printf
 #else
@@ -55,11 +57,17 @@ BaseAligner::BaseAligner(
     unsigned        i_extraSearchDepth,
     bool            i_noUkkonen,
     bool            i_noOrderedEvaluation,
-	bool			i_noTruncation,
+    bool			i_noTruncation,
+    bool            i_useAffineGap,
     bool            i_ignoreAlignmentAdjustmentsForOm,
     int             i_maxSecondaryAlignmentsPerContig,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
+    unsigned             i_matchReward,
+    unsigned             i_subPenalty,
+    unsigned             i_gapOpenPenalty,
+    unsigned             i_gapExtendPenalty,
+    unsigned             i_minAGScore,
     AlignerStats   *i_stats,
     BigAllocator   *allocator) :
         genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
@@ -67,7 +75,9 @@ BaseAligner::BaseAligner(
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
         noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
-		minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
+		useAffineGap(i_useAffineGap), matchReward(i_matchReward), subPenalty(i_subPenalty), 
+        gapOpenPenalty(i_gapOpenPenalty), gapExtendPenalty(i_gapExtendPenalty), minAGScore(i_minAGScore),
+        minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
         alignmentAdjuster(i_genomeIndex->getGenome()), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
 /*++
 
@@ -89,10 +99,16 @@ Arguments:
     i_noUkkonen         - Don't use Ukkonen's algorithm (i.e., don't reduce the max edit distance depth as we score candidates)
     i_noOrderedEvaluation-Don't order evaluating the reads by the hit count in order to drive down the max edit distance more quickly
 	i_noTruncation       - Don't truncate searches based on count of disjoint seed misses
+    i_useAffineGap      - Use affine gap scoring for seed extension
     i_ignoreAlignmentAdjustmentsForOm - When a read score is adjusted because of soft clipping for being near the end of a contig, don't use the adjusted score when computing what to keep for -om
     i_maxSecondaryAlignmentsPerContig - Maximum secondary alignments per contig; -1 means don't limit this
     i_landauVishkin     - an externally supplied LandauVishkin string edit distance object.  This is useful if we're expecting repeated computations and use the LV cache.
     i_reverseLandauVishkin - the same for the reverse direction.
+    i_matchReward       - affine gap score for a match
+    i_subPenalty        - affine gap score for a substitution
+    i_gapOpenPenalty    - affine gap cost for opening a gap (indel)
+    i_gapExtendPenalty  - affine gap cost for extending a gap (indel)
+    i_minAGScore        - minimum score for alignment using affine gap score
     i_stats             - an object into which we report out statistics
     allocator           - an allocator that's used to allocate our local memory.  This is useful for TLB optimization.  If this is supplied, the caller
                           is responsible for deallocation, we'll not deallocate any dynamic memory in our destructor.
@@ -118,6 +134,11 @@ Arguments:
         soft_exit(1);
     }
 
+    if (i_subPenalty > (i_gapOpenPenalty + i_gapExtendPenalty)) {
+        WriteErrorMessage("Substitutions may be penalized too high to be seen in alignments. Make sure subPenalty < gapOpen + gapExtend\n");
+        soft_exit(1);
+    }
+
     if (i_landauVishkin == NULL) {
         if (allocator) {
             landauVishkin = new (allocator) LandauVishkin<>;
@@ -131,6 +152,15 @@ Arguments:
         landauVishkin = i_landauVishkin;
         reverseLandauVishkin = i_reverseLandauVishkin;
         ownLandauVishkin = false;
+    }
+
+    if (allocator) {
+        affineGap = new (allocator) AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        reverseAffineGap = new (allocator) AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+    }
+    else {
+        affineGap = new AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        reverseAffineGap = new AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
 
     unsigned maxSeedsToUse;
@@ -415,17 +445,30 @@ Return Value:
                 // exceed our seed count.  Do the best we can with what we have.
                 //
 #ifdef TRACE_ALIGNER
-                printf(stderr, "Calling score with force=true because we wrapped around enough\n");
+                printf("Calling score with force=true because we wrapped around enough\n");
 #endif
-                score(
-                    true,
-                    read,
-                    primaryResult,
-                    maxEditDistanceForSecondaryResults,
-                    secondaryResultBufferSize,
-                    nSecondaryResults,
-                    secondaryResults,
-                    &overflowedSecondaryResultsBuffer);
+                if (useAffineGap) {
+                    scoreAffineGap(
+                        true,
+                        read,
+                        primaryResult,
+                        maxEditDistanceForSecondaryResults,
+                        secondaryResultBufferSize,
+                        nSecondaryResults,
+                        secondaryResults,
+                        &overflowedSecondaryResultsBuffer);
+                }
+                else {
+                    score(
+                        true,
+                        read,
+                        primaryResult,
+                        maxEditDistanceForSecondaryResults,
+                        secondaryResultBufferSize,
+                        nSecondaryResults,
+                        secondaryResults,
+                        &overflowedSecondaryResultsBuffer);
+                }
 
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %llu\n", 
@@ -501,7 +544,7 @@ Return Value:
             if (nHits[rc] <= maxHitsToConsider) {
                 printf("%sHits:", rc == 1 ? "RC " : "");
                 for (unsigned i = 0; i < nHits[rc]; i++)
-                    printf(" %u", hits[rc][i]);
+                    printf(" %9llu", doesGenomeIndexHave64BitLocations ? hits[rc][i].location : (_int64)hits32[rc][i]);
                 printf("\n");
             }
         }
@@ -587,8 +630,8 @@ Return Value:
                             candidate->seedOffset = offset;
                             _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
                         } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit || noTruncation) {
-                            _ASSERT(offset <= readLen - seedLen);
-                            allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
+                                _ASSERT(offset <= readLen - seedLen);
+                                allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                     offset, &candidate, &hashTableElement);
                         }
                     }
@@ -619,7 +662,9 @@ Return Value:
             //
             // And finally, try scoring.
             //
-            if (score(
+            bool didScore = false;
+            if (useAffineGap) {
+                didScore = scoreAffineGap(
                     false,
                     read,
                     primaryResult,
@@ -627,7 +672,20 @@ Return Value:
                     secondaryResultBufferSize,
                     nSecondaryResults,
                     secondaryResults,
-                    &overflowedSecondaryResultsBuffer)) {
+                    &overflowedSecondaryResultsBuffer);
+            }
+            else {
+                didScore = score(
+                    false,
+                    read,
+                    primaryResult,
+                    maxEditDistanceForSecondaryResults,
+                    secondaryResultBufferSize,
+                    nSecondaryResults,
+                    secondaryResults,
+                    &overflowedSecondaryResultsBuffer);
+            }
+            if (didScore) {
 
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %llu\n", primaryResult->score, primaryResult->mapq, primaryResult->location.location);
@@ -647,16 +705,28 @@ Return Value:
 #ifdef TRACE_ALIGNER
     printf("Calling score with force=true because we ran out of seeds\n");
 #endif
-    score(
-        true,
-        read,
-        primaryResult,
-        maxEditDistanceForSecondaryResults,
-        secondaryResultBufferSize,
-        nSecondaryResults,
-        secondaryResults,
-        &overflowedSecondaryResultsBuffer);
-
+    if (useAffineGap) {
+        scoreAffineGap(
+            true,
+            read,
+            primaryResult,
+            maxEditDistanceForSecondaryResults,
+            secondaryResultBufferSize,
+            nSecondaryResults,
+            secondaryResults,
+            &overflowedSecondaryResultsBuffer);
+    }
+    else {
+        score(
+            true,
+            read,
+            primaryResult,
+            maxEditDistanceForSecondaryResults,
+            secondaryResultBufferSize,
+            nSecondaryResults,
+            secondaryResults,
+            &overflowedSecondaryResultsBuffer);
+    }
 #ifdef  _DEBUG
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %llu\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location.location);
 #endif  // _DEBUG
@@ -1107,6 +1177,469 @@ Return Value:
     return false;
 }
 
+bool
+BaseAligner::scoreAffineGap(
+    bool                     forceResult,
+    Read                    *read[NUM_DIRECTIONS],
+    SingleAlignmentResult   *primaryResult,
+    int                      maxEditDistanceForSecondaryResults,
+    _int64                   secondaryResultBufferSize,
+    _int64                  *nSecondaryResults,
+    SingleAlignmentResult   *secondaryResults,
+    bool                    *overflowedSecondaryBuffer)
+    /*++
+
+    Routine Description:
+    
+
+    Arguments:
+
+
+    Return Value:
+
+        true iff we've reached a result.  When called with forceResult, we'll always return true.
+
+    --*/
+{
+    *overflowedSecondaryBuffer = false;
+#ifdef TRACE_ALIGNER
+    printf("score() called with force=%d nsa=%d nrcsa=%d best=%u bestloc=%u 2nd=%u\n",
+        forceResult, nSeedsApplied[FORWARD], nSeedsApplied[RC], bestScore, bestScoreGenomeLocation, secondBestScore);
+    //printf("Candidates:\n");
+    //for (int i = 0; i < nCandidates; i++) {
+    //    Candidate* c = candidates + i;
+    //    printf("  loc=%u rc=%d weight=%u minps=%u scored=%d score=%u r=%u-%u\n",
+    //        c->genomeLocation, c->isRC, c->weight, c->minPossibleScore, c->scored,
+    //        c->score, c->minRange, c->maxRange);
+    //}
+    //printf("\n\n");
+#endif
+
+    if (0 == mostSeedsContainingAnyParticularBase[FORWARD] && 0 == mostSeedsContainingAnyParticularBase[RC]) {
+        //
+        // The only way we can get here is if we've tried all of the seeds that we're willing
+        // to try and every one of them generated too many hits to process.  Give up.
+        //
+        _ASSERT(forceResult);
+        primaryResult->status = NotFound;
+        primaryResult->mapq = 0;
+        return true;
+    }
+
+    //
+    // Recompute highest possible score at any unscored location.
+    //
+    for (Direction direction = 0; direction < 2; direction++) {
+        if (0 != mostSeedsContainingAnyParticularBase[direction]) {
+            lowestPossibleScoreOfAnyUnseenLocation[direction] =
+                __max(lowestPossibleScoreOfAnyUnseenLocation[direction],
+                    nSeedsApplied[direction] / mostSeedsContainingAnyParticularBase[direction]);
+        }
+    }
+
+#ifdef TRACE_ALIGNER
+    printf("Lowest possible scores for unseen locations: %d (fwd), %d (RC)\n",
+        lowestPossibleScoreOfAnyUnseenLocation[FORWARD],
+        lowestPossibleScoreOfAnyUnseenLocation[RC]);
+#endif
+
+    unsigned weightListToCheck = highestUsedWeightList;
+
+    do {
+        //
+        // Grab the next element to score, and score it.
+        //
+
+        while (weightListToCheck > 0 && weightLists[weightListToCheck].weightNext == &weightLists[weightListToCheck]) {
+            weightListToCheck--;
+            highestUsedWeightList = weightListToCheck;
+        }
+
+        if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD], lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit && !noTruncation) || forceResult) {
+            if (weightListToCheck < minWeightToCheck) {
+                //
+                // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
+                // answer.
+                //
+                primaryResult->score = bestScore;
+
+                if (bestScore <= maxK) {
+                    primaryResult->location = bestScoreGenomeLocation;
+                    primaryResult->mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
+                    if (primaryResult->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
+                        primaryResult->status = SingleHit;
+                    }
+                    else {
+                        primaryResult->status = MultipleHits;
+                    }
+                    return true;
+                }
+                else {
+                    primaryResult->status = NotFound;
+                    primaryResult->mapq = 0;
+                    return true;
+                }
+            }
+            //
+            // Nothing that we haven't already looked up can possibly be the answer.  Score what we've got and exit.
+            //
+            forceResult = true;
+        }
+        else if (weightListToCheck == 0) {
+            //
+            // No candidates, look for more.
+            //
+            return false;
+        }
+
+        HashTableElement *elementToScore = weightLists[weightListToCheck].weightNext;
+        _ASSERT(!elementToScore->allExtantCandidatesScored);
+        _ASSERT(elementToScore->candidatesUsed != 0);
+        _ASSERT(elementToScore != &weightLists[weightListToCheck]);
+
+        if (doAlignerPrefetch) {
+            //
+            // Our prefetch pipeline is one loop out we get the genome data for the next loop, and two loops out we get the element to score.
+            //
+            _mm_prefetch((const char *)(elementToScore->weightNext->weightNext), _MM_HINT_T2);   // prefetch the next element, it's likely to be the next thing we score.
+            genome->prefetchData(elementToScore->weightNext->baseGenomeLocation);
+        }
+
+        if (elementToScore->lowestPossibleScore <= scoreLimit) {
+            unsigned long candidateIndexToScore;
+            _uint64 candidatesMask = elementToScore->candidatesUsed;
+            while (_BitScanForward64(&candidateIndexToScore, candidatesMask)) {
+                _uint64 candidateBit = ((_uint64)1 << candidateIndexToScore);
+                candidatesMask &= ~candidateBit;
+                if ((elementToScore->candidatesScored & candidateBit) != 0) {
+                    // Already scored it, or marked it as scored due to using ProbabilityDistance
+                    continue;
+                }
+
+                bool anyNearbyCandidatesAlreadyScored = elementToScore->candidatesScored != 0;
+
+                elementToScore->candidatesScored |= candidateBit;
+                _ASSERT(candidateIndexToScore < hashTableElementSize);
+                Candidate *candidateToScore = &elementToScore->candidates[candidateIndexToScore];
+
+                GenomeLocation genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
+                GenomeLocation elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
+
+                //
+                // We're about to run edit distance computation on the genome.  Launch a prefetch for it
+                // so that it's in cache when we do (or at least on the way).
+                //
+                if (doAlignerPrefetch) {
+                    genomeIndex->prefetchGenomeData(genomeLocation - scoreLimit);
+                }
+
+                unsigned score = -1;
+                double matchProbability = 0;
+                unsigned readDataLength = read[elementToScore->direction]->getDataLength();
+                GenomeDistance genomeDataLength = readDataLength + scoreLimit; // Leave extra space for scoreLimit deletions
+                const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
+
+                if (data != NULL) {
+                    Read *readToScore = read[elementToScore->direction];
+
+                    _ASSERT(candidateToScore->seedOffset + seedLen <= readToScore->getDataLength());
+
+                    //
+                    // Compute the distance separately in the forward and backward directions from the seed, to allow
+                    // arbitrary offsets at both the start and end.
+                    //
+                    double matchProb1 = 1.0, matchProb2 = 1.0;
+                    int score1 = 0, score2 = 0;
+                    int agScore1 = seedLen, agScore2 = 0;
+                    int genomeLocationOffset;
+                    // First, do the forward direction from where the seed aligns to past of it
+                    int readLen = readToScore->getDataLength();
+                    int seedLen = genomeIndex->getSeedLength();
+                    int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
+                    int tailStart = seedOffset + seedLen;
+
+                    _ASSERT(!memcmp(data + seedOffset, readToScore->getData() + seedOffset, seedLen));
+
+                    if (tailStart != readLen) {
+                        int textLen = (int)__min(genomeDataLength - tailStart, 0x7ffffff0);
+                        agScore1 = affineGap->computeScore(data + tailStart,
+                                                            textLen,
+                                                            readToScore->getData() + tailStart,
+                                                            readToScore->getQuality() + tailStart,
+                                                            readLen - tailStart,
+                                                            scoreLimit,
+                                                            seedLen,
+                                                            NULL,
+                                                            &score1,
+                                                            &matchProb1);
+#ifdef TRACE_ALIGNER
+                        printf("Forward extension at %9llu with limit %d: %d (prob %g)\n",
+                            genomeLocation.location, scoreLimit, score1, matchProbability);
+                        printf("REF:");
+                        for (int i = 0; i < textLen; ++i) {
+                            printf("%c", *(data + tailStart + i));
+                        }
+                        printf("\nPAT:");
+                        for (int i = 0; i < readLen - tailStart; ++i) {
+                            printf("%c", *(readToScore->getData() + tailStart + i));
+                        }
+                        printf("\n");
+#endif
+                    }
+                    if (seedOffset != 0 && score1 != -1) {
+                        _ASSERT(score1 <= (int) scoreLimit);
+                        // The tail of the read matched; now let's reverse match the reference genome and the head
+                        int limitLeft = scoreLimit - score1;
+                        agScore2 = reverseAffineGap->computeScore(data + seedOffset,
+                                                                seedOffset + limitLeft,
+                                                                reversedRead[elementToScore->direction] + readLen - seedOffset,
+                                                                read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
+                                                                seedOffset,
+                                                                limitLeft,
+                                                                agScore1,
+                                                                &genomeLocationOffset,
+                                                                &score2,
+                                                                &matchProb2);
+#ifdef TRACE_ALIGNER
+                        printf("Backward extension at %9llu with limit %d: %d (prob %g)\n",
+                            genomeLocation.location, limitLeft, score2, matchProbability);
+                        printf("REF:");
+                        for (int i = 1; i <= seedOffset + limitLeft; ++i) {
+                            printf("%c", *(data + seedOffset - i));
+                        }
+                        printf("\nPAT:");
+                        for (int i = 0; i < seedOffset; ++i) {
+                            printf("%c", *(reversedRead[elementToScore->direction] + readLen - seedOffset + i));
+                        }
+                        printf("\n");
+#endif
+                        if (score2 != -1) {
+                            //
+                            // Adjust the genome location based on any indels that we found.
+                            //
+                            genomeLocation = genomeLocation + seedOffset - genomeLocationOffset;
+                        }
+                    }
+                    if (score1 != -1 && score2 != -1) {
+                        score = score1 + score2;
+
+                        // Map probabilities for substrings can be multiplied, but make sure to count seed too
+                        matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+
+                        //
+                        // We could mark as scored anything in between the old and new genome offsets, but it's probably not worth the effort since this is
+                        // so rare and all it would do is same time.
+                        //
+                    }
+                }
+                else { // if we had genome data to compare against
+                    matchProbability = 0;
+                }
+#ifdef TRACE_ALIGNER
+                printf("Computing distance at %u (RC) with limit %d: %d (prob %g)\n",
+                    genomeLocation, scoreLimit, score, matchProbability);
+#endif
+
+
+#ifdef  _DEBUG
+                if (_DumpAlignments) printf("Scored %9llu weight %2d limit %d, result %2d %s\n", genomeLocation.location, elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
+#endif  // _DEBUG
+
+                candidateToScore->score = score;
+
+                nLocationsScored++;
+                affineGapScores++;
+                affineGapScoresAfterBestFound++;
+
+
+                //
+                // Handle the special case where we just scored a different offset for a region that's already been scored.  This can happen when
+                // there are indels in the read.  In this case, we want to treat them as a single aignment, not two different ones (which would
+                // cause us to lose confidence in the alignment, since they're probably both pretty good).
+                //
+                if (anyNearbyCandidatesAlreadyScored) {
+                    if (elementToScore->bestScore < score || elementToScore->bestScore == score && matchProbability <= elementToScore->matchProbabilityForBestScore) {
+                        //
+                        // This is a no better mapping than something nearby that we already tried.  Just ignore it.
+                        //
+                        continue;
+                    }
+                }
+                else {
+                    _ASSERT(elementToScore->matchProbabilityForBestScore == 0.0);
+                }
+
+                elementToScore->bestScoreGenomeLocation = genomeLocation;
+
+                //
+                // Look up the hash table element that's closest to the genomeLocation but that doesn't
+                // contain it, to check if this location is already scored.
+                //
+                // We do this computation in a strange way in order to avoid generating a branch instruction that
+                // the processor's branch predictor will get wrong half of the time.  Think about it like this:
+                // The genome location lies in a bucket of size hashTableElementSize.  Its offset in the bucket
+                // is genomeLocation % hashTableElementSize.  If we take that quantity and integer divide it by
+                // hashTableElementSize / 2, we get 0 if it's in the first half and 1 if it's in the second.  Double that and subtract
+                // one, and you're at the right place with no branches.
+                //
+                HashTableElement *nearbyElement;
+                GenomeLocation nearbyGenomeLocation;
+                if (-1 != score) {
+                    nearbyGenomeLocation = elementGenomeLocation + (2 * (GenomeLocationAsInt64(elementGenomeLocation) % hashTableElementSize / (hashTableElementSize / 2)) - 1) * (hashTableElementSize / 2);
+                    _ASSERT((GenomeLocationAsInt64(elementGenomeLocation) % hashTableElementSize >= (hashTableElementSize / 2) ? elementGenomeLocation + (hashTableElementSize / 2) : elementGenomeLocation - (hashTableElementSize / 2)) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
+
+                    findElement(nearbyGenomeLocation, elementToScore->direction, &nearbyElement);
+                }
+                else {
+                    nearbyElement = NULL;
+                }
+
+                if (NULL != nearbyElement && nearbyElement->candidatesScored != 0) {
+                    //
+                    // Just because there's a "nearby" element doesn't mean it's really within the maxMergeDist.  Check that now.
+                    //
+                    if (!genomeLocationIsWithin(genomeLocation, nearbyElement->bestScoreGenomeLocation, maxMergeDist)) {
+
+                        //
+                        // There's a nearby element, but its best score is too far away to merge.  Forget it.
+                        //
+                        nearbyElement = NULL;
+                    }
+
+                    if (NULL != nearbyElement) {
+                        if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
+                            //
+                            // Again, this no better than something nearby we already tried.  Give up.
+                            //
+                            continue;
+                        }
+                        anyNearbyCandidatesAlreadyScored = true;
+                        probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - nearbyElement->matchProbabilityForBestScore);
+                        nearbyElement->matchProbabilityForBestScore = 0;    // keeps us from backing it out twice
+                    }
+                }
+
+                probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - elementToScore->matchProbabilityForBestScore); // need the max due to floating point lossage.
+                probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
+                elementToScore->matchProbabilityForBestScore = matchProbability;
+                elementToScore->bestScore = score;
+
+                if (bestScore > score ||
+                    (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
+
+                    //
+                    // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
+                    //
+
+                    if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxMergeDist > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
+                        (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxMergeDist > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
+                        (!anyNearbyCandidatesAlreadyScored || (GenomeLocationAsInt64(bestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist &&
+                            GenomeLocationAsInt64(secondBestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist))) {
+                        secondBestScore = bestScore;
+                        secondBestScoreGenomeLocation = bestScoreGenomeLocation;
+                        secondBestScoreDirection = primaryResult->direction;
+                    }
+
+                    //
+                    // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
+                    //
+                    if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
+                        if (secondaryResultBufferSize <= *nSecondaryResults) {
+                            *overflowedSecondaryBuffer = true;
+                            return true;
+                        }
+
+                        SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                        result->direction = primaryResult->direction;
+                        result->location = bestScoreGenomeLocation;
+                        result->mapq = 0;
+                        result->score = bestScore;
+                        result->status = MultipleHits;
+                        result->clippingForReadAdjustment = 0;
+
+                        _ASSERT(result->score != -1);
+
+                        (*nSecondaryResults)++;
+                    }
+
+                    bestScore = score;
+                    probabilityOfBestCandidate = matchProbability;
+                    _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
+                    bestScoreGenomeLocation = genomeLocation;
+                    primaryResult->location = bestScoreGenomeLocation;
+                    primaryResult->score = bestScore;
+                    primaryResult->direction = elementToScore->direction;
+                    _ASSERT(0 == primaryResult->clippingForReadAdjustment);
+
+                    affineGapScoresAfterBestFound = 0;
+                }
+                else {
+                    if (secondBestScore > score) {
+                        //
+                        // A new second best.
+                        //
+                        secondBestScore = score;
+                        secondBestScoreGenomeLocation = genomeLocation;
+                        secondBestScoreDirection = elementToScore->direction;
+                    }
+
+                    //
+                    // If this is close enough, record it as a secondary alignment.
+                    //
+                    if (-1 != maxEditDistanceForSecondaryResults && NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults && score != -1) {
+                        if (secondaryResultBufferSize <= *nSecondaryResults) {
+                            *overflowedSecondaryBuffer = true;
+                            return true;
+                        }
+
+                        SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                        result->direction = elementToScore->direction;
+                        result->location = genomeLocation;
+                        result->mapq = 0;
+                        result->score = score;
+                        result->status = MultipleHits;
+                        result->clippingForReadAdjustment = 0;
+
+                        _ASSERT(result->score != -1);
+
+                        (*nSecondaryResults)++;
+                    }
+                }
+
+                if (stopOnFirstHit && bestScore <= maxK) {
+                    // The user just wanted to find reads that match the database within some distance, but doesn't
+                    // care about the best alignment. Stop now but mark the result as MultipleHits because we're not
+                    // confident that it's the best one.  We don't support mapq in this secnario, because we haven't
+                    // explored enough to compute it.
+                    primaryResult->status = MultipleHits;
+                    primaryResult->mapq = 0;
+                    return true;
+                }
+
+                // Update scoreLimit since we may have improved bestScore or secondBestScore
+                if (!noUkkonen) {   // If we've turned off Ukkonen, then don't drop k
+                    scoreLimit = min(bestScore, maxK) + extraSearchDepth;
+                }
+                else {
+                    _ASSERT(scoreLimit == maxK + extraSearchDepth);
+                }
+            }   // While candidates exist in the element
+        }   // If the element could possibly affect the result
+
+        //
+        // Remove the element from the weight list.
+        //
+        elementToScore->allExtantCandidatesScored = true;
+        elementToScore->weightNext->weightPrev = elementToScore->weightPrev;
+        elementToScore->weightPrev->weightNext = elementToScore->weightNext;
+        elementToScore->weightNext = elementToScore->weightPrev = elementToScore;
+
+    } while (forceResult);
+
+    return false;
+}
+
+
 
     void
 BaseAligner::prefetchHashTableBucket(GenomeLocation genomeLocation, Direction direction)
@@ -1310,6 +1843,14 @@ Return Value:
                 reverseLandauVishkin->~LandauVishkin();
             }
         }
+
+        if (NULL != affineGap) {
+            affineGap->~AffineGap();
+        }
+        if (NULL != reverseAffineGap) {
+            reverseAffineGap->~AffineGap();
+        }
+
     } else {
 
         if (ownLandauVishkin) {
@@ -1321,6 +1862,15 @@ Return Value:
                 delete reverseLandauVishkin;
             }
         }
+
+
+        if (NULL != affineGap) {
+            delete affineGap;
+        }
+        if (NULL != reverseAffineGap) {
+            delete reverseAffineGap;
+        }
+
 
         BigDealloc(rcReadData);
         rcReadData = NULL;
@@ -1454,6 +2004,8 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         (ownLandauVishkin ?
             LandauVishkin<>::getBigAllocatorReservation() +
             LandauVishkin<-1>::getBigAllocatorReservation() : 0)        + // our LandauVishkin objects
+        AffineGap<>::getBigAllocatorReservation()                       + 
+        AffineGap<-1>::getBigAllocatorReservation()                     + // our AffineGap objects
         sizeof(char) * maxReadSize * 2                                  + // rcReadData
         sizeof(char) * maxReadSize * 4 + 2 * MAX_K                      + // reversed read (both)
         sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                      + // seed used

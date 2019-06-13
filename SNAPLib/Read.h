@@ -190,7 +190,7 @@ public:
     //
     // write a batch of single reads, the first one of which is a primary alignment and the rest secondary.
     //
-    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, _int64 nResults, bool firstIsPrimary) = 0;
+    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, _int64 nResults, bool firstIsPrimary, bool useAffineGap = false) = 0;
 
     //
     // Write a batch of paired alignments, including some single secondary alignments.  reads needs to be exactly two reads, singleAlignmentResult is a pointer to two arrays of
@@ -198,7 +198,7 @@ public:
     // result is primary, all others are secondary.
     //
     virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, _int64 nResults,
-        SingleAlignmentResult **singleResults /* array of size 2*/, _int64 *nSingleResults /* array of size 2*/, bool firstIsPrimary) = 0;
+        SingleAlignmentResult **singleResults /* array of size 2*/, _int64 *nSingleResults /* array of size 2*/, bool firstIsPrimary, bool useAffineGap = false) = 0;
 
 
     // close out this thread
@@ -230,7 +230,7 @@ public:
             upcaseForwardRead(NULL), auxiliaryData(NULL), auxiliaryDataLength(0),
             readGroup(NULL), originalAlignedLocation(-1), originalMAPQ(-1), originalSAMFlags(0),
             originalFrontClipping(0), originalBackClipping(0), originalFrontHardClipping(0), originalBackHardClipping(0),
-            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0), additionalFrontClipping(0)
+            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0), additionalFrontClipping(0), additionalBackClipping(0)
         {}
 
         Read(const Read& other) :  localBufferAllocationOffset(0)
@@ -353,6 +353,7 @@ public:
             originalRNEXTLength = other.originalRNEXTLength;
             originalPNEXT = other.originalPNEXT;
             additionalFrontClipping = other.additionalFrontClipping;
+            additionalBackClipping = other.additionalBackClipping;
         }
 
         //
@@ -400,6 +401,7 @@ public:
             frontClippedLength = 0;
             clippingState = NoClipping;
             additionalFrontClipping = 0;
+            additionalBackClipping = 0;
             originalAlignedLocation = i_originalAlignedLocation;
             originalMAPQ = i_originalMAPQ;
             originalSAMFlags = i_originalSAMFlags;
@@ -486,6 +488,14 @@ public:
             additionalFrontClipping = clipping;
         }
 
+        inline void setAdditionalBackClipping(int clipping)
+        {
+            _ASSERT(0 <= clipping);
+
+            dataLength -= clipping - additionalBackClipping;
+            additionalBackClipping = clipping;
+        }
+
         inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM) const
         {
             *o_length = auxiliaryDataLength;
@@ -542,7 +552,7 @@ public:
             }
 
             _ASSERT(frontClippedLength <= dataLength);
-
+            
             dataLength -= frontClippedLength;
             data += frontClippedLength;
             quality += frontClippedLength;
@@ -676,6 +686,7 @@ private:
         unsigned frontClippedLength;
         ReadClippingType clippingState;
         int additionalFrontClipping;
+        int additionalBackClipping;
 
         //
         // Alignment data that was in the read when it was read from a file.  While this should probably also be the place to put

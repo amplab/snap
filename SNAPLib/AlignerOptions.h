@@ -100,6 +100,12 @@ struct AlignerOptions : public AbstractOptions
     bool                noUkkonen;
     bool                noOrderedEvaluation;
 	bool				noTruncation;
+    bool                useAffineGap;
+    unsigned            matchReward;
+    unsigned            subPenalty;
+    unsigned            gapOpenPenalty;
+    unsigned            gapExtendPenalty;
+    unsigned            minAGScore;
 	unsigned			minReadLength;
 	bool				mapIndex;
 	bool				prefetchIndex;

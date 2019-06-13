@@ -29,6 +29,7 @@ Revision History:
 
 #include "AlignmentResult.h"
 #include "LandauVishkin.h"
+#include "AffineGap.h"
 #include "BigAlloc.h"
 #include "ProbabilityDistance.h"
 #include "AlignerStats.h"
@@ -53,10 +54,16 @@ public:
         bool            i_noUkkonen,
         bool            i_noOrderedEvaluation,
 		bool			i_noTruncation,
+        bool            i_useAffineGap,           
         bool            i_ignoreAlignmentAdjustmentsForOm,
         int             i_maxSecondaryAlignmentsPerContig,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
+        unsigned        i_matchReward = 1,
+        unsigned        i_subPenalty = 4,
+        unsigned        i_gapOpenPenalty = 6,
+        unsigned        i_gapExtendPenalty = 1,
+        unsigned        i_minAGScore = 30,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);
 
@@ -119,6 +126,17 @@ private:
     LandauVishkin<> *landauVishkin;
     LandauVishkin<-1> *reverseLandauVishkin;
     bool ownLandauVishkin;
+
+    AffineGap<> *affineGap;
+    AffineGap<-1> *reverseAffineGap;
+
+    // Affine gap scoring parameters
+    int matchReward;
+    int subPenalty;
+    int gapOpenPenalty;
+    int gapExtendPenalty;
+
+    unsigned minAGScore;
 
     ProbabilityDistance *probDistance;
 
@@ -255,8 +273,11 @@ private:
     GenomeLocation secondBestScoreGenomeLocation;
     int      secondBestScoreDirection;
     unsigned scoreLimit;
+    unsigned minScoreThreshold; // used in affine gap to elide scoring of missed seed hits
     unsigned lvScores;
     unsigned lvScoresAfterBestFound;
+    unsigned affineGapScores;
+    unsigned affineGapScoresAfterBestFound;
     double probabilityOfAllCandidates;
     double probabilityOfBestCandidate;
     int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
@@ -268,6 +289,17 @@ private:
 
         bool
     score(
+        bool                     forceResult,
+        Read                    *read[NUM_DIRECTIONS],
+        SingleAlignmentResult   *primaryResult,
+        int                      maxEditDistanceForSecondaryResults,
+        _int64                   secondaryResultBufferSize,
+        _int64                  *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults,
+        bool                    *overflowedSecondaryResultsBuffer);
+
+        bool
+    scoreAffineGap(
         bool                     forceResult,
         Read                    *read[NUM_DIRECTIONS],
         SingleAlignmentResult   *primaryResult,
@@ -299,6 +331,7 @@ private:
     bool     noUkkonen;
     bool     noOrderedEvaluation;
 	bool     noTruncation;
+    bool     useAffineGap;
     bool     ignoreAlignmentAdjustmentsForOm;
     bool     doesGenomeIndexHave64BitLocations;
     int      maxSecondaryAlignmentsPerContig;

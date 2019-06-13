@@ -114,11 +114,17 @@ public:
     bool                                 noUkkonen;
     bool                                 noOrderedEvaluation;
 	bool								 noTruncation;
+    bool                                 useAffineGap;
     bool                                 ignoreAlignmentAdjustmentForOm;
     int                                  maxSecondaryAlignmentAdditionalEditDistance;
 	int									 maxSecondaryAlignments;
     int                                  maxSecondaryAlignmentsPerContig;
 	unsigned							 minReadLength;
+    unsigned                             matchReward;
+    unsigned                             subPenalty;
+    unsigned                             gapOpenPenalty;
+    unsigned                             gapExtendPenalty;
+    unsigned                             minAGScore;
 
 
     // iteration variables

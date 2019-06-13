@@ -21,6 +21,7 @@ Environment:
 
 #include "Compat.h"
 #include "LandauVishkin.h"
+#include "AffineGap.h"
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"

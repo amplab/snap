@@ -10,7 +10,6 @@
 
 using std::make_pair;
 using std::min;
-
  
 LandauVishkinWithCigar::LandauVishkinWithCigar()
 {
@@ -20,73 +19,6 @@ LandauVishkinWithCigar::LandauVishkinWithCigar()
         }
     }
     totalIndels[0][MAX_K] = 0;
-}
-
-/*++
-    Write cigar to buffer, return true if it fits
-    null-terminates buffer if it returns false (i.e. fills up buffer)
---*/
-bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format)
-{
-    _ASSERT(count >= 0);
-    if (count <= 0) {
-        return true;
-    }
-    switch (format) {
-    case EXPANDED_CIGAR_STRING: {
-        int n = min(*o_buflen, count);
-        for (int i = 0; i < n; i++) {
-            *(*o_buf)++ = code;
-        }
-        *o_buflen -= n;
-        if (*o_buflen == 0) {
-            *(*o_buf - 1) = '\0';
-        }
-        return *o_buflen > 0;
-    }
-    case COMPACT_CIGAR_STRING: {
-        if (*o_buflen == 0) {
-            *(*o_buf - 1) = '\0';
-            return false;
-        }
-        int written = snprintf(*o_buf, *o_buflen, "%d%c", count, code);
-        if (written > *o_buflen - 1) {
-            *o_buf = '\0';
-            return false;
-        } else {
-            *o_buf += written;
-            *o_buflen -= written;
-            return true;
-        }
-    }
-    case COMPACT_CIGAR_BINARY:
-        // binary format with non-zero count byte followed by char (easier to examine programmatically)
-        while (true) {
-            if (*o_buflen < 3) {
-                *(*o_buf) = '\0';
-                return false;
-            }
-            *(*o_buf)++ = min(count, 255);
-            *(*o_buf)++ = code;
-            *o_buflen -= 2;
-            if (count <= 255) {
-                return true;
-            }
-            count -= 255;
-        }
-    case BAM_CIGAR_OPS:
-        if (*o_buflen < 4 || count >= (1 << 28)) {
-            return false;
-        }
-        *(_uint32*)*o_buf = (count << 4) | BAMAlignment::CigarToCode[code];
-        *o_buf += 4;
-        *o_buflen -= 4;
-        return true;
-    default:
-        WriteErrorMessage( "invalid cigar format %d\n", format);
-        soft_exit(1);
-        return false;        // Not reached.  This is just here to suppress a compiler warning.
-    } // switch
 }
 
 #if 0
@@ -136,6 +68,75 @@ static const int PrevDelta[3][3] =  // Version that minimizes NET indels (ie., |
       { 0, +1, -1 },     // d == 0
       { 0, -1, +1 } };   // d > 0
 #endif // 0
+
+/*++
+    Write cigar to buffer, return true if it fits
+    null-terminates buffer if it returns false (i.e. fills up buffer)
+--*/
+    bool 
+LandauVishkinWithCigar::writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format)
+{
+    _ASSERT(count >= 0);
+    if (count <= 0) {
+        return true;
+    }
+    switch (format) {
+    case EXPANDED_CIGAR_STRING: {
+        int n = min(*o_buflen, count);
+        for (int i = 0; i < n; i++) {
+            *(*o_buf)++ = code;
+        }
+        *o_buflen -= n;
+        if (*o_buflen == 0) {
+            *(*o_buf - 1) = '\0';
+        }
+        return *o_buflen > 0;
+    }
+    case COMPACT_CIGAR_STRING: {
+        if (*o_buflen == 0) {
+            *(*o_buf - 1) = '\0';
+            return false;
+        }
+        int written = snprintf(*o_buf, *o_buflen, "%d%c", count, code);
+        if (written > *o_buflen - 1) {
+            *o_buf = '\0';
+            return false;
+        }
+        else {
+            *o_buf += written;
+            *o_buflen -= written;
+            return true;
+        }
+    }
+    case COMPACT_CIGAR_BINARY:
+        // binary format with non-zero count byte followed by char (easier to examine programmatically)
+        while (true) {
+            if (*o_buflen < 3) {
+                *(*o_buf) = '\0';
+                return false;
+            }
+            *(*o_buf)++ = min(count, 255);
+            *(*o_buf)++ = code;
+            *o_buflen -= 2;
+            if (count <= 255) {
+                return true;
+            }
+            count -= 255;
+        }
+    case BAM_CIGAR_OPS:
+        if (*o_buflen < 4 || count >= (1 << 28)) {
+            return false;
+        }
+        *(_uint32*)*o_buf = (count << 4) | BAMAlignment::CigarToCode[code];
+        *o_buf += 4;
+        *o_buflen -= 4;
+        return true;
+    default:
+        WriteErrorMessage("invalid cigar format %d\n", format);
+        soft_exit(1);
+        return false;        // Not reached.  This is just here to suppress a compiler warning.
+    } // switch
+}
 
 int LandauVishkinWithCigar::computeEditDistance(
     const char* text, int textLen,

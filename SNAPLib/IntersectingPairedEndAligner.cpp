@@ -50,11 +50,18 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
 		bool          noTruncation_,
-        bool          ignoreAlignmentAdjustmentsForOm_) :
+        bool          useAffineGap_,    
+        bool          ignoreAlignmentAdjustmentsForOm_,
+        unsigned      matchReward_,
+        unsigned      subPenalty_,
+        unsigned      gapOpenPenalty_,
+        unsigned      gapExtendPenalty_,
+        unsigned      minAGScore_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
-    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), 
-    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_)
+    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), useAffineGap(useAffineGap_),
+    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_),
+    matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), minAGScore(minAGScore_)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -1016,9 +1023,12 @@ IntersectingPairedEndAligner::scoreLocation(
     GenomeDistance genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
     const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
 
+    *genomeLocationOffset = 0;
+
     if (NULL == data) {
         *score = -1;
         *matchProbability = 0;
+        *genomeLocationOffset = 0;
         return;
     }
 
@@ -1026,8 +1036,9 @@ IntersectingPairedEndAligner::scoreLocation(
     // Compute the distance separately in the forward and backward directions from the seed, to allow
     // arbitrary offsets at both the start and end but not have to pay the cost of exploring all start
     // shifts in BoundedStringDistance
-    double matchProb1, matchProb2;
-    int score1, score2;
+    double matchProb1 = 1.0, matchProb2 = 1.0;
+    int score1 = 0, score2 = 0; // edit distance
+    int agScore1 = seedLen, agScore2 = 0; // affine gap scores
     // First, do the forward direction from where the seed aligns to past of it
     int readLen = readToScore->getDataLength();
     int seedLen = index->getSeedLength();
@@ -1041,28 +1052,76 @@ IntersectingPairedEndAligner::scoreLocation(
     } else {
         textLen = (int)(genomeDataLength - tailStart);
     }
-    score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
-        scoreLimit, &matchProb1);
-    if (score1 == -1) {
-        *score = -1;
-    } else {
-        // The tail of the read matched; now let's reverse the reference genome data and match the head
-        int limitLeft = scoreLimit - score1;
-        score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
-                                                                    reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, genomeLocationOffset);
 
-        if (score2 == -1) {
-            *score = -1;
-        } else {
+    if (useAffineGap) {
+        if (tailStart != readLen) {
+            agScore1 = affineGap->computeScore(data + tailStart,
+                textLen,
+                readToScore->getData() + tailStart,
+                readToScore->getQuality() + tailStart,
+                readLen - tailStart,
+                scoreLimit,
+                seedLen,
+                NULL,
+                &score1,
+                &matchProb1);
+        }
+        if (seedOffset != 0 && score1 != -1) {
+            int limitLeft = scoreLimit - score1;
+            agScore2 = reverseAffineGap->computeScore(data + seedOffset,
+                seedOffset + limitLeft,
+                reversedRead[whichRead][direction] + readLen - seedOffset,
+                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
+                seedOffset,
+                limitLeft,
+                agScore1,
+                genomeLocationOffset,
+                &score2,
+                &matchProb2);
+
+            if (score2 != -1) {
+                // Correct the start position of reference ahead of time to play nicely with the rest of the code
+                *genomeLocationOffset = (seedOffset - *genomeLocationOffset);
+            }
+        }
+        if (score1 != -1 && score2 != -1) {
             *score = score1 + score2;
             _ASSERT(*score <= scoreLimit);
             // Map probabilities for substrings can be multiplied, but make sure to count seed too
             *matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
         }
+        else {
+            *score = -1;
+            *matchProbability = 0;
+            *genomeLocationOffset = 0;
+        }
     }
+    else {
+        score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
+            scoreLimit, &matchProb1);
+        if (score1 == -1) {
+            *score = -1;
+        }
+        else {
+            // The tail of the read matched; now let's reverse the reference genome data and match the head
+            int limitLeft = scoreLimit - score1;
+            score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
+                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, genomeLocationOffset);
 
-    if (*score == -1) {
-        *matchProbability = 0;
+            if (score2 == -1) {
+                *score = -1;
+            }
+            else {
+                *score = score1 + score2;
+                _ASSERT(*score <= scoreLimit);
+                // Map probabilities for substrings can be multiplied, but make sure to count seed too
+                *matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+            }
+        }
+
+        if (*score == -1) {
+            *matchProbability = 0;
+        }
     }
 }
 

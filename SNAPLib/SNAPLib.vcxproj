@@ -156,6 +156,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AffineGap.h" />
     <ClInclude Include="AlignerContext.h" />
     <ClInclude Include="AlignerOptions.h" />
     <ClInclude Include="AlignerStats.h" />
@@ -216,6 +217,7 @@
     <ClInclude Include="WindowsFileMapper.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AffineGap.cpp" />
     <ClCompile Include="AlignerContext.cpp" />
     <ClCompile Include="AlignerOptions.cpp" />
     <ClCompile Include="AlignerStats.cpp" />
