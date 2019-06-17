@@ -220,7 +220,7 @@ SimpleReadWriter::writeReads(
 
             unsigned nAdjustments = 0;
 
-            if (useAffineGap) {
+            if (useAffineGap && results[whichResult].usedAffineGapScoring) {
                 while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
                     results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping,
                     results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
@@ -454,7 +454,7 @@ SimpleReadWriter::writePairs(
                     //
                     int addFrontClipping = 0;
 
-                    if (useAffineGap) {
+                    if (useAffineGap && result[whichAlignmentPair].usedAffineGapScoring[whichRead]) {
                         while (!format->writeRead(context, &agc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
                             idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
                             whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag,
@@ -571,7 +571,7 @@ SimpleReadWriter::writePairs(
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
 
-                if (useAffineGap) {
+                if (useAffineGap && singleResults[whichRead][whichAlignment].usedAffineGapScoring) {
                     while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
                         reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
                         true, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag)) {

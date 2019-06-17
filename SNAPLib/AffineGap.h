@@ -169,9 +169,9 @@ int computeScore(
             H[j] = H[j - 1] - gapExtendPenalty;
         }
 
-        int score = -1; // Final alignment score to be returned
+        int score = -1; // Final alignment score to be returned. 
 
-        *o_textOffset = -1; // Start offset in text where the pattern best aligns
+        *o_textOffset = -1; // # Characters of text used for aligning against the pattern
         *o_nEdits = -1;
 
         // Iterate over all rows of text
@@ -219,7 +219,7 @@ int computeScore(
                 hCurr = __max(hCurr, fCurr);
                 backtraceAction[i][j - beg][0] = action;
 
-                maxScoreRow = __max(maxScoreRow, hCurr);
+                maxScoreRow = __max(maxScoreRow, hCurr);                
 
 #ifdef PRINT_SCORES
                 printf("%d,", hCurr);
@@ -267,7 +267,7 @@ int computeScore(
                 }
             }
         }
-        
+
         if (score > scoreInit) {
             int rowIdx = *o_textOffset, colIdx = patternLen - 1, matrixIdx = 0;
             char action = 'M', prevAction = 'M';
@@ -277,6 +277,10 @@ int computeScore(
             // Start traceback from the cell (i,j) with the maximum score
             while (rowIdx >= 0 && colIdx >= 0) {
                 int actionIdx = (rowIdx > w) ? colIdx - (rowIdx - w) : colIdx; // Colidx can span patternLen, while backtrack actions are stored only within band w.
+                // debugging
+                //if (actionIdx < 0) {
+                //    WriteErrorMessage("Invalid traceback action: %d. (r,c,w) : (%d,%d,%d). Text:%.*s. Pattern:%.*s\n", actionIdx, rowIdx, colIdx, w, textLen, text, patternLen, pattern);
+                //}
                 _ASSERT(actionIdx >= 0);
                 action = backtraceAction[rowIdx][actionIdx][matrixIdx];
                 if (action == 'M') {
@@ -326,6 +330,8 @@ int computeScore(
             *matchProbability *= lv_perfectMatchProbability[nMatches];
             
             *o_textOffset += 1;
+
+            *o_textOffset = patternLen - *o_textOffset;
             
             return score;
         }

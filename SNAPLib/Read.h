@@ -478,6 +478,11 @@ public:
         inline const char *getOriginalRNEXT() {return originalRNEXT;}
         inline unsigned getOriginalRNEXTLength() {return originalRNEXTLength;}
         inline unsigned getOriginalPNEXT() {return originalPNEXT;}
+        inline void addFrontClipping(int clipping) {
+            data += clipping;
+            dataLength -= clipping;
+            quality += clipping;
+        }
         inline void setAdditionalFrontClipping(int clipping)
         {
             _ASSERT(0 <= clipping);
@@ -494,6 +499,9 @@ public:
 
             dataLength -= clipping - additionalBackClipping;
             additionalBackClipping = clipping;
+        }
+        inline void addBackClipping(int clipping) {
+            dataLength -= clipping;
         }
 
         inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM) const

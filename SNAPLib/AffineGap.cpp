@@ -173,7 +173,7 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
         H[j] = -(gapOpenPenalty + (j - 1) * gapExtendPenalty);
     }
 
-    int score = -1, nEdits = -1; // Final alignment score and edit distance to be returned
+    int score = INT16_MIN, nEdits = -1; // Final alignment score and edit distance to be returned
     int textUsed = -1;
 
     // Iterate over all rows of text
@@ -253,7 +253,7 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
     LocalCigarResult res; // Track each (action, count) pair for generating CIGAR
     int n_res = 0; // Number of (action, count) pairs
 
-    if (score >= 0) {
+    if (score > INT16_MIN) {
         int rowIdx = textUsed;
         int colIdx = min(rowIdx + w + 1, patternLen) - 1, matrixIdx = 0;
         char action = 'X', prevAction = 'X'; // initial
@@ -261,6 +261,9 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
         // Start traceback from the cell (i,j) with the maximum score
         while (rowIdx >= 0 && colIdx >= 0) {
             int actionIdx = (rowIdx > w) ? colIdx - (rowIdx - w) : colIdx; // ColIdx can span patternLen, while backtrack actions are stored only within band w.
+            //if (actionIdx < 0) {
+            //    WriteErrorMessage("Invalid traceback action: %d. (r,c,w) : (%d,%d,%d). Text:%.*s. Pattern:%.*s\n", actionIdx, rowIdx, colIdx, w, textLen, text, patternLen, pattern);
+            //}
             _ASSERT(actionIdx >= 0);
             action = backtraceAction[rowIdx][actionIdx][matrixIdx];
             if (action == 'M') {

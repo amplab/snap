@@ -215,6 +215,7 @@ private:
         Direction            direction;
         bool                 allExtantCandidatesScored;
         double               matchProbabilityForBestScore;
+        bool                 usedAffineGapScoring;
  
         Candidate            candidates[hashTableElementSize];
     };

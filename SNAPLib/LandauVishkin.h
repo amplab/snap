@@ -118,9 +118,11 @@ public:
                 int patternLen,
                 int k,
                 double *matchProbability,
-                int *o_netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
+                int *o_netIndel = NULL,  // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
+                int *o_totalIndels = NULL)  // also keep track of total (absolute) indels seen
 {
     int localNetIndel;
+    int localTotalIndels;
 	int d;
     if (NULL == o_netIndel) {
         //
@@ -129,9 +131,17 @@ public:
         //
         o_netIndel = &localNetIndel;
     }
+    if (NULL == o_totalIndels) {
+        //
+        // If the user doesn't want netIndel, just use a stack local to avoid
+        // having to check it all the time.
+        //
+        o_totalIndels = &localTotalIndels;
+    }
+
     _ASSERT(k < MAX_K);
 
-    *o_netIndel = 0;
+    *o_netIndel = 0; *o_totalIndels = 0;
 
     k = __min(MAX_K - 1, k); // enforce limit even in non-debug builds
     if (NULL == text) {
@@ -308,11 +318,13 @@ got_answer:
 				*matchProbability *= lv_indelProbabilities[actionCount];
 				offset += actionCount;
 				*o_netIndel += actionCount;
+                *o_totalIndels += actionCount;
 			}
 			else if (action == 'D') {
 				*matchProbability *= lv_indelProbabilities[actionCount];
 				offset -= actionCount;
 				*o_netIndel -= actionCount;
+                *o_totalIndels += actionCount;
 			}
 			else {
 				_ASSERT(action == 'X');
