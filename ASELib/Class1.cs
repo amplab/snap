@@ -1073,7 +1073,7 @@ namespace ASELib
                     key.minLocus = gene.minLocus;
 
                     //
-                    // We need to split any regions that cross the beginnig and end of the gene, and add the gene to any regions entirely
+                    // We need to split any regions that cross the beginning and end of the gene, and add the gene to any regions entirely
                     // contained within it.
                     //
 

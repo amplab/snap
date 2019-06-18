@@ -225,7 +225,7 @@ namespace CategorizeTumors
                 }
             } // foreach gene
 
-            Console.WriteLine(ASETools.ElapsedTimeInSeconds(stopwatch));
+            Console.WriteLine();
 
             var tp53File = ASETools.CreateStreamWriterWithRetry(@"\temp\tp53_histograms.txt");
             tp53File.WriteLine("Exactly one mutation (n = " + tp53SingleHistogram.count() + ")");
@@ -248,6 +248,21 @@ namespace CategorizeTumors
 
             var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.Configuration.geneCategorizationFilename);
 
+            outputFile.WriteLine("Hugo Symbol\tn Too Few Reads\tn Evaluated\tn Mutant (ignoring minor subclones)\tn No Mutations\tn Minor Subclone\tn Multiple Mutations\tn Loss of Heterozygosity\tn nonsense mediated decay\tn Reverse ASE\tn Single\tn ASE" +
+                "\tfrac No Mutations\tfrac Minor Subclone\tfrac Multiple Mutations\tfrac Loss of Heterozygosity\tfrac nonsense mediated decay\tfrac Reverse ASE\tfrac Single\tfrac ASE" +
+                "\tfrac of all mutant multiple mutations\tfrac of all mutant loss of heterozygosity\tfrac of all mutant nonsense mediated decay\tfrac of all mutant reverse ASE\tfrac of all mutant single\tfrac of all mutant ASE" +
+                "\tgraph title\theading1\theading2\theading3\theading4\theading5\theading6\theading7\theading8");
+
+            foreach (var result in results)
+            {
+                outputFile.WriteLine(ASETools.ConvertToExcelString(result.hugo_symbol + " (n = " + result.totalMutant() + ")") + "\t" + result.nTooFewReads + "\t" + result.totalEvaluated() + "\t" + result.totalMutant() +
+                    "\t" + result.nZero + "\t" + result.nMinorSubclone + "\t" + result.nMultiple + "\t" + result.nLossOfHeterozygosity + "\t" + result.nNonsenseMediatedDecay + "\t" + result.nOnePlusReverseASE + "\t" + result.nSingle + "\t" + result.nOnePlusASE +
+                    "\t" + result.fracZero() + "\t" + result.fracMinorSubclone() + "\t" + result.fracMultiple() + "\t" + result.fracLossOfHeterozygosity() + "\t" + result.fracNonsenseMediatedDecay() + "\t" + result.fracOnePlusReverseASE() + "\t" + result.fracSingle() + "\t" + result.fracOnePlusASE() +
+                    "\t" + result.fracOfAllMutantMultiple() + "\t" + result.fracOfAllMutantLossOfHeterozygosity() + "\t" + result.fracOfAllMutantNonsenseMediatedDecay() + "\t" + result.fracOfAllMutantOnePlusReverseASE() + "\t" + result.fracOfAllMutantSingle() + "\t" + result.fracOfAllMutantOnePlusASE() +
+                    "\tBreakdown of " + result.hugo_symbol + " mutant tumors excluding minor subclones\tNo mutations\tMinor subclone\tMultiple mutations\tLoss of heterozygosity\tNonsense mediated decay\tVAF < 0.4\t0.4 <= VAF <= 0.6\tVAF > 0.6");                    
+            }
+
+#if false
             outputFile.WriteLine("Hugo Symbol\tn Too Few Reads\tn Evaluated\tn Mutant (ignoring minor subclones)\tn No Mutations\tfrac No Mutations\tn Minor Subclone\tfrac Minor Subclone\tn Multiple Mutations\tfrac Multiple Mutations\tfrac of all mutant multiple mutations"
                 + "\tn Loss of Heterozygosity\tfrac Loss of Heterozygosity\tfrac of all mutant loss of heterozygosity"
                 + "\tn nonsense mediated decay\tfrac nonsense mediated decay\tfrac of all mutant nonsense medidated decay"
@@ -267,9 +282,11 @@ namespace CategorizeTumors
                     + "\tBreakdown of " + result.hugo_symbol + " mutant tumors excluding minor subclones\tNo mutations\tMinor subclone\tMultiple mutations\tLoss of heterozygosity\tNonsense mediated decay\tVAF < 0.4\tVAF > 0.6\t0.4 <= VAF <= 0.6"
                     );
             }
+#endif // false
 
             outputFile.Close();
 
+            Console.WriteLine(ASETools.ElapsedTimeInSeconds(stopwatch));
 
         } // main
     }

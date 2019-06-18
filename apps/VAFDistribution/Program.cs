@@ -41,7 +41,27 @@ namespace VAFDistribution
 
             public int CompareTo(HistogramsAndPValue peer)
             {
-                return p.CompareTo(peer.p);
+                var ourMean = oneMutationHistogram.mean();
+                var theirMean = peer.oneMutationHistogram.mean();
+
+                //
+                // Sort order: all significant results before any non-significant results.  Then, mean > 0.5 (preferrentially expressing the mutant allele) before mean <= 0.5, then by p value.
+                //
+                if ((p <= 0.01) != (peer.p <= 0.01))
+                {
+                    return (p <= 0.01) ? -1 : 1;
+                }
+
+                if ((ourMean > 0.5) == (theirMean > 0.5)) {
+                    return p.CompareTo(peer.p);
+                }
+
+                if (ourMean > 0.5)
+                {
+                    return -1;   // Sort the perferrential mutant ones first (smaller)
+                }
+
+                return 1;
             }
 
             public HistogramsAndPValue(double p_, ASETools.PreBucketedHistogram oneMutationHistogram_, ASETools.PreBucketedHistogram multipleMutationHistogram_, ASETools.PreBucketedHistogram germlineHistogram_, ASETools.PreBucketedHistogram silentHistogram_, string hugo_symbol_)
@@ -103,15 +123,21 @@ namespace VAFDistribution
 
 
             var results = new List<HistogramsAndPValue>();
+            var pValueHistogram = new ASETools.PreBucketedHistogram(0, 1, 0.02);
+            var pValueHistogramCorrected = new ASETools.PreBucketedHistogram(0, 0.2, .001);
 
-            foreach (var geneEntry in global_one_mutation_histograms.Where(x => x.Value.count() >= minCount))
+            foreach (var geneEntry in global_one_mutation_histograms.Where(x => x.Value.count() >= minCount && geneLocationInformation.genesByName.ContainsKey(x.Key) && ASETools.isChromosomeAutosomal(geneLocationInformation.genesByName[x.Key].chromosome)))
             {
                 var hugo_symbol = geneEntry.Key;
                 var histogram = geneEntry.Value;
 
-                results.Add(new HistogramsAndPValue(ASETools.binomialTest((int)histogram.nLessThan(0.5), (int)histogram.count(), 0.5, ASETools.BinomalTestType.TwoSided) * bonferroniCorrection, histogram, 
+                var p = ASETools.binomialTest((int)histogram.nLessThan(0.5), (int)histogram.count(), 0.5, ASETools.BinomalTestType.TwoSided);
+
+                results.Add(new HistogramsAndPValue(p * bonferroniCorrection, histogram, 
                     global_multiple_mutation_histograms[hugo_symbol], global_germline_histograms[hugo_symbol], global_silent_histograms[hugo_symbol], hugo_symbol));
 
+                pValueHistogram.addValue(p);
+                pValueHistogramCorrected.addValue(p * bonferroniCorrection);
             }
 
             foreach (var particularMutation in global_idh1_one_mutation_histograms)
@@ -131,6 +157,14 @@ namespace VAFDistribution
             results.Sort();
 
             var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.vaf_histogram_filename);
+            outputFile.WriteLine("Bonferroni correction " + bonferroniCorrection);
+
+            outputFile.WriteLine("Histogram of p-Values for binomial test (pre-Bonferroni correction)");
+            pValueHistogram.WriteHistogram(outputFile);
+
+            outputFile.WriteLine();
+            outputFile.WriteLine("Histogram of p-Values for binomial test (post-Bonferroni correction)");
+            pValueHistogramCorrected.WriteHistogram(outputFile);
 
             foreach (var result in results)
             {
