@@ -204,6 +204,12 @@ int computeScore(
 
             int maxScoreRow = 0;
 
+#ifdef PRINT_SCORES
+            for (int j = 0; j < beg; ++j) {
+                printf(" ,");
+            }
+#endif
+
             // Iterate over all columns of pattern (within the band)
             for (int j = beg; j < end; ++j) {
 
@@ -394,14 +400,14 @@ public:
     int computeGlobalScore(const char* text, int textLen, const char* pattern, int patternLen, int w,
         char* cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format = COMPACT_CIGAR_STRING,
-        int* o_cigarBufUsed = NULL);
+        int* o_cigarBufUsed = NULL, int *o_netDel = NULL);
 
     int computeGlobalScoreNormalized(const char* text, int textLen,
         const char* pattern, int patternLen,
         int k,
         char *cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format, int* o_cigarBufUsed,
-        int* o_addFrontClipping);
+        int* o_addFrontClipping, int *o_netDel = NULL);
 
     bool AffineGapWithCigar::writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format);
 

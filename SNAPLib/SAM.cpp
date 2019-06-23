@@ -1975,7 +1975,8 @@ SAMFormat::computeCigar(
         useM,
         cigarFormat,
         o_cigarBufUsed,
-        o_addFrontClipping);
+        o_addFrontClipping,
+        &netIndel);
 
     if (*o_addFrontClipping != 0) {
         //

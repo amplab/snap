@@ -1062,8 +1062,12 @@ IntersectingPairedEndAligner::scoreLocation(
         textLen = (int)(genomeDataLength - tailStart);
     }
 
+    // Compute maxK for which edit distance and affine gap scoring report the same alignment
+    // GapOpenPenalty + k.GapExtendPenalty >= k * SubPenalty
+    int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
 
     int totalIndels = 0;
+
     score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
         scoreLimit, &matchProb1, NULL, &totalIndels);
     if (score1 == -1) {

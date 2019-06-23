@@ -137,7 +137,7 @@ AffineGapWithCigar::writeCigar(char** o_buf, int* o_buflen, int count, char code
 int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const char* pattern, int patternLen, int w,
     char* cigarBuf, int cigarBufLen, bool useM,
     CigarFormat format,
-    int* o_cigarBufUsed) 
+    int* o_cigarBufUsed, int *o_netDel) 
 {
 #ifdef PRINT_SCORES
     printf("\n");
@@ -149,6 +149,12 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
 
     if (NULL == text) {
         return -1;
+    }
+
+    int localNetDel = 0;
+
+    if (o_netDel == NULL) {
+        o_netDel = &localNetDel;
     }
 
     // 
@@ -192,6 +198,12 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
         if (beg == 0) {
             hLeft = -(gapOpenPenalty + i * gapExtendPenalty);
         }
+
+#ifdef PRINT_SCORES
+        for (int j = 0; j < beg; ++j) {
+            printf(" ,");
+        }
+#endif
 
         // Iterate over all columns of pattern (within the band)
         for (int j = beg; j < end; ++j) {
@@ -333,6 +345,7 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
                 else {
                     if (res.action[i] == 'D') {
                         rowIdx += res.count[i];
+                        *o_netDel += 1;
                     }
                     else if (res.action[i] == 'I') {
                         colIdx += res.count[i];
@@ -386,6 +399,7 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
         }
         // nEdits = (nEdits <= w) ? nEdits : -1; // return -1 if we have more edits than threshold w
         return nEdits;
+
     } // score > 0
     else {
         // Could not align strings with at most K edits
@@ -399,7 +413,7 @@ int AffineGapWithCigar::computeGlobalScoreNormalized(const char* text, int textL
     int k,
     char *cigarBuf, int cigarBufLen, bool useM,
     CigarFormat format, int* o_cigarBufUsed,
-    int* o_addFrontClipping)
+    int* o_addFrontClipping, int *o_netDel)
 {
     if (format != BAM_CIGAR_OPS && format != COMPACT_CIGAR_STRING) {
         WriteErrorMessage("AffineGapWithCigar::computeGlobalScoreNormalized invalid parameter\n");
@@ -409,7 +423,7 @@ int AffineGapWithCigar::computeGlobalScoreNormalized(const char* text, int textL
     char* bamBuf = (char*)alloca(bamBufLen);
     int bamBufUsed;
     int score = computeGlobalScore(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
-        useM, BAM_CIGAR_OPS, &bamBufUsed);
+        useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel);
     if (score < 0) {
         return score;
     }

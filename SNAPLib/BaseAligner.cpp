@@ -155,12 +155,12 @@ Arguments:
     }
 
     if (allocator) {
-        affineGap = new (allocator) AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        reverseAffineGap = new (allocator) AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        affineGap = new (allocator) AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        reverseAffineGap = new (allocator) AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
     else {
-        affineGap = new AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        reverseAffineGap = new AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        affineGap = new AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        reverseAffineGap = new AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
 
     unsigned maxSeedsToUse;
@@ -905,6 +905,10 @@ Return Value:
                     int seedLen = genomeIndex->getSeedLength();
                     int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
                     int tailStart = seedOffset + seedLen;
+                    
+                    // Compute maxK for which edit distance and affine gap scoring report the same alignment
+                    // GapOpenPenalty + k.GapExtendPenalty >= k * SubPenalty
+                    int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
 
                     int totalIndels = 0;
                     int genomeLocationOffset;
@@ -945,7 +949,7 @@ Return Value:
                         if (score2 == -1) {
                             score = -1;
                         }
-                        else if (useAffineGap && totalIndels > 1) {
+                        else if (useAffineGap && (totalIndels > 1)) {
                             agScore2 = reverseAffineGap->computeScore(data + seedOffset,
                                 seedOffset + limitLeft,
                                 reversedRead[elementToScore->direction] + readLen - seedOffset,
@@ -1855,10 +1859,10 @@ Return Value:
         }
 
         if (NULL != affineGap) {
-            affineGap->~AffineGap();
+            affineGap->~AffineGapVectorized();
         }
         if (NULL != reverseAffineGap) {
-            reverseAffineGap->~AffineGap();
+            reverseAffineGap->~AffineGapVectorized();
         }
 
     } else {
@@ -2015,8 +2019,10 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         (ownLandauVishkin ?
             LandauVishkin<>::getBigAllocatorReservation() +
             LandauVishkin<-1>::getBigAllocatorReservation() : 0)        + // our LandauVishkin objects
-        AffineGap<>::getBigAllocatorReservation()                       + 
-        AffineGap<-1>::getBigAllocatorReservation()                     + // our AffineGap objects
+        // AffineGap<>::getBigAllocatorReservation()                       + 
+        // AffineGap<-1>::getBigAllocatorReservation()                     + // our AffineGap objects
+        AffineGapVectorized<>::getBigAllocatorReservation()             + 
+        AffineGapVectorized<-1>::getBigAllocatorReservation()          + // our AffineGap objects
         sizeof(char) * maxReadSize * 2                                  + // rcReadData
         sizeof(char) * maxReadSize * 4 + 2 * MAX_K                      + // reversed read (both)
         sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                      + // seed used

@@ -157,6 +157,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AffineGap.h" />
+    <ClInclude Include="AffineGapVectorized.h" />
     <ClInclude Include="AlignerContext.h" />
     <ClInclude Include="AlignerOptions.h" />
     <ClInclude Include="AlignerStats.h" />

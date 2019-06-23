@@ -70,8 +70,8 @@ public:
     }
     
      void setAffineGap(
-         AffineGap<1> *affineGap_,
-         AffineGap<-1> *reverseAffineGap_)
+         AffineGapVectorized<1> *affineGap_,
+         AffineGapVectorized<-1> *reverseAffineGap_)
      {
          affineGap = affineGap_;
          reverseAffineGap = reverseAffineGap_;
@@ -324,8 +324,11 @@ private:
     LandauVishkin<> *landauVishkin;
     LandauVishkin<-1> *reverseLandauVishkin;
 
-    AffineGap<> *affineGap;
-    AffineGap<-1> *reverseAffineGap;
+    // AffineGap<> *affineGap;
+    // AffineGap<-1> *reverseAffineGap;
+    
+    AffineGapVectorized<> *affineGap;
+    AffineGapVectorized<-1> *reverseAffineGap;
 
     char rcTranslationTable[256];
     unsigned nTable[256];

@@ -26,6 +26,7 @@ Revision History:
 #include "directions.h"
 #include "LandauVishkin.h"
 #include "AffineGap.h"
+#include "AffineGapVectorized.h"
 #include "Read.h"
 
 
@@ -60,8 +61,8 @@ public:
     }
 
     virtual void setAffineGap(
-        AffineGap<1>        *affineGap,
-        AffineGap<-1>       *reverseAffineGap)
+        AffineGapVectorized<1>        *affineGap,
+        AffineGapVectorized<-1>       *reverseAffineGap)
     {
     }
 
