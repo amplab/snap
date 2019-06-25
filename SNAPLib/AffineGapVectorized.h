@@ -166,7 +166,7 @@ public:
         int numVec = (patternLen + VEC_SIZE - 1) / VEC_SIZE; // Number of vector segments
         int paddedPatternLen = numVec * VEC_SIZE;
         int patternIdx = 0;
-        
+
         // 
         // Generate query profile
         //
@@ -220,8 +220,8 @@ public:
         *o_textOffset = -1; // # Characters of text used for aligning against the pattern
         *o_nEdits = -1;
 
-        __m128i* Hptr = (__m128i*)H;
-        __m128i* Hminus1ptr = (__m128i*)Hminus1;
+        __m128i* Hptr = H;
+        __m128i* Hminus1ptr = Hminus1;
 
         // Iterate over all rows of text
         for (int i = 0; i < textLen; i++) {
@@ -288,7 +288,7 @@ public:
                 f = _mm_max_epi16(f, temp);
 
                 // Store traceback information
-                _mm_store_si128(backtraceAction[i] + j, backtraceActionVec);
+                _mm_store_si128(backtraceAction + (i * numVec + j), backtraceActionVec);
 
                 // Load the next score vector
                 h = _mm_load_si128(Hptr + j);
@@ -306,8 +306,13 @@ public:
 
                 for (int j = 0; j < numVec; j++) {
                     
-                    __m128i backtraceActionVec = _mm_load_si128(backtraceAction[i] + j);
                     h = _mm_load_si128(Hminus1ptr + j);
+
+                    // action = f > h ? 2 : action
+                    __m128i tmpResult = _mm_and_si128(_mm_cmpgt_epi16(f, h), v_two);
+                    __m128i backtraceActionVec = _mm_load_si128(backtraceAction + (i * numVec + j));
+                    __m128i tmpResult2 = _mm_andnot_si128(tmpResult, backtraceActionVec);
+                    backtraceActionVec = _mm_or_si128(tmpResult, tmpResult2); 
 
                     h = _mm_max_epi16(h, f);
                     _mm_store_si128(Hminus1ptr + j, h);
@@ -317,9 +322,9 @@ public:
                     temp = _mm_subs_epu16(h, v_gapOpen);
                     f = _mm_subs_epu16(f, v_gapExtend);
 
-                    __m128i tmpResult = _mm_and_si128(_mm_cmpgt_epi16(f, temp), v_thirtytwo);
+                    tmpResult = _mm_and_si128(_mm_cmpgt_epi16(f, temp), v_thirtytwo);
                     backtraceActionVec = _mm_or_si128(backtraceActionVec, tmpResult);
-                    _mm_store_si128(backtraceAction[i] + j, backtraceActionVec);
+                    _mm_store_si128(backtraceAction + (i * numVec + j), backtraceActionVec);
 
                     // Converged if no element of f can influence h
                     bool converged = !(_mm_movemask_epi8(_mm_cmpgt_epi16(f, temp))); // !! converts int to bool
@@ -341,7 +346,7 @@ public:
             // Extract score when aligning to the end of the pattern
             __m128i v_endScore = _mm_load_si128(Hminus1ptr + ((patternLen - 1) % numVec));
             int endScore = getElem((patternLen - 1) / numVec, v_endScore);
-            if (endScore > score) {
+            if (endScore >= score) {
                 score = endScore;
                 *o_textOffset = i;
             }
@@ -363,7 +368,7 @@ public:
 
             // Start traceback from the cell (i,j) with the maximum score
             while (rowIdx >= 0 && colIdx >= 0) {
-                uint16_t* backtracePointersRow = (uint16_t*)(backtraceAction[rowIdx]);
+                uint16_t* backtracePointersRow = (uint16_t*)(backtraceAction + (rowIdx * numVec));
                 // 
                 // The traceback matrix (H, E, or F) we need to look at depends on the current action.
                 // We index the corresponding matrix using the current action as described below:
@@ -392,8 +397,9 @@ public:
                 else if (action == D) {
                     rowIdx--;
                 }
-                else if (action == I) {
+                else { // action == I
                     colIdx--;
+                    action = I; // FIXME: we choose I, whenever action == 2 or 3. Make action == 2, since matrixIdx depends on it
                 }
                 // Ignore transitions from H. Compute number of indels in sequence for matchProbability
                 if (prevAction != M) {
@@ -458,15 +464,17 @@ private:
     int gapOpenPenalty;
     int gapExtendPenalty;
 
-    __declspec(align(16)) __m128i qProfile[MAX_ALPHABET_SIZE * MAX_VEC_SEGMENTS];
-    __declspec(align(16)) __m128i H[MAX_VEC_SEGMENTS], Hminus1[MAX_VEC_SEGMENTS], E[MAX_VEC_SEGMENTS];
+    __m128i qProfile[MAX_ALPHABET_SIZE * MAX_VEC_SEGMENTS];
+    __m128i H[MAX_VEC_SEGMENTS];
+    __m128i Hminus1[MAX_VEC_SEGMENTS];
+    __m128i E[MAX_VEC_SEGMENTS];
 
     //
     // Pointers to traceback alignment, one for each of the three affine-gap matrices, F, E and H
     // Traceback actions are encoded as follows: Bit 5 to Bit 0 - F[5:4], E[3:2], H[1:0]
     // Although we need only 1 bit to encode paths into E and F matrix, we use 2 bits to simplify decoding
     //
-    __declspec(align(16)) __m128i backtraceAction[MAX_READ_LENGTH + MAX_K][MAX_VEC_SEGMENTS];
+    __m128i backtraceAction[(MAX_READ_LENGTH + MAX_K) * MAX_VEC_SEGMENTS];
 
     //
     // Helper functions for operations on SSE registers

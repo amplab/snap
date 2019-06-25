@@ -72,6 +72,8 @@ public:
      void setAffineGap(
          AffineGapVectorized<1> *affineGap_,
          AffineGapVectorized<-1> *reverseAffineGap_)
+         // AffineGap<1> *affineGap_,
+         // AffineGap<-1> *reverseAffineGap_)
      {
          affineGap = affineGap_;
          reverseAffineGap = reverseAffineGap_;

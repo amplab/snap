@@ -155,10 +155,14 @@ Arguments:
     }
 
     if (allocator) {
+        // affineGap = new (allocator) AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // reverseAffineGap = new (allocator) AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
         affineGap = new (allocator) AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
         reverseAffineGap = new (allocator) AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
     else {
+        // affineGap = new AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // reverseAffineGap = new AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
         affineGap = new AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
         reverseAffineGap = new AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
@@ -1859,9 +1863,11 @@ Return Value:
         }
 
         if (NULL != affineGap) {
+            // affineGap->~AffineGap();
             affineGap->~AffineGapVectorized();
         }
         if (NULL != reverseAffineGap) {
+            // reverseAffineGap->~AffineGap();
             reverseAffineGap->~AffineGapVectorized();
         }
 

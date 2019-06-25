@@ -113,7 +113,7 @@ SingleAlignerContext::runIterationThread()
     size_t alignmentResultBufferSize = sizeof(*alignmentResults) * alignmentResultBufferCount; 
 
     BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(index, true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig, extraSearchDepth) 
-        + alignmentResultBufferSize);
+        + alignmentResultBufferSize, 16); // FIXME: Used larger allocation granularity for __m128i that needs to be aligned at 16 byte boundaries
    
     BaseAligner *aligner = new (allocator) BaseAligner(
             index,

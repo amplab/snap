@@ -267,7 +267,7 @@ int computeScore(
             }
 
             if (end == patternLen) { // we got a semi-global alignment
-                if (H[end] > score) {
+                if (H[end] >= score) {
                     score = H[end];
                     *o_textOffset = i;
                 }

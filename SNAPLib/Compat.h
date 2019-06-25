@@ -27,6 +27,7 @@ Revision History:
 
 #ifdef  _MSC_VER
 #include <Windows.h>
+#include <emmintrin.h>
 #include <intrin.h> // FIXME: Not sure this is the right include file
 
 typedef unsigned _int64 _uint64;

@@ -2172,7 +2172,8 @@ SAMFormat::computeCigarString(
 #ifdef _DEBUG
 	void 
 SAMFormat::validateCigarString(
-	const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM)
+	const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM) {}
+/*
 {
 	const char *nextChunkOfCigar = cigarBuf;
 	GenomeDistance offsetInData = 0;
@@ -2410,7 +2411,7 @@ SAMFormat::validateCigarString(
         soft_exit(1);
     }
 }
-
+*/
 #endif // _DEBUG
 
 

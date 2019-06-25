@@ -419,7 +419,7 @@ void PairedAlignerContext::runIterationThread()
 
     memoryPoolSize += (1 + maxPairedSecondaryHits) * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
 
-    BigAllocator *allocator = new BigAllocator(memoryPoolSize);
+    BigAllocator *allocator = new BigAllocator(memoryPoolSize, 16); // FIXME: Used larger allocation granularity for __m128i that needs to be aligned at 16 byte boundaries
     
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
