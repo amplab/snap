@@ -400,14 +400,14 @@ public:
     int computeGlobalScore(const char* text, int textLen, const char* pattern, int patternLen, int w,
         char* cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format = COMPACT_CIGAR_STRING,
-        int* o_cigarBufUsed = NULL, int *o_netDel = NULL);
+        int* o_cigarBufUsed = NULL, int *o_netDel = NULL, int *o_tailIns = NULL);
 
     int computeGlobalScoreNormalized(const char* text, int textLen,
         const char* pattern, int patternLen,
         int k,
         char *cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format, int* o_cigarBufUsed,
-        int* o_addFrontClipping, int *o_netDel = NULL);
+        int* o_addFrontClipping, int *o_netDel = NULL, int* o_tailIns = NULL);
 
     bool AffineGapWithCigar::writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format);
 

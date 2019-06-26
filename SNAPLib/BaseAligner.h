@@ -220,7 +220,9 @@ private:
         bool                 allExtantCandidatesScored;
         double               matchProbabilityForBestScore;
         bool                 usedAffineGapScoring;
- 
+        int                  basesClippedBefore;
+        int                  basesClippedAfter;
+     
         Candidate            candidates[hashTableElementSize];
     };
 

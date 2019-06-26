@@ -225,6 +225,8 @@ bool ChimericPairedEndAligner::align(
 			result->score[r] = singleResult.score;
             result->scorePriorToClipping[r] = singleResult.scorePriorToClipping;
             result->usedAffineGapScoring[r] = singleResult.usedAffineGapScoring;
+            result->basesClippedBefore[r] = singleResult.basesClippedBefore;
+            result->basesClippedAfter[r] = singleResult.basesClippedAfter;
 		}
     }
 

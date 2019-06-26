@@ -268,11 +268,11 @@ public:
         GenomeDistance *o_extraBasesClippedAfter, 
         GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping);
 
-    static void computeCigar(CigarFormat cigarFormat, const Genome * genome, AffineGapWithCigar * lv,
+    static void computeCigar(CigarFormat cigarFormat, const Genome * genome, AffineGapWithCigar * ag,
         char * cigarBuf, int cigarBufLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
         GenomeDistance *o_extraBasesClippedAfter,
-        GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping);
+        GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping, int *o_backClippingMissedByLV);
 
 private:
     static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,

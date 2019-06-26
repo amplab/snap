@@ -137,7 +137,7 @@ AffineGapWithCigar::writeCigar(char** o_buf, int* o_buflen, int count, char code
 int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const char* pattern, int patternLen, int w,
     char* cigarBuf, int cigarBufLen, bool useM,
     CigarFormat format,
-    int* o_cigarBufUsed, int *o_netDel) 
+    int* o_cigarBufUsed, int *o_netDel, int *o_tailIns) 
 {
 #ifdef PRINT_SCORES
     printf("\n");
@@ -156,6 +156,13 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
     if (o_netDel == NULL) {
         o_netDel = &localNetDel;
     }
+
+    int localTailIns = 0;
+    if (o_tailIns == NULL) {
+        o_tailIns = &localTailIns;
+    }
+
+    *o_netDel = *o_tailIns = 0;
 
     // 
     // Generate query profile
@@ -310,23 +317,32 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
             res.count[n_res] = actionCount;
             n_res++;
         }
-        if (rowIdx >= 0) { // deletion just after the seed
+        if (rowIdx >= 0) {
             actionCount = rowIdx + 1;
             res.action[n_res] = 'D';
             res.count[n_res] = actionCount;
             n_res++;
         }
-        if (colIdx >= 0) { // insertion just after the seed
+        if (colIdx >= 0) {
             actionCount = colIdx + 1;
             res.action[n_res] = 'I';
             res.count[n_res] = actionCount;
+            *o_tailIns = actionCount;
             n_res++;
         }
 
         char* cigarBufStart = cigarBuf;
         rowIdx = 0; colIdx = 0;  nEdits = 0;
 
-        for (int i = n_res - 1; i >= 0; --i) { // Reverse local result to obtain CIGAR in correct order
+        // Special handling of tail insertions which will be soft-clipped
+        _ASSERT(n_res > 0);
+        int min_i = 0;
+        if (res.action[0] == 'I') {
+            min_i = 1;
+            *o_tailIns = res.count[0];
+        }
+
+        for (int i = n_res - 1; i >= min_i; --i) { // Reverse local result to obtain CIGAR in correct order
             if (useM) {
                 if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], res.action[i], format)) {
                     return -2;
@@ -413,7 +429,7 @@ int AffineGapWithCigar::computeGlobalScoreNormalized(const char* text, int textL
     int k,
     char *cigarBuf, int cigarBufLen, bool useM,
     CigarFormat format, int* o_cigarBufUsed,
-    int* o_addFrontClipping, int *o_netDel)
+    int* o_addFrontClipping, int *o_netDel, int *o_tailIns)
 {
     if (format != BAM_CIGAR_OPS && format != COMPACT_CIGAR_STRING) {
         WriteErrorMessage("AffineGapWithCigar::computeGlobalScoreNormalized invalid parameter\n");
@@ -423,7 +439,7 @@ int AffineGapWithCigar::computeGlobalScoreNormalized(const char* text, int textL
     char* bamBuf = (char*)alloca(bamBufLen);
     int bamBufUsed;
     int score = computeGlobalScore(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
-        useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel);
+        useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
     if (score < 0) {
         return score;
     }
@@ -434,10 +450,6 @@ int AffineGapWithCigar::computeGlobalScoreNormalized(const char* text, int textL
     // FIXME: Need to check if this is still valid with affine gap
     // _ASSERT('I' != BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 1])]);
 
-
-    //
-    // Turn leading 'D' into soft clipping, and 'I' into an alignment change followed by an X.
-    //
     if (o_addFrontClipping != NULL) {
         char firstCode = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[0])];
         if (firstCode == 'D') {

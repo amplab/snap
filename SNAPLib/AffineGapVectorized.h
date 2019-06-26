@@ -92,6 +92,7 @@ public:
         int w,
         int scoreInit,
         int *o_textOffset = NULL,
+        int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
         double *matchProbability = NULL)
     {
@@ -103,13 +104,17 @@ public:
         _ASSERT(w < MAX_K);
         _ASSERT(textLen <= MAX_READ_LENGTH + MAX_K);
 
-        int localTextOffset;
+        int localTextOffset, localPatternOffset;
         if (NULL == o_textOffset) {
             //
             // If the user doesn't want textOffset, just use a stack local to avoid
             // having to check it all the time.
             //
             o_textOffset = &localTextOffset;
+        }
+
+        if (NULL == o_patternOffset) {
+            o_patternOffset = &localPatternOffset;
         }
 
         w = __min(MAX_K - 1, w); // enforce limit even in non-debug builds
@@ -217,9 +222,18 @@ public:
 
         int score = -1; // Final alignment score to be returned. 
 
-        *o_textOffset = -1; // # Characters of text used for aligning against the pattern
-        *o_nEdits = -1;
+        // We keep track of the best score and text offset for global and local alignment separately.
+        // These are used to choose between global and local alignment for the {text, pattern} pair
+        int bestGlobalAlignmentScore = -1;
+        int bestGlobalAlignmentTextOffset = -1; 
+        int bestLocalAlignmentScore = -1;
+        int bestLocalAlignmentTextOffset = -1;
+        int bestLocalAlignmentPatternOffset = -1;
 
+        *o_textOffset = -1; // # Characters of text used for aligning against the pattern
+        *o_patternOffset = -1; // # Characters of pattern used for obtaining the maximum score. Ideally we would like to use the full pattern
+        *o_nEdits = -1;
+        
         __m128i* Hptr = H;
         __m128i* Hminus1ptr = Hminus1;
 
@@ -343,16 +357,35 @@ public:
             }
             printf("\n");
 #endif
-            // Extract score when aligning to the end of the pattern
-            __m128i v_endScore = _mm_load_si128(Hminus1ptr + ((patternLen - 1) % numVec));
-            int endScore = getElem((patternLen - 1) / numVec, v_endScore);
-            if (endScore >= score) {
-                score = endScore;
-                *o_textOffset = i;
+            
+            // Global alignment score (i.e., score when aligning to the end of the pattern)
+            __m128i v_globalAlignmentScore = _mm_load_si128(Hminus1ptr + ((patternLen - 1) % numVec));
+            int globalAlignmentScore = getElem((patternLen - 1) / numVec, v_globalAlignmentScore);
+            if (globalAlignmentScore >= bestGlobalAlignmentScore) {
+                bestGlobalAlignmentScore = globalAlignmentScore;
+                bestGlobalAlignmentTextOffset = i;
             }
 
             if (maxScoreRow == 0) break;
 
+            if (maxScoreRow > bestLocalAlignmentScore) { // If we obtained a better score this round  
+                // Get index in pattern where maximum score was obtained
+                for (int j = 0; j < numVec; ++j) {
+                    __m128i h = _mm_load_si128(Hminus1ptr + j); // Load a vector of score values 
+                    __m128i mask = _mm_cmpeq_epi16(h, _mm_set1_epi16(maxScoreRow)); // Create a mask of 1's in cells where score = maxScoreRow
+                    int result = _mm_movemask_epi8(_mm_packs_epi16(mask, v_zero)); // Convert vector result to 8-bit
+                    unsigned long zeroes;
+                    if (result) {
+                        CountLeadingZeroes(result, zeroes);
+                        int patternOffset = zeroes * numVec + j;
+                        bestLocalAlignmentPatternOffset = (bestLocalAlignmentPatternOffset > patternOffset) ? bestLocalAlignmentPatternOffset : patternOffset;
+                        _ASSERT(bestLocalAlignmentPatternOffset < patternLen); // Scores outside the pattern boundaries should never be the maximum in the row
+                    }
+                }
+                bestLocalAlignmentScore = maxScoreRow;
+                bestLocalAlignmentTextOffset = i;
+            }
+            
             // Swap roles of H and Hminus1 for the next row
             __m128i* hTemp = Hminus1ptr; 
             Hminus1ptr = Hptr; 
@@ -360,8 +393,23 @@ public:
 
         } // end text
 
+        
+        // Choose between local and global alignment
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore > bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
+            // Local alignment preferred
+            score = bestLocalAlignmentScore;
+            *o_textOffset = bestLocalAlignmentTextOffset;
+            *o_patternOffset = bestLocalAlignmentPatternOffset;
+        }
+        else {
+            // Global alignment preferred
+            score = bestGlobalAlignmentScore;
+            *o_textOffset = bestGlobalAlignmentTextOffset;
+            *o_patternOffset = patternLen - 1;
+        }
+
         if (score > scoreInit) {
-            int rowIdx = *o_textOffset, colIdx = patternLen - 1, matrixIdx;
+            int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
             int actionCount = 1;
             int nMatches = 0, nMismatches = 0, nGaps = 0;
@@ -433,8 +481,10 @@ public:
             *matchProbability *= lv_perfectMatchProbability[nMatches];
 
             *o_textOffset += 1;
+            *o_patternOffset += 1;
 
             *o_textOffset = patternLen - *o_textOffset;
+            *o_patternOffset = patternLen - *o_patternOffset;
             
             return score;
         }

@@ -215,6 +215,10 @@ SimpleReadWriter::writeReads(
         for (_int64 whichResult = 0; whichResult < nResults; whichResult++) {
             int addFrontClipping = 0;
             read->setAdditionalFrontClipping(results[whichResult].clippingForReadAdjustment);
+            
+            read->addFrontClipping(results[whichResult].basesClippedBefore);
+            read->addBackClipping(results[whichResult].basesClippedAfter);
+
             int cumulativeAddFrontClipping = 0, cumulativeAddBackClipping = 0;
             finalLocations[whichResult] = results[whichResult].location;
 
@@ -425,6 +429,18 @@ SimpleReadWriter::writePairs(
             reads[0]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[0]);
             reads[1]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[1]);
 
+            // Soft-clip reads based on any potential local alignments
+            for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
+                if (result[whichAlignmentPair].direction[i] == RC) {
+                    reads[i]->addFrontClipping(result[whichAlignmentPair].basesClippedAfter[i]);
+                    reads[i]->addBackClipping(result[whichAlignmentPair].basesClippedBefore[i]);
+                }
+                else {
+                    reads[i]->addFrontClipping(result[whichAlignmentPair].basesClippedBefore[i]);
+                    reads[i]->addBackClipping(result[whichAlignmentPair].basesClippedAfter[i]);
+                }
+            }
+
             GenomeLocation locations[2];
             locations[0] = result[whichAlignmentPair].status[0] != NotFound ? result[whichAlignmentPair].location[0] : InvalidGenomeLocation;
             locations[1] = result[whichAlignmentPair].status[1] != NotFound ? result[whichAlignmentPair].location[1] : InvalidGenomeLocation;
@@ -568,6 +584,17 @@ SimpleReadWriter::writePairs(
             for (int whichAlignment = 0; whichAlignment < nSingleResults[whichRead]; whichAlignment++) {
                 int addFrontClipping;
                 reads[whichRead]->setAdditionalFrontClipping(singleResults[whichRead]->clippingForReadAdjustment);
+                
+                // Soft-clip reads based on any potential local alignments
+                if (singleResults[whichRead][whichAlignment].direction == RC) {
+                    reads[whichRead]->addFrontClipping(singleResults[whichRead][whichAlignment].basesClippedAfter);
+                    reads[whichRead]->addBackClipping(singleResults[whichRead][whichAlignment].basesClippedBefore);
+                }
+                else {
+                    reads[whichRead]->addFrontClipping(singleResults[whichRead][whichAlignment].basesClippedBefore);
+                    reads[whichRead]->addBackClipping(singleResults[whichRead][whichAlignment].basesClippedAfter);
+                }
+
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
 

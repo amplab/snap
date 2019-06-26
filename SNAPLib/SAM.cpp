@@ -1302,9 +1302,6 @@ SAMFormat::createSAMLine(
         clippedData = &data[fullLength - clippedLength - read->getFrontClippedLength()];
         basesClippedBefore = fullLength - clippedLength - read->getFrontClippedLength();
         basesClippedAfter = read->getFrontClippedLength();
-        //clippedData = &data[fullLength - clippedLength];
-        //basesClippedBefore = read->getFrontClippedLength();
-        //basesClippedAfter = fullLength - clippedLength - basesClippedBefore;
     }
     else {
         memcpy(data, read->getUnclippedData(), read->getUnclippedLength());
@@ -1384,8 +1381,6 @@ SAMFormat::createSAMLine(
             _int64 mateBasesClippedAfter = mate->getUnclippedLength() - mate->getDataLength() - mateBasesClippedBefore;
             GenomeLocation mateStart = mateLocation - (mateDirection == RC ? mateBasesClippedAfter : mateBasesClippedBefore);
             GenomeLocation mateEnd = mateLocation + mate->getDataLength() + (mateDirection == FORWARD ? mateBasesClippedAfter : mateBasesClippedBefore);
-            //GenomeLocation mateStart = mateLocation - mateBasesClippedBefore;
-            //GenomeLocation mateEnd = mateLocation + mate->getDataLength() + mateBasesClippedAfter;
             if (contigName == matecontigName) { // pointer (not value) comparison, but that's OK.
                 if (myStart < mateStart) {
                     templateLength = mateEnd - myStart;
@@ -1923,7 +1918,8 @@ SAMFormat::computeCigar(
     bool useM,
     int * o_editDistance,
     int *o_cigarBufUsed,
-    int * o_addFrontClipping)
+    int * o_addFrontClipping,
+    int *o_backClippingMissedByLV)
 {
     if (dataLength > INT32_MAX - MAX_K) {
         dataLength = INT32_MAX - MAX_K;
@@ -1976,7 +1972,8 @@ SAMFormat::computeCigar(
         cigarFormat,
         o_cigarBufUsed,
         o_addFrontClipping,
-        &netIndel);
+        &netIndel,
+        o_backClippingMissedByLV);
 
     if (*o_addFrontClipping != 0) {
         //
@@ -2010,7 +2007,8 @@ SAMFormat::computeCigar(
             useM,
             cigarFormat,
             o_cigarBufUsed,
-            o_addFrontClipping);
+            o_addFrontClipping,
+            o_backClippingMissedByLV);
 
         newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
     }
@@ -2121,10 +2119,11 @@ SAMFormat::computeCigarString(
 {
     GenomeDistance extraBasesClippedAfter;
     int cigarBufUsed;
+    int backClippingMissedByLV = 0;
 
     computeCigar(COMPACT_CIGAR_STRING, genome, ag, cigarBuf, cigarBufLen, data, dataLength, basesClippedBefore,
         extraBasesClippedBefore, basesClippedAfter, &extraBasesClippedAfter, genomeLocation, useM,
-        o_editDistance, &cigarBufUsed, o_addFrontClipping);
+        o_editDistance, &cigarBufUsed, o_addFrontClipping, &backClippingMissedByLV);
 
     if (*o_addFrontClipping != 0) {
         return NULL;
@@ -2143,6 +2142,11 @@ SAMFormat::computeCigarString(
         return "*";
     }
     else {
+        // There may be a better way to do this. For now, whenever we see tail insertions, soft-clip them
+        if (basesClippedAfter != backClippingMissedByLV) {
+            basesClippedAfter += backClippingMissedByLV;
+            dataLength -= backClippingMissedByLV;
+        }
         // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
         char clipBefore[16] = { '\0' };
         char clipAfter[16] = { '\0' };
@@ -2172,8 +2176,7 @@ SAMFormat::computeCigarString(
 #ifdef _DEBUG
 	void 
 SAMFormat::validateCigarString(
-	const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM) {}
-/*
+	const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM)
 {
 	const char *nextChunkOfCigar = cigarBuf;
 	GenomeDistance offsetInData = 0;
@@ -2411,7 +2414,7 @@ SAMFormat::validateCigarString(
         soft_exit(1);
     }
 }
-*/
+
 #endif // _DEBUG
 
 

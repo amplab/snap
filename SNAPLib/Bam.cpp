@@ -1428,12 +1428,13 @@ BAMFormat::computeCigarOps(
 {
     GenomeDistance extraBasesClippedAfter = 0;
     int used = 0;
+    int backClippingMissedByLV = 0;
 
     unsigned clippingWordsBefore = ((basesClippedBefore + extraBasesClippedBefore > 0) ? 1 : 0) + ((frontHardClipping > 0) ? 1 : 0);
     unsigned clippingWordsAfter = ((basesClippedAfter + extraBasesClippedAfter > 0) ? 1 : 0) + ((backHardClipping > 0) ? 1 : 0);
 
     SAMFormat::computeCigar(BAM_CIGAR_OPS, genome, ag, cigarBuf + 4 * clippingWordsBefore, cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter), data, dataLength, basesClippedBefore, extraBasesClippedBefore,
-        basesClippedAfter, &extraBasesClippedAfter, genomeLocation, useM, o_editDistance, &used,  o_addFrontClipping);
+        basesClippedAfter, &extraBasesClippedAfter, genomeLocation, useM, o_editDistance, &used,  o_addFrontClipping, &backClippingMissedByLV);
 
     if (*o_addFrontClipping != 0) {
         return 0;
@@ -1450,6 +1451,10 @@ BAMFormat::computeCigarOps(
         }
         return 0;
     } else {
+        // There may be a better way to do this. For now, whenever we see tail insertions, soft-clip them
+        if (basesClippedAfter != backClippingMissedByLV) {
+            basesClippedAfter += backClippingMissedByLV;
+        }
         //
         // If we have hard clipping, add in the cigar string for it.
         //

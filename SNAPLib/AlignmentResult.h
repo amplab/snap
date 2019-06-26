@@ -59,6 +59,8 @@ struct SingleAlignmentResult {
     int             clippingForReadAdjustment;
 
     bool            usedAffineGapScoring;
+    int             basesClippedBefore;
+    int             basesClippedAfter;
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
@@ -91,6 +93,9 @@ struct PairedAlignmentResult {
     int clippingForReadAdjustment[NUM_READS_PER_PAIR];
 
     bool usedAffineGapScoring[NUM_READS_PER_PAIR];
+
+    int basesClippedBefore[NUM_READS_PER_PAIR];
+    int basesClippedAfter[NUM_READS_PER_PAIR];
 
 	bool fromAlignTogether;                     // Was this alignment created by aligning both reads together, rather than from some combination of single-end aligners?
 	bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
