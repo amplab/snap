@@ -720,9 +720,10 @@ public:
         const ReaderContext& context, AffineGapWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int * o_addFrontClipping,
-        int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
+        int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
+        bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
-        bool alignedAsPair = false) const;
+        bool alignedAsPair = false, int mateBpClippedBefore = 0, int mateBpClippedAfter = 0) const;
 
 private:
 
@@ -1110,13 +1111,17 @@ BAMFormat::writeRead(
     int internalScore,
     bool emitInternalScore,
     char *internalScoreTag,
+    int bpClippedBefore,
+    int bpClippedAfter,
     bool hasMate,
     bool firstInPair,
     Read * mate,
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
     Direction mateDirection,
-    bool alignedAsPair) const
+    bool alignedAsPair,
+    int mateBpClippedBefore,
+    int mateBpClippedAfter) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ;
@@ -1152,7 +1157,7 @@ BAMFormat::writeRead(
         // inputs:
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection,
-        &extraBasesClippedBefore))
+        &extraBasesClippedBefore, bpClippedBefore, bpClippedAfter, mateBpClippedBefore, mateBpClippedAfter))
     {
         return false;
     }

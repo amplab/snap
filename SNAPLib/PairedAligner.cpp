@@ -507,6 +507,9 @@ void PairedAlignerContext::runIterationThread()
             result.location[1] = InvalidGenomeLocation;
             nSingleResults[0] = nSingleResults[1] = 0;
             result.clippingForReadAdjustment[0] = result.clippingForReadAdjustment[1] = 0;
+            result.usedAffineGapScoring[0] = result.usedAffineGapScoring[1] = false;
+            result.basesClippedBefore[0] = result.basesClippedBefore[1] = 0;
+            result.basesClippedAfter[0] = result.basesClippedAfter[1] = 0;
 
             bool pass0 = options->passFilter(reads[0], result.status[0], true, false);
             bool pass1 = options->passFilter(reads[1], result.status[1], true, false);

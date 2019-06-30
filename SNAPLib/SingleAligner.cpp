@@ -86,6 +86,9 @@ SingleAlignerContext::runIterationThread()
             result.mapq = 0;
             result.score = 0;
             result.location = InvalidGenomeLocation;
+            result.usedAffineGapScoring = false;
+            result.basesClippedBefore = 0;
+            result.basesClippedAfter = 0;
             if (options->passFilter(read, NotFound, read->getDataLength() < minReadLength || read->countOfNs() > maxDist, false)) {
                 stats->notFound++;
                 if (NULL != readWriter) {
@@ -190,6 +193,9 @@ SingleAlignerContext::runIterationThread()
                     result.mapq = 0;
                     result.direction = FORWARD;
                     result.clippingForReadAdjustment = 0;
+                    result.usedAffineGapScoring = false;
+                    result.basesClippedBefore = 0;
+                    result.basesClippedAfter = 0;
                     readWriter->writeReads(readerContext, read, &result, 1, true, useAffineGap);
                 }
                 stats->uselessReads++;

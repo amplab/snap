@@ -128,6 +128,9 @@ bool ChimericPairedEndAligner::align(
     *nSecondaryResults = 0;
     *nSingleEndSecondaryResultsForFirstRead = 0;
     *nSingleEndSecondaryResultsForSecondRead = 0;
+    result->usedAffineGapScoring[0] = result->usedAffineGapScoring[1] = false;
+    result->basesClippedBefore[0] = result->basesClippedBefore[1] = 0;
+    result->basesClippedAfter[0] = result->basesClippedAfter[1] = 0;
 
 	if (read0->getDataLength() < minReadLength && read1->getDataLength() < minReadLength) {
         TRACE("Reads are both too short -- returning");
@@ -202,6 +205,9 @@ bool ChimericPairedEndAligner::align(
 			result->direction[r] = FORWARD;
 			result->location[r] = 0;
 			result->score[r] = 0;
+            result->usedAffineGapScoring[r] = false;
+            result->basesClippedBefore[r] = 0;
+            result->basesClippedAfter[r] = 0;
 		} else {
 			// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
             bool fitInSecondaryBuffer = 

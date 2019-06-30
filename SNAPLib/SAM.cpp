@@ -1254,7 +1254,11 @@ SAMFormat::createSAMLine(
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
     Direction mateDirection,
-    GenomeDistance *extraBasesClippedBefore)
+    GenomeDistance *extraBasesClippedBefore,
+    int bpClippedBefore,
+    int bpClippedAfter,
+    int mateBpClippedBefore,
+    int mateBpClippedAfter)
 {
     contigName = "*";
     positionInContig = 0;
@@ -1302,6 +1306,11 @@ SAMFormat::createSAMLine(
         clippedData = &data[fullLength - clippedLength - read->getFrontClippedLength()];
         basesClippedBefore = fullLength - clippedLength - read->getFrontClippedLength();
         basesClippedAfter = read->getFrontClippedLength();
+        // Add soft-clipping from seed extension
+        basesClippedBefore += bpClippedAfter;
+        basesClippedAfter += bpClippedBefore;
+        clippedData += bpClippedAfter;
+        clippedLength -= (bpClippedBefore + bpClippedAfter);
     }
     else {
         memcpy(data, read->getUnclippedData(), read->getUnclippedLength());
@@ -1309,6 +1318,17 @@ SAMFormat::createSAMLine(
         clippedData = read->getData();
         basesClippedBefore = read->getFrontClippedLength();
         basesClippedAfter = fullLength - clippedLength - basesClippedBefore;
+        // Add soft-clipping from seed extension
+        basesClippedBefore += bpClippedBefore;
+        basesClippedAfter += bpClippedAfter;
+        clippedData += bpClippedBefore;
+        clippedLength -= (bpClippedBefore + bpClippedAfter);
+    }
+
+    // For debug
+    if (clippedLength > 101) {
+        WriteErrorMessage("Clipping incorrect: Read:%.*s, isRC:%d\n", fullLength, data, direction);
+        soft_exit(1);
     }
 
     int editDistance = -1;
@@ -1377,8 +1397,14 @@ SAMFormat::createSAMLine(
             // give a signed result based on whether our read is first or second in the pair.
             GenomeLocation myStart = genomeLocation - basesClippedBefore;
             GenomeLocation myEnd = genomeLocation + clippedLength + basesClippedAfter;
-            _int64 mateBasesClippedBefore = mate->getFrontClippedLength();
-            _int64 mateBasesClippedAfter = mate->getUnclippedLength() - mate->getDataLength() - mateBasesClippedBefore;
+            _int64 mateBasesClippedBefore, mateBasesClippedAfter;
+            mateBasesClippedBefore = mate->getFrontClippedLength();
+            mateBasesClippedAfter = mate->getUnclippedLength() - mate->getDataLength() - mateBasesClippedBefore;
+
+            // Add soft-clipping due to seed extension
+            mateBasesClippedBefore += mateBpClippedBefore;
+            mateBasesClippedAfter += mateBpClippedAfter;
+
             GenomeLocation mateStart = mateLocation - (mateDirection == RC ? mateBasesClippedAfter : mateBasesClippedBefore);
             GenomeLocation mateEnd = mateLocation + mate->getDataLength() + (mateDirection == FORWARD ? mateBasesClippedAfter : mateBasesClippedBefore);
             if (contigName == matecontigName) { // pointer (not value) comparison, but that's OK.
@@ -1600,13 +1626,17 @@ SAMFormat::writeRead(
     int internalScore,
     bool emitInternalScore,
     char *internalScoreTag,
+    int bpClippedBefore,
+    int bpClippedAfter,
     bool hasMate,
     bool firstInPair,
     Read * mate,
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
     Direction mateDirection,
-    bool alignedAsPair
+    bool alignedAsPair,
+    int mateBpClippedBefore,
+    int mateBpClippedAfter
 ) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
@@ -1644,7 +1674,7 @@ SAMFormat::writeRead(
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection,
-        &extraBasesClippedBefore))
+        &extraBasesClippedBefore, bpClippedBefore, bpClippedAfter, mateBpClippedBefore, mateBpClippedAfter))
     {
         return false;
     }

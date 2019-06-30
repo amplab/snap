@@ -327,6 +327,9 @@ Return Value:
     primaryResult->score = UnusedScoreValue;
     primaryResult->status = NotFound;
     primaryResult->clippingForReadAdjustment = 0;
+    primaryResult->usedAffineGapScoring = false;
+    primaryResult->basesClippedBefore = 0;
+    primaryResult->basesClippedAfter = 0;
 
     unsigned lookupsThisRun = 0;
 

@@ -177,6 +177,9 @@ IntersectingPairedEndAligner::align(
     result->nLVCalls = 0;
     result->nSmallHits = 0;
     result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
+    result->usedAffineGapScoring[0] = result->usedAffineGapScoring[1] = false;
+    result->basesClippedBefore[0] = result->basesClippedBefore[1] = 0;
+    result->basesClippedAfter[0] = result->basesClippedAfter[1] = 0;
 
     *nSecondaryResults = 0;
     *nSingleEndSecondaryResultsForFirstRead = 0;

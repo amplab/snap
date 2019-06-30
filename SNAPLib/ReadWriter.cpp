@@ -216,17 +216,6 @@ SimpleReadWriter::writeReads(
             int addFrontClipping = 0;
             read->setAdditionalFrontClipping(results[whichResult].clippingForReadAdjustment);
             
-            if (results[whichResult].usedAffineGapScoring) {
-                if (results[whichResult].direction == RC) {
-                    read->addFrontClipping(results[whichResult].basesClippedAfter);
-                    read->addBackClipping(results[whichResult].basesClippedBefore);
-                }
-                else {
-                    read->addFrontClipping(results[whichResult].basesClippedBefore);
-                    read->addBackClipping(results[whichResult].basesClippedAfter);
-                }
-            }
-
             int cumulativeAddFrontClipping = 0, cumulativeAddBackClipping = 0;
             finalLocations[whichResult] = results[whichResult].location;
 
@@ -235,7 +224,8 @@ SimpleReadWriter::writeReads(
             if (useAffineGap && results[whichResult].usedAffineGapScoring) {
                 while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
                     results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping,
-                    results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+                    results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag, results[whichResult].basesClippedBefore,
+                    results[whichResult].basesClippedAfter)) {
 
                     _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster.
 
@@ -437,20 +427,6 @@ SimpleReadWriter::writePairs(
             reads[0]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[0]);
             reads[1]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[1]);
 
-            // Soft-clip reads based on any potential local alignments
-            for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
-                if (result[whichAlignmentPair].usedAffineGapScoring[i]) {
-                    if (result[whichAlignmentPair].direction[i] == RC) {
-                        reads[i]->addFrontClipping(result[whichAlignmentPair].basesClippedAfter[i]);
-                        reads[i]->addBackClipping(result[whichAlignmentPair].basesClippedBefore[i]);
-                    }
-                    else {
-                        reads[i]->addFrontClipping(result[whichAlignmentPair].basesClippedBefore[i]);
-                        reads[i]->addBackClipping(result[whichAlignmentPair].basesClippedAfter[i]);
-                    }
-                }
-            }
-
             GenomeLocation locations[2];
             locations[0] = result[whichAlignmentPair].status[0] != NotFound ? result[whichAlignmentPair].location[0] : InvalidGenomeLocation;
             locations[1] = result[whichAlignmentPair].status[1] != NotFound ? result[whichAlignmentPair].location[1] : InvalidGenomeLocation;
@@ -484,9 +460,10 @@ SimpleReadWriter::writePairs(
                         while (!format->writeRead(context, &agc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
                             idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
                             whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag,
+                            result[whichAlignmentPair].basesClippedBefore[whichRead], result[whichAlignmentPair].basesClippedAfter[whichRead], 
                             true, writeOrder[firstOrSecond] == 0,
                             reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
-                            result[whichAlignmentPair].alignedAsPair)) {
+                            result[whichAlignmentPair].alignedAsPair, result[whichAlignmentPair].basesClippedBefore[1 - whichRead], result[whichAlignmentPair].basesClippedAfter[1 - whichRead])) {
 
                             _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster
 
@@ -594,25 +571,15 @@ SimpleReadWriter::writePairs(
             for (int whichAlignment = 0; whichAlignment < nSingleResults[whichRead]; whichAlignment++) {
                 int addFrontClipping;
                 reads[whichRead]->setAdditionalFrontClipping(singleResults[whichRead]->clippingForReadAdjustment);
-                
-                if (singleResults[whichRead][whichAlignment].usedAffineGapScoring) {
-                    // Soft-clip reads based on any potential local alignments
-                    if (singleResults[whichRead][whichAlignment].direction == RC) {
-                        reads[whichRead]->addFrontClipping(singleResults[whichRead][whichAlignment].basesClippedAfter);
-                        reads[whichRead]->addBackClipping(singleResults[whichRead][whichAlignment].basesClippedBefore);
-                    }
-                    else {
-                        reads[whichRead]->addFrontClipping(singleResults[whichRead][whichAlignment].basesClippedBefore);
-                        reads[whichRead]->addBackClipping(singleResults[whichRead][whichAlignment].basesClippedAfter);
-                    }
-                }
+
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
 
                 if (useAffineGap && singleResults[whichRead][whichAlignment].usedAffineGapScoring) {
                     while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
                         reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
-                        true, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+                        true, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag,
+                        singleResults[whichRead][whichAlignment].basesClippedBefore, singleResults[whichRead][whichAlignment].basesClippedAfter)) {
 
                         if (0 == addFrontClipping) {
                             goto blownBuffer;

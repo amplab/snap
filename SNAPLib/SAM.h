@@ -165,20 +165,21 @@ public:
 
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
-        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
+        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
-        int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
+        int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
-        bool alignedAsPair = false) const; 
+        bool alignedAsPair = false) const;
 
     // Affine gap version
     virtual bool writeRead(
         const ReaderContext& context, AffineGapWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
-        int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
+        int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
+        bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
-        bool alignedAsPair = false) const;
+        bool alignedAsPair = false, int mateBpClippedBefore = 0, int mateBpClippedAfter = 0) const;
 
     // calculate data needed to write SAM/BAM record
     // very long argument list since this was extracted from
@@ -260,7 +261,11 @@ public:
             AlignmentResult mateResult,
             GenomeLocation mateLocation,
             Direction mateDirection,
-            GenomeDistance *extraBasesClippedBefore);
+            GenomeDistance *extraBasesClippedBefore,
+            int bpClippedBefore,
+            int bpClippedAfter,
+            int mateBpClippedBefore,
+            int mateBpClippedAfter);
 
     static void computeCigar(CigarFormat cigarFormat, const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
