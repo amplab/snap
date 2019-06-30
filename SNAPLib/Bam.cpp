@@ -1452,9 +1452,14 @@ BAMFormat::computeCigarOps(
         return 0;
     } else {
         // There may be a better way to do this. For now, whenever we see tail insertions, soft-clip them
-        if (basesClippedAfter != backClippingMissedByLV) {
-            basesClippedAfter += backClippingMissedByLV;
+        basesClippedAfter += backClippingMissedByLV;
+        dataLength -= backClippingMissedByLV;
+
+        if (dataLength > 101) {
+            WriteErrorMessage("computeCigarString: Data length negative for read:%.*s, isRC:%d\n", 101, data - basesClippedBefore, isRC);
+            soft_exit(1);
         }
+
         //
         // If we have hard clipping, add in the cigar string for it.
         //
@@ -1476,6 +1481,7 @@ BAMFormat::computeCigarOps(
             *(_uint32*)(cigarBuf + used) = (backHardClipping << 4) | BAMAlignment::CigarToCode['H'];
             used += 4;
         }
+
         return used / 4;
     }
 }

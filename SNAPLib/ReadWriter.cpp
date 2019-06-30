@@ -216,8 +216,16 @@ SimpleReadWriter::writeReads(
             int addFrontClipping = 0;
             read->setAdditionalFrontClipping(results[whichResult].clippingForReadAdjustment);
             
-            read->addFrontClipping(results[whichResult].basesClippedBefore);
-            read->addBackClipping(results[whichResult].basesClippedAfter);
+            if (results[whichResult].usedAffineGapScoring) {
+                if (results[whichResult].direction == RC) {
+                    read->addFrontClipping(results[whichResult].basesClippedAfter);
+                    read->addBackClipping(results[whichResult].basesClippedBefore);
+                }
+                else {
+                    read->addFrontClipping(results[whichResult].basesClippedBefore);
+                    read->addBackClipping(results[whichResult].basesClippedAfter);
+                }
+            }
 
             int cumulativeAddFrontClipping = 0, cumulativeAddBackClipping = 0;
             finalLocations[whichResult] = results[whichResult].location;
@@ -431,13 +439,15 @@ SimpleReadWriter::writePairs(
 
             // Soft-clip reads based on any potential local alignments
             for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
-                if (result[whichAlignmentPair].direction[i] == RC) {
-                    reads[i]->addFrontClipping(result[whichAlignmentPair].basesClippedAfter[i]);
-                    reads[i]->addBackClipping(result[whichAlignmentPair].basesClippedBefore[i]);
-                }
-                else {
-                    reads[i]->addFrontClipping(result[whichAlignmentPair].basesClippedBefore[i]);
-                    reads[i]->addBackClipping(result[whichAlignmentPair].basesClippedAfter[i]);
+                if (result[whichAlignmentPair].usedAffineGapScoring[i]) {
+                    if (result[whichAlignmentPair].direction[i] == RC) {
+                        reads[i]->addFrontClipping(result[whichAlignmentPair].basesClippedAfter[i]);
+                        reads[i]->addBackClipping(result[whichAlignmentPair].basesClippedBefore[i]);
+                    }
+                    else {
+                        reads[i]->addFrontClipping(result[whichAlignmentPair].basesClippedBefore[i]);
+                        reads[i]->addBackClipping(result[whichAlignmentPair].basesClippedAfter[i]);
+                    }
                 }
             }
 
@@ -585,16 +595,17 @@ SimpleReadWriter::writePairs(
                 int addFrontClipping;
                 reads[whichRead]->setAdditionalFrontClipping(singleResults[whichRead]->clippingForReadAdjustment);
                 
-                // Soft-clip reads based on any potential local alignments
-                if (singleResults[whichRead][whichAlignment].direction == RC) {
-                    reads[whichRead]->addFrontClipping(singleResults[whichRead][whichAlignment].basesClippedAfter);
-                    reads[whichRead]->addBackClipping(singleResults[whichRead][whichAlignment].basesClippedBefore);
+                if (singleResults[whichRead][whichAlignment].usedAffineGapScoring) {
+                    // Soft-clip reads based on any potential local alignments
+                    if (singleResults[whichRead][whichAlignment].direction == RC) {
+                        reads[whichRead]->addFrontClipping(singleResults[whichRead][whichAlignment].basesClippedAfter);
+                        reads[whichRead]->addBackClipping(singleResults[whichRead][whichAlignment].basesClippedBefore);
+                    }
+                    else {
+                        reads[whichRead]->addFrontClipping(singleResults[whichRead][whichAlignment].basesClippedBefore);
+                        reads[whichRead]->addBackClipping(singleResults[whichRead][whichAlignment].basesClippedAfter);
+                    }
                 }
-                else {
-                    reads[whichRead]->addFrontClipping(singleResults[whichRead][whichAlignment].basesClippedBefore);
-                    reads[whichRead]->addBackClipping(singleResults[whichRead][whichAlignment].basesClippedAfter);
-                }
-
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
 

@@ -2008,6 +2008,7 @@ SAMFormat::computeCigar(
             cigarFormat,
             o_cigarBufUsed,
             o_addFrontClipping,
+            &netIndel,
             o_backClippingMissedByLV);
 
         newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
@@ -2143,10 +2144,14 @@ SAMFormat::computeCigarString(
     }
     else {
         // There may be a better way to do this. For now, whenever we see tail insertions, soft-clip them
-        if (basesClippedAfter != backClippingMissedByLV) {
-            basesClippedAfter += backClippingMissedByLV;
-            dataLength -= backClippingMissedByLV;
+        basesClippedAfter += backClippingMissedByLV;
+        dataLength -= backClippingMissedByLV;
+        
+        if (dataLength > 101) {
+            WriteErrorMessage("computeCigarString: Data length negative for read:%.*s, isRC:%d\n", 101, data - basesClippedBefore, direction);
+            soft_exit(1);
         }
+
         // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
         char clipBefore[16] = { '\0' };
         char clipAfter[16] = { '\0' };
@@ -2173,7 +2178,7 @@ SAMFormat::computeCigarString(
     }
 }
 
-#ifdef _DEBUG
+// #ifdef _DEBUG
 	void 
 SAMFormat::validateCigarString(
 	const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM)
@@ -2182,7 +2187,7 @@ SAMFormat::validateCigarString(
 	GenomeDistance offsetInData = 0;
 	const char *reference = genome->getSubstring(genomeLocation, dataLength);
 	if (NULL == reference) {
-		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation.location);
+		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation);
 		soft_exit(1);
 	}
 	GenomeDistance offsetInReference = 0;
@@ -2415,7 +2420,7 @@ SAMFormat::validateCigarString(
     }
 }
 
-#endif // _DEBUG
+// #endif // _DEBUG
 
 
     
