@@ -393,23 +393,22 @@ public:
 
         } // end text
 
-        
-        // Choose between local and global alignment
-        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore > bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
+        score = bestGlobalAlignmentScore;
+        *o_textOffset = bestGlobalAlignmentTextOffset;
+
+        // Choose between local and global alignment for patternOffset
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
             // Local alignment preferred
-            score = bestLocalAlignmentScore;
-            *o_textOffset = bestLocalAlignmentTextOffset;
             *o_patternOffset = bestLocalAlignmentPatternOffset;
         }
         else {
             // Global alignment preferred
-            score = bestGlobalAlignmentScore;
-            *o_textOffset = bestGlobalAlignmentTextOffset;
             *o_patternOffset = patternLen - 1;
         }
 
         if (score > scoreInit) {
-            int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
+            // Perform traceback and compute nEdits assuming the entire pattern is aligned
+            int rowIdx = *o_textOffset, colIdx = patternLen - 1, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
             int actionCount = 1;
             int nMatches = 0, nMismatches = 0, nGaps = 0;

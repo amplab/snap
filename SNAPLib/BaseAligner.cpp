@@ -917,7 +917,8 @@ Return Value:
                     
                     // Compute maxK for which edit distance and affine gap scoring report the same alignment
                     // GapOpenPenalty + k.GapExtendPenalty >= k * SubPenalty
-                    int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
+                    // int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
+                    int maxKForSameAlignment = 1;
 
                     int totalIndels = 0;
                     int genomeLocationOffset;

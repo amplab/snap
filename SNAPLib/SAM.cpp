@@ -1306,11 +1306,6 @@ SAMFormat::createSAMLine(
         clippedData = &data[fullLength - clippedLength - read->getFrontClippedLength()];
         basesClippedBefore = fullLength - clippedLength - read->getFrontClippedLength();
         basesClippedAfter = read->getFrontClippedLength();
-        // Add soft-clipping from seed extension
-        basesClippedBefore += bpClippedAfter;
-        basesClippedAfter += bpClippedBefore;
-        clippedData += bpClippedAfter;
-        clippedLength -= (bpClippedBefore + bpClippedAfter);
     }
     else {
         memcpy(data, read->getUnclippedData(), read->getUnclippedLength());
@@ -1318,12 +1313,13 @@ SAMFormat::createSAMLine(
         clippedData = read->getData();
         basesClippedBefore = read->getFrontClippedLength();
         basesClippedAfter = fullLength - clippedLength - basesClippedBefore;
-        // Add soft-clipping from seed extension
-        basesClippedBefore += bpClippedBefore;
-        basesClippedAfter += bpClippedAfter;
-        clippedData += bpClippedBefore;
-        clippedLength -= (bpClippedBefore + bpClippedAfter);
     }
+
+    // Add soft-clipping from seed extension
+    basesClippedBefore += bpClippedBefore;
+    basesClippedAfter += bpClippedAfter;
+    clippedData += bpClippedBefore;
+    clippedLength -= (bpClippedBefore + bpClippedAfter);
 
     // For debug
     if (clippedLength > 101) {
