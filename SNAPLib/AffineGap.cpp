@@ -361,7 +361,7 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
                 else {
                     if (res.action[i] == 'D') {
                         rowIdx += res.count[i];
-                        *o_netDel += 1;
+                        *o_netDel += res.count[i];
                     }
                     else if (res.action[i] == 'I') {
                         colIdx += res.count[i];
