@@ -10,14 +10,19 @@ namespace PhylogenyFromASE
     class Program
     {
 
-        enum ExpressionState { Unknown, Reference, Alt, Both };
+        enum ExpressionState { Unknown, Reference, Alt, Both, Multiple };
 
         static Dictionary<string, Dictionary<string, ExpressionState>> expressionStateByCell = new Dictionary<string, Dictionary<string, ExpressionState>>();   // Barcode->locus->ExpressionState
         static Dictionary<string, Dictionary<string, ExpressionState>> expressionStateByLocus = new Dictionary<string, Dictionary<string, ExpressionState>>();  // Locus->Barcode->ExpressionState
 
         static int ChromosomeFromLocus(string locus)
         {
-            return Convert.ToInt32(locus.Split(':')[0]);
+            var chromosome = locus.Split(':')[0];
+            if (chromosome.ToLower().StartsWith("chr"))
+            {
+                chromosome = chromosome.Substring(3);
+            }
+            return Convert.ToInt32(chromosome);
         }
 
         struct BarcodeAndChromosome
@@ -36,7 +41,7 @@ namespace PhylogenyFromASE
         {
             var configuration = ASETools.Configuration.loadFromFile(args);
 
-            var inputFilename = configuration.baseDirectory + "DJA20_WESConfSNV_PassHardFilt_Tile.txt";
+            var inputFilename = /*configuration.baseDirectory + "DJA20_WESConfSNV_PassHardFilt_Tile.txt"*/ @"c:\temp\AustMms_chr17_SNV_PassHardFilt_Tile.txt";
             var inputFile = ASETools.CreateStreamReaderWithRetry(inputFilename);
 
             if (null == inputFile)
@@ -119,6 +124,9 @@ namespace PhylogenyFromASE
                     if (stateInText == "1")
                     {
                         expressionState = ExpressionState.Unknown;
+                    } else if (stateInText == "2")
+                    {
+                        expressionState = ExpressionState.Multiple;
                     } else if (stateInText == "3")
                     {
                         expressionState = ExpressionState.Reference;
@@ -234,9 +242,9 @@ namespace PhylogenyFromASE
                 int nFromBeginning = 0;
                 int nToEnd = 0;
                 bool seenAnyNonLOH = true;
-                for (int i = 0; i < nLoci; i++)
+                for (int i = 0; i < nLoci + 1; i++)
                 {
-                    var locus = loci[i];
+                    var locus = (i == nLoci ? "end:0" : loci[i]);
                     var chromosome = locus.Split(':')[0];
 
                     if (currentChromosome != chromosome)
@@ -275,13 +283,18 @@ namespace PhylogenyFromASE
                         currentChromosome = chromosome;
                     }
 
+                    if (i == nLoci)
+                    {
+                        break;
+                    }
+
                     var expressionState = expressionStateByCell[barcode][locus];
                     if (expressionState == ExpressionState.Unknown)
                     {
                         continue;
                     }
 
-                    if (expressionState == ExpressionState.Both)
+                    if (expressionState == ExpressionState.Both || expressionState == ExpressionState.Multiple)
                     {
                         seenAnyNonLOH = true;
                         nToEnd = 0;
