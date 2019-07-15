@@ -1630,7 +1630,7 @@ DecompressDataReader::decompress(
         zstream->zalloc = zalloc;
         zstream->zfree = zfree;
         zstream->opaque = heap;
-    } else {
+    } else if (mode != ContinueMultiBlock) {
         zstream->zalloc = NULL;
         zstream->zfree = NULL;
     }
