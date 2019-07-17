@@ -393,18 +393,18 @@ public:
 
         } // end text
 
-        score = bestGlobalAlignmentScore;
-
         // Choose between local and global alignment for patternOffset
         if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
             // Local alignment preferred
             *o_patternOffset = bestLocalAlignmentPatternOffset;
-			*o_textOffset = bestLocalAlignmentTextOffset;
+            *o_textOffset = bestLocalAlignmentTextOffset;
+            score = bestLocalAlignmentScore;
         }
         else {
             // Global alignment preferred
             *o_patternOffset = patternLen - 1;
-			*o_textOffset = bestGlobalAlignmentTextOffset;
+            *o_textOffset = bestGlobalAlignmentTextOffset;
+            score = bestGlobalAlignmentScore;
         }
 
         if (score > scoreInit) {

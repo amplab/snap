@@ -1021,8 +1021,9 @@ Return Value:
                 // cause us to lose confidence in the alignment, since they're probably both pretty good).
                 //
                 if (anyNearbyCandidatesAlreadyScored) {
-                    if (elementToScore->bestScore < score || elementToScore->bestScore == score && matchProbability <= elementToScore->matchProbabilityForBestScore) {
-                        //
+                    // if (elementToScore->bestScore < score || elementToScore->bestScore == score && matchProbability <= elementToScore->matchProbabilityForBestScore) {
+                    if (matchProbability <= elementToScore->matchProbabilityForBestScore) {
+						//
                         // This is a no better mapping than something nearby that we already tried.  Just ignore it.
                         //
                         continue;
@@ -1071,7 +1072,8 @@ Return Value:
                     }
 
                     if (NULL != nearbyElement) {
-                        if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
+                        // if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
+						if (nearbyElement->matchProbabilityForBestScore >= matchProbability) {
                             //
                             // Again, this no better than something nearby we already tried.  Give up.
                             //
@@ -1088,9 +1090,9 @@ Return Value:
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
-                if (bestScore > score ||
-                    (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
-
+                // if (bestScore > score ||
+                //    (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
+				if (matchProbability > probabilityOfBestCandidate) {
                     //
                     // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
                     //
@@ -1107,28 +1109,29 @@ Return Value:
                     //
                     // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
                     //
-                    if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
-                        if (secondaryResultBufferSize <= *nSecondaryResults) {
-                            *overflowedSecondaryBuffer = true;
-                            return true;
-                        }
+					if (bestScore >= score) {
+						if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
+							if (secondaryResultBufferSize <= *nSecondaryResults) {
+								*overflowedSecondaryBuffer = true;
+								return true;
+							}
 
-                        SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-                        result->direction = primaryResult->direction;
-                        result->location = bestScoreGenomeLocation;
-                        result->mapq = 0;
-                        result->score = bestScore;
-                        result->status = MultipleHits;
-                        result->clippingForReadAdjustment = 0;
-                        result->usedAffineGapScoring = primaryResult->usedAffineGapScoring;
-                        result->basesClippedBefore = primaryResult->basesClippedBefore;
-                        result->basesClippedAfter = primaryResult->basesClippedAfter;
+							SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+							result->direction = primaryResult->direction;
+							result->location = bestScoreGenomeLocation;
+							result->mapq = 0;
+							result->score = bestScore;
+							result->status = MultipleHits;
+							result->clippingForReadAdjustment = 0;
+							result->usedAffineGapScoring = primaryResult->usedAffineGapScoring;
+							result->basesClippedBefore = primaryResult->basesClippedBefore;
+							result->basesClippedAfter = primaryResult->basesClippedAfter;
 
-                        _ASSERT(result->score != -1);
+							_ASSERT(result->score != -1);
 
-                        (*nSecondaryResults)++;
-                    }
-
+							(*nSecondaryResults)++;
+						}
+					}
                     bestScore = score;
                     probabilityOfBestCandidate = matchProbability;
                     _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);

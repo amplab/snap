@@ -742,9 +742,10 @@ IntersectingPairedEndAligner::align(
 
                             bool isBestHit = false;
 
-                            if (pairScore <= maxK && (pairScore < bestPairScore ||
-                                (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
-                                //
+                            // if (pairScore <= maxK && (pairScore < bestPairScore ||
+                            //    (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
+                            if (pairProbability > probabilityOfBestPair) {
+								//
                                 // A new best hit.
                                 //
                                 if (maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= bestPairScore - pairScore) {
@@ -1498,7 +1499,8 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
         //
         // Within merge distance.  Keep the better score (or if they're tied the better match probability).
         //
-        if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+        // if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+		if (newMatchProbability > matchProbability) {
 #ifdef _DEBUG
             if (_DumpAlignments) {
                 printf("Merge replacement at anchor (%llu, %llu), loc (%llu, %llu), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",

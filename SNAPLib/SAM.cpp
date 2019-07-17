@@ -2016,7 +2016,7 @@ SAMFormat::computeCigar(
     //
     GenomeDistance newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
     for (GenomeDistance pass = 0; pass < dataLength; pass++) {
-        if (newExtraBasesClippedAfter == *o_extraBasesClippedAfter) {
+        if (newExtraBasesClippedAfter <= *o_extraBasesClippedAfter) {
             return;
         }
 
@@ -2040,6 +2040,7 @@ SAMFormat::computeCigar(
         newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
     }
 
+	WriteErrorMessage("cigar computation didn't converge: data:%.*s\n", dataLength, data);
     _ASSERT(!"cigar computation didn't converge");
     *o_extraBasesClippedAfter = newExtraBasesClippedAfter;
 }
