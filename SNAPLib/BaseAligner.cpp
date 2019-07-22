@@ -330,6 +330,7 @@ Return Value:
     primaryResult->usedAffineGapScoring = false;
     primaryResult->basesClippedBefore = 0;
     primaryResult->basesClippedAfter = 0;
+    primaryResult->agScore = 0;
 
     unsigned lookupsThisRun = 0;
 
@@ -896,6 +897,7 @@ Return Value:
                 bool usedAffineGapScoring = false;
                 int basesClippedBefore = 0;
                 int basesClippedAfter = 0;
+                int agScore = 0;
 
                 if (data != NULL) {
                     Read *readToScore = read[elementToScore->direction];
@@ -908,13 +910,13 @@ Return Value:
                     //
                     double matchProb1, matchProb2;
                     int score1, score2;
-                    int agScore1 = seedLen, agScore2 = 0;
                     // First, do the forward direction from where the seed aligns to past of it
                     int readLen = readToScore->getDataLength();
                     int seedLen = genomeIndex->getSeedLength();
                     int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
                     int tailStart = seedOffset + seedLen;
-                    
+                    int agScore1 = seedLen, agScore2 = 0;
+
                     // Compute maxK for which edit distance and affine gap scoring report the same alignment
                     // GapOpenPenalty + k.GapExtendPenalty >= k * SubPenalty
                     // int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
@@ -927,6 +929,9 @@ Return Value:
                     int textLen = (int)__min(genomeDataLength - tailStart, 0x7ffffff0);
                     score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
                         scoreLimit, &matchProb1, NULL, &totalIndels);
+
+                    agScore1 = (seedLen + (readLen - tailStart - score1) * matchReward - score1 * subPenalty);
+
                     if (score1 == -1) {
                         score = -1;
                     }
@@ -945,9 +950,9 @@ Return Value:
 
                         usedAffineGapScoring = true;
                         
-
                         if (score1 == -1) {
                             score = -1;
+                            agScore = 0;
                         }
                     }
                     if (score1 != -1) {
@@ -957,6 +962,8 @@ Return Value:
                         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
                             read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2,
                             &genomeLocationOffset, &totalIndels);
+
+                        agScore2 = (seedOffset - score2) * matchReward - score2 * subPenalty;
 
                         if (score2 == -1) {
                             score = -1;
@@ -976,8 +983,11 @@ Return Value:
 
                             usedAffineGapScoring = true;
 
+                            agScore2 -= (readLen - seedOffset);
+
                             if (score2 == -1) {
                                 score = -1;
+                                agScore = 0;
                             }
                         }
                         if (score2 != -1) {
@@ -990,6 +1000,7 @@ Return Value:
                             //
                             genomeLocation += genomeLocationOffset;
 
+                            agScore = agScore1 + agScore2;
                             //
                             // We could mark as scored anything in between the old and new genome offsets, but it's probably not worth the effort since this is
                             // so rare and all it would do is same time.
@@ -1036,6 +1047,7 @@ Return Value:
                 elementToScore->usedAffineGapScoring = usedAffineGapScoring;
                 elementToScore->basesClippedBefore = basesClippedBefore;
                 elementToScore->basesClippedAfter = basesClippedAfter;
+                elementToScore->agScore = agScore;
 
                 //
                 // Look up the hash table element that's closest to the genomeLocation but that doesn't
@@ -1126,6 +1138,7 @@ Return Value:
 							result->usedAffineGapScoring = primaryResult->usedAffineGapScoring;
 							result->basesClippedBefore = primaryResult->basesClippedBefore;
 							result->basesClippedAfter = primaryResult->basesClippedAfter;
+                            result->agScore = primaryResult->agScore;
 
 							_ASSERT(result->score != -1);
 
@@ -1142,6 +1155,7 @@ Return Value:
                     primaryResult->usedAffineGapScoring = elementToScore->usedAffineGapScoring;
                     primaryResult->basesClippedBefore = elementToScore->basesClippedBefore;
                     primaryResult->basesClippedAfter = elementToScore->basesClippedAfter;
+                    primaryResult->agScore = elementToScore->agScore;
                     _ASSERT(0 == primaryResult->clippingForReadAdjustment);
 
                     lvScoresAfterBestFound = 0;
@@ -1174,6 +1188,7 @@ Return Value:
                         result->usedAffineGapScoring = elementToScore->usedAffineGapScoring;
                         result->basesClippedBefore = elementToScore->basesClippedBefore;
                         result->basesClippedAfter = elementToScore->basesClippedAfter;
+                        result->agScore = elementToScore->agScore;
 
                         _ASSERT(result->score != -1);
 
@@ -1188,6 +1203,18 @@ Return Value:
                     // explored enough to compute it.
                     primaryResult->status = MultipleHits;
                     primaryResult->mapq = 0;
+                    return true;
+                }
+
+                // Taken from intersecting paired-end aligner.
+                // Assuming maximum probability among unseen candidates is 1 and MAPQ < 1, find probability of
+                // all candidates for each we can terminate early without exploring any more MAPQ 0 alignments
+                // i.e., -10 log10(1 - 1/x) < 1 
+                // i.e.,  x > 4.86 ~ 4.9
+                if (probabilityOfAllCandidates >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
+                    //
+                    // Nothing will rescue us from a 0 MAPQ, so just stop looking.
+                    //
                     return true;
                 }
 
@@ -1366,6 +1393,7 @@ Return Value:
     element->usedAffineGapScoring = false;
     element->basesClippedBefore = 0;
     element->basesClippedAfter = 0;
+    element->agScore = 0;
 
     //
     // And insert it at the end of weight list 1.
@@ -1498,6 +1526,7 @@ BaseAligner::HashTableElement::init()
     allExtantCandidatesScored = false;
     matchProbabilityForBestScore = 0;
     usedAffineGapScoring = false;
+    agScore = 0;
 }
 
     void

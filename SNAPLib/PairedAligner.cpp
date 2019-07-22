@@ -510,6 +510,7 @@ void PairedAlignerContext::runIterationThread()
             result.usedAffineGapScoring[0] = result.usedAffineGapScoring[1] = false;
             result.basesClippedBefore[0] = result.basesClippedBefore[1] = 0;
             result.basesClippedAfter[0] = result.basesClippedAfter[1] = 0;
+            result.agScore[0] = result.agScore[1] = 0;
 
             bool pass0 = options->passFilter(reads[0], result.status[0], true, false);
             bool pass1 = options->passFilter(reads[1], result.status[1], true, false);
@@ -583,6 +584,10 @@ void PairedAlignerContext::runIterationThread()
             // either both align or neither do
             results[0].status[0] = results[0].status[1] = NotFound;
             results[0].location[0] = results[0].location[1] = InvalidGenomeLocation;
+            results[0].usedAffineGapScoring[0] = results[0].usedAffineGapScoring[1] = false;
+            results[0].basesClippedBefore[0] = results[0].basesClippedBefore[1] = 0;
+            results[0].basesClippedAfter[0] = results[0].basesClippedAfter[1] = 0;
+            results[0].agScore[0] = results[0].agScore[1] = 0;
         }
 
         bool firstIsPrimary = true;

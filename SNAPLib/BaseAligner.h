@@ -222,7 +222,8 @@ private:
         bool                 usedAffineGapScoring;
         int                  basesClippedBefore;
         int                  basesClippedAfter;
-     
+        int                  agScore;
+
         Candidate            candidates[hashTableElementSize];
     };
 

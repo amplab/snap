@@ -365,7 +365,8 @@ private:
             int                 *genomeLocationOffset,   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
             bool                *usedAffineGapScoring = false,
             int                 *basesClippedBefore = NULL,
-            int                 *basesClippedAfter = NULL
+            int                 *basesClippedAfter = NULL,
+            int                 *agScore = NULL
     );
 
     //
@@ -424,6 +425,7 @@ private:
         bool                    usedAffineGapScoring;
         int                     basesClippedBefore;
         int                     basesClippedAfter;
+        int                     agScore;
 
         void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
@@ -436,6 +438,7 @@ private:
             usedAffineGapScoring = false;
             basesClippedBefore = 0;
             basesClippedAfter = 0;
+            agScore = 0;
         }
     };
 
@@ -452,6 +455,7 @@ private:
         bool                    usedAffineGapScoring;
         int                     basesClippedBefore;
         int                     basesClippedAfter;
+        int                     agScore;
 
         void init(GenomeLocation readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
                   unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_)
@@ -467,6 +471,7 @@ private:
             usedAffineGapScoring = false;
             basesClippedBefore = 0;
             basesClippedAfter = 0;
+            agScore = 0;
          }
     };
 

@@ -919,7 +919,7 @@ BAMFormat::writeRead(
     unsigned basesClippedBefore;
     GenomeDistance extraBasesClippedBefore;
     unsigned basesClippedAfter;
-    int editDistance;
+    int editDistance = -1;
     int newAddFrontClipping = 0;
 
     if (!SAMFormat::createSAMLine(context.genome, lv, 
@@ -1146,7 +1146,7 @@ BAMFormat::writeRead(
     unsigned basesClippedBefore;
     GenomeDistance extraBasesClippedBefore;
     unsigned basesClippedAfter;
-    int editDistance;
+    int editDistance = -1;
     int newAddFrontClipping = 0;
 
     if (!SAMFormat::createSAMLine(context.genome, ag,

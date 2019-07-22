@@ -131,6 +131,7 @@ bool ChimericPairedEndAligner::align(
     result->usedAffineGapScoring[0] = result->usedAffineGapScoring[1] = false;
     result->basesClippedBefore[0] = result->basesClippedBefore[1] = 0;
     result->basesClippedAfter[0] = result->basesClippedAfter[1] = 0;
+    result->agScore[0] = result->agScore[1] = 0;
 
 	if (read0->getDataLength() < minReadLength && read1->getDataLength() < minReadLength) {
         TRACE("Reads are both too short -- returning");
@@ -149,6 +150,8 @@ bool ChimericPairedEndAligner::align(
     }
 
     _int64 start = timeInNanos();
+    int pairAGScore = 0;
+    bool compareWithSingleEndAlignment = false;
 	if (read0->getDataLength() >= minReadLength && read1->getDataLength() >= minReadLength) {
 		//
 		// Let the LVs use the cache that we built up.
@@ -179,8 +182,14 @@ bool ChimericPairedEndAligner::align(
 			}
 			return true;
 		}
+        
+        int maxScore = __max(result->score[0], result->score[1]);
 
-		if (result->status[0] != NotFound && result->status[1] != NotFound) {
+        if ((result->usedAffineGapScoring[0] || result->usedAffineGapScoring[1]) && maxScore >= 5) { // FIXME: Replace 5 with parameter
+            compareWithSingleEndAlignment = true;
+        }
+        
+		if (result->status[0] != NotFound && result->status[1] != NotFound && (!compareWithSingleEndAlignment)) {
 			//
 			// Not a chimeric read.
 			//
@@ -195,25 +204,32 @@ bool ChimericPairedEndAligner::align(
     Read *read[NUM_READS_PER_PAIR] = {read0, read1};
     _int64 *resultCount[2] = {nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead};
 
+    SingleAlignmentResult singleResult[NUM_READS_PER_PAIR];
+    int singleEndAGScore = 0;
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-        SingleAlignmentResult singleResult;
         _int64 singleEndSecondaryResultsThisTime = 0;
-
-		if (read[r]->getDataLength() < minReadLength) {
-			result->status[r] = NotFound;
-			result->mapq[r] = 0;
-			result->direction[r] = FORWARD;
-			result->location[r] = 0;
-			result->score[r] = 0;
+        if (compareWithSingleEndAlignment) {
+            pairAGScore += result->agScore[r];
+        }
+        if (read[r]->getDataLength() < minReadLength) {
+            result->status[r] = NotFound;
+            result->mapq[r] = 0;
+            result->direction[r] = FORWARD;
+            result->location[r] = 0;
+            result->score[r] = 0;
             result->usedAffineGapScoring[r] = false;
             result->basesClippedBefore[r] = 0;
             result->basesClippedAfter[r] = 0;
-		} else {
-			// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
-            bool fitInSecondaryBuffer = 
-			singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
-				singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
-                maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
+            result->agScore[r] = 0;
+            result->fromAlignTogether = false;
+            result->alignedAsPair = false;
+        }
+        else {
+            // We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
+            bool fitInSecondaryBuffer =
+                singleAligner->AlignRead(read[r], &singleResult[r], maxEditDistanceForSecondaryResults,
+                    singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
+                    maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
 
             if (!fitInSecondaryBuffer) {
                 *nSecondaryResults = 0;
@@ -222,22 +238,46 @@ bool ChimericPairedEndAligner::align(
                 return false;
             }
 
-			*(resultCount[r]) = singleEndSecondaryResultsThisTime;
+            *(resultCount[r]) = singleEndSecondaryResultsThisTime;
 
-			result->status[r] = singleResult.status;
-			result->mapq[r] = singleResult.mapq / 3;   // Heavy quality penalty for chimeric reads
-			result->direction[r] = singleResult.direction;
-			result->location[r] = singleResult.location;
-			result->score[r] = singleResult.score;
-            result->scorePriorToClipping[r] = singleResult.scorePriorToClipping;
-            result->usedAffineGapScoring[r] = singleResult.usedAffineGapScoring;
-            result->basesClippedBefore[r] = singleResult.basesClippedBefore;
-            result->basesClippedAfter[r] = singleResult.basesClippedAfter;
-		}
+            if (compareWithSingleEndAlignment) {
+                singleEndAGScore += singleResult[r].agScore;
+            }
+
+        }
     }
 
-    result->fromAlignTogether = false;
-    result->alignedAsPair = false;
+    if (!compareWithSingleEndAlignment || (singleEndAGScore >= pairAGScore + 17)) { // FIXME: Add threshold for choosing single-end alignments
+        for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+            if (read[r]->getDataLength() < minReadLength) {
+                result->status[r] = NotFound;
+                result->mapq[r] = 0;
+                result->direction[r] = FORWARD;
+                result->location[r] = 0;
+                result->score[r] = 0;
+                result->usedAffineGapScoring[r] = false;
+                result->basesClippedBefore[r] = 0;
+                result->basesClippedAfter[r] = 0;
+                result->agScore[r] = 0;
+            }
+            else {
+                result->status[r] = singleResult[r].status;
+                result->mapq[r] = singleResult[r].mapq / 3;   // Heavy quality penalty for chimeric reads
+                result->direction[r] = singleResult[r].direction;
+                result->location[r] = singleResult[r].location;
+                result->score[r] = singleResult[r].score;
+                result->scorePriorToClipping[r] = singleResult[r].scorePriorToClipping;
+                result->usedAffineGapScoring[r] = singleResult[r].usedAffineGapScoring;
+                result->basesClippedBefore[r] = singleResult[r].basesClippedBefore;
+                result->basesClippedAfter[r] = singleResult[r].basesClippedAfter;
+                result->agScore[r] = singleResult[r].agScore;
+                _ASSERT(result->basesClippedAfter[r] >= 0);
+                _ASSERT(result->basesClippedBefore[r] >= 0);
+            }
+        }
+        result->fromAlignTogether = false;
+        result->alignedAsPair = false;
+    }
 
 #ifdef _DEBUG
     if (_DumpAlignments) {
