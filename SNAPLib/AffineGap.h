@@ -409,7 +409,7 @@ public:
         CigarFormat format, int* o_cigarBufUsed,
         int* o_addFrontClipping, int *o_netDel = NULL, int* o_tailIns = NULL);
 
-    bool AffineGapWithCigar::writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format);
+    bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format);
 
 private:
 

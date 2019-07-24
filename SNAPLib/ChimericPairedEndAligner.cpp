@@ -185,7 +185,7 @@ bool ChimericPairedEndAligner::align(
         
         int maxScore = __max(result->score[0], result->score[1]);
 
-        if ((result->usedAffineGapScoring[0] || result->usedAffineGapScoring[1]) && maxScore >= 5) { // FIXME: Replace 5 with parameter
+        if ((result->usedAffineGapScoring[0] || result->usedAffineGapScoring[1]) && maxScore >= 3) { // FIXME: Replace 3 with parameter
             compareWithSingleEndAlignment = true;
         }
         
@@ -247,7 +247,7 @@ bool ChimericPairedEndAligner::align(
         }
     }
 
-    if (!compareWithSingleEndAlignment || (singleEndAGScore >= pairAGScore + 17)) { // FIXME: Add threshold for choosing single-end alignments
+    if (!compareWithSingleEndAlignment || (singleEndAGScore >= pairAGScore + 12)) { // FIXME: Add threshold for choosing single-end alignments
         for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
             if (read[r]->getDataLength() < minReadLength) {
                 result->status[r] = NotFound;

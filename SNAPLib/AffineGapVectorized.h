@@ -53,6 +53,13 @@ public:
 
     static size_t getBigAllocatorReservation() { return sizeof(AffineGapVectorized<TEXT_DIRECTION>); }
 
+    // return (~mask)*v1 | (mask)*v2
+    static inline __m128i blend_sse(__m128i v1, __m128i v2, __m128i mask) {
+        v1 = _mm_andnot_si128(mask, v1);
+        v1 = _mm_or_si128(v1, _mm_and_si128(mask, v2));
+        return v1;
+    }
+
     ~AffineGapVectorized()
     {
     }
@@ -202,6 +209,7 @@ public:
         __m128i v_gapOpen = _mm_set1_epi16(gapOpenPenalty);
         __m128i v_gapExtend = _mm_set1_epi16(gapExtendPenalty);
         __m128i v_scoreInit = _mm_set1_epi16(scoreInit);
+        __m128i v_mask = _mm_cmpgt_epi16(_mm_set_epi16(0, 0, 0, 0, 0, 0, 0, 1), v_zero);
 
         //
         // Initialize scores of first row
@@ -260,7 +268,8 @@ public:
                 hInit = __max(0, scoreInit - gapOpenPenalty - (i - 1) * gapExtendPenalty);
             }
             __m128i v_hInit = _mm_set1_epi16(hInit);
-            h = _mm_blend_epi16(h, v_hInit, 1);
+            // h = _mm_blend_epi16(h, v_hInit, 1); // Does not work with SSE !
+            h = blend_sse(h, v_hInit, v_mask);
 
             for (int j = 0; j < numVec; j++) {
 

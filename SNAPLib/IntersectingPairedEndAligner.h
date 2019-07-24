@@ -363,7 +363,7 @@ private:
             unsigned            *score,
             double              *matchProbability,
             int                 *genomeLocationOffset,   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
-            bool                *usedAffineGapScoring = false,
+            bool                *usedAffineGapScoring = NULL,
             int                 *basesClippedBefore = NULL,
             int                 *basesClippedAfter = NULL,
             int                 *agScore = NULL
