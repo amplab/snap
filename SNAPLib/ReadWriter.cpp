@@ -567,6 +567,8 @@ SimpleReadWriter::writePairs(
                 }
 
                 if (writeOrder[0] != newWriteOrder[0] || writeOrder[1] != newWriteOrder[1]) {
+                    writeOrder[0] = newWriteOrder[0];
+                    writeOrder[1] = newWriteOrder[1];
                     writeOrderChanged = true;
                 }
 
