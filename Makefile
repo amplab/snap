@@ -63,8 +63,8 @@ SNAPCommand: $(LIB_OBJ) $(SNAPCOMMAND_OBJ)
 
 snapxl:
 	make clean
-	make snap CXXFLAGS="-DLONG_READS $(CXXFLAGS)"
-	mv snap snapxl
+	make snap-aligner CXXFLAGS="-DLONG_READS $(CXXFLAGS)"
+	mv snap-aligner snapxl-aligner
 	make clean
 
 roc: $(LIB_OBJ) $(ROC_OBJ)
