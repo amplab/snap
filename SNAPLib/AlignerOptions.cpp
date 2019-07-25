@@ -58,7 +58,7 @@ AlignerOptions::AlignerOptions(
     rgLineContents("@RG\tID:FASTQ\tPL:Illumina\tPU:pu\tLB:lb\tSM:sm"),
     perfFileName(NULL),
     useTimingBarrier(false),
-    extraSearchDepth(2),
+    extraSearchDepth(1),
     defaultReadGroup("FASTQ"),
     seedCountSpecified(false),
     minWeightToCheck(1),
@@ -157,7 +157,7 @@ AlignerOptions::usageMessage()
         "  -pf  specify the name of a file to contain the run speed\n"
         "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)  This is the default\n"
         "  -hp  Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
-        "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
+        "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default %d\n"
         "  -rg  Specify the default read group if it is not specified in the input file\n"
         "  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
         "       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
@@ -228,7 +228,8 @@ AlignerOptions::usageMessage()
             maxHits,
 			minWeightToCheck,
             MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
-            expansionFactor,
+			extraSearchDepth,
+			expansionFactor,
 			DEFAULT_MIN_READ_LENGTH,
             matchReward,
             subPenalty,
