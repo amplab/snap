@@ -433,10 +433,12 @@ SimpleReadWriter::writePairs(
 
             bool secondReadLocationChanged;
             int cumulativePositiveAddFrontClipping[NUM_READS_PER_PAIR] = { 0, 0 };
+            bool writeOrderChanged;
 
             do {
                 size_t tentativeUsed = 0;
                 secondReadLocationChanged = false;
+                writeOrderChanged = false;
 
 
                 int writeOrder[2];  // The order in which we write the reads, which is just numerical by genome location.  SO writeOrder[0] gets written first, and writeOrder[1] second.
@@ -553,7 +555,22 @@ SimpleReadWriter::writePairs(
                     tentativeUsed += usedBuffer[firstOrSecond][whichAlignmentPair];
                 } // for first or second read
 
-            } while (secondReadLocationChanged);
+                // Check if the write order is correct, if not redo
+                int newWriteOrder[2];
+                if (locations[0] <= locations[1]) {
+                    newWriteOrder[0] = 0;
+                    newWriteOrder[1] = 1;
+                }
+                else {
+                    newWriteOrder[0] = 1;
+                    newWriteOrder[1] = 0;
+                }
+
+                if (writeOrder[0] != newWriteOrder[0] || writeOrder[1] != newWriteOrder[1]) {
+                    writeOrderChanged = true;
+                }
+
+            } while (secondReadLocationChanged || writeOrderChanged);
             used += usedBuffer[0][whichAlignmentPair] + usedBuffer[1][whichAlignmentPair];
 
             //

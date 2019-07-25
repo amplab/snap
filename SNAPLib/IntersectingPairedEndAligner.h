@@ -110,6 +110,14 @@ public:
          return nLocationsScored;
      }
 
+    void setMinSpacing(int minSpacing_) {
+        minSpacing = minSpacing_;
+    }
+
+    void setMaxSpacing(int maxSpacing_) {
+        maxSpacing = maxSpacing_;
+    }
+
 
 private:
 

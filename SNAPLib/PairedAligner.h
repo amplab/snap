@@ -29,6 +29,12 @@ Revision History:
 
 struct PairedAlignerStats;
 
+static const int DEFAULT_BATCH_SIZE_IS_ESTIMATION = 256 * 1024;
+// Parameters from BWA-MEM
+static const int OUTLIER_BOUND = 2;
+static const int MAPPING_BOUND = 3;
+static const int MAX_STDDEV = 4;
+
 class PairedAlignerContext : public AlignerContext
 {
 public:
@@ -53,6 +59,8 @@ protected:
 
     bool isPaired() {return true;}
 
+    void computeSpacingDist(GenomeDistance* pairedEndSpacing, int* minSpacing, int* maxSpacing, double* avg, double* stddev);
+
 protected:
 
     virtual void typeSpecificBeginIteration();
@@ -68,6 +76,10 @@ protected:
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
     bool                quicklyDropUnpairedReads;
+    bool                inferSpacing;
+
+    GenomeDistance pairedEndSpacing[DEFAULT_BATCH_SIZE_IS_ESTIMATION];      // Spacing between reads aligned as FR pairs
+    static int compareBySpacing(const void *first_, const void *second_);
 
 	friend class AlignerContext2;
 };
@@ -88,4 +100,5 @@ struct PairedAlignerOptions : public AlignerOptions
     unsigned    intersectingAlignerMaxHits;
     unsigned    maxCandidatePoolSize;
     bool        quicklyDropUnpairedReads;
+    bool        inferSpacing;
 };

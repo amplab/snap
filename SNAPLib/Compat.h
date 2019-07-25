@@ -37,6 +37,7 @@ typedef unsigned short _uint16;
 
 static const double LOG10 = log(10.0);
 inline double exp10(double x) { return exp(x * LOG10); }
+static const double SQRT1_2 = 0.707106781186547524401;
 
 const void* memmem(const void* data, const size_t dataLength, const void* pattern, const size_t patternLength);
 

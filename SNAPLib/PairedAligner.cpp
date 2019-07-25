@@ -231,7 +231,8 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     forceSpacing(false),
     intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
     maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
-    quicklyDropUnpairedReads(true)
+    quicklyDropUnpairedReads(true),
+    inferSpacing(false)
 {
 }
 
@@ -253,6 +254,7 @@ void PairedAlignerOptions::usageMessage()
         "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
         "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
         "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
+        "  -ins infer min and max spacing by aligning a batch of reads. Default: false\n"
         ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
@@ -296,7 +298,11 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         filterFlags |= FilterBothMatesMatch;
         n += 1;
         return true;
+    } else if (strcmp(argv[n], "-ins") == 0) {
+        inferSpacing = true;
+        return true;
     }
+
     return AlignerOptions::parse(argv, argc, n, done);
 }
 
@@ -318,6 +324,7 @@ bool PairedAlignerContext::initialize()
     quicklyDropUnpairedReads = options2->quicklyDropUnpairedReads;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
+    inferSpacing = options2->inferSpacing;
 
 	return true;
 }
@@ -333,6 +340,61 @@ void PairedAlignerContext::runTask()
     task.run();
 }
 
+int
+PairedAlignerContext::compareBySpacing(const void *first_, const void *second_)
+{
+    const GenomeDistance firstDist = *(GenomeDistance *)first_;
+    const GenomeDistance secondDist = *(GenomeDistance *)second_;
+
+    if (firstDist < secondDist) {
+        return -1;
+    }
+    else if (firstDist > secondDist) {
+        return 1;
+    }
+    else {
+        return 0;
+    }
+}
+
+//
+// Compute paired-end insert size distribution based on BWA-MEM
+//
+void PairedAlignerContext::computeSpacingDist(GenomeDistance* pairedEndSpacing, int* minSpacing, int* maxSpacing, double* avg, double* stddev) {
+    GenomeDistance s25, s75; // Lower quartile and Upper Quartile
+    s25 = pairedEndSpacing[int(.25 * DEFAULT_BATCH_SIZE_IS_ESTIMATION)]; // .499 for rounding up
+    s75 = pairedEndSpacing[int(.75 * DEFAULT_BATCH_SIZE_IS_ESTIMATION)];
+
+    *minSpacing = (int)__max(s25 - OUTLIER_BOUND * (s75 - s25), 1);
+    *maxSpacing = (int)(s75 + OUTLIER_BOUND * (s75 - s25));
+
+    double sum = 0;
+    int count = 0;
+    for (int i = 0; i < DEFAULT_BATCH_SIZE_IS_ESTIMATION; i++) {
+        if (pairedEndSpacing[i] >= *minSpacing && pairedEndSpacing[i] <= *maxSpacing) {
+            sum += pairedEndSpacing[i];
+            count++;
+        }
+    }
+    *avg = sum / count;
+
+    sum = 0;
+    for (int i = 0; i < DEFAULT_BATCH_SIZE_IS_ESTIMATION; i++) {
+        if (pairedEndSpacing[i] >= *minSpacing && pairedEndSpacing[i] <= *maxSpacing) {
+            sum += ((pairedEndSpacing[i] - *avg) * (pairedEndSpacing[i] - *avg));
+        }
+    }
+    *stddev = sqrt(sum / count);
+
+    *minSpacing = (int)(s25 - MAPPING_BOUND * (s75 - s25));
+    *maxSpacing = (int)(s75 + MAPPING_BOUND * (s75 - s25));
+
+    *minSpacing = (int)__min(*avg - MAX_STDDEV * (*stddev), *minSpacing);
+    *maxSpacing = (int)__max(*avg + MAX_STDDEV * (*stddev), *maxSpacing);
+
+    *minSpacing = __max(*minSpacing, 1);
+
+}
 
 void PairedAlignerContext::runIterationThread()
 {
@@ -474,6 +536,7 @@ void PairedAlignerContext::runIterationThread()
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
 
+    _uint64 readIdxInBatch = 0;
     _int64 startTime = timeInMillis();
     while (supplier->getNextReadPair(&reads[0],&reads[1])) {
         _int64 readFinishedTime;
@@ -635,10 +698,42 @@ void PairedAlignerContext::runIterationThread()
 
         stats->extraAlignments += nSecondaryResults + (firstIsPrimary ? 0 : 1); // If first isn't primary, it's secondary.
 
+        if (inferSpacing) {
+            pairedEndSpacing[readIdxInBatch] = 0;
+        }
+
         if (firstIsPrimary) {
             updateStats((PairedAlignerStats*)stats, reads[0], reads[1], &results[0], useful0, useful1);
+            if (inferSpacing) {
+                if ((results[0].direction[0] == FORWARD && results[0].direction[1] == RC) ||
+                    (results[0].direction[0] == RC && results[0].direction[1] == FORWARD)) {
+                    pairedEndSpacing[readIdxInBatch] = DistanceBetweenGenomeLocations(results[0].location[0], results[0].location[1]);
+                    readIdxInBatch++;
+                }
+            }
         } else {
             stats->filtered += 2;
+        }
+
+        if (inferSpacing) {
+            // Compute new minSpacing and maxSpacing for batch
+            if (readIdxInBatch == DEFAULT_BATCH_SIZE_IS_ESTIMATION) {
+
+                // Sort all alignments based on spacing
+                qsort(pairedEndSpacing, DEFAULT_BATCH_SIZE_IS_ESTIMATION, sizeof(GenomeDistance), compareBySpacing);
+
+                int newMinSpacing = minSpacing, newMaxSpacing = maxSpacing;
+                double avg, stddev;
+                computeSpacingDist(pairedEndSpacing, &newMinSpacing, &newMaxSpacing, &avg, &stddev);
+
+                // fprintf(stderr, "SNAP paired-end read spacing (min, max, avg, stddev) = (%d, %d, %.3f, %.3f)\n", newMinSpacing, newMaxSpacing, avg, stddev);
+
+                // Update min and max spacing for paired-end aligner
+                intersectingAligner->setMinSpacing(newMinSpacing);
+                intersectingAligner->setMaxSpacing(newMaxSpacing);
+
+                readIdxInBatch = 0;
+            }
         }
     }   // while we have a read pair
 
