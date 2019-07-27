@@ -1211,12 +1211,12 @@ Return Value:
                 // all candidates for each we can terminate early without exploring any more MAPQ 0 alignments
                 // i.e., -10 log10(1 - 1/x) < 1 
                 // i.e.,  x > 4.86 ~ 4.9
-                if (probabilityOfAllCandidates >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
-                    //
-                    // Nothing will rescue us from a 0 MAPQ, so just stop looking.
-                    //
-                    return true;
-                }
+                //if (probabilityOfAllCandidates >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
+                //    //
+                //    // Nothing will rescue us from a 0 MAPQ, so just stop looking.
+                //    //
+                //    return true;
+                //}
 
                 // Update scoreLimit since we may have improved bestScore or secondBestScore
                 if (!noUkkonen) {   // If we've turned off Ukkonen, then don't drop the score limit, just leave it at maxK + extraSearchDepth always
