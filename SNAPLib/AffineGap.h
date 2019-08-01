@@ -86,6 +86,7 @@ int computeScore(
         int w,
         int scoreInit,
         int *o_textOffset = NULL,
+        int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
         double *matchProbability = NULL)
 {
@@ -96,13 +97,17 @@ int computeScore(
         _ASSERT(w < MAX_K);
         _ASSERT(textLen <= MAX_READ_LENGTH + MAX_K);
 
-        int localTextOffset;
+        int localTextOffset, localPatternOffset;
         if (NULL == o_textOffset) {
             //
             // If the user doesn't want textOffset, just use a stack local to avoid
             // having to check it all the time.
             //
             o_textOffset = &localTextOffset;
+        }
+
+        if (NULL == o_patternOffset) {
+            o_patternOffset = &localPatternOffset;
         }
 
         w = __min(MAX_K - 1, w); // enforce limit even in non-debug builds
@@ -171,19 +176,32 @@ int computeScore(
 
         int score = -1; // Final alignment score to be returned. 
 
+        // We keep track of the best score and text offset for global and local alignment separately.
+        // These are used to choose between global and local alignment for the {text, pattern} pair
+        int bestGlobalAlignmentScore = -1;
+        int bestGlobalAlignmentTextOffset = -1;
+        int bestLocalAlignmentScore = -1;
+        int bestLocalAlignmentTextOffset = -1;
+        int bestLocalAlignmentPatternOffset = -1;
+
         *o_textOffset = -1; // # Characters of text used for aligning against the pattern
+        *o_patternOffset = -1; // # Characters of pattern used for obtaining the maximum score. Ideally we would like to use the full pattern
         *o_nEdits = -1;
 
+        int beg = 0, end = patternLen;
         // Iterate over all rows of text
         for (int i = 0; i < textLen; i++) {
-            // Compute only a 2w+1 band along the main diagonal
-            int beg = __max(i - w, 0);
-            int end = __min(i + w + 1, patternLen);
+            // Compute only a 2w+1 band
+            if (beg < i - w) beg = i - w;
+            if (end > i + w + 1) end = i + w + 1;
+            if (end > patternLen) end = patternLen;
 
             const char* t = (text + i * TEXT_DIRECTION);
 
             // Get the query profile for the row
             _int8* qRowProfile = &qProfile[BASE_VALUE[*t] * patternLen];
+
+            _mm_prefetch((const char*)&qProfile[BASE_VALUE[*(t + TEXT_DIRECTION)] * patternLen], _MM_HINT_T0);
 
             int hLeft = 0, fCurr = 0;
 
@@ -223,8 +241,9 @@ int computeScore(
                 int hCurr = __max(hDiag, E[j]);
                 action = (hCurr >= fCurr) ? action : 'I';
                 hCurr = __max(hCurr, fCurr);
-                backtraceAction[i][j - beg][0] = action;
+                backtraceAction[i][j][0] = action;
 
+                bestLocalAlignmentPatternOffset = (hCurr >= maxScoreRow) ? j : bestLocalAlignmentPatternOffset;
                 maxScoreRow = __max(maxScoreRow, hCurr);                
 
 #ifdef PRINT_SCORES
@@ -246,14 +265,14 @@ int computeScore(
                 E[j] -= gapExtendPenalty;
                 action = (E[j] > hTemp) ? 'D' : 'M';
                 E[j] = __max(hTemp, E[j]);
-                backtraceAction[i][j - beg][1] = action;
+                backtraceAction[i][j][1] = action;
 
                 fCurr -= gapExtendPenalty;
                 action = (fCurr > hTemp) ? 'I' : 'M';
                 fCurr = __max(hTemp, fCurr);
-                backtraceAction[i][j - beg][2] = action;
+                backtraceAction[i][j][2] = action;
 
-            }
+            } // end pattern
             H[end] = hLeft;
             E[end] = 0;
 
@@ -261,34 +280,58 @@ int computeScore(
             printf("\n");
 #endif
 
+            if (end == patternLen) { // we got a semi-global alignment
+                int globalAlignmentScore = H[end];
+                if (globalAlignmentScore >= bestGlobalAlignmentScore) {
+                    bestGlobalAlignmentScore = globalAlignmentScore;
+                    bestGlobalAlignmentTextOffset = i;
+                }
+            }
+
             // All scores in row are zero. Break out and report local alignment
             if (maxScoreRow == 0) {
                 break;
             }
 
-            if (end == patternLen) { // we got a semi-global alignment
-                if (H[end] >= score) {
-                    score = H[end];
-                    *o_textOffset = i;
-                }
+            if (maxScoreRow > bestLocalAlignmentScore) { // If we obtained a better score this round  
+                bestLocalAlignmentScore = maxScoreRow;
+                bestLocalAlignmentTextOffset = i;
             }
+
+            // BWA-MEM's band narrowing heuristic
+            int j;
+            for (j = beg; j < end && H[j] == 0 && E[j] == 0; ++j);
+            beg = j;
+            for (j = end; j >= beg && H[j] == 0 && E[j] == 0; --j);
+            end = j + 2; 
+
+        } // end text
+
+        // Choose between local and global alignment for patternOffset
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
+            // Local alignment preferred
+            *o_patternOffset = bestLocalAlignmentPatternOffset;
+            *o_textOffset = bestLocalAlignmentTextOffset;
+            score = bestLocalAlignmentScore;
+        }
+        else {
+            // Global alignment preferred
+            *o_patternOffset = patternLen - 1;
+            *o_textOffset = bestGlobalAlignmentTextOffset;
+            score = bestGlobalAlignmentScore;
         }
 
-        if (score > scoreInit) {
-            int rowIdx = *o_textOffset, colIdx = patternLen - 1, matrixIdx = 0;
+        if (bestGlobalAlignmentScore > scoreInit) {
+            int rowIdx = bestGlobalAlignmentTextOffset, colIdx = patternLen - 1, matrixIdx = 0;
+            if (abs(rowIdx - colIdx) > w) return -1;
             char action = 'M', prevAction = 'M';
             int actionCount = 1; 
             int nMatches = 0, nMismatches = 0, nGaps = 0;
  
             // Start traceback from the cell (i,j) with the maximum score
             while (rowIdx >= 0 && colIdx >= 0) {
-                int actionIdx = (rowIdx > w) ? colIdx - (rowIdx - w) : colIdx; // Colidx can span patternLen, while backtrack actions are stored only within band w.
-                // debugging
-                //if (actionIdx < 0) {
-                //    WriteErrorMessage("Invalid traceback action: %d. (r,c,w) : (%d,%d,%d). Text:%.*s. Pattern:%.*s\n", actionIdx, rowIdx, colIdx, w, textLen, text, patternLen, pattern);
-                //}
-                _ASSERT(actionIdx >= 0);
-                action = backtraceAction[rowIdx][actionIdx][matrixIdx];
+                action = backtraceAction[rowIdx][colIdx][matrixIdx];
+                _ASSERT(action == 'M' || action == 'I' || action == 'D');
                 if (action == 'M') {
                     if (pattern[colIdx] != text[rowIdx * TEXT_DIRECTION]) {
                         // Compute probabilties of mismatches
@@ -317,6 +360,11 @@ int computeScore(
                     }
                 }
                 prevAction = action;
+                /*
+                if (nMismatches + nGaps > w) {
+                    return -1;
+                }
+                */
             }
             if (rowIdx >= 0) { // deletion just after the seed
                 actionCount = rowIdx + 1;
@@ -336,8 +384,10 @@ int computeScore(
             *matchProbability *= lv_perfectMatchProbability[nMatches];
             
             *o_textOffset += 1;
+            *o_patternOffset += 1;
 
             *o_textOffset = patternLen - *o_textOffset;
+            *o_patternOffset = patternLen - *o_patternOffset;
             
             return score;
         }
@@ -435,8 +485,8 @@ private:
 
     //
     // Pointers to traceback alignment, one for each of the three affine-gap matrices, H, E and F
-    //
-    char backtraceAction[(MAX_READ_LENGTH + MAX_K)][(2 * MAX_K + 1)][3];
+    //S
+    char backtraceAction[(MAX_READ_LENGTH + MAX_K)][MAX_READ_LENGTH][3];
 
     //
     // Structure used for storing (action, count) pairs from backtracking

@@ -155,16 +155,16 @@ Arguments:
     }
 
     if (allocator) {
-        // affineGap = new (allocator) AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        // reverseAffineGap = new (allocator) AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        affineGap = new (allocator) AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        reverseAffineGap = new (allocator) AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        affineGap = new (allocator) AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        reverseAffineGap = new (allocator) AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // affineGap = new (allocator) AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // reverseAffineGap = new (allocator) AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
     else {
-        // affineGap = new AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        // reverseAffineGap = new AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        affineGap = new AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        reverseAffineGap = new AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        affineGap = new AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        reverseAffineGap = new AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // affineGap = new AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // reverseAffineGap = new AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
 
     unsigned maxSeedsToUse;
@@ -930,7 +930,7 @@ Return Value:
                     score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
                         scoreLimit, &matchProb1, NULL, &totalIndels);
 
-                    agScore1 = (seedLen + (readLen - tailStart - score1) * matchReward - score1 * subPenalty);
+                    agScore1 = (seedLen + readLen - tailStart - score1) * matchReward - score1 * subPenalty;
 
                     if (score1 == -1) {
                         score = -1;
@@ -975,7 +975,7 @@ Return Value:
                                 read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
                                 seedOffset,
                                 limitLeft,
-                                readLen - seedOffset, // FIXME: Assumes the rest of the read matches exactly
+                                seedLen, // FIXME: Assumes the rest of the read matches exactly
                                 &genomeLocationOffset,
                                 &basesClippedBefore,
                                 &score2,
@@ -983,7 +983,7 @@ Return Value:
 
                             usedAffineGapScoring = true;
 
-                            agScore2 -= (readLen - seedOffset);
+                            agScore2 -= (seedLen);
 
                             if (score2 == -1) {
                                 score = -1;
@@ -1032,8 +1032,8 @@ Return Value:
                 // cause us to lose confidence in the alignment, since they're probably both pretty good).
                 //
                 if (anyNearbyCandidatesAlreadyScored) {
-                    // if (elementToScore->bestScore < score || elementToScore->bestScore == score && matchProbability <= elementToScore->matchProbabilityForBestScore) {
-                    if (matchProbability <= elementToScore->matchProbabilityForBestScore) {
+                    if (elementToScore->bestScore < score || elementToScore->bestScore == score && matchProbability <= elementToScore->matchProbabilityForBestScore) {
+                    // if (matchProbability <= elementToScore->matchProbabilityForBestScore) {
 						//
                         // This is a no better mapping than something nearby that we already tried.  Just ignore it.
                         //
@@ -1084,8 +1084,8 @@ Return Value:
                     }
 
                     if (NULL != nearbyElement) {
-                        // if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
-						if (nearbyElement->matchProbabilityForBestScore >= matchProbability) {
+                        if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
+						// if (nearbyElement->matchProbabilityForBestScore >= matchProbability) {
                             //
                             // Again, this no better than something nearby we already tried.  Give up.
                             //
@@ -1102,9 +1102,9 @@ Return Value:
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
-                // if (bestScore > score ||
-                //    (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
-				if (matchProbability > probabilityOfBestCandidate) {
+                if (bestScore > score ||
+                   (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
+				// if (matchProbability > probabilityOfBestCandidate) {
                     //
                     // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
                     //
@@ -1121,7 +1121,7 @@ Return Value:
                     //
                     // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
                     //
-					if (bestScore >= score) {
+					// if (bestScore >= score) {
 						if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
 							if (secondaryResultBufferSize <= *nSecondaryResults) {
 								*overflowedSecondaryBuffer = true;
@@ -1144,7 +1144,7 @@ Return Value:
 
 							(*nSecondaryResults)++;
 						}
-					}
+					// }
                     bestScore = score;
                     probabilityOfBestCandidate = matchProbability;
                     _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
@@ -1448,12 +1448,12 @@ Return Value:
         }
 
         if (NULL != affineGap) {
-            // affineGap->~AffineGap();
-            affineGap->~AffineGapVectorized();
+            affineGap->~AffineGap();
+            // affineGap->~AffineGapVectorized();
         }
         if (NULL != reverseAffineGap) {
-            // reverseAffineGap->~AffineGap();
-            reverseAffineGap->~AffineGapVectorized();
+            reverseAffineGap->~AffineGap();
+            // reverseAffineGap->~AffineGapVectorized();
         }
 
     } else {
@@ -1611,10 +1611,10 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         (ownLandauVishkin ?
             LandauVishkin<>::getBigAllocatorReservation() +
             LandauVishkin<-1>::getBigAllocatorReservation() : 0)        + // our LandauVishkin objects
-        // AffineGap<>::getBigAllocatorReservation()                       + 
-        // AffineGap<-1>::getBigAllocatorReservation()                     + // our AffineGap objects
-        AffineGapVectorized<>::getBigAllocatorReservation()             + 
-        AffineGapVectorized<-1>::getBigAllocatorReservation()          + // our AffineGap objects
+        AffineGap<>::getBigAllocatorReservation()                       + 
+        AffineGap<-1>::getBigAllocatorReservation()                     + // our AffineGap objects
+        // AffineGapVectorized<>::getBigAllocatorReservation()             + 
+        // AffineGapVectorized<-1>::getBigAllocatorReservation()          + // our AffineGap objects
         sizeof(char) * maxReadSize * 2                                  + // rcReadData
         sizeof(char) * maxReadSize * 4 + 2 * MAX_K                      + // reversed read (both)
         sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                      + // seed used

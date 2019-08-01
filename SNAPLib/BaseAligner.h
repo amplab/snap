@@ -128,11 +128,11 @@ private:
     LandauVishkin<-1> *reverseLandauVishkin;
     bool ownLandauVishkin;
 
-    // AffineGap<> *affineGap;
-    // AffineGap<-1> *reverseAffineGap;
+    AffineGap<> *affineGap;
+    AffineGap<-1> *reverseAffineGap;
 
-    AffineGapVectorized<> *affineGap;
-    AffineGapVectorized<-1> *reverseAffineGap;
+    // AffineGapVectorized<> *affineGap;
+    // AffineGapVectorized<-1> *reverseAffineGap;
 
     // Affine gap scoring parameters
     int matchReward;

@@ -98,10 +98,10 @@ private:
     LandauVishkin<1> lv;
     LandauVishkin<-1> reverseLV;
 
-    // AffineGap<1> ag;
-    // AffineGap<-1> reverseAG;
-    AffineGapVectorized<1> ag;
-    AffineGapVectorized<-1> reverseAG;
+    AffineGap<1> ag;
+    AffineGap<-1> reverseAG;
+    // AffineGapVectorized<1> ag;
+    // AffineGapVectorized<-1> reverseAG;
 
 	GenomeIndex *index;
 	unsigned	minReadLength;

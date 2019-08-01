@@ -61,10 +61,10 @@ public:
     }
 
     virtual void setAffineGap(
-        AffineGapVectorized<1>        *affineGap,
-        AffineGapVectorized<-1>       *reverseAffineGap)
-        // AffineGap<1>        *affineGap,
-        // AffineGap<-1>       *reverseAffineGap)
+        // AffineGapVectorized<1>        *affineGap,
+        // AffineGapVectorized<-1>       *reverseAffineGap)
+        AffineGap<1>        *affineGap,
+        AffineGap<-1>       *reverseAffineGap)
     {
     }
 
