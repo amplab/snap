@@ -486,7 +486,7 @@ private:
     //
     // Pointers to traceback alignment, one for each of the three affine-gap matrices, H, E and F
     //S
-    char backtraceAction[(MAX_READ_LENGTH + MAX_K)][2 * MAX_K + 1][3];
+    char backtraceAction[(MAX_READ_LENGTH + MAX_K)][MAX_READ_LENGTH][3];
 
     //
     // Structure used for storing (action, count) pairs from backtracking

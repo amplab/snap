@@ -919,8 +919,7 @@ Return Value:
 
                     // Compute maxK for which edit distance and affine gap scoring report the same alignment
                     // GapOpenPenalty + k.GapExtendPenalty >= k * SubPenalty
-                    // int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
-                    int maxKForSameAlignment = 1;
+                    int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
 
                     int totalIndels = 0;
                     int genomeLocationOffset;
@@ -935,7 +934,7 @@ Return Value:
                     if (score1 == -1) {
                         score = -1;
                     }
-                    else if (useAffineGap && ((totalIndels > 1) || (score1 > maxKForSameAlignment))) {
+                    else if (useAffineGap && (score1 > maxKForSameAlignment)) {
                         agScore1 = affineGap->computeScore(data + tailStart,
                             textLen,
                             readToScore->getData() + tailStart,
@@ -968,7 +967,7 @@ Return Value:
                         if (score2 == -1) {
                             score = -1;
                         }
-                        else if (useAffineGap && ((totalIndels > 1) || (score2 > maxKForSameAlignment))) {
+                        else if (useAffineGap && (score2 > maxKForSameAlignment)) {
                             agScore2 = reverseAffineGap->computeScore(data + seedOffset,
                                 seedOffset + limitLeft,
                                 reversedRead[elementToScore->direction] + readLen - seedOffset,
@@ -1208,15 +1207,15 @@ Return Value:
 
                 // Taken from intersecting paired-end aligner.
                 // Assuming maximum probability among unseen candidates is 1 and MAPQ < 1, find probability of
-                // all candidates for each we can terminate early without exploring any more MAPQ 0 alignments
+                // all candidates for which we can terminate early without exploring any more MAPQ < 1 alignments
                 // i.e., -10 log10(1 - 1/x) < 1 
-                // i.e.,  x > 4.86 ~ 4.9
-                //if (probabilityOfAllCandidates >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
-                //    //
-                //    // Nothing will rescue us from a 0 MAPQ, so just stop looking.
-                //    //
-                //    return true;
-                //}
+                // i.e.,  x > 4.89 ~ 4.9
+                if (probabilityOfAllCandidates >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
+                    //
+                    // nothing will rescue us from a 0 mapq, so just stop looking.
+                    //
+                    return true;
+                }
 
                 // Update scoreLimit since we may have improved bestScore or secondBestScore
                 if (!noUkkonen) {   // If we've turned off Ukkonen, then don't drop the score limit, just leave it at maxK + extraSearchDepth always

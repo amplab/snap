@@ -225,7 +225,7 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
             int hCurr = __max(hDiag, E[j]);
             action = (hCurr >= fCurr) ? action : 'I';
             hCurr = __max(hCurr, fCurr);
-            backtraceAction[i][j - beg][0] = action;
+            backtraceAction[i][j][0] = action;
 
 #ifdef PRINT_SCORES
             printf("%d,", hCurr);
@@ -246,12 +246,12 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
             E[j] -= gapExtendPenalty;
             action = (E[j] > hTemp) ? 'D' : 'M';
             E[j] = __max(hTemp, E[j]);
-            backtraceAction[i][j - beg][1] = action;
+            backtraceAction[i][j][1] = action;
 
             fCurr -= gapExtendPenalty;
             action = (fCurr > hTemp) ? 'I' : 'M';
             fCurr = __max(hTemp, fCurr);
-            backtraceAction[i][j - beg][2] = action;
+            backtraceAction[i][j][2] = action;
 
         } // end of pattern
         H[end] = hLeft;
@@ -279,12 +279,7 @@ int AffineGapWithCigar::computeGlobalScore(const char* text, int textLen, const 
         int actionCount = 1;
         // Start traceback from the cell (i,j) with the maximum score
         while (rowIdx >= 0 && colIdx >= 0) {
-            int actionIdx = (rowIdx > w) ? colIdx - (rowIdx - w) : colIdx; // ColIdx can span patternLen, while backtrack actions are stored only within band w.
-            //if (actionIdx < 0) {
-            //    WriteErrorMessage("Invalid traceback action: %d. (r,c,w) : (%d,%d,%d). Text:%.*s. Pattern:%.*s\n", actionIdx, rowIdx, colIdx, w, textLen, text, patternLen, pattern);
-            //}
-            _ASSERT(actionIdx >= 0);
-            action = backtraceAction[rowIdx][actionIdx][matrixIdx];
+            action = backtraceAction[rowIdx][colIdx][matrixIdx];
             if (action == 'M') {
                 rowIdx--;
                 colIdx--;

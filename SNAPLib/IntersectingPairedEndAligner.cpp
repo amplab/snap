@@ -1100,8 +1100,7 @@ IntersectingPairedEndAligner::scoreLocation(
 
     // Compute maxK for which edit distance and affine gap scoring report the same alignment
     // GapOpenPenalty + k.GapExtendPenalty >= k * SubPenalty
-    // int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
-    int maxKForSameAlignment = 1;
+    int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
 
     int totalIndels = 0;
 
@@ -1113,7 +1112,7 @@ IntersectingPairedEndAligner::scoreLocation(
     if (score1 == -1) {
         *score = -1;
     }
-    else if (useAffineGap && ((totalIndels > 1) || (score1 > maxKForSameAlignment))) { // We conservatively use affine gap scoring whenever totalIndels > 1
+    else if (useAffineGap && (score1 > maxKForSameAlignment)) { // We conservatively use affine gap scoring whenever totalIndels > 1
         // Nothing to the right of the read
         _ASSERT(tailStart != readLen);
         agScore1 = affineGap->computeScore(data + tailStart,
@@ -1145,7 +1144,7 @@ IntersectingPairedEndAligner::scoreLocation(
         if (score2 == -1) {
             *score = -1;
         } 
-        else if (useAffineGap && ((totalIndels > 1) || (score2 > maxKForSameAlignment))) {
+        else if (useAffineGap && (score2 > maxKForSameAlignment)) {
             _ASSERT(seedOffset != 0);
             agScore2 = reverseAffineGap->computeScore(data + seedOffset,
                 seedOffset + limitLeft,
@@ -1153,7 +1152,7 @@ IntersectingPairedEndAligner::scoreLocation(
                 reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
                 seedOffset,
                 limitLeft,
-                readLen - seedOffset, // FIXME: Assumes the rest of the read matches perfectly
+                seedLen, // FIXME: Assumes the rest of the read matches perfectly
                 genomeLocationOffset,
                 basesClippedBefore,
                 &score2,
@@ -1161,7 +1160,7 @@ IntersectingPairedEndAligner::scoreLocation(
 
             *usedAffineGapScoring = true;
 
-            agScore2 -= (readLen - seedOffset);
+            agScore2 -= (seedLen);
 
             if (score2 == -1) {
                 *score = -1;
