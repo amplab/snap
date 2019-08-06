@@ -1111,6 +1111,7 @@ IntersectingPairedEndAligner::scoreLocation(
 
     if (score1 != -1) {
         int limitLeft = scoreLimit - score1;
+        totalIndels = 0;
         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
             reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, genomeLocationOffset, &totalIndels);
 
@@ -1172,8 +1173,9 @@ IntersectingPairedEndAligner::scoreLocation(
 
         *agScore = agScore1 + agScore2;
     }
-
-    if (*score == -1) {
+    else {
+        *score = -1;
+        *agScore = 0;
         *matchProbability = 0;
     }
 }

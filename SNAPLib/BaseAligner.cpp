@@ -1017,6 +1017,7 @@ Return Value:
                         //
                     }
                     else {
+                        score = -1;
                         agScore = 0;
                     }
                 } else { // if we had genome data to compare against
