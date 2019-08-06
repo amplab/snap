@@ -128,11 +128,11 @@ private:
     LandauVishkin<-1> *reverseLandauVishkin;
     bool ownLandauVishkin;
 
-    AffineGap<> *affineGap;
-    AffineGap<-1> *reverseAffineGap;
+    // AffineGap<> *affineGap;
+    // AffineGap<-1> *reverseAffineGap;
 
-    // AffineGapVectorized<> *affineGap;
-    // AffineGapVectorized<-1> *reverseAffineGap;
+    AffineGapVectorized<> *affineGap;
+    AffineGapVectorized<-1> *reverseAffineGap;
 
     // Affine gap scoring parameters
     int matchReward;
@@ -273,6 +273,7 @@ private:
     // them member variables than to pass them around.
     //
     unsigned lowestPossibleScoreOfAnyUnseenLocation[NUM_DIRECTIONS];
+    unsigned currRoundLowestPossibleScoreOfAnyUnseenLocation[NUM_DIRECTIONS];
     unsigned mostSeedsContainingAnyParticularBase[NUM_DIRECTIONS];
     unsigned nSeedsApplied[NUM_DIRECTIONS];
     unsigned bestScore;

@@ -1107,77 +1107,72 @@ IntersectingPairedEndAligner::scoreLocation(
     score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
         scoreLimit, &matchProb1, NULL, &totalIndels);
 
-    agScore1 = (seedLen + (readLen - tailStart - score1) * matchReward - score1 * subPenalty);
+    agScore1 = (seedLen + readLen - tailStart - score1) * matchReward - score1 * subPenalty;
 
-    if (score1 == -1) {
-        *score = -1;
-    }
-    else if (useAffineGap && (score1 > maxKForSameAlignment)) { // We conservatively use affine gap scoring whenever totalIndels > 1
-        // Nothing to the right of the read
-        _ASSERT(tailStart != readLen);
-        agScore1 = affineGap->computeScore(data + tailStart,
-            textLen,
-            readToScore->getData() + tailStart,
-            readToScore->getQuality() + tailStart,
-            readLen - tailStart,
-            scoreLimit,
-            seedLen,
-            NULL,
-            basesClippedAfter,
-            &score1,
-            &matchProb1);
-
-        *usedAffineGapScoring = true;
-
-        if (score1 == -1) {
-            *score = -1;
-            *agScore = 0;
-        }
-    }
     if (score1 != -1) {
         int limitLeft = scoreLimit - score1;
         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
             reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, genomeLocationOffset, &totalIndels);
 
         agScore2 = (seedOffset - score2) * matchReward - score2 * subPenalty;
-
-        if (score2 == -1) {
-            *score = -1;
-        } 
-        else if (useAffineGap && (score2 > maxKForSameAlignment)) {
-            _ASSERT(seedOffset != 0);
-            agScore2 = reverseAffineGap->computeScore(data + seedOffset,
-                seedOffset + limitLeft,
-                reversedRead[whichRead][direction] + readLen - seedOffset,
-                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
-                seedOffset,
-                limitLeft,
-                seedLen, // FIXME: Assumes the rest of the read matches perfectly
-                genomeLocationOffset,
-                basesClippedBefore,
-                &score2,
-                &matchProb2);
-
+    }
+    if (score1 != -1 && score2 != -1) {
+        if (useAffineGap && (score1 + score2) > maxKForSameAlignment) {
+            score1 = 0;  score2 = 0;  agScore1 = seedLen; agScore2 = 0;
             *usedAffineGapScoring = true;
+            if (tailStart != readLen) {
+                agScore1 = affineGap->computeScore(data + tailStart,
+                    textLen,
+                    readToScore->getData() + tailStart,
+                    readToScore->getQuality() + tailStart,
+                    readLen - tailStart,
+                    scoreLimit,
+                    seedLen,
+                    NULL,
+                    basesClippedAfter,
+                    &score1,
+                    &matchProb1);
+            }
+            if (score1 != -1) {
+                if (seedOffset != 0) {
+                    int limitLeft = scoreLimit - score1;
+                    agScore2 = reverseAffineGap->computeScore(data + seedOffset,
+                        seedOffset + limitLeft,
+                        reversedRead[whichRead][direction] + readLen - seedOffset,
+                        reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
+                        seedOffset,
+                        limitLeft,
+                        seedLen, // FIXME: Assumes the rest of the read matches perfectly
+                        genomeLocationOffset,
+                        basesClippedBefore,
+                        &score2,
+                        &matchProb2);
 
-            agScore2 -= (seedLen);
+                    agScore2 -= (seedLen);
 
-            if (score2 == -1) {
+                    if (score2 == -1) {
+                        *score = -1;
+                        *genomeLocationOffset = 0;
+                        *agScore = 0;
+                    }
+                }
+            }
+            else {
                 *score = -1;
                 *genomeLocationOffset = 0;
                 *agScore = 0;
             }
         }
-        if (score2 != -1) {
-            *score = score1 + score2;
-            _ASSERT(*score <= scoreLimit);
-            // Map probabilities for substrings can be multiplied, but make sure to count seed too
-            *matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
-
-            *agScore = agScore1 + agScore2;
-
-        }
     }
+    if (score1 != -1 && score2 != -1) {
+        *score = score1 + score2;
+        _ASSERT(*score <= scoreLimit);
+        // Map probabilities for substrings can be multiplied, but make sure to count seed too
+        *matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+
+        *agScore = agScore1 + agScore2;
+    }
+
     if (*score == -1) {
         *matchProbability = 0;
     }

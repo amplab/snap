@@ -224,7 +224,7 @@ int computeScore(
 
 #ifdef PRINT_SCORES
             for (int j = 0; j < beg; ++j) {
-                printf(" ,");
+                printf("0,");
             }
 #endif
 

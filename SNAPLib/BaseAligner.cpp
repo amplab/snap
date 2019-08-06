@@ -39,6 +39,7 @@ Revision History:
 using std::min;
 
 // #define TRACE_ALIGNER 1
+#define EXACT_DISJOINT_MISS_COUNT 1
 
 #ifdef TRACE_ALIGNER    // If you turn this on, then stdout writing won't work.
 #define TRACE printf
@@ -155,16 +156,16 @@ Arguments:
     }
 
     if (allocator) {
-        affineGap = new (allocator) AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        reverseAffineGap = new (allocator) AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        // affineGap = new (allocator) AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        // reverseAffineGap = new (allocator) AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // affineGap = new (allocator) AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // reverseAffineGap = new (allocator) AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        affineGap = new (allocator) AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        reverseAffineGap = new (allocator) AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
     else {
-        affineGap = new AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        reverseAffineGap = new AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        // affineGap = new AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        // reverseAffineGap = new AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // affineGap = new AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        // reverseAffineGap = new AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        affineGap = new AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        reverseAffineGap = new AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
 
     unsigned maxSeedsToUse;
@@ -425,6 +426,7 @@ Return Value:
     unsigned nextSeedToTest = 0;
     unsigned wrapCount = 0;
     lowestPossibleScoreOfAnyUnseenLocation[FORWARD] = lowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
+    currRoundLowestPossibleScoreOfAnyUnseenLocation[FORWARD] = currRoundLowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
     mostSeedsContainingAnyParticularBase[FORWARD] = mostSeedsContainingAnyParticularBase[RC] = 1;  // Instead of tracking this for real, we're just conservative and use wrapCount+1.  It's faster.
     bestScore = UnusedScoreValue;
     secondBestScore = UnusedScoreValue;
@@ -447,6 +449,7 @@ Return Value:
             // fast, we use use a table lookup.
             //
             wrapCount++;
+
             if (wrapCount >= seedLen) {
                 //
                 // We tried all possible seeds without matching or even getting enough seeds to
@@ -479,6 +482,8 @@ Return Value:
             nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
 
             mostSeedsContainingAnyParticularBase[FORWARD] = mostSeedsContainingAnyParticularBase[RC] = wrapCount + 1;
+
+            currRoundLowestPossibleScoreOfAnyUnseenLocation[FORWARD] = currRoundLowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
         }
 
         while (nextSeedToTest < nPossibleSeeds && IsSeedUsed(nextSeedToTest)) {
@@ -633,6 +638,7 @@ Return Value:
                     }
                 }
                 nSeedsApplied[direction]++;
+                currRoundLowestPossibleScoreOfAnyUnseenLocation[direction]++;
                 appliedEitherSeed = true;
             } // not too popular
         }   // directions
@@ -790,9 +796,15 @@ Return Value:
     //
     for (Direction direction = 0; direction < 2; direction++) {
         if (0 != mostSeedsContainingAnyParticularBase[direction]) {
+#ifdef EXACT_DISJOINT_MISS_COUNT
+            lowestPossibleScoreOfAnyUnseenLocation[direction] =
+                __max(lowestPossibleScoreOfAnyUnseenLocation[direction],
+                    currRoundLowestPossibleScoreOfAnyUnseenLocation[direction]);
+#else
             lowestPossibleScoreOfAnyUnseenLocation[direction] =
                 __max(lowestPossibleScoreOfAnyUnseenLocation[direction],
                       nSeedsApplied[direction] / mostSeedsContainingAnyParticularBase[direction]);
+#endif
         }
     }
 
@@ -917,7 +929,7 @@ Return Value:
                     int tailStart = seedOffset + seedLen;
                     int agScore1 = seedLen, agScore2 = 0;
 
-                    // Compute maxK for which edit distance and affine gap scoring report the same alignment
+                    // Compute maxK for which edit distance and affine gap scoring report the same alignment given a set of scoring parameters
                     // GapOpenPenalty + k.GapExtendPenalty >= k * SubPenalty
                     int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
 
@@ -931,29 +943,6 @@ Return Value:
 
                     agScore1 = (seedLen + readLen - tailStart - score1) * matchReward - score1 * subPenalty;
 
-                    if (score1 == -1) {
-                        score = -1;
-                    }
-                    else if (useAffineGap && (score1 > maxKForSameAlignment)) {
-                        agScore1 = affineGap->computeScore(data + tailStart,
-                            textLen,
-                            readToScore->getData() + tailStart,
-                            readToScore->getQuality() + tailStart,
-                            readLen - tailStart,
-                            scoreLimit,
-                            seedLen,
-                            NULL,
-                            &basesClippedAfter,
-                            &score1,
-                            &matchProb1);
-
-                        usedAffineGapScoring = true;
-                        
-                        if (score1 == -1) {
-                            score = -1;
-                            agScore = 0;
-                        }
-                    }
                     if (score1 != -1) {
                         // The tail of the read matched; now let's reverse match the reference genome and the head
                         int limitLeft = scoreLimit - score1;
@@ -963,48 +952,72 @@ Return Value:
                             &genomeLocationOffset, &totalIndels);
 
                         agScore2 = (seedOffset - score2) * matchReward - score2 * subPenalty;
-
-                        if (score2 == -1) {
-                            score = -1;
-                        }
-                        else if (useAffineGap && (score2 > maxKForSameAlignment)) {
-                            agScore2 = reverseAffineGap->computeScore(data + seedOffset,
-                                seedOffset + limitLeft,
-                                reversedRead[elementToScore->direction] + readLen - seedOffset,
-                                read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
-                                seedOffset,
-                                limitLeft,
-                                seedLen, // FIXME: Assumes the rest of the read matches exactly
-                                &genomeLocationOffset,
-                                &basesClippedBefore,
-                                &score2,
-                                &matchProb2);
-
+                    }
+                    if (score1 != -1 && score2 != -1) {
+                        // Check if affine gap must be called
+                        if (useAffineGap && ((score1 + score2) > maxKForSameAlignment) && elementToScore->lowestPossibleScore <= bestScore) {
+                            score1 = 0;  score2 = 0;  agScore1 = seedLen; agScore2 = 0;
                             usedAffineGapScoring = true;
+                            if (tailStart != readLen) {
+                                agScore1 = affineGap->computeScore(data + tailStart,
+                                    textLen,
+                                    readToScore->getData() + tailStart,
+                                    readToScore->getQuality() + tailStart,
+                                    readLen - tailStart,
+                                    scoreLimit,
+                                    seedLen,
+                                    NULL,
+                                    &basesClippedAfter,
+                                    &score1,
+                                    &matchProb1);
+                            }
+                            if (score1 != -1) {
+                                if (seedOffset != 0) {
+                                    int limitLeft = scoreLimit - score1;
+                                    agScore2 = reverseAffineGap->computeScore(data + seedOffset,
+                                        seedOffset + limitLeft,
+                                        reversedRead[elementToScore->direction] + readLen - seedOffset,
+                                        read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
+                                        seedOffset,
+                                        limitLeft,
+                                        seedLen, // FIXME: Assumes the rest of the read matches exactly
+                                        &genomeLocationOffset,
+                                        &basesClippedBefore,
+                                        &score2,
+                                        &matchProb2);
 
-                            agScore2 -= (seedLen);
+                                    agScore2 -= (seedLen);
 
-                            if (score2 == -1) {
+                                    if (score2 == -1) {
+                                        score = -1;
+                                        agScore = 0;
+                                    }
+                                }
+                            }
+                            else {
                                 score = -1;
                                 agScore = 0;
                             }
                         }
-                        if (score2 != -1) {
-                            score = score1 + score2;
-                            // Map probabilities for substrings can be multiplied, but make sure to count seed too
-                            matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+                    }
+                    if (score1 != -1 && score2 != -1) {
+                        score = score1 + score2;
+                        // Map probabilities for substrings can be multiplied, but make sure to count seed too
+                        matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
 
-                            //
-                            // Adjust the genome location based on any indels that we found.
-                            //
-                            genomeLocation += genomeLocationOffset;
+                        //
+                        // Adjust the genome location based on any indels that we found.
+                        //
+                        genomeLocation += genomeLocationOffset;
 
-                            agScore = agScore1 + agScore2;
-                            //
-                            // We could mark as scored anything in between the old and new genome offsets, but it's probably not worth the effort since this is
-                            // so rare and all it would do is same time.
-                            //
-                        }
+                        agScore = agScore1 + agScore2;
+                        //
+                        // We could mark as scored anything in between the old and new genome offsets, but it's probably not worth the effort since this is
+                        // so rare and all it would do is same time.
+                        //
+                    }
+                    else {
+                        agScore = 0;
                     }
                 } else { // if we had genome data to compare against
                     matchProbability = 0;
@@ -1447,12 +1460,12 @@ Return Value:
         }
 
         if (NULL != affineGap) {
-            affineGap->~AffineGap();
-            // affineGap->~AffineGapVectorized();
+            // affineGap->~AffineGap();
+            affineGap->~AffineGapVectorized();
         }
         if (NULL != reverseAffineGap) {
-            reverseAffineGap->~AffineGap();
-            // reverseAffineGap->~AffineGapVectorized();
+            // reverseAffineGap->~AffineGap();
+            reverseAffineGap->~AffineGapVectorized();
         }
 
     } else {
@@ -1610,10 +1623,10 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         (ownLandauVishkin ?
             LandauVishkin<>::getBigAllocatorReservation() +
             LandauVishkin<-1>::getBigAllocatorReservation() : 0)        + // our LandauVishkin objects
-        AffineGap<>::getBigAllocatorReservation()                       + 
-        AffineGap<-1>::getBigAllocatorReservation()                     + // our AffineGap objects
-        // AffineGapVectorized<>::getBigAllocatorReservation()             + 
-        // AffineGapVectorized<-1>::getBigAllocatorReservation()          + // our AffineGap objects
+        // AffineGap<>::getBigAllocatorReservation()                       + 
+        // AffineGap<-1>::getBigAllocatorReservation()                     + // our AffineGap objects
+        AffineGapVectorized<>::getBigAllocatorReservation()             + 
+        AffineGapVectorized<-1>::getBigAllocatorReservation()          + // our AffineGap objects
         sizeof(char) * maxReadSize * 2                                  + // rcReadData
         sizeof(char) * maxReadSize * 4 + 2 * MAX_K                      + // reversed read (both)
         sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                      + // seed used
