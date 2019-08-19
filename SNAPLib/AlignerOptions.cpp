@@ -91,7 +91,7 @@ AlignerOptions::AlignerOptions(
     emitInternalScore(false)
 {
     if (forPairedEnd) {
-        maxDist                 = 15;
+        maxDist                 = 32;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
         maxHits                 = 300;
