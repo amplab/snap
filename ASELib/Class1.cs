@@ -2126,6 +2126,17 @@ namespace ASELib
             }
         }
 
+        public static StreamReader CreateStreamReaderWithRetryCompressedBasedOnFilename(string filename)
+        {
+            if (filename.ToLower().EndsWith(".gz"))
+            {
+                return CreateCompressedStreamReaderWithRetry(filename);
+            } else
+            {
+                return CreateStreamReaderWithRetry(filename);
+            }
+        }
+
         public class Configuration
         {
             // If you add anything that references defaultBaseDirectory, be sure to add it to

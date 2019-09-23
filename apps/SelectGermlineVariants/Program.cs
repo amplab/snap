@@ -182,7 +182,7 @@ namespace SelectGermlineVariants
 
                     if (fields.Count() != 10)
                     {
-                        Console.WriteLine("Wrong number of fields (" + fields.Count() + " != 11) in vcf line: '" + line + "' in file " + case_.vcf_filename + ".  Ignoring file.");
+                        Console.WriteLine("Wrong number of fields (" + fields.Count() + " != 10) in vcf line: '" + line + "' in file " + case_.vcf_filename + ".  Ignoring file.");
 
                         badFile = true;
                         break;
