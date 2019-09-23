@@ -14643,6 +14643,130 @@ namespace ASELib
             outputFile.WriteLine();
         } // WriteMatrixWithPercentages
 
+        public class FASTA
+        {
+            public FASTA(StreamReader inputFile)
+            {
+                string nextLine;
+
+                List<string> currentContig = null;
+                string currentContigName = null;
+
+                while (null != (nextLine = inputFile.ReadLine()))
+                {
+                    if (nextLine.StartsWith(">"))
+                    {
+                        addContig(currentContigName, currentContig);
+                        currentContig = new List<string>();
+                        currentContigName = nextLine.Substring(1);  // Cut off the >
+                        if (currentContigName.Contains(' '))
+                        {
+                            currentContigName = currentContigName.Substring(0, currentContigName.IndexOf(' '));
+                        }
+                    } else
+                    {
+                        if (currentContig == null)
+                        {
+                            Console.WriteLine("FASTA: input file does not start with a contig name");
+                            throw new Exception("FASTA: input file does not start with a contig name");
+                        }
+
+                        currentContig.Add(nextLine);
+                    }
+                }
+
+                addContig(currentContigName, currentContig);
+            }
+
+            void addContig(string contigName, List<string> contigStrings)
+            {
+                if (contigs.ContainsKey(contigName))
+                {
+                    Console.WriteLine("FASTA: contig " + contigName + " appears at least twice");
+                    throw new Exception("FASTA: contig " + contigName + " appears at least twice");
+                }
+
+                var contig = new char[contigStrings.Select(_ => _.Length).Sum()];
+                int howFar = 0;
+                foreach (var contigString in contigStrings)
+                {
+                    for (int i = 0; i < contigString.Length; i++)
+                    {
+                        contig[howFar + i] = contigString[i];
+                    }
+                    howFar += contigString.Length;
+                }
+
+                contigs.Add(contigName, contig);
+            }
+
+            public static FASTA loadFromFile(string inputFilename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(inputFilename);
+                if (null == inputFile)
+                {
+                    return null;
+                }
+
+                var retVal = new FASTA(inputFile);
+                inputFile.Close();
+
+                return retVal;
+            }
+
+            Dictionary<string, char[]> contigs = new Dictionary<string, char[]>();
+
+            static public bool compare(FASTA one, FASTA two)
+            {
+                var fastas = new FASTA[2];
+                fastas[0] = one;
+                fastas[1] = two;
+
+                bool equal = true;
+
+                for (int i = 0; i < 2; i++) {
+                    foreach (var contig in fastas[i].contigs)
+                    {
+                        if (!fastas[1-i].contigs.ContainsKey(contig.Key))
+                        {
+                            Console.WriteLine("One FASTA has contig " + contig.Key + ", which isn't in the other");
+                            equal = false;
+                        }
+                    }
+                } // for each FASTA
+
+                foreach (var contig in one.contigs)
+                {
+                    var contigName = contig.Key;
+                    if (!two.contigs.ContainsKey(contigName))
+                    {
+                        continue;
+                    }
+
+                    if (contig.Value.Length != two.contigs[contigName].Length)
+                    {
+                        Console.WriteLine("Contig " + contigName + " differs in length: " + contig.Value.Length + " and " + two.contigs[contigName].Length);
+                        equal = false;
+                        continue;
+                    }
+
+                    for (int i = 0; i < contig.Value.Length; i++)
+                    {
+                        if (contig.Value[i] != two.contigs[contigName][i])
+                        {
+                            Console.WriteLine("Contig " + contigName + " first differs at " + i + " (zero based) with values: " + contig.Value[i] + " and " + two.contigs[contigName][i]);
+                            equal = false;
+                            break;
+                        }
+                    }
+                }
+
+                return equal;
+
+                
+            }
+        } // FASTA
+
 
     } // ASETools
 
