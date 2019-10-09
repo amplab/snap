@@ -2238,6 +2238,8 @@ namespace ASELib
             public double repetitiveRegionConfidence = 0.95;   // 
             public int minDistanceBetweenGermlineVariants = 1000;
 
+            public int distanceFromVariantToKeepReads = 1500;   // Determines how far away from a variant (somatic or germline) we keep reads.  This also controls how far away we look for variant pairs we can phase.
+
             public int nWorkerMachines = 120;                 // Over how many machines would we like to evenly split our work?
 
             public bool isBeatAML = false;
@@ -2509,6 +2511,8 @@ namespace ASELib
                         retVal.localIndexDirectory = fields[1];
                     } else if (type == "n worker machines") {
                         retVal.nWorkerMachines = Convert.ToInt32(fields[1]);
+                    } else if (type == "distance from variant to keep reads") { 
+                         retVal.distanceFromVariantToKeepReads = Convert.ToInt32(fields[1]);
                     } else if (type == "uses chr") {
                         if (fields[1] == "yes")
                         {
@@ -3323,6 +3327,7 @@ namespace ASELib
         public const string ExpressionDistrbutionByChromosomeDirectory = @"expression_distribution_by_chromosome\";
         public const string UniparentalDisomyFilename = "UniparentalDisomy.txt";
         public const string UniparentalDisomyHistogramsFilename = "UniparentalDisomyHistograms.txt";
+        public const string PhasingForNearbyVariantsFilename = "PhasingForNearbyVariants.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -6716,6 +6721,8 @@ namespace ASELib
                     }
                 }
 
+                indexReader.Close();
+
                 if (!sawDone)
                 {
                     Console.WriteLine("ASETools.ConsolodatedFile: truncated index file: " + filename);
@@ -7993,6 +8000,11 @@ namespace ASELib
                 return str;
             }
 
+            public string getExtractedReadsExtension()
+            {
+                return "-" + contig + "-" + locus;
+            }
+
             public bool isSilent()
             {
                 return variantClassification == "Silent";
@@ -8551,6 +8563,16 @@ namespace ASELib
             public bool isNextUnmapped()
             {
                 return (flag & NextUnmapped) == NextUnmapped;
+            }
+
+            static public bool operator==(SAMLine one, SAMLine two)
+            {
+                return one.qname == two.qname && one.flag == two.flag;  // This is sufficient as long as there are only pairs and not more than that with the same name.
+            }
+
+            static public bool operator!=(SAMLine one, SAMLine two)
+            {
+                return !(one == two);   // Why you have to define this and it's not automatic I'll never know.
             }
 
             public readonly string qname;
@@ -14671,7 +14693,7 @@ namespace ASELib
                             throw new Exception("FASTA: input file does not start with a contig name");
                         }
 
-                        currentContig.Add(nextLine);
+                        currentContig.Add(nextLine.ToUpper());
                     }
                 }
 
@@ -14680,6 +14702,11 @@ namespace ASELib
 
             void addContig(string contigName, List<string> contigStrings)
             {
+                if (contigName == null)
+                {
+                    return;
+                }
+
                 if (contigs.ContainsKey(contigName))
                 {
                     Console.WriteLine("FASTA: contig " + contigName + " appears at least twice");
@@ -14752,7 +14779,7 @@ namespace ASELib
 
                     for (int i = 0; i < contig.Value.Length; i++)
                     {
-                        if (contig.Value[i] != two.contigs[contigName][i])
+                        if (contig.Value[i] != two.contigs[contigName][i] && contig.Value[i] != 'N' && two.contigs[contigName][i] != 'N')
                         {
                             Console.WriteLine("Contig " + contigName + " first differs at " + i + " (zero based) with values: " + contig.Value[i] + " and " + two.contigs[contigName][i]);
                             equal = false;
@@ -14766,6 +14793,8 @@ namespace ASELib
                 
             }
         } // FASTA
+
+      
 
 
     } // ASETools
