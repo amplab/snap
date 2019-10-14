@@ -437,7 +437,7 @@ public:
 #define CountTrailingZeroes(x, ans) {_BitScanForward64(&ans, x);}
 #define ByteSwapUI64(x) (_byteswap_uint64(x))
 #else
-#define CountLeadingZeroes(x, ans) {ans = __builtin_clzll(x);}
+#define CountLeadingZeroes(x, ans) {ans = 63 - __builtin_clzll(x);}
 #define CountTrailingZeroes(x, ans) {ans = __builtin_ctzll(x);}
 #define ByteSwapUI64(x) (__builtin_bswap64(x))
 #endif
