@@ -41,7 +41,7 @@ namespace CheckPhasing
             int nPerDot;
             ASETools.PrintMessageAndNumberBar("Processing", "cases", casesToProcess.Count(), out nPerDot);
 
-            var threading = new ASETools.WorkerThreadHelper<ASETools.Case, int>(casesToProcess, HandleOneCase, null, null, nPerDot);
+            var threading = new ASETools.WorkerThreadHelper<ASETools.Case, WorkerThreadState>(casesToProcess, HandleOneCase, FinishUp, null, nPerDot);
 
             threading.run();
 
@@ -58,8 +58,47 @@ namespace CheckPhasing
 
         } // Main
 
+        class AlleleBalance
+        {
+            public int[,] counts = new int[3, 3];   // [ref = 0 alt = 1, other = 2 for first variant, ref = 0, alt = 1, other = 2 for second variant] value is count for this
+            public const int ref_allele = 0;
+            public const int alt_allele = 1;
+            public const int other_allele = 2;
+        } // AlleleBalance
 
-        static void HandleOneCase(ASETools.Case case_, int state)
+        class DnaRnaAlleleBalance
+        {
+            public Dictionary<bool, AlleleBalance>  balanceByNucleicAcidType = new Dictionary<bool, AlleleBalance>();
+            public const bool DNA = true;
+            public const bool RNA = true;
+        } // DnaRnaAlleleBalance
+
+        class WorkerThreadState
+        {
+            public Dictionary<string, List<DnaRnaAlleleBalance>> alleleBalanceByGene = new Dictionary<string, List<DnaRnaAlleleBalance>>();
+        }
+
+        static Dictionary<string, List<DnaRnaAlleleBalance>> alleleBalanceByGene = new Dictionary<string, List<DnaRnaAlleleBalance>>();
+
+        static void FinishUp(WorkerThreadState state)
+        {
+            lock (alleleBalanceByGene)
+            {
+                foreach (var hugo_symbol in state.alleleBalanceByGene.Select(_ => _.Key))
+                {
+                    if (!alleleBalanceByGene.ContainsKey(hugo_symbol))
+                    {
+                        alleleBalanceByGene.Add(hugo_symbol, state.alleleBalanceByGene[hugo_symbol]);
+                    } else
+                    {
+                        alleleBalanceByGene[hugo_symbol].AddRange(state.alleleBalanceByGene[hugo_symbol]);
+                    }
+                } // hugo symbol
+            } // lock
+        } // FinishUp
+
+
+        static void HandleOneCase(ASETools.Case case_, WorkerThreadState state)
         {
             var tentativeAnnotatedVariants = ASETools.AnnotatedVariant.readFile(case_.tentative_annotated_selected_variants_filename).Where(_ => _.variantType == "SNP").ToList();  // We use the tentative ones because the selected ones discard germline variants that are too close to one another
             if (null == tentativeAnnotatedVariants)
