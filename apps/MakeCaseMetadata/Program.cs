@@ -58,7 +58,7 @@ namespace MakeCaseMetadata
 
                 foreach (var dna in ASETools.BothBools)
                 {
-                    bamMetadata[tumor].Add(dna, GetBamMetadataFromFile(case_.getReadsAtSelectedVariantsFilename(tumor, dna)));
+                    bamMetadata[tumor].Add(dna, GetBamMetadataFromFile(case_.getReadsAtTentativeSelectedVariantsFilename(tumor, dna)));
 
                     sample[tumor].Add(dna, GetSampleFromFile(case_.getDownloadedReadsFilename(tumor, dna)));
                 } // dna

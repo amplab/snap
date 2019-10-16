@@ -154,6 +154,11 @@ namespace SplitIntoPieces
                     nLinesPerPiece += lineGranularity - nLinesPerPiece % lineGranularity;
                 }
 
+                if (nLinesPerPiece * nPieces < nLines)
+                {
+                    nLinesPerPiece += lineGranularity;  // Round up
+                }
+
 
                 for (i = 0; i < nPieces; i++)
                 {

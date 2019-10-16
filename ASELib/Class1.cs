@@ -1971,7 +1971,7 @@ namespace ASELib
                 return normal_rna_allcount_filename;
             } // getAllcountFilename
 
-            public string getReadsAtSelectedVariantsFilename(bool tumor, bool dna)
+            public string getReadsAtTentativeSelectedVariantsFilename(bool tumor, bool dna)
             {
                 if (tumor)
                 {
@@ -1981,6 +1981,21 @@ namespace ASELib
                 {
                     if (dna) return normal_dna_reads_at_tentative_selected_variants_filename;
                     return normal_rna_reads_at_tentative_selected_variants_filename;
+                }
+            } // getReadsAtSelectedVariantsFilename
+
+ 
+            public string getReadsAtTentativeSelectedVariantsIndexFilename(bool tumor, bool dna)
+            {
+                if (tumor)
+                {
+                    if (dna) return tumor_dna_reads_at_tentative_selected_variants_index_filename;
+                    else return tumor_rna_reads_at_tentative_selected_variants_index_filename;
+                }
+                else
+                {
+                    if (dna) return normal_dna_reads_at_tentative_selected_variants_index_filename;
+                    else return normal_rna_reads_at_tentative_selected_variants_index_filename;
                 }
             } // getReadsAtSelectedVariantsFilename
 
@@ -2009,6 +2024,19 @@ namespace ASELib
                     return normal_rna_filename;
                 }
             } // getDownloadedReadsFilename
+
+            public string getDownloadedReadsBamMD5(bool tumor, bool dna)
+            {
+                if (tumor)
+                {
+                    if (dna) return tumor_dna_file_bam_md5;
+                    return tumor_rna_file_bam_md5;
+                } else
+                {
+                    if (dna) return normal_dna_file_bam_md5;
+                    return normal_rna_file_bam_md5;
+                }
+            }
 
         } // Case
 
@@ -3229,6 +3257,17 @@ namespace ASELib
                 }
             }
         } // DownloadedFile
+
+        public static string getReadsAtTentativeSelectedVariantsExtension(bool tumor, bool dna)
+        {
+            if (tumor)
+            {
+                if (dna) return tumorDNAReadsAtTentativeSelectedVariantsExtension;
+                return tumorRNAReadsAtTentativeSelectedVariantsIndexExtension;
+            }
+            if (dna) return normalDNAReadsAtTentativeSelectedVariantsExtension;
+            return normalRNAReadsAtTentativeSelectedVariantsExtension;
+        } // getReadsAtTentativeSelectedVariantsExtension
 
 
         public const string tumorRNAAllcountExtension = ".allcount.gz";
@@ -8565,6 +8604,7 @@ namespace ASELib
                 return (flag & NextUnmapped) == NextUnmapped;
             }
 
+#if false
             static public bool operator==(SAMLine one, SAMLine two)
             {
                 return one.qname == two.qname && one.flag == two.flag;  // This is sufficient as long as there are only pairs and not more than that with the same name.
@@ -8574,6 +8614,7 @@ namespace ASELib
             {
                 return !(one == two);   // Why you have to define this and it's not automatic I'll never know.
             }
+#endif
 
             public readonly string qname;
             public readonly int flag;

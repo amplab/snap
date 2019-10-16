@@ -121,7 +121,7 @@ namespace ReadLengthDistributions
             {
                 foreach (var dna in ASETools.BothBools)
                 {
-                    if (case_.getReadsAtSelectedVariantsFilename(tumor, dna) == "")
+                    if (case_.getReadsAtTentativeSelectedVariantsFilename(tumor, dna) == "")
                     {
                         //
                         // This is normal RNA for a case that doesn't have it.
@@ -137,9 +137,9 @@ namespace ReadLengthDistributions
 
                     var consolodatedFile = new ASETools.ConsolodatedFileReader();
 
-                    if (!consolodatedFile.open(case_.getReadsAtSelectedVariantsFilename(tumor, dna)))
+                    if (!consolodatedFile.open(case_.getReadsAtTentativeSelectedVariantsFilename(tumor, dna)))
                     {
-                        Console.WriteLine("Unable to open reads at selected variants file " + case_.getReadsAtSelectedVariantsFilename(tumor, dna));
+                        Console.WriteLine("Unable to open reads at selected variants file " + case_.getReadsAtTentativeSelectedVariantsFilename(tumor, dna));
                         continue;
                     }
 
@@ -164,7 +164,7 @@ namespace ReadLengthDistributions
                             }
                             catch (Exception e)
                             {
-                                Console.WriteLine("Unable to parse sam line in extracted reads main file + " + case_.getReadsAtSelectedVariantsFilename(tumor, dna) + " subfile " + subfileName + ": " + line);
+                                Console.WriteLine("Unable to parse sam line in extracted reads main file + " + case_.getReadsAtTentativeSelectedVariantsFilename(tumor, dna) + " subfile " + subfileName + ": " + line);
                                 throw e;
                             }
 
