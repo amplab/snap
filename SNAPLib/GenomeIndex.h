@@ -79,7 +79,8 @@ public:
 
     static GenomeIndex *loadFromDirectory(char *directoryName, bool map, bool prefetch);
 
-    static void printBiasTables();
+	int getMajorVersion();
+	int getMinorVersion();
 
 protected:
 
@@ -87,6 +88,9 @@ protected:
     unsigned hashTableKeySize;
     unsigned nHashTables;
     const Genome *genome;
+
+	int majorVersion;
+	int minorVersion;
 
     bool largeHashTable;
     unsigned locationSize;
@@ -151,7 +155,7 @@ protected:
     // NB: This deletes the Genome that's passed into it.
     //
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
-                                      bool computeBias, const char *directory,
+                                      const char *directory,
                                       unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
                                       unsigned hashTableKeySize, bool large, const char *histogramFileName,
                                       unsigned locationSize, bool smallMemory);
@@ -164,7 +168,7 @@ protected:
         int seedLen, unsigned hashTableKeySize, bool large, unsigned locationSize, double* biasTable = NULL);
     
     static const unsigned GenomeIndexFormatMajorVersion = 5;
-    static const unsigned GenomeIndexFormatMinorVersion = 0;
+    static const unsigned GenomeIndexFormatMinorVersion = 1;	// Index version 5.0 has Ns in the FASTA stored in lower case in the index so that they won't match Ns in reads.  5.1 does away with that.
     
     static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
     static const unsigned largestKeySize = 8;

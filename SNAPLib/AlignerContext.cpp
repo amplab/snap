@@ -159,9 +159,14 @@ AlignerContext::initialize()
             }
             g_index = index;
 
+
             _int64 loadTime = timeInMillis() - loadStart;
              WriteStatusMessage("%llds.  %u bases, seed size %d\n",
                     loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+
+			 if (index->getMajorVersion() < 5 || index->getMajorVersion() == 5 && index->getMinorVersion() == 0) {
+				 WriteErrorMessage("WARNING: The version of the index you're using was built with an earlier version of SNAP and will result in Ns in the reference NOT matching Ns in reads.\n         If you do not want this behavior, rebuild the index.\n");
+			 }
          } else {
             WriteStatusMessage("no alignment, input/output only\n");
         }

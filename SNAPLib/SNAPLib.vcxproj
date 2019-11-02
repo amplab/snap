@@ -227,7 +227,6 @@
     <ClCompile Include="ApproximateCounter.cpp" />
     <ClCompile Include="Bam.cpp" />
     <ClCompile Include="BaseAligner.cpp" />
-    <ClCompile Include="BiasTables.cpp" />
     <ClCompile Include="BigAlloc.cpp" />
     <ClCompile Include="BufferedAsync.cpp" />
     <ClCompile Include="ChimericPairedEndAligner.cpp" />

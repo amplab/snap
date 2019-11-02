@@ -218,9 +218,6 @@
     <ClCompile Include="BaseAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="BiasTables.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="BigAlloc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

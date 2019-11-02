@@ -138,10 +138,6 @@ ReadFASTAGenome(
                 *newline = 0;
             }
 
-            //
-            // But convert any 'N' to 'n'.  This is so we don't match the N from the genome with N
-            // in reads (where we just do a straight text comparison.
-            //
             size_t lineLen = strlen(lineBuffer);
 
 			for (unsigned i = 0; i < lineLen; i++) {
@@ -149,10 +145,6 @@ ReadFASTAGenome(
             }
 
 			for (unsigned i = 0; i < lineLen; i++) {
-                if ('N' == lineBuffer[i]) {
-                    lineBuffer[i] = 'n';
-                }
-
                 if (!isValidGenomeCharacter[(unsigned char)lineBuffer[i]]) {
                     if (!warningIssued) {
                         WriteErrorMessage("\nFASTA file contained a character that's not a valid base (or N): '%c', full line '%s'; \nconverting to 'N'.  This may happen again, but there will be no more warnings.\n", lineBuffer[i], lineBuffer);

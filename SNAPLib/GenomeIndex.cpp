@@ -59,7 +59,7 @@ static void usage()
 		"Options:\n"
 		"  -s               Seed size (default: %d)\n"
 		"  -h               Hash table slack (default: %.1f)\n"
-		"  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and a smaller index, but only works for the complete human reference.\n"
+		"  -hg19            This parameter is deprecated and will be ignored.\n"
 		"  -Ofactor         This parameter is deprecated and will be ignored.\n"
 		" -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
 		" -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
@@ -111,7 +111,6 @@ GenomeIndex::runIndexer(
 
     int seedLen = DEFAULT_SEED_SIZE;
     double slack = DEFAULT_SLACK;
-    bool computeBias = true;
     const char *pieceNameTerminatorCharacters = NULL;
     bool spaceIsAPieceNameTerminator = false;
     const char *histogramFileName = NULL;
@@ -140,7 +139,7 @@ GenomeIndex::runIndexer(
         } else if (strcmp(argv[n], "-exact") == 0) {
             forceExact = true;
         } else if (strcmp(argv[n], "-hg19") == 0) {
-            computeBias = false;        
+			WriteErrorMessage("The -hg19 flag is deprecated, ignoring it.\n");
         } else if (strcmp(argv[n], "-locationSize") == 0) {
             if (n + 1 < argc) {
                 locationSize = atoi(argv[n+1]);
@@ -200,11 +199,6 @@ GenomeIndex::runIndexer(
         soft_exit(1);
     }
 
-    if (seedLen < 19 && !computeBias && locationSize < 5) {
-		WriteErrorMessage("For hg19 with seedLen < 19, you'll need to use 5 byte location size (which will use more memory).  Setting that option for you.\n");
-        locationSize = 5;
-    }
-
 	if ((unsigned)seedLen * 2 < keySizeInBytes * 8) {
 		WriteErrorMessage("You must specify a smaller keysize or a larger seed size.  The seed must be big enough to fill the key\n"
 			"and takes two bits per base of seed.\n");
@@ -232,8 +226,8 @@ GenomeIndex::runIndexer(
 
     GenomeDistance nBases = genome->getCountOfBases();
 
-    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, maxThreads, chromosomePadding, forceExact, keySizeInBytes, 
-		large, histogramFileName, locationSize, smallMemory)) {
+    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, outputDir, maxThreads, chromosomePadding, forceExact, keySizeInBytes, 
+										    large, histogramFileName, locationSize, smallMemory)) {
         WriteErrorMessage("Genome index build failed\n");
         soft_exit(1);
     }
@@ -259,7 +253,7 @@ SetInvalidGenomeLocation(unsigned locationSize)
 }
 
     bool
-GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName,
+GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, const char *directoryName,
                                     unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, unsigned hashTableKeySize, 
 									bool large, const char *histogramFileName, unsigned locationSize, bool smallMemory)
 {
@@ -304,30 +298,16 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         soft_exit(1);
     }
 
-    // Compute bias table sizes, unless we're using the precomputed ones hardcoded in BiasTables.cpp
+    // Compute bias table sizes
     double *biasTable = NULL;
-    if (!computeBias) {
-        if (large) {
-            biasTable = hg19_biasTables_large[hashTableKeySize][seedLen];
-        } else {
-            biasTable = hg19_biasTables[hashTableKeySize][seedLen];
-        }
-
-        if (NULL == biasTable) {
-            WriteErrorMessage("-hg19 not available for this seed length/key size/small-or-large combo.  Computing bias tables the hard way.\n");
-            computeBias = true;
-        }
-    }
     
-    if (computeBias) {
-        unsigned nHashTables = 1 << ((max((unsigned)seedLen, hashTableKeySize * 4) - hashTableKeySize * 4) * 2);
-        biasTable = new double[nHashTables];
-        ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact, hashTableKeySize, large);
-    }
+    unsigned nHashTables = 1 << ((max((unsigned)seedLen, hashTableKeySize * 4) - hashTableKeySize * 4) * 2);
+    biasTable = new double[nHashTables];
+    ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact, hashTableKeySize, large);
 
     WriteStatusMessage("Allocating memory for hash tables...");
     start = timeInMillis();
-    unsigned nHashTables;
+
     SNAPHashTable** hashTables = index->hashTables =
         allocateHashTables(&nHashTables, countOfBases, slack, seedLen, hashTableKeySize, large, locationSize, biasTable);
     index->nHashTables = nHashTables;
@@ -743,7 +723,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     fclose(indexFile);
  
     delete index;
-    if (computeBias && biasTable != NULL) {
+    if (biasTable != NULL) {
         delete[] biasTable;
     }
  
@@ -1301,7 +1281,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
                 WriteErrorMessage("HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
             }
             WriteErrorMessage("IndexBuilder: exceeded size of hash table %d.\n"
-                    "If you're indexing a non-human genome, make sure not to pass the -hg19 option.  Otheriwse, use -exact or increase slack with -h.\n",
+                    "Use -exact or increase slack with -h.\n",
                     whichHashTable);
             soft_exit(1);
         }
@@ -1545,70 +1525,16 @@ GenomeIndex::OverflowBackpointerAnchor::loadFromFile(FILE *file)
 const unsigned GenomeIndex::OverflowBackpointerAnchor::batchSize = 1024 * 1024;
 GenomeIndex::OverflowBackpointer GenomeIndex::OverflowBackpointerAnchor::spilledTableSlot;
 
-    void
-GenomeIndex::printBiasTables()
+		int
+GenomeIndex::getMajorVersion()
 {
-    for (int keySize = 0; keySize <= largestKeySize; keySize++) {
-        for (int seedSize = 0; seedSize <= largestBiasTable; seedSize++) {
-            if (NULL != hg19_biasTables_large[keySize][seedSize]) {
-                printf("static double hg19_biasTable%d_%d_large[] = {\n", seedSize, keySize);
-                unsigned bitsOfSeed = seedSize * 2;
-                unsigned bitsOfKey = keySize * 8;   // 8 == nBits / byte
-                unsigned numHashTables = 1 << (bitsOfSeed - bitsOfKey);
-                for (unsigned hashTable = 0; hashTable < numHashTables; hashTable++) {
-                    if (hg19_biasTables_large[keySize][seedSize][hashTable] == 0) {
-                        printf("0");
-                    } else if (hg19_biasTables_large[keySize][seedSize][hashTable] > 1000 || hg19_biasTables_large[keySize][seedSize][hashTable] < .01) {
-                        printf("%1.2e", hg19_biasTables_large[keySize][seedSize][hashTable]);
-                    } else if (hg19_biasTables_large[keySize][seedSize][hashTable] > 10) {
-                        printf("%1.1f", hg19_biasTables_large[keySize][seedSize][hashTable]);
-                    } else {
-                        printf("%1.3f", hg19_biasTables_large[keySize][seedSize][hashTable]);
-                    }
+	return majorVersion;
+}
 
-                    if (hashTable != numHashTables-1) {
-                        printf(",");
-                    }
-
-                    if (hashTable % 10 == 9) {
-                        printf("\n");
-                    }
-                } // for each hash table
-                printf("\n};\n\n");
-            } // if there is a bias entry for this key * seed size
-        } // for each seed size
-    } // for each key size
-
-    for (int keySize = 0; keySize <= largestKeySize; keySize++) {
-        for (int seedSize = 0; seedSize <= largestBiasTable; seedSize++) {
-            if (NULL != hg19_biasTables[keySize][seedSize]) {
-                printf("static double hg19_biasTable%d_%d[] = {\n", seedSize, keySize);
-                unsigned bitsOfSeed = seedSize * 2;
-                unsigned bitsOfKey = keySize * 8;   // 8 == nBits / byte
-                unsigned numHashTables = 1 << (bitsOfSeed - bitsOfKey);
-                for (unsigned hashTable = 0; hashTable < numHashTables; hashTable++) {
-                    if (hg19_biasTables[keySize][seedSize][hashTable] == 0) {
-                        printf("0");
-                    } else if (hg19_biasTables[keySize][seedSize][hashTable] > 1000 || hg19_biasTables[keySize][seedSize][hashTable] < .01) {
-                        printf("%1.2e", hg19_biasTables[keySize][seedSize][hashTable]);
-                    } else if (hg19_biasTables[keySize][seedSize][hashTable] > 10) {
-                        printf("%1.1f", hg19_biasTables[keySize][seedSize][hashTable]);
-                    } else {
-                        printf("%1.3f", hg19_biasTables[keySize][seedSize][hashTable]);
-                    }
-
-                    if (hashTable != numHashTables-1) {
-                        printf(",");
-                    }
-
-                    if (hashTable % 10 == 9) {
-                        printf("\n");
-                    }
-                } // for each hash table
-                printf("\n};\n\n");
-            } // if there is a bias entry for this key * seed size
-        } // for each seed size
-    } // for each key size
+		int
+GenomeIndex::getMinorVersion()
+{
+	return minorVersion;
 }
 
         GenomeIndex *
@@ -1682,6 +1608,8 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     GenomeIndex *index;
     index = new GenomeIndex();
 
+	index->majorVersion = majorVersion;
+	index->minorVersion = minorVersion;
     index->nHashTables = nHashTables;
     index->overflowTableSize = overflowTableSize;
     index->hashTableKeySize = hashTableKeySize;
@@ -1855,12 +1783,8 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     }
 
     if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0 && locationSize == 4) {
-        WriteErrorMessage("\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
-                        "allowed building indices with too small of a seed size, and this appears to be such\n"
-                        "an index.  You can no longer build indices like this, and you also can't use them\n"
-                        "because they are corrupt and would produce incorrect results.  Please use an index\n"
-                        "built with a larger seed size.  For hg19, the seed size must be at least 19.\n"
-                        "For other reference genomes this quantity will vary.\n");
+        WriteErrorMessage("\nThis index has too many overflow entries to be valid.  It was probably built with\n"
+		                    "an anctient version of SNAP.  Please rebuild it.\n");
         soft_exit(1);
     }
 
