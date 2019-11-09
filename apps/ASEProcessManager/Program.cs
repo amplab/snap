@@ -1254,11 +1254,14 @@ namespace ASEProcessManager
                     }
 
                     //
-                    // The Azure script downloads on the fly, so add every one that isn't done.
+                    // The Azure script downloads on the fly, so add every one that isn't done.  
+                    // NB: we use Write and \n rather than WriteLine to avoid generating crlf text that would confuse Linux
                     //
                     azureScript.Write("date\n");  // NB: we use Write and \n rather than WriteLine to avoid generating crlf text that would confuse Linux
                     if (!stateOfTheWorld.configuration.isBeatAML) { // for BeatAML, we've already manually loaded the files into an Azure files location, and mounted that on /mnt/downloaded_files/
                         azureScript.Write("rm -rf /mnt/downloaded_files/*\n"); // /mnt is a big but temporary filesystem on these azure instances
+                        azureScript.Write("sudo mkdir /mnt/downloaded_files/\n");
+                        azureScript.Write("sudo chmod 777 /mnt/downloaded_files\n");
                         azureScript.Write("cd /mnt/downloaded_files\n");
                         azureScript.Write(@"~/gdc-client download --token-file ~/" + ASETools.GetFileNameFromPathname(stateOfTheWorld.configuration.accessTokenPathname) + " " + case_.normal_dna_file_id + "\n");
                     }
@@ -1273,17 +1276,18 @@ namespace ASEProcessManager
                         azureScript.Write("ln -s /mnt/downloaded_files/" + case_.normal_dna_file_id + " ~/x\n");
                     }
 
-                    var regionFileName = stateOfTheWorld.configuration.isBeatAML ? "~/genomes/hg19-100k-regions" : "~/genomes/hg38-100k-regions";
-                    var fastaName = stateOfTheWorld.configuration.isBeatAML ? "~/genomes/hg19-no-chr.fa" : "~/genomes/hg38.fa";
+                    azureScript.Write("cd ~/freebayes/scripts\n");
+                    var regionFileName = stateOfTheWorld.configuration.isBeatAML ? "~/genomes/hg19-100k-regions" : "~/genomes/GRCh38.d1.vd1-100k-regions";
+                    var fastaName = stateOfTheWorld.configuration.isBeatAML ? "~/genomes/hg19-no-chr.fa" : "~/genomes/GRCh38.d1.vd1.fa";
 
-                    azureScript.Write("cat " + regionFileName + " | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference " + fastaName + " ~/x/*.bam" +
-                        " \" | ~/freebayes/vcflib/bin/vcffirstheader | ~/freebayes/vcflib/bin/vcfstreamsort -w 1000 | ~/freebayes/vcflib/bin/vcfuniq > ~/" +
+                    azureScript.Write("./freebayes-parallel " + regionFileName + " `cat ~/ncores` --region {} --fasta-reference " + fastaName + " ~/x/*.bam > ~/" +
                         case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
                     azureScript.Write("if [ $? = 0 ]; then\n");
                     azureScript.Write("    mv " + case_.normal_dna_file_id + ASETools.vcfExtension + " ~/completed_vcfs/\n");
                     azureScript.Write("else\n");
-                    azureScript.Write("    echo " + case_.normal_dna_file_id + " >> variant_calling_errors\n");
+                    azureScript.Write("    echo " + case_.normal_dna_file_id + " >> ~/variant_calling_errors\n");
                     azureScript.Write("fi\n");
+                    azureScript.Write("cd ~\n");
                     azureScript.Write("rm ~/" + case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
                     if (!stateOfTheWorld.configuration.isBeatAML) // Don't delete it for BeatAML, since we hand uploaded it.
                     {
@@ -1297,7 +1301,7 @@ namespace ASEProcessManager
                         continue;
                     }
 
-                    linuxScript.Write("date\n");    // NB: we use Write and \n rather than WriteLine to avoid generating crlf text that would confuse Linux
+                    linuxScript.Write("date\n");    
                     linuxScript.Write("cat " + regionFileName + " | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference " + fastaName + " " + 
                         ASETools.WindowsToLinuxPathname(stateOfTheWorld.downloadedFiles[case_.normal_dna_file_id].fileInfo.FullName) + 
                         " \" | ~/freebayes/vcflib/bin/vcffirstheader | ~/freebayes/vcflib/bin/vcfstreamsort -w 1000 | ~/freebayes/vcflib/bin/vcfuniq > " +
@@ -4050,6 +4054,14 @@ namespace ASEProcessManager
             }
         } // AddPercentilesToScatterGraphLinesProcessingStage
 
+        class SummarizePhasingProcessingStage : SingleOutputProcessingStage
+        {
+            public SummarizePhasingProcessingStage() : base("Summarize Phasing", true, "SummarizePhasing.exe", "", getPerCaseFile, null, getOutputFile) { }
+
+            static GetCaseFile[] getPerCaseFile = { _ => _.variant_phasing_filename };
+            static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.PhasingForNearbyVariantsFilename };
+        }
+
         //
         // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
         //
@@ -4403,6 +4415,16 @@ namespace ASEProcessManager
             static GetCaseFile[] getOutputFile = { _ => _.compressed_vcf_filename };
         }
 
+        class VariantPhasingProcessingStage : PerCaseProcessingStage
+        {
+            public VariantPhasingProcessingStage() : base("Phase variants", "CheckPhasing.exe", "", getInputFiles, null, getOutputFile) { }
+
+            static GetCaseFile[] getInputFiles = {_ => _.tentative_annotated_selected_variants_filename, _ => _.tumor_dna_reads_at_tentative_selected_variants_filename, _ => _.tumor_dna_reads_at_tentative_selected_variants_index_filename,
+                                                  _ => _.tumor_rna_reads_at_tentative_selected_variants_filename, _ => _.tumor_rna_reads_at_tentative_selected_variants_index_filename};
+
+            static GetCaseFile[] getOutputFile = { _ => _.variant_phasing_filename };
+        }
+
 
         static void Main(string[] args)
         {
@@ -4622,6 +4644,8 @@ namespace ASEProcessManager
             processingStages.Add(new CaseMetadataProcessingStage());
             processingStages.Add(new UniparentalDisomyProcessingStage());
             processingStages.Add(new TentativeASVWithoutCNVsProcessingStage());
+            processingStages.Add(new VariantPhasingProcessingStage());
+            processingStages.Add(new SummarizePhasingProcessingStage());
 
             if (checkDependencies)
             {

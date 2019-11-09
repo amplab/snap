@@ -14,6 +14,8 @@ namespace CheckPhasing
         static ASETools.CommonData commonData;
         static ASETools.ASERepetitiveRegionMap repetitiveRegionMap;
 
+        static int minReadsToDecideConsistency = 3;  // This maybe should be a configuration parameter
+
         static void Main(string[] args)
         {
             commonData = ASETools.CommonData.LoadCommonData(args);
@@ -45,15 +47,6 @@ namespace CheckPhasing
 
             threading.run();
 
-            var outputFilename = commonData.configuration.finalResultsDirectory + ASETools.PhasingForNearbyVariantsFilename;
-            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-            if (null == outputFile)
-            {
-                Console.WriteLine("Unable to open outputfile " + outputFilename);
-                return;
-            }
-
-            outputFile.WriteLine("**done**");
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(commonData.timer));
 
         } // Main
@@ -134,6 +127,11 @@ namespace CheckPhasing
 
             var readsForGivenVariant = new Dictionary<string, Dictionary<bool, List<ASETools.SAMLine>>>();    // Save reads we've already parsed so we don't have to do it more than once.
 
+
+
+            var outputLines = new List<string>();
+
+
             foreach (var variant in tentativeAnnotatedVariants)
             {
                 if (!variant.IsASECandidate(true, copyNumber, commonData) || !ASETools.isChromosomeAutosomal(variant.contig) || 
@@ -150,7 +148,7 @@ namespace CheckPhasing
                 // See if there are other variants that would pair with this one, meaning that they're within distanceFromVariantToKeepReads.  We only select ones that have a higher locus than this one
                 // to avoid selecting the same pairs twice, once for each end.
                 //
-                var matchingVariants = tentativeAnnotatedVariants.Where(_ => _.contig == variant.contig && _.locus > variant.locus && _.locus <= variant.locus + commonData.configuration.distanceFromVariantToKeepReads);
+                var matchingVariants = tentativeAnnotatedVariants.Where(_ => _.contig == variant.contig && _.locus > variant.locus && _.locus <= variant.locus + 1500).ToList();
 
                 foreach (var matchingVariant in matchingVariants)
                 {
@@ -159,6 +157,8 @@ namespace CheckPhasing
                     variants[1] = matchingVariant;
 
                     var reads = new Dictionary<bool, List<ASETools.SAMLine>>();    // dna -> reads
+                    ASETools.BothBools.ToList().ForEach(_ => reads.Add(_, new List<ASETools.SAMLine>()));
+                    bool loadFailed = false;
 
                     for (int i = 0; i < 2; i++)
                     {
@@ -169,7 +169,16 @@ namespace CheckPhasing
                             readsForGivenVariant.Add(key, new Dictionary<bool, List<ASETools.SAMLine>>());
                             foreach (var dna in ASETools.BothBools)
                             {
-                                var subfileReader = readers[dna].getSubfile((dna ? case_.tumor_dna_file_id : case_.tumor_rna_file_id) + variantToLoad.getExtractedReadsExtension());
+                                var subfileName = (dna ? case_.tumor_dna_file_id : case_.tumor_rna_file_id) + variantToLoad.getExtractedReadsExtension();
+                                if (readers[dna].isSubfileTooBigToRead(subfileName))
+                                {
+                                    readsForGivenVariant.Remove(key);
+                                    loadFailed = true;
+                                    break;
+                                }
+
+                                var subfileReader = readers[dna].getSubfile(subfileName);
+
                                 if (subfileReader == null)
                                 {
                                     Console.WriteLine("Unable to load subfile reader for " + (dna ? case_.tumor_dna_file_id : case_.tumor_rna_file_id) + variantToLoad.getExtractedReadsExtension());
@@ -181,20 +190,40 @@ namespace CheckPhasing
                             } // dna/rna
                         } // if we don't have it cached
 
+                        if (loadFailed)
+                        {
+                            break;
+                        }
+
                         foreach (var dna in ASETools.BothBools)
                         {
                             reads[dna].AddRange(readsForGivenVariant[key][dna]);
                         }
                     } // for each variant
 
+                    if (loadFailed)
+                    {
+                        continue;
+                    }
+
+                    var inPhaseRef = new Dictionary<bool, int>();
+                    ASETools.BothBools.ToList().ForEach(dna => inPhaseRef.Add(dna, 0));
+
+                    var inPhaseAlt = new Dictionary<bool, int>();
+                    ASETools.BothBools.ToList().ForEach(dna => inPhaseAlt.Add(dna, 0));
+
+                    var outOfPhaseRA = new Dictionary<bool, int>();
+                    ASETools.BothBools.ToList().ForEach(dna => outOfPhaseRA.Add(dna, 0));
+
+                    var outOfPhaseAR = new Dictionary<bool, int>();
+                    ASETools.BothBools.ToList().ForEach(dna => outOfPhaseAR.Add(dna, 0));
+
+                    var weird = new Dictionary<bool, int>();
+                    ASETools.BothBools.ToList().ForEach(dna => weird.Add(dna, 0));
 
                     foreach (var dna in ASETools.BothBools)
                     {
                         var readsById = reads[dna].GroupByToDict(_ => _.qname);
-
-                        var mapsRef = new int[2];
-                        var mapsAlt = new int[2];
-                        var mapsOther = new int[2];
 
                         foreach (var id in readsById.Select(_ => _.Key))
                         {
@@ -221,13 +250,59 @@ namespace CheckPhasing
                                         }
                                     }
                                 } // foreach read in the set
-
-
                             } // foreach variant
+
+                            // Recall that Enumerable.Range has parameters (start, count), so Enumerable.Range(0,2) is {0, 1}.
+
+                            if (Enumerable.Range(0,2).Any(whichVariant => mapsRefThisPair[whichVariant] + mapsAltThisPair[whichVariant] + mapsOtherThisPair[whichVariant] == 0))
+                            {
+                                //
+                                // No coverage on at least one variant, nothing to see here.
+                                //
+                                continue;
+                            }
+
+                            if (Enumerable.Range(0, 2).Any(whichVariant => mapsOtherThisPair[whichVariant] > 0 || mapsRefThisPair[whichVariant] > 0 && mapsAltThisPair[whichVariant] > 0))    // We have an other or a both on a single variant.  Weird.
+                            {
+                                weird[dna]++;
+                            } else if (mapsRefThisPair[0] > 0 && mapsRefThisPair[1] > 0)
+                            {
+                                inPhaseRef[dna]++;
+                            } else if (mapsAltThisPair[0] > 0 && mapsAltThisPair[1] > 0)
+                            {
+                                inPhaseAlt[dna]++;
+                            } else if (mapsRefThisPair[0] > 0 && mapsAltThisPair[1] > 0)
+                            {
+                                outOfPhaseRA[dna]++;
+                            } else if (mapsAltThisPair[0] > 0 && mapsRefThisPair[1] > 0)
+                            {
+                                outOfPhaseAR[dna]++;
+                            } else
+                            {
+                                throw new Exception("Logic error -- this shouldn't be possible.");
+                            }
+                        } // for each read ID
+                    } // dna/rna
+
+                    //
+                    // Now decide whether this variant pair is in phase, out of phase, or both, and whether that is supported by evidence from both phases and from both DNA & RNA.
+                    //
+                    if (ASETools.BothBools.Select(dna => inPhaseRef[dna] + inPhaseAlt[dna] + outOfPhaseAR[dna] + outOfPhaseRA[dna]).Sum() >= minReadsToDecideConsistency)
+                    {
+                        // Contig\tlocus 0\tlocus 1\tSomatic 0\tSomatic 1\tRef 0\tAlt 0\tRef 1\tAlt 1\tDNA ref ref\tDNA alt alt\tDNA ref alt\tDNA alt ref\tDNA weird\tRNA ref ref\tRNA alt alt\tRNA ref alt\tRNA alt ref\tRNA weird\tDNA consistent\tRNA consistent\tDNA consistent with RNA
+                        var outputLine = variant.contig + "\t" + variant.locus + "\t" + matchingVariant.locus + "\t" + variant.somaticMutation + "\t" + matchingVariant.somaticMutation + "\t";
+                        outputLine += variant.reference_allele + "\t" + variant.alt_allele + "\t" + matchingVariant.reference_allele + "\t" + matchingVariant.alt_allele;
+
+                        foreach (var dna in ASETools.BothBools)
+                        {
+                            outputLine += "\t" + inPhaseRef[dna] + "\t" + inPhaseAlt[dna] + "\t" + outOfPhaseRA[dna] + "\t" + outOfPhaseAR[dna] + "\t" + weird[dna];
                         }
+
+                        outputLine += "\t" + isConsistent(true, inPhaseRef, inPhaseAlt, outOfPhaseRA, outOfPhaseAR, weird) + "\t" + isConsistent(false, inPhaseRef, inPhaseAlt, outOfPhaseRA, outOfPhaseAR, weird);
+                        outputLine += "\t" + DNAandRNAConsistent(inPhaseRef, inPhaseAlt, outOfPhaseRA, outOfPhaseAR, weird);
+
+                        outputLines.Add(outputLine);
                     }
-
-
                 } // foreach matching variant for the first chosen variant
 
                 if (readsForGivenVariant.ContainsKey(variant.contig + ":" + variant.locus))
@@ -241,6 +316,53 @@ namespace CheckPhasing
             } // foreach variant for this case
 
 
+            var outputFilename = ASETools.GetDirectoryFromPathname(case_.tentative_annotated_selected_variants_filename) + @"\" + case_.case_id + ASETools.variantPhasingExtension;
+            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+            if (null == outputFile)
+            {
+                Console.WriteLine("Unable to open " + outputFilename);
+                return;
+            }
+
+            outputFile.WriteLine("Contig\tlocus 0\tlocus 1\tSomatic 0\tSomatic 1\tRef 0\tAlt 0\tRef 1\tAlt 1\tDNA ref ref\tDNA alt alt\tDNA ref alt\tDNA alt ref\tDNA weird\tRNA ref ref\tRNA alt alt\tRNA ref alt\tRNA alt ref\tRNA weird" +
+                "\tDNA consistent\tRNA consistent\tDNA consistent with RNA");
+            outputLines.ForEach(_ => outputFile.WriteLine(_));
+
+            outputFile.WriteLine("**done**");
+            outputFile.Close();
         } // HandleOneCase
+
+        static bool isConsistent(bool dna, Dictionary<bool, int> inPhaseRef, Dictionary<bool, int> inPhaseAlt, Dictionary<bool, int> outOfPhaseRA, Dictionary<bool, int> outOfPhaseAR, Dictionary<bool, int> weird)
+        {
+            int totalMeasurements = inPhaseRef[dna] + inPhaseAlt[dna] + outOfPhaseRA[dna] + outOfPhaseRA[dna] + weird[dna];
+            if (inPhaseRef[dna] + outOfPhaseRA[dna] < minReadsToDecideConsistency || inPhaseAlt[dna] + outOfPhaseAR[dna] < minReadsToDecideConsistency || 
+                inPhaseRef[dna] + outOfPhaseAR[dna] < minReadsToDecideConsistency || inPhaseAlt[dna] + outOfPhaseRA[dna] < minReadsToDecideConsistency) // We have at least minReadsToDecideConsistency cases in the ref and alt of at least one variant
+            {
+                return true;    // Nothing to see here
+            }
+
+            double inPhaseFraction = ((double)inPhaseRef[dna] + inPhaseAlt[dna]) / totalMeasurements;
+            return (inPhaseFraction <= 0.1 || inPhaseFraction >= 0.9) && (double)weird[dna] / totalMeasurements < 0.1;
+        } // isConsistent
+
+        static bool DNAandRNAConsistent(Dictionary<bool, int> inPhaseRef, Dictionary<bool, int> inPhaseAlt, Dictionary<bool, int> outOfPhaseRA, Dictionary<bool, int> outOfPhaseAR, Dictionary<bool, int> weird)
+        {
+            if (ASETools.BothBools.Any(dna => !isConsistent(dna, inPhaseRef, inPhaseAlt, outOfPhaseRA, outOfPhaseAR, weird)))
+            {
+                return false;
+            }
+
+            if (ASETools.BothBools.Any(dna => inPhaseRef[dna] + outOfPhaseRA[dna] < minReadsToDecideConsistency || inPhaseAlt[dna] + outOfPhaseAR[dna] < minReadsToDecideConsistency ||
+                inPhaseRef[dna] + outOfPhaseAR[dna] < minReadsToDecideConsistency || inPhaseAlt[dna] + outOfPhaseRA[dna] < minReadsToDecideConsistency))
+            {
+                return true;    // Anything is consistent with too little measurement.
+            }
+
+            var dnaIsInPhase = inPhaseRef[true] + inPhaseAlt[true] > outOfPhaseAR[true] + outOfPhaseRA[true];
+            var rnaIsInPhase = inPhaseRef[false] + inPhaseAlt[false] > outOfPhaseAR[false] + outOfPhaseRA[false];
+
+            return dnaIsInPhase == rnaIsInPhase;
+        } // DNAandRNAConsistent
+
     } // Program
 } // Namespace

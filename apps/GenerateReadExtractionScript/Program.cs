@@ -171,7 +171,7 @@ namespace GenerateScriptFromVariants
                 foreach (var tenativeSelectedVariant in tentativeSelectedVariants)
                 {
 
-                    generatedScript.Add("samtools view " + inputBamFilename + " " + tenativeSelectedVariant.contig + ":" + Math.Max(1, tenativeSelectedVariant.locus - configuration.distanceFromVariantToKeepReads) + "-" + (tenativeSelectedVariant.locus + configuration.distanceFromVariantToKeepReads) +
+                    generatedScript.Add("samtools view " + inputBamFilename + " " + tenativeSelectedVariant.contig + ":" + Math.Max(1, tenativeSelectedVariant.locus - 200) + "-" + (tenativeSelectedVariant.locus + 10) +
                         @" > " + bamFileId + tenativeSelectedVariant.getExtractedReadsExtension());
 
                     nVariants++;
@@ -189,7 +189,7 @@ namespace GenerateScriptFromVariants
 
                 foreach (var mafLine in mafLines)
                 {
-                    generatedScript.Add("samtools view " + inputBamFilename + " " + mafLine.Chromosome + ":" + Math.Max(1, mafLine.Start_Position - configuration.distanceFromVariantToKeepReads) + "-" + (mafLine.End_Positon + configuration.distanceFromVariantToKeepReads) +
+                    generatedScript.Add("samtools view " + inputBamFilename + " " + mafLine.Chromosome + ":" + Math.Max(1, mafLine.Start_Position - 200) + "-" + (mafLine.End_Positon + 10) +
                         @" > " + bamFileId + mafLine.getExtractedReadsExtension());
                 }
 

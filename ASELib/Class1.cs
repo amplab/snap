@@ -1391,6 +1391,7 @@ namespace ASELib
             public string compressed_vcf_filename = "";
             public string case_metadata_filename = "";
             public string tentative_asv_without_cnvs_filename = "";
+            public string variant_phasing_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -1458,6 +1459,7 @@ namespace ASELib
             public long compressed_vcf_file_size = 0;
             public long case_metadata_file_size = 0;
             public long tentative_asv_without_cnvs_size = 0;
+            public long variant_phasing_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1676,6 +1678,7 @@ namespace ASELib
                 new FieldInformation("Compressed VCF",                                      c => c.compressed_vcf_filename, (c, v) => c.compressed_vcf_filename = v, DerivedFile.Type.CompressedVCF, compressedVCFExtension, c => c.normal_dna_file_id, "Compressed VCF Size", c => c.compressed_vcf_file_size, (c, v) => c.compressed_vcf_file_size = v),
                 new FieldInformation("Case Metadata",                                       c => c.case_metadata_filename, (c, v) => c.case_metadata_filename = v, DerivedFile.Type.CaseMetadata, caseMetadataExtension, c => c.case_id, "Case Metadata Size", c => c.case_metadata_file_size, (c, v) => c.case_metadata_file_size = v),
                 new FieldInformation("Tentative ASVs without CNVs Filename",                c => c.tentative_asv_without_cnvs_filename, (c, v) => c.tentative_asv_without_cnvs_filename = v, DerivedFile.Type.TentativeASVsWithoutCNVs, tentativeASVsWithoutCNVsExtension, c => c.case_id, "Tentative ASVs Without CNVs Size", c => c.tentative_asv_without_cnvs_size, (c, v) => c.tentative_asv_without_cnvs_size = v),
+                new FieldInformation("Variant Phasing Filename",                            c => c.variant_phasing_filename, (c, v) => c.variant_phasing_filename = v, DerivedFile.Type.VariantPhasing, variantPhasingExtension, c => c.case_id, "Variant Phasing Size", c => c.variant_phasing_size, (c, v) => c.variant_phasing_size = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -2266,9 +2269,7 @@ namespace ASELib
             public double repetitiveRegionConfidence = 0.95;   // 
             public int minDistanceBetweenGermlineVariants = 1000;
 
-            public int distanceFromVariantToKeepReads = 1500;   // Determines how far away from a variant (somatic or germline) we keep reads.  This also controls how far away we look for variant pairs we can phase.
-
-            public int nWorkerMachines = 120;                 // Over how many machines would we like to evenly split our work?
+             public int nWorkerMachines = 120;                 // Over how many machines would we like to evenly split our work?
 
             public bool isBeatAML = false;
 
@@ -2539,8 +2540,6 @@ namespace ASELib
                         retVal.localIndexDirectory = fields[1];
                     } else if (type == "n worker machines") {
                         retVal.nWorkerMachines = Convert.ToInt32(fields[1]);
-                    } else if (type == "distance from variant to keep reads") { 
-                         retVal.distanceFromVariantToKeepReads = Convert.ToInt32(fields[1]);
                     } else if (type == "uses chr") {
                         if (fields[1] == "yes")
                         {
@@ -3263,7 +3262,7 @@ namespace ASELib
             if (tumor)
             {
                 if (dna) return tumorDNAReadsAtTentativeSelectedVariantsExtension;
-                return tumorRNAReadsAtTentativeSelectedVariantsIndexExtension;
+                return tumorRNAReadsAtTentativeSelectedVariantsExtension;
             }
             if (dna) return normalDNAReadsAtTentativeSelectedVariantsExtension;
             return normalRNAReadsAtTentativeSelectedVariantsExtension;
@@ -3367,6 +3366,7 @@ namespace ASELib
         public const string UniparentalDisomyFilename = "UniparentalDisomy.txt";
         public const string UniparentalDisomyHistogramsFilename = "UniparentalDisomyHistograms.txt";
         public const string PhasingForNearbyVariantsFilename = "PhasingForNearbyVariants.txt";
+        public const string variantPhasingExtension = ".variant_phasing.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -3416,7 +3416,7 @@ namespace ASELib
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
-                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs
+                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs, VariantPhasing
             };
         } // DerivedFile
 
@@ -6771,6 +6771,16 @@ namespace ASELib
                 return true;
             }
 
+            public bool isSubfileTooBigToRead(string subfileName)
+            {
+                if (!subfiles.ContainsKey(subfileName))
+                {
+                    return false;   // Doesn't exist, so it's not too big to read
+                }
+
+                return subfiles[subfileName].size > int.MaxValue;
+            }
+
             public StreamReader getSubfile(string subfileName)
             {
                 if (!subfiles.ContainsKey(subfileName))
@@ -8041,7 +8051,14 @@ namespace ASELib
 
             public string getExtractedReadsExtension()
             {
-                return "-" + contig + "-" + locus;
+                if (somaticMutation)
+                {
+                    return "-" + contig + "-" + Math.Max(1, locus - 200) + "-" + (locus + 10);    // Is this right for indels??
+                }
+                else
+                {
+                    return "-" + contig + "-" + locus;
+                }
             }
 
             public bool isSilent()
@@ -14835,8 +14852,221 @@ namespace ASELib
             }
         } // FASTA
 
-      
+        public static void MergeDictionaries<K,V>(Dictionary<K, List<V>> into, Dictionary<K,List<V>> from)
+        {
+            foreach (var k in from.Select(_ => _.Key))
+            {
+                if (!into.ContainsKey(k))
+                {
+                    into.Add(k, from[k]);
+                } else
+                {
+                    into[k].AddRange(from[k]);
+                }
+            } // for each key in from
+        } // MergeDictionaries
 
+        public static void MergeDictionaries<K>(Dictionary<K, int> into, Dictionary<K, int> from)
+        {
+            foreach (var k in from.Select(_ => _.Key))
+            {
+                if (!into.ContainsKey(k))
+                {
+                    into.Add(k, from[k]);
+                }
+                else
+                {
+                    into[k] += from[k];
+                }
+            } // for each key in from
+        } // MergeDictionaries
+
+        public static void MergeDictionaries<K>(Dictionary<K, double> into, Dictionary<K, double> from)
+        {
+            foreach (var k in from.Select(_ => _.Key))
+            {
+                if (!into.ContainsKey(k))
+                {
+                    into.Add(k, from[k]);
+                }
+                else
+                {
+                    into[k] += from[k];
+                }
+            } // for each key in from
+        } // MergeDictionaries
+
+        public class VariantPairPhasing
+        {
+            public readonly string contig;
+            public readonly int locus0, locus1;
+            public readonly int[] loci = new int[2];
+            public readonly bool somatic0, somatic1;
+            public readonly bool[] somatic = new bool[2];
+            public readonly string ref0, alt0, ref1, alt1;
+            public readonly string[] ref_ = new string[2], alt = new string[2];
+            public readonly Dictionary<bool, Dictionary<bool, Dictionary<bool, int>>> counts = new Dictionary<bool, Dictionary<bool, Dictionary<bool, int>>>();    // Doesn't include weird.  Maps dna->ref locus 0->ref locus 1->count
+            public readonly Dictionary<bool, int> weirdCounts = new Dictionary<bool, int>();  // DNA->weird count
+            public readonly bool dnaConsistent, rnaConsistent;
+            public readonly Dictionary<bool, bool> consistent = new Dictionary<bool, bool>();  // DNA->consistent
+            public readonly bool mutuallyConsistent;
+
+            public static List<VariantPairPhasing> readFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    return null;
+                }
+
+                var headerizedFile = new HeaderizedFile<VariantPairPhasing>(inputFile, false, true, "", wantedFields.ToList());
+                List<VariantPairPhasing> retVal;
+                if (!headerizedFile.ParseFile(ParseOneLine, out retVal))
+                {
+                    return null;
+                }
+
+                return retVal;
+            }
+
+            public int nSomaticVariants()
+            {
+                int retVal = 0;
+                if (somatic0) retVal++;
+                if (somatic1) retVal++;
+
+                return retVal;
+            }
+
+            public int countOfReadsForOneReadType(bool dna)
+            {
+                return counts[dna][true][true] + counts[dna][true][false] + counts[dna][false][true] + counts[dna][false][false];
+            }
+
+            public bool hasEnoughReadsForOneReadType(bool dna, int minReads)
+            {
+                return countOfReadsForOneReadType(dna) >= minReads;
+            }
+
+            public bool hasEnoughReadsOfEitherReadType(int minReads)
+            {
+                return ASETools.BothBools.Any(dna => hasEnoughReadsForOneReadType(dna, minReads));
+            }
+
+
+
+            VariantPairPhasing(string contig_, int locus0_, int locus1_, bool somatic0_, bool somatic1_, string ref0_, string ref1_, string alt0_, string alt1_, int dnaRR, int dnaAA, int dnaRA, int dnaAR, int dnaWeird,
+                               int rnaRR, int rnaAA, int rnaRA, int rnaAR, int rnaWeird, bool dnaConsistent_, bool rnaConsistent_, bool mutuallyConsistent_)
+            {
+                contig = contig_;
+                locus0 = locus0_;
+                locus1 = locus1_;
+                somatic0 = somatic0_;
+                somatic1 = somatic1_;
+                ref0 = ref0_;
+                ref1 = ref1_;
+                alt0 = alt0_;
+                alt1 = alt1_;
+                dnaConsistent = dnaConsistent_;
+                rnaConsistent = rnaConsistent_;
+                mutuallyConsistent = mutuallyConsistent_;
+
+                loci[0] = locus0;
+                loci[1] = locus1;
+
+                somatic[0] = somatic0;
+                somatic[1] = somatic1;
+
+                ref_[0] = ref0;
+                ref_[1] = ref1;
+
+                alt[0] = alt0;
+                alt[1] = alt1;
+
+                foreach (var dna in ASETools.BothBools)
+                {
+                    counts.Add(dna, new Dictionary<bool, Dictionary<bool, int>>());
+
+                    foreach (var refLocus0 in ASETools.BothBools)
+                    {
+                        counts[dna].Add(refLocus0, new Dictionary<bool, int>());
+
+                        // Don't bother with the last Add, we do it below when we populate.
+                    } // refLocus0
+                } // dna
+
+                counts[true][true].Add(true, dnaRR);
+                counts[true][true].Add(false, dnaRA);
+                counts[true][false].Add(true, dnaAR);
+                counts[true][false].Add(false, dnaAA);
+                counts[false][true].Add(true, rnaRR);
+                counts[false][true].Add(false, rnaRA);
+                counts[false][false].Add(true, rnaAR);
+                counts[false][false].Add(false, rnaAA);
+
+                weirdCounts.Add(true, dnaWeird);
+                weirdCounts.Add(false, rnaWeird);
+
+                consistent.Add(true, dnaConsistent);
+                consistent.Add(false, rnaConsistent);
+
+            }
+
+            static VariantPairPhasing ParseOneLine(HeaderizedFile<VariantPairPhasing>.FieldGrabber fieldGrabber)
+            {
+                return new VariantPairPhasing(
+                                contig_:                fieldGrabber.AsString("Contig"),
+                                locus0_:                fieldGrabber.AsInt("locus 0"),
+                                locus1_:                fieldGrabber.AsInt("locus 1"),
+                                somatic0_:              fieldGrabber.AsBool("Somatic 0"),
+                                somatic1_:              fieldGrabber.AsBool("Somatic 1"),
+                                ref0_:                  fieldGrabber.AsString("Ref 0"),
+                                ref1_:                  fieldGrabber.AsString("Ref 1"),
+                                alt0_:                  fieldGrabber.AsString("Alt 0"),
+                                alt1_:                  fieldGrabber.AsString("Alt 1"),
+                                dnaRR:                  fieldGrabber.AsInt("DNA ref ref"),
+                                dnaRA:                  fieldGrabber.AsInt("DNA ref alt"),
+                                dnaAR:                  fieldGrabber.AsInt("DNA alt ref"),
+                                dnaAA:                  fieldGrabber.AsInt("DNA alt alt"),
+                                rnaRR:                  fieldGrabber.AsInt("RNA ref ref"),
+                                rnaRA:                  fieldGrabber.AsInt("RNA ref alt"),
+                                rnaAR:                  fieldGrabber.AsInt("RNA alt ref"),
+                                rnaAA:                  fieldGrabber.AsInt("RNA alt alt"),
+                                dnaWeird:               fieldGrabber.AsInt("DNA weird"),
+                                rnaWeird:               fieldGrabber.AsInt("RNA weird"),
+                                dnaConsistent_:         fieldGrabber.AsBool("DNA consistent"),
+                                rnaConsistent_:         fieldGrabber.AsBool("RNA consistent"),
+                                mutuallyConsistent_:    fieldGrabber.AsBool("DNA consistent with RNA")
+                                );
+
+            } // ParseOneLine
+
+            static readonly string[] wantedFields =
+            {
+                "Contig",
+                "locus 0",
+                "locus 1",
+                "Somatic 0",
+                "Somatic 1",
+                "Ref 0",
+                "Alt 0",
+                "Ref 1",
+                "Alt 1",
+                "DNA ref ref",
+                "DNA alt alt",
+                "DNA ref alt",
+                "DNA alt ref",
+                "DNA weird",
+                "RNA ref ref",
+                "RNA alt alt",
+                "RNA ref alt",
+                "RNA alt ref",
+                "RNA weird",
+                "DNA consistent",
+                "RNA consistent",
+                "DNA consistent with RNA"
+            };
+        } // VariantPairPhasing
 
     } // ASETools
 

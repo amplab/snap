@@ -224,6 +224,7 @@ namespace CheckDone
                 HandleFilename(case_.isoform_read_counts_filename, "IsoformReadCounts", fileTypesToUse);
                 HandleFilename(case_.case_metadata_filename, "CaseMetadata", fileTypesToUse);
                 HandleFilename(case_.tentative_asv_without_cnvs_filename, "TentativeASVsWithoutCNVs", fileTypesToUse);
+                HandleFilename(case_.variant_phasing_filename, "VariantPhasing", fileTypesToUse);
             }
 
             HandleFilenameIfExists(configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename, "SingleReadPhasing", fileTypesToUse);
