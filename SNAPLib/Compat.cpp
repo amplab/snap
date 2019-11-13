@@ -219,7 +219,7 @@ bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis)
 
 void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread to a processor.  You can no-op it at some perf hit.
 {
-    if (!SetThreadAffinityMask(GetCurrentThread(),((unsigned _int64)1) << processorNumber)) {
+    if (!SetThreadAffinityMask(GetCurrentThread(),((_uint64)1) << processorNumber)) {
         WriteErrorMessage("Binding thread to processor %d failed, %d\n",processorNumber,GetLastError());
     }
 }
