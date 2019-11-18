@@ -733,7 +733,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (caseFileInputGetters.Any(inputGetter => stateOfTheWorld.listOfCases.Any(case_ => inputGetter(case_) == "")))
+                if (caseFileInputGetters != null && caseFileInputGetters.Any(inputGetter => stateOfTheWorld.listOfCases.Any(case_ => inputGetter(case_) == "")))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -822,11 +822,12 @@ namespace ASEProcessManager
 
         class SpliceosomeAllelicImbalanceProcessingStage : SingleOutputProcessingStage
         {
-            public SpliceosomeAllelicImbalanceProcessingStage():base("Spliceosome Allelic Imbalance", true, "SpliceosomeAllelicImbalance.exe", "", getCaseFiles, null, getOutputFiles)
+            public SpliceosomeAllelicImbalanceProcessingStage() : base("Spliceosome Allelic Imbalance", true, "SpliceosomeAllelicImbalance.exe", "", getCaseFiles, getOneOffFiles, getOutputFiles)
             {
             }
 
             static GetCaseFile[] getCaseFiles = { _ => _.isoform_read_counts_filename };
+            static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };    // Not clear it actually needs this, but it loads it with common data.
             static GetOneOffFile[] getOutputFiles = {_ => _.configuration.finalResultsDirectory + ASETools.IsoformBalancePValueHistogramFilename , _ => _.configuration.finalResultsDirectory + ASETools.IsoformBalanceFilenameBase + "_tumor.txt",
             _ => _.configuration.finalResultsDirectory + ASETools.IsoformBalanceFilenameBase + "_normal.txt"};  // XXX should be a way to do the per-disease and per-gene files here, too.
         }
@@ -1283,7 +1284,7 @@ namespace ASEProcessManager
                     azureScript.Write("./freebayes-parallel " + regionFileName + " `cat ~/ncores` --region {} --fasta-reference " + fastaName + " ~/x/*.bam > ~/" +
                         case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
                     azureScript.Write("if [ $? = 0 ]; then\n");
-                    azureScript.Write("    mv " + case_.normal_dna_file_id + ASETools.vcfExtension + " ~/completed_vcfs/\n");
+                    azureScript.Write("    mv ~/" + case_.normal_dna_file_id + ASETools.vcfExtension + " ~/completed_vcfs/\n");
                     azureScript.Write("else\n");
                     azureScript.Write("    echo " + case_.normal_dna_file_id + " >> ~/variant_calling_errors\n");
                     azureScript.Write("fi\n");
@@ -4030,7 +4031,7 @@ namespace ASEProcessManager
             public DistanceBetweenMutationsProcessingStage() : base("Distance Between Mutations", true, "DistanceBetweenMutations.exe", "", null, getInputFile, getOutputFile)
             { }
 
-            static GetOneOffFile[] getInputFile = { stateOfTheWorld => stateOfTheWorld.scatterGraphsSummaryFile };
+            static GetOneOffFile[] getInputFile = { stateOfTheWorld => stateOfTheWorld.scatterGraphsSummaryFile, _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };
             static GetOneOffFile[] getOutputFile = { stateOfTheWorld => stateOfTheWorld.configuration.finalResultsDirectory + ASETools.DistanceBetweenMutationsFilename };
         } // DistanceBetweenMutationsProcessingStage
 
@@ -4499,6 +4500,14 @@ namespace ASEProcessManager
 
                 var vcfsToBeMoved = new List<string>();
                 foreach (var completedVCF in Directory.EnumerateFiles(configuration.completedVCFsDirectory)) {
+                    if (completedVCF.ToLower().EndsWith("filepart"))
+                    {
+                        //
+                        // This is a partially downloaded file from WinSCP.  Just ignore it.
+                        //
+                        continue;
+                    }
+                    
                     if (!completedVCF.EndsWith(ASETools.vcfExtension))
                     {
                         Console.WriteLine("Found non-VCF file in completed VCFs directory: " + completedVCF + ".  Ignoring.");
