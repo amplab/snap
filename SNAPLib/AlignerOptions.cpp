@@ -88,7 +88,8 @@ AlignerOptions::AlignerOptions(
     sortIntermediateDirectory(NULL),
     profile(false),
     ignoreAlignmentAdjustmentsForOm(true),
-    emitInternalScore(false)
+    emitInternalScore(false),
+	altAwareness(true)
 {
     if (forPairedEnd) {
         maxDist                 = 32;
@@ -222,6 +223,9 @@ AlignerOptions::usageMessage()
         "           cost for opening a gap -go (default: %u)\n"
         "           cost for extending a gap -ge (default: %u)\n"
         "           minimum score threshold for read -gt (default: %u)\n"
+		"  -A-  Disable ALT awareness.  The default is to try to map reads to the primary assembly and to generate ALT hits with the supplementary\n"
+		"       alignment SAM flag (0x800), and to compute MAPQ for non-ALT alignments using only non-ALT hits.  This flag disables that behavior and\n"
+		"       results in ALT-oblivious behavior."
 		,
             commandLine,
             maxDist,

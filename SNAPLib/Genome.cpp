@@ -183,8 +183,9 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
     GenericFile *loadFile;
     GenomeDistance nBases;
     unsigned nContigs;
+	bool hasALTContigsMarked;
 
-    if (!openFileAndGetSizes(fileName, &loadFile, &nBases, &nContigs, map)) {
+    if (!openFileAndGetSizes(fileName, &loadFile, &nBases, &nContigs, map, &hasALTContigsMarked)) {
         //
         // It already printed an error.  Just fail.
         //
@@ -213,6 +214,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         WriteErrorMessage("Genome::loadFromFile: specified minOffset %u >= nBases %u\n", GenomeLocationAsInt64(minLocation), nBases);
         soft_exit(-1);
     }
+	genome->isContigAware = hasALTContigsMarked;
 
     genome->maxLocation = maxLocation;
 
@@ -306,7 +308,7 @@ Genome::sortContigsByName()
 }
 
     bool
-Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map)
+Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map, bool *hasALTContigsMarked)
 {
 	if (map) {
 		*file = GenericFile_map::open(filename);
@@ -329,6 +331,23 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDist
         WriteErrorMessage("Genome::openFileAndGetSizes: unable to read header\n");
         return false;
     }
+
+	unsigned flags = 0;
+	if (3 == sscanf(linebuf, "%lld %d %d\n", nBases, nContigs, flags)) 
+	{
+		if (flags & 0x1) 
+		{
+			*hasALTContigsMarked = true;
+		}
+		else 
+		{
+			*hasALTContigsMarked = false;
+		}
+	}
+	else 
+	{
+		*hasALTContigsMarked = false;
+	}
     return true;
 }
 

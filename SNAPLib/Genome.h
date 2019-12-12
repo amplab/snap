@@ -193,7 +193,12 @@ public:
         //
         // minOffset and length are used to read in only a part of a whole genome.
         //
-        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation i_minLocation = 0, GenomeDistance length = 0, bool map = false);
+        static const Genome *loadFromFile(
+								const char *fileName, 
+								unsigned chromosomePadding, 
+								GenomeLocation i_minLocation = 0, 
+								GenomeDistance length = 0, 
+								bool map = false);
                                                                   // This loads from a genome save
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
@@ -250,6 +255,7 @@ public:
             GenomeDistance     length;
             unsigned           nameLength;
             char              *name;
+			bool			   isALT;
         };
 
         inline const Contig *getContigs() const { return contigs; }
@@ -260,9 +266,10 @@ public:
         const Contig *getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const;
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
         int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
-
-// unused        Genome *copy() const {return copy(true,true,true);}
-// unused        Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
+		inline bool isGenomeContigAware() 
+		{
+			return isContigAware;
+		}
 
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
@@ -293,13 +300,14 @@ private:
         Contig      *contigs;    // This is always in order (it's not possible to express it otherwise in FASTA).
 
         Contig      *contigsByName;
-        Genome *copy(bool copyX, bool copyY, bool copyM) const;
-
-        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map);
+ 
+        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map, bool *hasALTContigsMarked);
 
         const unsigned chromosomePadding;
 
 		GenericFile_map *mappedFile;
+
+		bool isContigAware;
 };
 
 GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB);
