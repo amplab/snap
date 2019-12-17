@@ -52,6 +52,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
 		bool          noTruncation_,
         bool          useAffineGap_,    
         bool          ignoreAlignmentAdjustmentsForOm_,
+		bool		  altAwareness_,
         unsigned      matchReward_,
         unsigned      subPenalty_,
         unsigned      gapOpenPenalty_,
@@ -60,7 +61,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
     extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), useAffineGap(useAffineGap_),
-    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_),
+    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), altAwareness(altAwareness_),
     matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), minAGScore(minAGScore_)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();

@@ -45,6 +45,7 @@ public:
 		bool				noTruncation,
         bool                useAffineGap,
         bool                ignoreALignmentAdjustmentsForOm,
+		bool                altAwareness,
         PairedEndAligner    *underlyingPairedEndAligner_,
 		unsigned			minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,

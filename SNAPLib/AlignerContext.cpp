@@ -181,6 +181,7 @@ AlignerContext::initialize()
     noOrderedEvaluation = options->noOrderedEvaluation;
 	noTruncation = options->noTruncation;
     ignoreAlignmentAdjustmentForOm = options->ignoreAlignmentAdjustmentsForOm;
+	altAwareness = options->altAwareness;
     maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
 	maxSecondaryAlignments = options->maxSecondaryAlignments;
     maxSecondaryAlignmentsPerContig = options->maxSecondaryAlignmentsPerContig;

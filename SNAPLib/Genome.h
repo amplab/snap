@@ -174,7 +174,8 @@ public:
             unsigned                maxContigs = 32);
 
         void startContig(
-            const char          *contigName);
+            const char          *contigName,
+			bool                 isAlt);
 
         void addData(
             const char          *data);
@@ -203,7 +204,7 @@ public:
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
 
-        static bool getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs);
+        static bool getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs, bool *hasAltContigsMarked);
 
         bool saveToFile(const char *fileName) const;
 
@@ -296,6 +297,8 @@ private:
         //
         int          nContigs;
         int          maxContigs;
+
+		bool		areAltContigsMarked;
 
         Contig      *contigs;    // This is always in order (it's not possible to express it otherwise in FASTA).
 

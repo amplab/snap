@@ -61,7 +61,8 @@ BaseAligner::BaseAligner(
     bool			i_noTruncation,
     bool            i_useAffineGap,
     bool            i_ignoreAlignmentAdjustmentsForOm,
-    int             i_maxSecondaryAlignmentsPerContig,
+	bool            i_altAwareness,
+	int             i_maxSecondaryAlignmentsPerContig,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
     unsigned             i_matchReward,
@@ -79,7 +80,8 @@ BaseAligner::BaseAligner(
 		useAffineGap(i_useAffineGap), matchReward(i_matchReward), subPenalty(i_subPenalty), 
         gapOpenPenalty(i_gapOpenPenalty), gapExtendPenalty(i_gapExtendPenalty), minAGScore(i_minAGScore),
         minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
-        alignmentAdjuster(i_genomeIndex->getGenome()), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
+        alignmentAdjuster(i_genomeIndex->getGenome()), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm),
+		altAwareness(i_altAwareness)
 /*++
 
 Routine Description:
@@ -110,6 +112,7 @@ Arguments:
     i_gapOpenPenalty    - affine gap cost for opening a gap (indel)
     i_gapExtendPenalty  - affine gap cost for extending a gap (indel)
     i_minAGScore        - minimum score for alignment using affine gap score
+	i_altAwareness      - treat reads mapped to ALT contigs differently than normal ones
     i_stats             - an object into which we report out statistics
     allocator           - an allocator that's used to allocate our local memory.  This is useful for TLB optimization.  If this is supplied, the caller
                           is responsible for deallocation, we'll not deallocate any dynamic memory in our destructor.
@@ -263,9 +266,7 @@ Arguments:
         memset(candidateHashTable[rc],0,sizeof(HashTableAnchor) * candidateHashTablesSize);
     }
     hashTableEpoch = 0;
-
- 
-}
+} // BaseAligner::BaseAligner
 
 
 #ifdef  _DEBUG

@@ -486,7 +486,7 @@ void PairedAlignerContext::runIterationThread()
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
-                                                                useAffineGap, ignoreAlignmentAdjustmentForOm,
+                                                                useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness,
                                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore);
 
 
@@ -505,6 +505,7 @@ void PairedAlignerContext::runIterationThread()
 		noTruncation,
         useAffineGap,
         ignoreAlignmentAdjustmentForOm,
+		altAwareness,
         intersectingAligner,
 		minReadLength,
         maxSecondaryAlignmentsPerContig,

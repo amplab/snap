@@ -73,7 +73,7 @@ Genome::addData(const char *data)
 }
 
     void
-Genome::startContig(const char *contigName)
+Genome::startContig(const char *contigName, bool isAlt)
 {
     if (nContigs == maxContigs) {
         //
@@ -101,6 +101,7 @@ Genome::startContig(const char *contigName)
 
     strncpy(contigs[nContigs].name,contigName,len);
     contigs[nContigs].name[len-1] = '\0';
+	contigs[nContigs].isALT = isAlt;
 
     nContigs++;
 }
@@ -127,6 +128,7 @@ Genome::~Genome()
 }
 
 
+#define	GENOME_FLAG_ALT_CONTIGS_MARKED		0x1
     bool
 Genome::saveToFile(const char *fileName) const
 {
@@ -141,7 +143,7 @@ Genome::saveToFile(const char *fileName) const
         return false;
     } 
 
-    fprintf(saveFile,"%lld %d\n",nBases, nContigs);
+    fprintf(saveFile,"%lld %d %d\n",nBases, nContigs, (areAltContigsMarked ? GENOME_FLAG_ALT_CONTIGS_MARKED : 0));	
     char *curChar = NULL;
 
     for (int i = 0; i < nContigs; i++) {
@@ -333,9 +335,9 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDist
     }
 
 	unsigned flags = 0;
-	if (3 == sscanf(linebuf, "%lld %d %d\n", nBases, nContigs, flags)) 
+	if (3 == sscanf(linebuf, "%lld %d %d\n", nBases, nContigs, &flags)) 
 	{
-		if (flags & 0x1) 
+		if (flags & GENOME_FLAG_ALT_CONTIGS_MARKED) 
 		{
 			*hasALTContigsMarked = true;
 		}
@@ -353,13 +355,13 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDist
 
 
     bool 
-Genome::getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs)
+Genome::getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs, bool *hasALTContigsMarked)
 {
     GenericFile *file;
     GenomeDistance localNBases;
     unsigned localnContigs;
     
-    if (!openFileAndGetSizes(fileName,&file, nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs, false)) {
+    if (!openFileAndGetSizes(fileName,&file, nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs, false, hasALTContigsMarked)) {
         return false;
     }
 

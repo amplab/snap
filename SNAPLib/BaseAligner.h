@@ -57,7 +57,8 @@ public:
 		bool			i_noTruncation,
         bool            i_useAffineGap,           
         bool            i_ignoreAlignmentAdjustmentsForOm,
-        int             i_maxSecondaryAlignmentsPerContig,
+		bool			i_altAwareness,
+		int             i_maxSecondaryAlignmentsPerContig,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         unsigned        i_matchReward = 1,
@@ -127,6 +128,7 @@ private:
     LandauVishkin<> *landauVishkin;
     LandauVishkin<-1> *reverseLandauVishkin;
     bool ownLandauVishkin;
+	bool altAwareness;
 
     // AffineGap<> *affineGap;
     // AffineGap<-1> *reverseAffineGap;

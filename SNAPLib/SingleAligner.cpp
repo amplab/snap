@@ -132,6 +132,7 @@ SingleAlignerContext::runIterationThread()
 			noTruncation,
             useAffineGap,
             ignoreAlignmentAdjustmentForOm,
+			altAwareness,
             maxSecondaryAlignmentsPerContig,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV

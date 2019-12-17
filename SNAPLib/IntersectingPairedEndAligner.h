@@ -55,6 +55,7 @@ public:
 		bool		  noTruncation_,
         bool          useAffineGap_,
         bool          ignoreAlignmentAdjustmentsForOm_,
+		bool		  altAwareness,
         unsigned      matchReward_,
         unsigned      subPenalty_,
         unsigned      gapOpenPenalty_,
@@ -150,6 +151,7 @@ private:
 	bool			noTruncation;
     bool            useAffineGap;
     bool            ignoreAlignmentAdjustmentsForOm;
+	bool			altAwareness;
 
     // Affine gap scoring parameters
     int             matchReward;
