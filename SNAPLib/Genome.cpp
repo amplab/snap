@@ -73,7 +73,7 @@ Genome::addData(const char *data)
 }
 
     void
-Genome::startContig(const char *contigName, bool isAlt)
+Genome::startContig(const char *contigName)
 {
     if (nContigs == maxContigs) {
         //
@@ -101,11 +101,23 @@ Genome::startContig(const char *contigName, bool isAlt)
 
     strncpy(contigs[nContigs].name,contigName,len);
     contigs[nContigs].name[len-1] = '\0';
-	contigs[nContigs].isALT = isAlt;
+	contigs[nContigs].isALT = false;
 
     nContigs++;
 }
 
+
+	void 
+Genome::markContigALT(
+	const char			*contigName)
+{
+	for (int i = 0; i < nContigs; i++) {
+		if (!strcmp(contigs[i].name, contigName)) {
+			contigs[i].isALT = true;
+			return;;
+		} // if it matches
+	} // for each contig
+} // markContigALT
 
 Genome::~Genome()
 {

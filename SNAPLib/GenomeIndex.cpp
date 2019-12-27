@@ -46,6 +46,7 @@ static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
 static const unsigned DEFAULT_LOCATION_SIZE = 4;
+static const GenomeDistance MAX_ALT_SIZE_FOR_AUTO_ALT = 20000000;
 
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
@@ -59,8 +60,7 @@ static void usage()
 		"Options:\n"
 		"  -s               Seed size (default: %d)\n"
 		"  -h               Hash table slack (default: %.1f)\n"
-		"  -hg19            This parameter is deprecated and will be ignored.\n"
-		"  -Ofactor         This parameter is deprecated and will be ignored.\n"
+
 		" -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
 		" -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
 		"                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
@@ -85,15 +85,40 @@ static void usage()
 		"                   In particular, this will generally use less memory than the index will use once it's built, so if this doesn't work you\n"
 		"                   won't be able to use the index anyway. However, if you've got sufficient memory to begin with, this option will just\n"
 		"                   slow down the index build by doing extra, useless IO.\n"
+		" -AutoAlt          Automatically mark ALT contigs.  Any contig larger than %lld will not be an alt, as will any contig named M, MT, chrM or\n"
+		"                   chrMT (regardless of capitalization).  Unless you specify this or one of the options below, no contigs will be marked ALT.\n"
+		" -maxAltContigSize Specify a size at or below which all contigs are automatically marked ALT, unless overriden by name using the args below\n"
+		" -altContigName    Specify the (case independent) name of an alt to mark a contig.  You can supply this parameter as often as you'd like\n"
+		" -altContigFile    Specify the name of a file with a list of alt contig names, one per line.  You may specify this as often as you'd like\n"
+		" -nonAltContig     Specify the name of a contig that's not an alt, regardless of its size\n"
+		" -nonAltFile       Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
 			,
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
             DEFAULT_PADDING,
             DEFAULT_KEY_BYTES,
-            DEFAULT_LOCATION_SIZE);
+            DEFAULT_LOCATION_SIZE,
+			MAX_ALT_SIZE_FOR_AUTO_ALT);
     soft_exit_no_print(1);    // Don't use soft-exit, it's confusing people to get an error message after the usage
 }
 
+// Copies the input string, reallocates the list and adds it to the end.
+    void
+addToCountedListOfStrings(
+	char *newString,
+	int *length,
+	char ***list)
+{
+	char *newStringCopy = new char[strlen(newString) + 1];
+	strcpy(newStringCopy, newString);
+
+	char **newList = new char*[*length + 1];
+	memcpy(newList, *list, sizeof(char *) * *length);
+	delete[] *list;
+	*list = newList;
+	(*list)[*length] = newStringCopy;
+	(*length)++;
+}
 
     void
 GenomeIndex::runIndexer(
@@ -120,6 +145,11 @@ GenomeIndex::runIndexer(
 	bool large = false;
     unsigned locationSize = DEFAULT_LOCATION_SIZE;
 	bool smallMemory = false;
+	GenomeDistance maxSizeForAyutomaticALT = 0;
+	int nAltOptIn = 0;
+	char *altOptInList = NULL;
+	int nALtOptOut = 0;
+	char *altOptOutList = NULL;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -185,8 +215,16 @@ GenomeIndex::runIndexer(
             }
         } else if (argv[n][0] == '-' && argv[n][1] == 'B') {
             pieceNameTerminatorCharacters = argv[n] + 2;
-        } else if (!strcmp(argv[n], "-bSpace")) {
-            spaceIsAPieceNameTerminator = true;
+		}
+		else if (!strcmp(argv[n], "-bSpace")) {
+			spaceIsAPieceNameTerminator = true;
+		} else if (!strcmp(argv[n], "-AutoAlt")) {
+			if (n + 1 < argc) {
+
+			}
+			else {
+				usage();
+			}
         } else {
             WriteErrorMessage("Invalid argument: %s\n\n", argv[n]);
             usage();

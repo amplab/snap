@@ -26,8 +26,22 @@ Revision History:
 
 #include "Genome.h"
 
-    const Genome *
-ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator, unsigned chromosomePaddingSize);
+//
+// There are several ways of specifying ALT contigs.  There is an opt-in list of ALTs, an opt-out list of regular chromosomes (these must be mutually
+// exclusive), and a size cutoff below which is contig is an ALT.  The opt-in and opt-out lists supersede the size cutoff.
+//
+
+	const Genome *
+ReadFASTAGenome(
+	const char		*fileName,
+	const char		*pieceNameTerminatorCharacters,
+	bool			 spaceIsAPieceNameTerminator,
+	unsigned		 chromosomePaddingSize,
+	const char		*opt_in_alt_names,
+	int				 opt_in_alt_names_count,
+	const char		*opt_out_alt_names,
+	int				 opt_out_alt_names_count,
+	GenomeDistance	 maxSizeForAutomaticALT);
 
 //
 // The FASTA appending functions return whether the write was successful.

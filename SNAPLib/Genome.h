@@ -173,9 +173,11 @@ public:
             unsigned                i_chromosomePadding,
             unsigned                maxContigs = 32);
 
-        void startContig(
-            const char          *contigName,
-			bool                 isAlt);
+		void startContig(
+			const char          *contigName);
+
+		void markContigALT(
+			const char			*contigName);
 
         void addData(
             const char          *data);

@@ -31,12 +31,53 @@ Revision History:
 
 using namespace std;
 
+void
+MarkALTContigIfAppropriate(
+	const char		*contigName,
+	GenomeDistance	 contigSize,
+	const char		*opt_in_alt_names,
+	int				 opt_in_alt_names_count,
+	const char		*opt_out_alt_names,
+	int				 opt_out_alt_names_count,
+	GenomeDistance	 maxSizeForAutomaticALT,
+	Genome			*genome)
+{
+	for (int i = 0; i < opt_out_alt_names_count; i++) {
+		if (!stricmp(opt_out_alt_names+i, contigName)) {
+			return;
+		}
+	} // opt out
+
+	if (contigSize <= maxSizeForAutomaticALT) {
+		genome->markContigALT(contigName);
+		return;
+	}
+
+	for (int i = 0; i < opt_in_alt_names_count; i++) {
+		if (!stricmp(opt_in_alt_names + i, contigName)) {
+			genome->markContigALT(contigName);
+			return;
+		} // match
+	} // opt in
+} // MarkALTContigIfAppropriate
+
+
+//
+// There are several ways of specifying ALT contigs.  There is an opt-in list of ALTs, an opt-out list of regular chromosomes (these must be mutually
+// exclusive), and a size cutoff below which is contig is an ALT.  The opt-in and opt-out lists supersede the size cutoff.
+//
+
     const Genome *
 ReadFASTAGenome(
-    const char *fileName,
-    const char *pieceNameTerminatorCharacters,
-    bool spaceIsAPieceNameTerminator,
-    unsigned chromosomePaddingSize)
+	const char		*fileName,
+	const char		*pieceNameTerminatorCharacters,
+	bool			 spaceIsAPieceNameTerminator,
+	unsigned		 chromosomePaddingSize,
+	const char		*opt_in_alt_names,
+	int				 opt_in_alt_names_count,
+	const char		*opt_out_alt_names,
+	int				 opt_out_alt_names_count,
+	GenomeDistance	 maxSizeForAutomaticALT)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -84,10 +125,19 @@ ReadFASTAGenome(
 
     bool warningIssued = false;
     bool inAContig = false;
+	GenomeDistance contigLength = 0;
+	char *lastContigName = new char[lineBufferSize];
 
     while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, fastaFile)) {
         if (lineBuffer[0] == '>') {
+			if (inAContig) {
+				MarkALTContigIfAppropriate(lastContigName, contigLength, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names,
+					opt_out_alt_names_count, maxSizeForAutomaticALT, genome);
+			}
+
             inAContig = true;
+			contigLength = 0;
+
             //
             // A new contig.  Add in the padding first.
             //
@@ -104,6 +154,7 @@ ReadFASTAGenome(
                     }
                 }
             }
+
             if (spaceIsAPieceNameTerminator) {
                 char *terminator = strchr(lineBuffer, ' ');
                 if (NULL != terminator) {
@@ -114,15 +165,19 @@ ReadFASTAGenome(
                     *terminator = '\0';
                 }
             }
+
             char *terminator = strchr(lineBuffer, '\n');
             if (NULL != terminator) {
                 *terminator = '\0';
             }
+
             terminator = strchr(lineBuffer, '\r');
             if (NULL != terminator) {
                 *terminator = '\0';
             }
+
             genome->startContig(lineBuffer+1);
+			strcpy(lastContigName, lineBuffer + 1);
         } else {
             if (!inAContig) {
                 WriteErrorMessage("\nFASTA file doesn't beging with a contig name (i.e., the first line doesn't start with '>').\n");
@@ -144,6 +199,8 @@ ReadFASTAGenome(
               lineBuffer[i] = toupper(lineBuffer[i]);
             }
 
+			contigLength += lineLen;
+
 			for (unsigned i = 0; i < lineLen; i++) {
                 if (!isValidGenomeCharacter[(unsigned char)lineBuffer[i]]) {
                     if (!warningIssued) {
@@ -157,6 +214,14 @@ ReadFASTAGenome(
         }
     }
 
+	if (!inAContig) {
+		WriteErrorMessage("The FASTA file was empty.");
+		return NULL;
+	}
+
+	MarkALTContigIfAppropriate(lastContigName, contigLength, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names,
+		opt_out_alt_names_count, maxSizeForAutomaticALT, genome);
+
     //
     // And finally add padding at the end of the genome.
     //
@@ -167,6 +232,7 @@ ReadFASTAGenome(
     fclose(fastaFile);
     delete [] paddingBuffer;
     delete [] lineBuffer;
+	delete [] lastContigName;
     return genome;
 }
 
