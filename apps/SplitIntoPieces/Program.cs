@@ -148,17 +148,7 @@ namespace SplitIntoPieces
             {
                 // Not randomized
 
-                int nLinesPerPiece = nLines / nPieces;
-                if (nLinesPerPiece % lineGranularity != 0)
-                {
-                    nLinesPerPiece += lineGranularity - nLinesPerPiece % lineGranularity;
-                }
-
-                if (nLinesPerPiece * nPieces < nLines)
-                {
-                    nLinesPerPiece += lineGranularity;  // Round up
-                }
-
+                int nLinesWritten = 0;
 
                 for (i = 0; i < nPieces; i++)
                 {
@@ -175,9 +165,13 @@ namespace SplitIntoPieces
                         }
                     }
 
+                    int linesToWrite = (nLines - nLinesWritten) / (nPieces - i);
+                    if (linesToWrite % lineGranularity != 0)
+                    {
+                        linesToWrite += lineGranularity - linesToWrite % lineGranularity;
+                    }
 
-
-                    for (int j = i * nLinesPerPiece; j < (i + 1) * nLinesPerPiece && j < nLines; j++)
+                    for (int j = nLinesWritten; j < nLines && j < nLinesWritten + linesToWrite ; j++)
                     {
                         if (useUnixLineEndings)
                         {
@@ -188,6 +182,8 @@ namespace SplitIntoPieces
                             outputFile.WriteLine(lines[j]);
                         }
                     }
+
+                    nLinesWritten += linesToWrite;
                     outputFile.Close();
                 }
             }

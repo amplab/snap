@@ -192,7 +192,7 @@ namespace ASEProcessManager
                 // Divide it up as equally as possible.
                 //
                 int realMaxPerLine = Math.Min(maxCaseIdsPerLine,
-                    ((maxCharsPerLine - (stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString + parametersBeforeCaseIds).Length)) / (ASETools.GuidStringLength + 1)); // +1 is for the space between guids
+                    (maxCharsPerLine - (stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString + parametersBeforeCaseIds).Length) / (ASETools.GuidStringLength + 1)); // +1 is for the space between guids
 
                 int minLines = (nCasesToRun + realMaxPerLine - 1) / realMaxPerLine;
 
@@ -201,21 +201,29 @@ namespace ASEProcessManager
                 //
                 int desiredLines = ((minLines + desiredParallelism - 1) / desiredParallelism) * desiredParallelism;
 
-                var softNCasesPerLine = (nCasesToRun + desiredLines - 1) / desiredLines;
-
+                int nRemainingCases = nCasesToRun;
+                int nCasesForThisLine = 0;  // This get set the first time through.
+                int nOutputLinesWritten = 0;
 
                 foreach (var case_ in casesToRun)
                 {
                     if (nOnOutputLine == 0)
                     {
                         outputLine = stateOfTheWorld.configuration.binariesDirectory + binaryName + stateOfTheWorld.configurationString + " " + parametersBeforeCaseIds;
+                        if (nOutputLinesWritten < desiredLines)
+                        {
+                            nCasesForThisLine = nRemainingCases / (desiredLines - nOutputLinesWritten);
+                        } else
+                        {
+                            nCasesForThisLine = -1;
+                        }
                     }
 
                     outputLine += " " + generateCaseIdOutput(case_.case_id, stateOfTheWorld);
 
                     nOnOutputLine++;
 
-                    if (nOnOutputLine >= maxCaseIdsPerLine || outputLine.Length >= maxCharsPerLine || nOnOutputLine >= softNCasesPerLine)
+                    if (nOnOutputLine >= maxCaseIdsPerLine || outputLine.Length >= maxCharsPerLine || nCasesForThisLine == 0)
                     {
                         script.WriteLine(outputLine);
                         outputLine = "";
@@ -223,6 +231,8 @@ namespace ASEProcessManager
                     }
 
                     nAddedToScript++;
+                    nRemainingCases--;
+                    nCasesForThisLine--;
                 } // foreach case
 
                 if (nOnOutputLine != 0)
@@ -710,9 +720,9 @@ namespace ASEProcessManager
                 binaryName = binaryName_;
                 parameters = parameters_;
 
-                caseFileInputGetters = getCaseFile == null ? null : getCaseFile.ToList();
+                caseFileInputGetters = (getCaseFile == null) ? null : getCaseFile.ToList();
 
-                oneOffFileGetters = oneOffFileGetters == null ? null : getOneOffFile.ToList();
+                oneOffFileGetters = (getOneOffFile == null) ? null : getOneOffFile.ToList();
 
                 outputFileGetters = getOutputFile.ToList();
             } // ctor
@@ -734,6 +744,12 @@ namespace ASEProcessManager
                 }
 
                 if (caseFileInputGetters != null && caseFileInputGetters.Any(inputGetter => stateOfTheWorld.listOfCases.Any(case_ => inputGetter(case_) == "")))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                if (oneOffFileGetters != null && oneOffFileGetters.Any(_ => !File.Exists(_(stateOfTheWorld))))
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -1254,12 +1270,14 @@ namespace ASEProcessManager
                         continue;
                     }
 
+
                     //
                     // The Azure script downloads on the fly, so add every one that isn't done.  
                     // NB: we use Write and \n rather than WriteLine to avoid generating crlf text that would confuse Linux
                     //
                     azureScript.Write("date\n");  // NB: we use Write and \n rather than WriteLine to avoid generating crlf text that would confuse Linux
-                    if (!stateOfTheWorld.configuration.isBeatAML) { // for BeatAML, we've already manually loaded the files into an Azure files location, and mounted that on /mnt/downloaded_files/
+                    if (!stateOfTheWorld.configuration.isBeatAML)
+                    { // for BeatAML, we've already manually loaded the files into an Azure files location, and mounted that on /mnt/downloaded_files/
                         azureScript.Write("rm -rf /mnt/downloaded_files/*\n"); // /mnt is a big but temporary filesystem on these azure instances
                         azureScript.Write("sudo mkdir /mnt/downloaded_files/\n");
                         azureScript.Write("sudo chmod 777 /mnt/downloaded_files\n");
@@ -1272,7 +1290,7 @@ namespace ASEProcessManager
                     {
                         azureScript.Write("ln -s /mnt/downloaded_files/BeatAML/" + case_.normal_dna_file_id + " ~/x\n");
                     }
-                    else 
+                    else
                     {
                         azureScript.Write("ln -s /mnt/downloaded_files/" + case_.normal_dna_file_id + " ~/x\n");
                     }
@@ -1281,7 +1299,7 @@ namespace ASEProcessManager
                     var regionFileName = stateOfTheWorld.configuration.isBeatAML ? "~/genomes/hg19-100k-regions" : "~/genomes/GRCh38.d1.vd1-100k-regions";
                     var fastaName = stateOfTheWorld.configuration.isBeatAML ? "~/genomes/hg19-no-chr.fa" : "~/genomes/GRCh38.d1.vd1.fa";
 
-                    azureScript.Write("./freebayes-parallel " + regionFileName + " `cat ~/ncores` --region {} --fasta-reference " + fastaName + " ~/x/*.bam > ~/" +
+                    azureScript.Write("./freebayes-parallel " + regionFileName + " `nproc` --fasta-reference " + fastaName + " ~/x/*.bam > ~/" +
                         case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
                     azureScript.Write("if [ $? = 0 ]; then\n");
                     azureScript.Write("    mv ~/" + case_.normal_dna_file_id + ASETools.vcfExtension + " ~/completed_vcfs/\n");
@@ -1302,24 +1320,35 @@ namespace ASEProcessManager
                         continue;
                     }
 
-                    linuxScript.Write("date\n");    
-                    linuxScript.Write("cat " + regionFileName + " | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference " + fastaName + " " + 
-                        ASETools.WindowsToLinuxPathname(stateOfTheWorld.downloadedFiles[case_.normal_dna_file_id].fileInfo.FullName) + 
-                        " \" | ~/freebayes/vcflib/bin/vcffirstheader | ~/freebayes/vcflib/bin/vcfstreamsort -w 1000 | ~/freebayes/vcflib/bin/vcfuniq > " +
-                        case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
+                    linuxScript.Write("date\n");
+
+                    var mountpoint = "/mnt/" + ASETools.ComputerFromPathname(case_.normal_dna_filename);
+                    linuxScript.Write("sudo mkdir " + mountpoint + "\n");
+                    linuxScript.Write("sudo chmod 777 " + mountpoint + "\n");
+                    linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(case_.normal_dna_filename) + "' " + mountpoint + "\n");
+                    var copiedBamDirectory = "~/" + case_.normal_dna_file_id;
+                    linuxScript.Write("mkdir " + copiedBamDirectory + "\n");
+                    linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(case_.normal_dna_filename)) + " " + copiedBamDirectory + "/\n");
+                    linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(case_.normal_dna_filename))) + "/*bai " + copiedBamDirectory + "/\n");
+
+                    linuxScript.Write("cd ~/freebayes/scripts\n");
+                    var outputFilename = case_.normal_dna_file_id + ASETools.vcfExtension;
+                    linuxScript.Write("./freebayes-parallel " + regionFileName + " `nproc` --fasta-reference " + fastaName + " " + copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(case_.normal_dna_filename) +
+                        " > ~/" + outputFilename + "\n");
+
                     linuxScript.Write("if [ $? = 0 ]; then\n");
-                    var outputDirectory = ASETools.WindowsToLinuxPathname(
-                        ASETools.GetDirectoryPathFromFullyQualifiedFilename(stateOfTheWorld.downloadedFiles[case_.normal_dna_file_id].fileInfo.FullName) + @"..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\"
-                        );
-                    linuxScript.Write(@"    mkdir " + outputDirectory + "\n");
-                    linuxScript.Write(@"    cp " + case_.normal_dna_file_id + ASETools.vcfExtension + " " + outputDirectory + "\n");
+                    var outputDirectory = mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(case_.normal_dna_filename)) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id);
+
+                    linuxScript.Write("    mkdir " + outputDirectory + "\n");
+                    linuxScript.Write("    cp ~/" + outputFilename + " " + outputDirectory + "/\n");
+                    linuxScript.Write("    rm ~/" + outputFilename + "\n");
                     linuxScript.Write("else\n");
                     linuxScript.Write(@"    echo " + case_.normal_dna_file_id + " >> variant_calling_errors\n");
                     linuxScript.Write("fi\n");
-                    if (!stateOfTheWorld.configuration.isBeatAML) // Since we have to upload them by hand, don't auto delete them, either.
-                    {
-                        linuxScript.Write("rm " + case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
-                    }
+                    linuxScript.Write("sleep 60\n");    // Time to let the copy finish before we can umount
+                    linuxScript.Write("sudo umount " + mountpoint + "\n");
+                    linuxScript.Write("sudo rmdir " + mountpoint + "\n");
+                    linuxScript.Write("rm -rf " + copiedBamDirectory + "\n"); // * is to get bai as well
 
                     nAddedToScript++;
                 } // foreach case
@@ -2802,6 +2831,15 @@ namespace ASEProcessManager
 
         } // OverallDistributionProcessingStage
 
+        class CorrectionProcessingStage: SingleOutputProcessingStage
+        {
+            public CorrectionProcessingStage() : base("ASE Correction", true, "GenerateASECorrection.exe", "", null, getOneOffInputs, getOutput) { }
+
+            static GetOneOffFile[] getOneOffInputs = { _ => _.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename, _ => _.configuration.finalResultsDirectory + ASETools.TumorRNAReadDepthDistributionFilename };
+            static GetOneOffFile[] getOutput = { _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };
+        } // CorrectionProcessingStage
+
+#if false
         class CorrectionProcessingStage : ProcessingStage
         {
             public CorrectionProcessingStage() { }
@@ -2836,6 +2874,7 @@ namespace ASEProcessManager
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
         } // CorrectionProcessingStage
+#endif // false
 
         class AllSitesReadDepthProcessingStage : ProcessingStage
         {
@@ -4057,8 +4096,9 @@ namespace ASEProcessManager
 
         class SummarizePhasingProcessingStage : SingleOutputProcessingStage
         {
-            public SummarizePhasingProcessingStage() : base("Summarize Phasing", true, "SummarizePhasing.exe", "", getPerCaseFile, null, getOutputFile) { }
+            public SummarizePhasingProcessingStage() : base("Summarize Phasing", true, "SummarizePhasing.exe", "", getPerCaseFile, getOneOffInput, getOutputFile) { }
 
+            static GetOneOffFile[] getOneOffInput = { _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };
             static GetCaseFile[] getPerCaseFile = { _ => _.variant_phasing_filename };
             static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.PhasingForNearbyVariantsFilename };
         }
@@ -4392,18 +4432,20 @@ namespace ASEProcessManager
 
         class SingleReadPhasingProcessingStage : SingleOutputProcessingStage
         {
-            public SingleReadPhasingProcessingStage() : base("Single Read-Based Phasing", true, "SingleReadPairPhasing.exe", "", getCaseFiles, null, getOutputFile)
+            public SingleReadPhasingProcessingStage() : base("Single Read-Based Phasing", true, "SingleReadPairPhasing.exe", "", getCaseFiles, getOneOffInputs, getOutputFile)
             { }
 
+            static GetOneOffFile[] getOneOffInputs = { _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };
             static GetCaseFile[] getCaseFiles = { _ => _.tumor_dna_reads_at_tentative_selected_variants_filename, _ => _.tumor_rna_reads_at_tentative_selected_variants_filename, _ => _.extracted_maf_lines_filename };
             static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename };
         }
 
         class TentativeASVWithoutCNVsProcessingStage : PerCaseProcessingStage
         {
-            public TentativeASVWithoutCNVsProcessingStage() : base("Tentative ASV without CNVs", "GenerateTentativeASVsWithoutCNVs.exe", "", getCaseFiles, null, getOutputFile)
+            public TentativeASVWithoutCNVsProcessingStage() : base("Tentative ASV without CNVs", "GenerateTentativeASVsWithoutCNVs.exe", "", getCaseFiles, getOneOffInputs, getOutputFile)
             { }
 
+            static GetOneOffFile[] getOneOffInputs = { _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };
             static GetCaseFile[] getCaseFiles = { _ => _.tentative_annotated_selected_variants_filename, _ => _.tumor_copy_number_filename };
             static GetCaseFile[] getOutputFile = { _ => _.tentative_asv_without_cnvs_filename };
         }
@@ -4418,13 +4460,30 @@ namespace ASEProcessManager
 
         class VariantPhasingProcessingStage : PerCaseProcessingStage
         {
-            public VariantPhasingProcessingStage() : base("Phase variants", "CheckPhasing.exe", "", getInputFiles, null, getOutputFile) { }
+            public VariantPhasingProcessingStage() : base("Phase variants", "CheckPhasing.exe", "", getInputFiles, getOneOffInputs, getOutputFile) { }
 
+            static GetOneOffFile[] getOneOffInputs = { _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };
             static GetCaseFile[] getInputFiles = {_ => _.tentative_annotated_selected_variants_filename, _ => _.tumor_dna_reads_at_tentative_selected_variants_filename, _ => _.tumor_dna_reads_at_tentative_selected_variants_index_filename,
                                                   _ => _.tumor_rna_reads_at_tentative_selected_variants_filename, _ => _.tumor_rna_reads_at_tentative_selected_variants_index_filename};
 
             static GetCaseFile[] getOutputFile = { _ => _.variant_phasing_filename };
         }
+
+        class ExtractVCFStatisticsProcessingStage : PerCaseProcessingStage
+        {
+            public ExtractVCFStatisticsProcessingStage() : base("Extract VCF Statistics", "ExtractVCFStatistics.exe", "", getInputFile, null, getOutputFile) { }
+
+            static GetCaseFile[] getInputFile = { _ => _.vcf_filename };
+            static GetCaseFile[] getOutputFile = { _ => _.vcf_statistics_filename };
+        } // ExtractVCFStatisticsProcessingStage
+
+        class OverallVCFStatisticsProcessingStage : SingleOutputProcessingStage
+        {
+            public OverallVCFStatisticsProcessingStage() : base("Overall VCF Statistics", true, "VCFStatistics.exe", "", getInputFiles, null, getOutputFile) { }
+
+            static GetCaseFile[] getInputFiles = { _ => _.variant_phasing_filename, _=> _.annotated_selected_variants_filename };
+            static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.VCFStatisticsFilename };
+        } // OverallVCFStatisticsProcessingStage
 
 
         static void Main(string[] args)
@@ -4655,6 +4714,8 @@ namespace ASEProcessManager
             processingStages.Add(new TentativeASVWithoutCNVsProcessingStage());
             processingStages.Add(new VariantPhasingProcessingStage());
             processingStages.Add(new SummarizePhasingProcessingStage());
+            processingStages.Add(new ExtractVCFStatisticsProcessingStage());
+            processingStages.Add(new OverallVCFStatisticsProcessingStage());
 
             if (checkDependencies)
             {

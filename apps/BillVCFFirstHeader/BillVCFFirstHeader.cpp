@@ -52,10 +52,11 @@ int main()
 				inHeader = false;
 			}
 
-			fwrite(buffer, 1, usedBuffer, stdout);
-			usedBuffer = 0;
+
 
 		} // while we have an input line
+		fwrite(buffer, 1, usedBuffer, stdout);
+		usedBuffer = 0;
 	}
 
 }

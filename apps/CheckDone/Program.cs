@@ -225,6 +225,7 @@ namespace CheckDone
                 HandleFilename(case_.case_metadata_filename, "CaseMetadata", fileTypesToUse);
                 HandleFilename(case_.tentative_asv_without_cnvs_filename, "TentativeASVsWithoutCNVs", fileTypesToUse);
                 HandleFilename(case_.variant_phasing_filename, "VariantPhasing", fileTypesToUse);
+                HandleFilename(case_.vcf_statistics_filename, "VCF Statistics", fileTypesToUse);
             }
 
             HandleFilenameIfExists(configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename, "SingleReadPhasing", fileTypesToUse);

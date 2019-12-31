@@ -59,7 +59,7 @@ namespace ASEMap
 
             public static string Header()
             {
-                return "Chromsome\tlocus\ttumor\tn cases\tindex\tmean\tstandard deviation";
+                return "Chromosome\tlocus\ttumor\tn cases\tindex\tmean\tstandard deviation";
             }
 
             public void WriteToFile(StreamWriter outputFile, bool tumor)
