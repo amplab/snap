@@ -265,6 +265,8 @@ public:
 
         inline int getNumContigs() const { return nContigs; }
 
+		int getNumALTContigs() const;
+
         const Contig *getContigAtLocation(GenomeLocation location) const;
         const Contig *getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const;
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;

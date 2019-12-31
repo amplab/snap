@@ -37,9 +37,9 @@ ReadFASTAGenome(
 	const char		*pieceNameTerminatorCharacters,
 	bool			 spaceIsAPieceNameTerminator,
 	unsigned		 chromosomePaddingSize,
-	const char		*opt_in_alt_names,
+	const char* const*opt_in_alt_names,
 	int				 opt_in_alt_names_count,
-	const char		*opt_out_alt_names,
+	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
 	GenomeDistance	 maxSizeForAutomaticALT);
 

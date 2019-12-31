@@ -114,7 +114,7 @@ Genome::markContigALT(
 	for (int i = 0; i < nContigs; i++) {
 		if (!strcmp(contigs[i].name, contigName)) {
 			contigs[i].isALT = true;
-			return;;
+			return;
 		} // if it matches
 	} // for each contig
 } // markContigALT
@@ -139,8 +139,11 @@ Genome::~Genome()
 	}
 }
 
-
+// Flags for the options field in the header
 #define	GENOME_FLAG_ALT_CONTIGS_MARKED		0x1
+
+// Flags for the per-contig options
+#define GENOME_FLAG_CONTIG_IS_ALT			0x1
     bool
 Genome::saveToFile(const char *fileName) const
 {
@@ -163,7 +166,12 @@ Genome::saveToFile(const char *fileName) const
          curChar = contigs[i].name + n;
          if (*curChar == ' '){ *curChar = '_'; }
         }
-        fprintf(saveFile,"%lld %s\n",GenomeLocationAsInt64(contigs[i].beginningLocation), contigs[i].name);
+
+		if (areAltContigsMarked) {
+			fprintf(saveFile, "%lld %x %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), contigs[i].name);
+		} else {
+			fprintf(saveFile, "%lld %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), contigs[i].name);
+		}
     }
 
 	//
@@ -257,9 +265,39 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
             WriteErrorMessage("Unable to parse contig start in genome file '%s', '%s%'\n", fileName, contigNameBuffer);
             soft_exit(1);
         }
+
         genome->contigs[i].beginningLocation = GenomeLocation(contigStart);
 	    contigNameBuffer[n] = ' '; 
 	    n++; // increment n so we start copying at the position after the space
+
+		bool contigIsALT = false;
+
+		if (hasALTContigsMarked) {
+			//
+			// There's an extra " %x" after the size with flags.
+			//
+			char *nextSpace = strchr(contigNameBuffer + n, ' ');
+			if (nextSpace == NULL) {
+				WriteErrorMessage("Failure loading genome.  Contigs are supposed to have flags to mark whether they're ALT, but one doesn't.  Line: '%s'\n", contigNameBuffer);
+				soft_exit(1);
+			}
+			*nextSpace = '\0';
+			int flags;
+			if (1 != sscanf(contigNameBuffer + n, "%x", &flags)) {
+				WriteErrorMessage("Failure loading genome.  Unable to parse contig flags in line: '%s'\n", contigNameBuffer);
+				soft_exit(1);
+			}
+
+			if (flags & GENOME_FLAG_CONTIG_IS_ALT) {
+				contigIsALT = true;
+			}
+
+			*nextSpace = ' ';
+			n = nextSpace - contigNameBuffer + 1;
+		}
+
+		genome->contigs[i].isALT = contigIsALT;
+
 	    contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
         genome->contigs[i].name = new char[contigSize + 1];
         genome->contigs[i].nameLength = (unsigned)contigSize;
@@ -522,6 +560,20 @@ const Genome::Contig *Genome::getContigForRead(GenomeLocation location, unsigned
     }
 
     return contig;
+}
+
+int 
+Genome::getNumALTContigs() const 
+{
+	int nALTContigs = 0;
+
+	for (int i = 0; i < nContigs; i++) {
+		if (contigs[i].isALT) {
+			nALTContigs++;
+		}
+	}
+
+	return nALTContigs;
 }
 
 GenomeLocation InvalidGenomeLocation;   // Gets set on genome build/load

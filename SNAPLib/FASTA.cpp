@@ -35,15 +35,15 @@ void
 MarkALTContigIfAppropriate(
 	const char		*contigName,
 	GenomeDistance	 contigSize,
-	const char		*opt_in_alt_names,
+	const char* const*opt_in_alt_names,
 	int				 opt_in_alt_names_count,
-	const char		*opt_out_alt_names,
+	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
 	GenomeDistance	 maxSizeForAutomaticALT,
 	Genome			*genome)
 {
 	for (int i = 0; i < opt_out_alt_names_count; i++) {
-		if (!stricmp(opt_out_alt_names+i, contigName)) {
+		if (!_stricmp(opt_out_alt_names[i], contigName)) {
 			return;
 		}
 	} // opt out
@@ -54,7 +54,7 @@ MarkALTContigIfAppropriate(
 	}
 
 	for (int i = 0; i < opt_in_alt_names_count; i++) {
-		if (!stricmp(opt_in_alt_names + i, contigName)) {
+		if (!_stricmp(opt_in_alt_names[i], contigName)) {
 			genome->markContigALT(contigName);
 			return;
 		} // match
@@ -73,9 +73,9 @@ ReadFASTAGenome(
 	const char		*pieceNameTerminatorCharacters,
 	bool			 spaceIsAPieceNameTerminator,
 	unsigned		 chromosomePaddingSize,
-	const char		*opt_in_alt_names,
+	const char* const*opt_in_alt_names,
 	int				 opt_in_alt_names_count,
-	const char		*opt_out_alt_names,
+	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
 	GenomeDistance	 maxSizeForAutomaticALT)
 {

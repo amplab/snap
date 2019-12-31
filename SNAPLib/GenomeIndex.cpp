@@ -90,8 +90,8 @@ static void usage()
 		" -maxAltContigSize Specify a size at or below which all contigs are automatically marked ALT, unless overriden by name using the args below\n"
 		" -altContigName    Specify the (case independent) name of an alt to mark a contig.  You can supply this parameter as often as you'd like\n"
 		" -altContigFile    Specify the name of a file with a list of alt contig names, one per line.  You may specify this as often as you'd like\n"
-		" -nonAltContig     Specify the name of a contig that's not an alt, regardless of its size\n"
-		" -nonAltFile       Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
+		" -nonAltContigName Specify the name of a contig that's not an alt, regardless of its size\n"
+		" -nonAltContigFile Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
 			,
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
@@ -105,7 +105,7 @@ static void usage()
 // Copies the input string, reallocates the list and adds it to the end.
     void
 addToCountedListOfStrings(
-	char *newString,
+	const char *newString,
 	int *length,
 	char ***list)
 {
@@ -145,11 +145,11 @@ GenomeIndex::runIndexer(
 	bool large = false;
     unsigned locationSize = DEFAULT_LOCATION_SIZE;
 	bool smallMemory = false;
-	GenomeDistance maxSizeForAyutomaticALT = 0;
+	GenomeDistance maxSizeForAutomaticALT = 0;
 	int nAltOptIn = 0;
-	char *altOptInList = NULL;
-	int nALtOptOut = 0;
-	char *altOptOutList = NULL;
+	char **altOptInList = NULL;
+	int nAltOptOut = 0;
+	char **altOptOutList = NULL;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -219,17 +219,90 @@ GenomeIndex::runIndexer(
 		else if (!strcmp(argv[n], "-bSpace")) {
 			spaceIsAPieceNameTerminator = true;
 		} else if (!strcmp(argv[n], "-AutoAlt")) {
+			maxSizeForAutomaticALT = MAX_ALT_SIZE_FOR_AUTO_ALT;
+			addToCountedListOfStrings("chrM", &nAltOptOut, &altOptOutList);
+			addToCountedListOfStrings("chrMT", &nAltOptOut, &altOptOutList);
+			addToCountedListOfStrings("M", &nAltOptOut, &altOptOutList);
+			addToCountedListOfStrings("MT", &nAltOptOut, &altOptOutList);
+		} else if (!strcmp(argv[n], "-maxAltContigSize")) {
 			if (n + 1 < argc) {
+				maxSizeForAutomaticALT = atoll(argv[n + 1]);
+			} else {
+				usage();
+			}
+			n++;
+        } else if (!strcmp(argv[n], "-altContigName")) {
+			if (n + 1 < argc) {
+				addToCountedListOfStrings(argv[n + 1], &nAltOptIn, &altOptInList);
+			} else {
+				usage();
+			}
+			n++;
+		} else if (!strcmp(argv[n], "-nonAltContigName")) {
+			if (n + 1 < argc) {
+				addToCountedListOfStrings(argv[n + 1], &nAltOptOut, &altOptOutList);
+			} else {
+				usage();
+			}
+			n++;
+		} else if (!strcmp(argv[n], "-altContigFile")) {
+			if (n + 1 < argc) {
+				FILE *inputFile = fopen(argv[n + 1], "r");
+				if (NULL == inputFile) {
+					WriteErrorMessage("Unable to open alt contig list file %s\n", argv[n + 1]);
+					soft_exit(1);
+				}
+				char *contigNameBuffer = NULL;
+				int contigNameBufferSize = 0;
 
+				while (NULL != reallocatingFgets(&contigNameBuffer, &contigNameBufferSize, inputFile)) {
+					if (NULL != strchr(contigNameBuffer, '\n')) {
+						*strchr(contigNameBuffer, '\n') = '\0';
+					}
+					if (NULL == strchr(contigNameBuffer, '\r')) {
+						*strchr(contigNameBuffer, '\r') = '\0';
+					}
+					addToCountedListOfStrings(contigNameBuffer, &nAltOptIn, &altOptInList);
+				} // while we have an input string.
+
+				fclose(inputFile);
+				delete[] contigNameBuffer;
+			} else {
+				usage();
+			}
+			n++;
+		} else if (!strcmp(argv[n], "-nonAltContigFile")) {
+			if (n + 1 < argc) {
+				FILE *inputFile = fopen(argv[n + 1], "r");
+				if (NULL == inputFile) {
+					WriteErrorMessage("Unable to open non-alt contig list file %s\n", argv[n + 1]);
+					soft_exit(1);
+				}
+				char *contigNameBuffer = NULL;
+				int contigNameBufferSize = 0;
+
+				while (NULL != reallocatingFgets(&contigNameBuffer, &contigNameBufferSize, inputFile)) {
+					if (NULL != strchr(contigNameBuffer, '\n')) {
+						*strchr(contigNameBuffer, '\n') = '\0';
+					}
+					if (NULL == strchr(contigNameBuffer, '\r')) {
+						*strchr(contigNameBuffer, '\r') = '\0';
+					}
+					addToCountedListOfStrings(contigNameBuffer, &nAltOptOut, &altOptOutList);
+				} // while we have an input string.
+
+				fclose(inputFile);
+				delete[] contigNameBuffer;
 			}
 			else {
 				usage();
 			}
-        } else {
+			n++;
+		} else {
             WriteErrorMessage("Invalid argument: %s\n\n", argv[n]);
             usage();
         }
-    }
+    } // for each arg
 
     if (seedLen < 8 || seedLen > 32) {
         // Seeds are stored in 64 bits, so they can't be larger than 32 bases for now.
@@ -255,12 +328,14 @@ GenomeIndex::runIndexer(
     BigAllocUseHugePages = false;
 
     _int64 start = timeInMillis();
-    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding);
+    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altOptInList, nAltOptIn, altOptOutList, nAltOptOut, maxSizeForAutomaticALT);
     if (NULL == genome) {
         WriteErrorMessage("Unable to read FASTA file\n");
         soft_exit(1);
     }
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
+
+	WriteStatusMessage("Genome has %d contigs, of which %d are ALTs\n", genome->getNumContigs(), genome->getNumALTContigs());
 
     GenomeDistance nBases = genome->getCountOfBases();
 
@@ -1659,6 +1734,14 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 
     size_t overflowTableSizeInBytes = (size_t)index->overflowTableSize * overflowEntrySize;
 
+	snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
+	if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
+		WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
+		delete[] filenameBuffer;
+		delete index;
+		return NULL;
+	}
+
     snprintf(filenameBuffer,filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, OverflowTableFileName);
 
 	if (map) {
@@ -1812,13 +1895,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 		blobFile = NULL;
 	}
 
-    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
-    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
-        WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
-        delete[] filenameBuffer;
-        delete index;
-        return NULL;
-    }
+
 
     if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0 && locationSize == 4) {
         WriteErrorMessage("\nThis index has too many overflow entries to be valid.  It was probably built with\n"
