@@ -146,7 +146,7 @@ inline _int64 GenomeLocationAsInt64(GenomeLocation genomeLocation)
 }
 
 inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
-    _ASSERT(genomeLocation <= 0xffffffff && genomeLocation>= 0);    // One might wonder about the value of an _ASSERT in code that's only non-_DEBUG.  Think of it as an uppity comment.  :-)
+    _ASSERT(genomeLocation <= 0xffffffff && genomeLocation >= 0);    // One might wonder about the value of an _ASSERT in code that's only non-_DEBUG.  Think of it as an uppity comment.  :-)
     return (unsigned)genomeLocation;
 }
 
@@ -253,7 +253,7 @@ public:
         }
 
         struct Contig {
-            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL) {}
+            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;
             unsigned           nameLength;
@@ -281,6 +281,10 @@ public:
         //
         void    fillInContigLengths();
         void    sortContigsByName();
+
+        inline bool isGenomeLocationALT(GenomeLocation location) {
+            return location >= genomeLocationOfFirstALTContig;
+        }
 
 private:
 
@@ -315,6 +319,8 @@ private:
 		GenericFile_map *mappedFile;
 
 		bool isContigAware;
+
+        GenomeLocation  genomeLocationOfFirstALTContig;
 };
 
 GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB);

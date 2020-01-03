@@ -31,8 +31,8 @@ Revision History:
 
 using namespace std;
 
-void
-MarkALTContigIfAppropriate(
+    bool
+IsContigALT(
 	const char		*contigName,
 	GenomeDistance	 contigSize,
 	const char* const*opt_in_alt_names,
@@ -40,25 +40,30 @@ MarkALTContigIfAppropriate(
 	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
 	GenomeDistance	 maxSizeForAutomaticALT,
-	Genome			*genome)
+    bool             autoALT)
 {
+
 	for (int i = 0; i < opt_out_alt_names_count; i++) {
 		if (!_stricmp(opt_out_alt_names[i], contigName)) {
-			return;
+			return false;
 		}
 	} // opt out
 
 	if (contigSize <= maxSizeForAutomaticALT) {
-		genome->markContigALT(contigName);
-		return;
+		return true;
 	}
 
 	for (int i = 0; i < opt_in_alt_names_count; i++) {
 		if (!_stricmp(opt_in_alt_names[i], contigName)) {
-			genome->markContigALT(contigName);
-			return;
+			return true;
 		} // match
 	} // opt in
+
+    if (autoALT && strlen(contigName) > 4 && !_stricmp(contigName + strlen(contigName) - 4, "_alt")) {
+        return true;
+    }
+
+    return false;
 } // MarkALTContigIfAppropriate
 
 
@@ -66,6 +71,92 @@ MarkALTContigIfAppropriate(
 // There are several ways of specifying ALT contigs.  There is an opt-in list of ALTs, an opt-out list of regular chromosomes (these must be mutually
 // exclusive), and a size cutoff below which is contig is an ALT.  The opt-in and opt-out lists supersede the size cutoff.
 //
+
+struct ContigLine {
+    char* bases;
+    ContigLine* next;
+
+    ContigLine() {
+        bases = NULL;
+        next = NULL;
+    }
+};
+
+struct RawContigData {
+    ContigLine* lines;
+    ContigLine* lastLine;
+    GenomeDistance totalSize;
+    char* name;
+    RawContigData* next;
+
+    RawContigData() {
+        lines = NULL;
+        lastLine = NULL;
+        totalSize = 0;
+        name = NULL;
+        next = NULL;
+    }
+
+    void addLine(const char* bases) {
+        ContigLine*line = new ContigLine();
+        size_t size = strlen(bases) + 1;
+        line->bases = new char[size];
+        strncpy(line->bases, bases, size);
+        if (lines == NULL) {
+            lines = lastLine = line;
+        } else {
+            lastLine->next = line;
+            lastLine = line;
+        }
+    } // addLine
+
+    ~RawContigData() {
+        delete[] name;
+
+        while (lines != NULL) {
+            ContigLine* toDelete = lines;
+            lines = lines->next;
+            delete[] toDelete->bases;
+            delete toDelete;
+        }
+    }
+}; // RawContigData
+
+   void
+AddRawContigToList(
+    RawContigData*   currentContig,
+    RawContigData**  altContigs,
+    RawContigData**  regularContigs,
+    const char* const* opt_in_alt_names,
+    int				 opt_in_alt_names_count,
+    const char* const* opt_out_alt_names,
+    int				 opt_out_alt_names_count,
+    GenomeDistance	 maxSizeForAutomaticALT,
+    bool             autoALT)
+{
+    if (IsContigALT(currentContig->name, currentContig->totalSize, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names,
+        opt_out_alt_names_count, maxSizeForAutomaticALT, autoALT)) {
+        currentContig->next = *altContigs;
+        *altContigs = currentContig;
+    }  else {
+        currentContig->next = *regularContigs;
+        *regularContigs = currentContig;
+    }
+}
+
+   void
+AddContigToGenome(
+    RawContigData   *contig,
+    Genome          *genome,
+    char            *paddingBuffer)
+{
+    genome->addData(paddingBuffer);
+    genome->startContig(contig->name);
+
+    for (ContigLine* line = contig->lines; NULL != line; line = line->next) {
+        genome->addData(line->bases);
+    }
+} // AddContigToGenome
 
     const Genome *
 ReadFASTAGenome(
@@ -77,7 +168,8 @@ ReadFASTAGenome(
 	int				 opt_in_alt_names_count,
 	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
-	GenomeDistance	 maxSizeForAutomaticALT)
+	GenomeDistance	 maxSizeForAutomaticALT,
+    bool             autoALT)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -104,47 +196,32 @@ ReadFASTAGenome(
     char *lineBuffer;
  
     //
-    // Count the chromosomes
+    // Read in the raw data and split it up by chromosome.  We're going to rearrange it to put the ALT chromosomes at the end so that it's
+    // quick to test whether a GenomeLocation is ALT or not.
     //
-    unsigned nChromosomes = 0;
+    unsigned nContigs = 0;
 
-    while (NULL != reallocatingFgets(&lineBuffer,&lineBufferSize,fastaFile)) {
-        if (lineBuffer[0] == '>') {
-            nChromosomes++;
-        }
-    }
-    rewind(fastaFile);
-
-    Genome *genome = new Genome(fileSize + (nChromosomes+1) * (size_t)chromosomePaddingSize, fileSize + (nChromosomes+1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nChromosomes + 1);
-
-    char *paddingBuffer = new char[chromosomePaddingSize+1];
-    for (unsigned i = 0; i < chromosomePaddingSize; i++) {
-        paddingBuffer[i] = 'n';
-    }
-    paddingBuffer[chromosomePaddingSize] = '\0';
+    RawContigData* regularContigs = NULL;
+    RawContigData* altContigs = NULL;
+    RawContigData* currentContig = NULL;
 
     bool warningIssued = false;
     bool inAContig = false;
-	GenomeDistance contigLength = 0;
-	char *lastContigName = new char[lineBufferSize];
 
     while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, fastaFile)) {
         if (lineBuffer[0] == '>') {
-			if (inAContig) {
-				MarkALTContigIfAppropriate(lastContigName, contigLength, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names,
-					opt_out_alt_names_count, maxSizeForAutomaticALT, genome);
+            nContigs++;
+
+            if (inAContig) {
+                AddRawContigToList(currentContig, &altContigs, &regularContigs, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names, opt_out_alt_names_count, maxSizeForAutomaticALT, autoALT);
 			}
 
+            currentContig = new RawContigData();
+
             inAContig = true;
-			contigLength = 0;
 
             //
-            // A new contig.  Add in the padding first.
-            //
-            genome->addData(paddingBuffer);
-
-            //
-            // Now supply the chromosome name.
+            // Now supply the contig name.
             //
             if (NULL != pieceNameTerminatorCharacters) {
                 for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
@@ -176,8 +253,11 @@ ReadFASTAGenome(
                 *terminator = '\0';
             }
 
-            genome->startContig(lineBuffer+1);
-			strcpy(lastContigName, lineBuffer + 1);
+            size_t nameLength = strlen(lineBuffer + 1) + 1;
+
+            currentContig->name = new char[nameLength];
+            strncpy(currentContig->name, lineBuffer + 1, nameLength);
+
         } else {
             if (!inAContig) {
                 WriteErrorMessage("\nFASTA file doesn't beging with a contig name (i.e., the first line doesn't start with '>').\n");
@@ -199,7 +279,7 @@ ReadFASTAGenome(
               lineBuffer[i] = toupper(lineBuffer[i]);
             }
 
-			contigLength += lineLen;
+			currentContig->totalSize += lineLen;
 
 			for (unsigned i = 0; i < lineLen; i++) {
                 if (!isValidGenomeCharacter[(unsigned char)lineBuffer[i]]) {
@@ -210,7 +290,8 @@ ReadFASTAGenome(
                     lineBuffer[i] = 'N';
                 }
             }
-            genome->addData(lineBuffer);
+
+            currentContig->addLine(lineBuffer);
         }
     }
 
@@ -219,8 +300,30 @@ ReadFASTAGenome(
 		return NULL;
 	}
 
-	MarkALTContigIfAppropriate(lastContigName, contigLength, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names,
-		opt_out_alt_names_count, maxSizeForAutomaticALT, genome);
+    AddRawContigToList(currentContig, &altContigs, &regularContigs, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names, opt_out_alt_names_count, maxSizeForAutomaticALT, autoALT);
+
+    Genome* genome = new Genome(fileSize + (nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + (nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1);
+
+    char* paddingBuffer = new char[(GenomeDistance)chromosomePaddingSize + 1];
+    for (unsigned i = 0; i < chromosomePaddingSize; i++) {
+        paddingBuffer[i] = 'n';
+    }
+    paddingBuffer[chromosomePaddingSize] = '\0';
+
+    while (regularContigs != NULL) {
+        AddContigToGenome(regularContigs, genome, paddingBuffer);
+        RawContigData* toDelete = regularContigs;
+        regularContigs = regularContigs->next;
+        delete toDelete;
+    }
+
+    while (altContigs != NULL) {
+        AddContigToGenome(altContigs, genome, paddingBuffer);
+        genome->markContigALT(altContigs->name);
+        RawContigData* toDelete = altContigs;
+        altContigs = altContigs->next;
+        delete toDelete;
+    }
 
     //
     // And finally add padding at the end of the genome.
@@ -232,7 +335,6 @@ ReadFASTAGenome(
     fclose(fastaFile);
     delete [] paddingBuffer;
     delete [] lineBuffer;
-	delete [] lastContigName;
     return genome;
 }
 

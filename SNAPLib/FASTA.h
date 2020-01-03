@@ -41,7 +41,8 @@ ReadFASTAGenome(
 	int				 opt_in_alt_names_count,
 	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
-	GenomeDistance	 maxSizeForAutomaticALT);
+	GenomeDistance	 maxSizeForAutomaticALT,
+	bool             autoAlt);
 
 //
 // The FASTA appending functions return whether the write was successful.

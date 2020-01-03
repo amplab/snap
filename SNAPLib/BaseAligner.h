@@ -292,7 +292,6 @@ private:
     double probabilityOfAllCandidates;
     double probabilityOfBestCandidate;
     int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
-    _int64 smallestSkippedSeed[NUM_DIRECTIONS];
     unsigned highestWeightListChecked;
 
     double totalProbabilityByDepth[AlignerStats::maxMaxHits];

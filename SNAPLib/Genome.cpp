@@ -357,6 +357,24 @@ Genome::sortContigsByName()
     contigsByName = new Contig[nContigs];
     memcpy(contigsByName, contigs, nContigs * sizeof(Contig));
     std::sort(contigsByName, contigsByName + nContigs, contigComparator);
+
+    GenomeLocation highestNonALTContig = 0;
+    GenomeLocation lowestALTContig = LLONG_MAX;
+
+    for (int i = 0; i < nContigs; i++) {
+        if (contigs[i].isALT) {
+            lowestALTContig = __min(lowestALTContig, contigs[i].beginningLocation);
+        } else {
+            highestNonALTContig = __max(highestNonALTContig, contigs[i].beginningLocation + contigs[i].length);
+        }
+    }
+
+    if (highestNonALTContig < lowestALTContig && lowestALTContig != LLONG_MAX) {
+        WriteErrorMessage("ALT and non-ALT regions overlap.  This is a code bug, it shouldn't happen with any FASTA file.");
+        soft_exit(1);
+    }
+
+    genomeLocationOfFirstALTContig = lowestALTContig;
 }
 
     bool

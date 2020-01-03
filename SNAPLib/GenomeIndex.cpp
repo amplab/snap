@@ -46,7 +46,6 @@ static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
 static const unsigned DEFAULT_LOCATION_SIZE = 4;
-static const GenomeDistance MAX_ALT_SIZE_FOR_AUTO_ALT = 20000000;
 
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
@@ -55,38 +54,37 @@ const char *GenomeFileName = "Genome";
 
 static void usage()
 {
-	WriteErrorMessage(
-		"Usage: snap-aligner index <input.fa> <output-dir> [<options>]\n"
-		"Options:\n"
-		"  -s               Seed size (default: %d)\n"
-		"  -h               Hash table slack (default: %.1f)\n"
+    WriteErrorMessage(
+        "Usage: snap-aligner index <input.fa> <output-dir> [<options>]\n"
+        "Options:\n"
+        "  -s               Seed size (default: %d)\n"
+        "  -h               Hash table slack (default: %.1f)\n"
 
-		" -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
-		" -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
-		"                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
-		"                   the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
-		"                   indicating that a space is a terminator.\n"
-		" -bSpace           Indicates that the space character is a terminator for chromosome names (see -B above).  This may be used in addition\n"
-		"                   to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
-		" -pPadding         Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
-		"                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
-		"                   read you'll process.  Default is %d\n"
-		" -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
-		" -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
-		" -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
-		" -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
-		"                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
-		" -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
-		"                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
-		"                   human genome, it will fit with four byte locations if the seed size is 19 or larger, but needs 5 (or more) for smaller\n"
-		"                   seeds.  Making the location size bigger than necessary will just waste (lots of) space, so unless you're doing something\n"
-		"                   quite unusual, the right answer is 4 or 5.  Default is %d\n"
-		" -sm               Use a temp file to work better in smaller memory.  This only helps a little, but can be the difference if you're close.\n"
-		"                   In particular, this will generally use less memory than the index will use once it's built, so if this doesn't work you\n"
-		"                   won't be able to use the index anyway. However, if you've got sufficient memory to begin with, this option will just\n"
-		"                   slow down the index build by doing extra, useless IO.\n"
-		" -AutoAlt          Automatically mark ALT contigs.  Any contig larger than %lld will not be an alt, as will any contig named M, MT, chrM or\n"
-		"                   chrMT (regardless of capitalization).  Unless you specify this or one of the options below, no contigs will be marked ALT.\n"
+        " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
+        " -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
+        "                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
+        "                   the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
+        "                   indicating that a space is a terminator.\n"
+        " -bSpace           Indicates that the space character is a terminator for chromosome names (see -B above).  This may be used in addition\n"
+        "                   to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
+        " -pPadding         Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
+        "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
+        "                   read you'll process.  Default is %d\n"
+        " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
+        " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
+        " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
+        " -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
+        "                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
+        " -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
+        "                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
+        "                   human genome, it will fit with four byte locations if the seed size is 19 or larger, but needs 5 (or more) for smaller\n"
+        "                   seeds.  Making the location size bigger than necessary will just waste (lots of) space, so unless you're doing something\n"
+        "                   quite unusual, the right answer is 4 or 5.  Default is %d\n"
+        " -sm               Use a temp file to work better in smaller memory.  This only helps a little, but can be the difference if you're close.\n"
+        "                   In particular, this will generally use less memory than the index will use once it's built, so if this doesn't work you\n"
+        "                   won't be able to use the index anyway. However, if you've got sufficient memory to begin with, this option will just\n"
+        "                   slow down the index build by doing extra, useless IO.\n"
+        " -AutoAlt          Automatically mark ALT contigs.  Any contig thats name ends in '_alt' (regardless of captialization) will be marked ALT.  Others will not.\n"
 		" -maxAltContigSize Specify a size at or below which all contigs are automatically marked ALT, unless overriden by name using the args below\n"
 		" -altContigName    Specify the (case independent) name of an alt to mark a contig.  You can supply this parameter as often as you'd like\n"
 		" -altContigFile    Specify the name of a file with a list of alt contig names, one per line.  You may specify this as often as you'd like\n"
@@ -97,8 +95,7 @@ static void usage()
             DEFAULT_SLACK,
             DEFAULT_PADDING,
             DEFAULT_KEY_BYTES,
-            DEFAULT_LOCATION_SIZE,
-			MAX_ALT_SIZE_FOR_AUTO_ALT);
+            DEFAULT_LOCATION_SIZE);
     soft_exit_no_print(1);    // Don't use soft-exit, it's confusing people to get an error message after the usage
 }
 
@@ -145,11 +142,12 @@ GenomeIndex::runIndexer(
 	bool large = false;
     unsigned locationSize = DEFAULT_LOCATION_SIZE;
 	bool smallMemory = false;
-	GenomeDistance maxSizeForAutomaticALT = 0;
+	GenomeDistance maxSizeForAutomaticALT = -1;
 	int nAltOptIn = 0;
 	char **altOptInList = NULL;
 	int nAltOptOut = 0;
 	char **altOptOutList = NULL;
+    bool autoALT = false;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -219,11 +217,7 @@ GenomeIndex::runIndexer(
 		else if (!strcmp(argv[n], "-bSpace")) {
 			spaceIsAPieceNameTerminator = true;
 		} else if (!strcmp(argv[n], "-AutoAlt")) {
-			maxSizeForAutomaticALT = MAX_ALT_SIZE_FOR_AUTO_ALT;
-			addToCountedListOfStrings("chrM", &nAltOptOut, &altOptOutList);
-			addToCountedListOfStrings("chrMT", &nAltOptOut, &altOptOutList);
-			addToCountedListOfStrings("M", &nAltOptOut, &altOptOutList);
-			addToCountedListOfStrings("MT", &nAltOptOut, &altOptOutList);
+            autoALT = true;
 		} else if (!strcmp(argv[n], "-maxAltContigSize")) {
 			if (n + 1 < argc) {
 				maxSizeForAutomaticALT = atoll(argv[n + 1]);
@@ -328,7 +322,7 @@ GenomeIndex::runIndexer(
     BigAllocUseHugePages = false;
 
     _int64 start = timeInMillis();
-    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altOptInList, nAltOptIn, altOptOutList, nAltOptOut, maxSizeForAutomaticALT);
+    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altOptInList, nAltOptIn, altOptOutList, nAltOptOut, maxSizeForAutomaticALT, autoALT);
     if (NULL == genome) {
         WriteErrorMessage("Unable to read FASTA file\n");
         soft_exit(1);

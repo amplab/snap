@@ -314,14 +314,13 @@ Return Value:
     }
 
     firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
-    smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = 0x8fffffffffffffff;
     highestWeightListChecked = 0;
 
     unsigned maxSeedsToUse;
     if (0 != maxSeedsToUseFromCommandLine) {
         maxSeedsToUse = maxSeedsToUseFromCommandLine;
     } else {
-        maxSeedsToUse = (int)(2 * maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength()); // 2x is for FORWARD/RC
+        maxSeedsToUse = (int)(NUM_DIRECTIONS * maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength()); 
     }
 
     primaryResult->location = InvalidGenomeLocation; // Value to return if we don't find a location.
@@ -561,7 +560,6 @@ Return Value:
                 //
                 nHitsIgnoredBecauseOfTooHighPopularity++;
                 popularSeedsSkipped++;
-                smallestSkippedSeed[direction] = __min(nHits[direction], smallestSkippedSeed[direction]);
             } else {
                 if (0 == wrapCount) {
                     firstPassSeedsNotSkipped[direction]++;
@@ -584,7 +582,7 @@ Return Value:
                     // represented some particular bases, and digit' is the base's complement). Then the
                     // RC of that read is 6'5'4'3'2'1'.  So, when we look up the hits for the seed at
                     // offset 0 in the forward read (i.e. 012 assuming a seed size of 3) then the index
-                    // will also return the results for the seed's reverse complement, i.e., 3'2'1'.
+                    // will also return the results for the seed's reverse complement, i.e., 2'1'0'.
                     // This happens as the last seed in the RC read.
                     //
                     offset = readLen - seedLen - nextSeedToTest;
@@ -683,9 +681,9 @@ Return Value:
                 }
                 finalizeSecondaryResults(read[FORWARD], primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return true;
-            }
-        }
-    }
+            } // If score says we have a difinitive answer
+        } // If we applied a seed, and so something's changed.
+    } // While we're still applying seeds
 
     //
     // Do the best with what we've got.
@@ -795,7 +793,7 @@ Return Value:
     //
     // Recompute lowestPossibleScore.
     //
-    for (Direction direction = 0; direction < 2; direction++) {
+    for (Direction direction = 0; direction < NUM_DIRECTIONS; direction++) {
         if (0 != mostSeedsContainingAnyParticularBase[direction]) {
 #ifdef EXACT_DISJOINT_MISS_COUNT
             lowestPossibleScoreOfAnyUnseenLocation[direction] =
@@ -848,7 +846,7 @@ Return Value:
                     primaryResult->mapq = 0;
                     return true;
                 }
-            }
+            } // If we don't still have weight lists to check
             //
             // Nothing that we haven't already looked up can possibly be the answer.  Score what we've got and exit.
             //
@@ -905,7 +903,7 @@ Return Value:
                 unsigned score = -1;
                 double matchProbability = 0;
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
-                GenomeDistance genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
+                GenomeDistance genomeDataLength = (GenomeDistance)readDataLength + MAX_K; // Leave extra space in case the read has deletions
                 const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
                 bool usedAffineGapScoring = false;
                 int basesClippedBefore = 0;
