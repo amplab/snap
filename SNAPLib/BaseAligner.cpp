@@ -270,7 +270,7 @@ Arguments:
 
 
 #ifdef  _DEBUG
-bool _DumpAlignments = true;
+bool _DumpAlignments = false;
 #endif  // _DEBUG
 
     bool
@@ -305,7 +305,12 @@ Return Value:
     true if there was enough space in secondaryResults, false otherwise
 
 --*/
-{   
+{
+#if _DEBUG
+    const size_t genomeLocationBufferSize = 200;
+    char genomeLocationBuffer[genomeLocationBufferSize];
+#endif // _DEBUG
+
     bool overflowedSecondaryResultsBuffer = false;
     memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
 
@@ -470,8 +475,8 @@ Return Value:
                     &overflowedSecondaryResultsBuffer);
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %llu\n", 
-                                            primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location.location);
+                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %s\n", 
+                                            primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, genome->genomeLocationInStringForm(primaryResult->location.location, genomeLocationBuffer, genomeLocationBufferSize));
 #endif  // _DEBUG
                 if (overflowedSecondaryResultsBuffer) {
                     return false;
@@ -531,7 +536,7 @@ Return Value:
             printf("\tSeed offset %2d, %4lld hits, %4lld rcHits.", nextSeedToTest, nHits[0], nHits[1]);
             for (int rc = 0; rc < 2; rc++) {
                 for (unsigned i = 0; i < __min(nHits[rc], 5); i++) {
-		  printf(" %sHit at %9llu.", rc == 1 ? "RC " : "", doesGenomeIndexHave64BitLocations ? hits[rc][i].location : (_int64)hits32[rc][i]);
+                    printf(" %sHit at %s.", rc == 1 ? "RC " : "", genome->genomeLocationInStringForm(doesGenomeIndexHave64BitLocations ? hits[rc][i].location : (_int64)hits32[rc][i], genomeLocationBuffer, genomeLocationBufferSize));
                 }
             }
             printf("\n");
@@ -765,6 +770,11 @@ Return Value:
 
 --*/
 {
+#if _DEBUG
+    const size_t genomeLocationBufferSize = 200;
+    char genomeLocationBuffer[genomeLocationBufferSize];
+#endif // _DEBUG
+
     *overflowedSecondaryBuffer = false;
 #ifdef TRACE_ALIGNER
     printf("score() called with force=%d nsa=%d nrcsa=%d best=%u bestloc=%u 2nd=%u\n",
@@ -1029,7 +1039,7 @@ Return Value:
 
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("Scored %9llu weight %2d limit %d, result %2d %s\n", genomeLocation.location, elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
+                if (_DumpAlignments) printf("Scored %s weight %2d limit %d, result %2d %s\n", genome->genomeLocationInStringForm(genomeLocation.location, genomeLocationBuffer, genomeLocationBufferSize), elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
 #endif  // _DEBUG
 
                 candidateToScore->score = score;

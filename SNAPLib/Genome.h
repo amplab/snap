@@ -286,6 +286,8 @@ public:
             return location >= genomeLocationOfFirstALTContig;
         }
 
+        char* genomeLocationInStringForm(GenomeLocation location, char *buffer, size_t bufferSize) const;
+
 private:
 
         static const int N_PADDING = 100; // Padding to add on either end of the genome to allow substring reads past it

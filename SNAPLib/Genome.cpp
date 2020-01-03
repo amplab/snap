@@ -594,4 +594,19 @@ Genome::getNumALTContigs() const
 	return nALTContigs;
 }
 
+    char* 
+Genome::genomeLocationInStringForm(GenomeLocation location, char* buffer, size_t bufferSize) const
+{
+    const Contig* contig = getContigAtLocation(location);
+
+    if (contig == NULL) {
+        snprintf(buffer, bufferSize, "UnknownContig:%lld", GenomeLocationAsInt64(location));
+    } else {
+        snprintf(buffer, bufferSize, "%s:%lld", contig->name, GenomeLocationAsInt64(location - contig->beginningLocation));
+    }
+
+    return buffer;
+} // genomeLocationInStringForm
+
+
 GenomeLocation InvalidGenomeLocation;   // Gets set on genome build/load
