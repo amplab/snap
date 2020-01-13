@@ -6,11 +6,13 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Threading;
+using System.Web.UI;
 
 namespace ASELib
 {
@@ -36,6 +38,7 @@ namespace ASELib
         public const int Billion = 1000000000;
 
         public static readonly string[] chromosomes = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrx", "chry" };// Leaves off the mitochondrial genes
+        public static readonly string[] chromosomesWithMitochondria = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrx", "chry", "chrm" };
         public static readonly string[] autosomes = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22" };
 
         // Used for writing out Bonferroni corrected p values in Mann Whitney tests
@@ -1394,6 +1397,7 @@ namespace ASELib
             public string tentative_asv_without_cnvs_filename = "";
             public string variant_phasing_filename = "";
             public string vcf_statistics_filename = "";
+            public string read_statictics_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -1464,6 +1468,7 @@ namespace ASELib
             public long tentative_asv_without_cnvs_size = 0;
             public long variant_phasing_size = 0;
             public long vcf_statistics_size = 0;
+            public long read_statictics_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1683,7 +1688,8 @@ namespace ASELib
                 new FieldInformation("Case Metadata",                                       c => c.case_metadata_filename, (c, v) => c.case_metadata_filename = v, DerivedFile.Type.CaseMetadata, caseMetadataExtension, c => c.case_id, "Case Metadata Size", c => c.case_metadata_file_size, (c, v) => c.case_metadata_file_size = v),
                 new FieldInformation("Tentative ASVs without CNVs Filename",                c => c.tentative_asv_without_cnvs_filename, (c, v) => c.tentative_asv_without_cnvs_filename = v, DerivedFile.Type.TentativeASVsWithoutCNVs, tentativeASVsWithoutCNVsExtension, c => c.case_id, "Tentative ASVs Without CNVs Size", c => c.tentative_asv_without_cnvs_size, (c, v) => c.tentative_asv_without_cnvs_size = v),
                 new FieldInformation("Variant Phasing Filename",                            c => c.variant_phasing_filename, (c, v) => c.variant_phasing_filename = v, DerivedFile.Type.VariantPhasing, variantPhasingExtension, c => c.case_id, "Variant Phasing Size", c => c.variant_phasing_size, (c, v) => c.variant_phasing_size = v),
-                new FieldInformation("VCF Statistics Filename",                             c => c.vcf_statistics_filename, (c,v) => c.vcf_statistics_filename = v, DerivedFile.Type.VCFStatistics, vcfStatisticsExtension, c => c.normal_dna_file_id, "VCF Statistics Size", c=> c.vcf_statistics_size, (c, v)=> c.vcf_statistics_size = v),
+                new FieldInformation("VCF Statistics Filename",                             c => c.vcf_statistics_filename, (c,v) => c.vcf_statistics_filename = v, DerivedFile.Type.VCFStatistics, vcfStatisticsExtension, c => c.normal_dna_file_id, "VCF Statistics Size", c=> c.vcf_statistics_size, (c, v) => c.vcf_statistics_size = v),
+                new FieldInformation("Read Statistics Filename",                            c => c.read_statictics_filename, (c, v) => c.read_statictics_filename = v, DerivedFile.Type.ReadStatictics, readStatisticsExtension, c => c.case_id, "Read Statictics Size", c => c.read_statictics_size, (c, v) => c.read_statictics_size = v)                        ,   
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -3401,6 +3407,8 @@ namespace ASELib
         public const string annotatedGeneHancerLinesExtension = ".annotated_gene_hancers.txt";
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
+        public const string readStatisticsExtension = ".read_statistics";
+
         public const string MethylationDistributionsFilename = "MethylationDistributions.txt";
         public const string MethylationCorrelationsFilename = "MethylationCorrelations.txt";
         public const string MethylagtionCorrelationsHistogramFilename = "MethylationCorrelationsHistogram.txt";
@@ -3465,7 +3473,7 @@ namespace ASELib
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
-                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs, VariantPhasing, VCFStatistics
+                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs, VariantPhasing, VCFStatistics, ReadStatictics
             };
         } // DerivedFile
 
@@ -8535,6 +8543,11 @@ namespace ASELib
                 tlen = Convert.ToInt32(fields[8]);
                 seq = fields[9];
                 qual = fields[10];
+                optionalFields = new string[fields.Count() - 11];
+                for (int i = 11; i < fields.Count(); i++)
+                {
+                    optionalFields[i - 11] = fields[i];
+                }
 
                 nonclippedBases = 0;
 
@@ -8549,6 +8562,14 @@ namespace ASELib
                 // keep track of cigar elements
                 int cigarElementStart = 0;
                 int cigarElementLength = 0;
+
+                //
+                // A small number of reads are incorrectly formatted with |qual| < |seq|.  Just pad them out with 2's.
+                //
+                while (qual.Length < seq.Length)
+                {
+                    qual += "2";
+                }
 
                 try
                 {
@@ -8637,11 +8658,12 @@ namespace ASELib
                                 break;
                         } // switch over character in the CIGAR string
                     } // while over the CIGAR string
-                } catch (Exception e)
+                }  catch (Exception e) 
                 {
-                    Console.WriteLine("SAMLine.SAMLine: error parsing cigar string " + cigar);
+                    Console.WriteLine("SAMLine.SAMLine: error parsing cigar string " + cigar + " for read " + rawline);
                     throw e;
                 } // catch
+                
 
             } // SAMLine
 
@@ -8650,9 +8672,19 @@ namespace ASELib
                 return (flag & Unmapped) == Unmapped;
             }
 
+            public bool isRC()
+            {
+                return (flag & RC) == RC;
+            }
+
             public bool isSecondaryAlignment()
             {
                 return (flag & SecondaryAligment) == SecondaryAligment;
+            }
+
+            public bool isSupplementaryAlignment()
+            {
+                return (flag & SupplementaryAlignment) == SupplementaryAlignment;
             }
 
             public bool isDuplicate()
@@ -8663,6 +8695,11 @@ namespace ASELib
             public bool isPaired()
             {
                 return (flag & MultipleSegments) == MultipleSegments;
+            }
+
+            public bool bothHalvesOfPairMapped()
+            {
+                return (flag & AllSegmentsProperlyAligned) == AllSegmentsProperlyAligned;
             }
 
             public bool isNextUnmapped()
@@ -8682,6 +8719,22 @@ namespace ASELib
             }
 #endif
 
+            public bool NMKnown()
+            {
+                return (optionalFields.Any(_ => _.StartsWith("NM:i:")));
+            }
+
+            public int NM()
+            {
+                var NMField = optionalFields.Where(_ => _.StartsWith("NM:i:")).ToList();
+                if (NMField.Count != 1)
+                {
+                    throw new Exception("SAMLine.NM: line does not have exactly one NM:i: field");
+                }
+
+                return Convert.ToInt32(NMField[0].Substring(5));
+            } // NM
+
             public readonly string qname;
             public readonly int flag;
             public readonly string rname;
@@ -8694,12 +8747,19 @@ namespace ASELib
             public readonly string seq;
             public readonly string qual;
             public readonly int nonclippedBases;
+            public readonly string[] optionalFields;
 
-            public const int MultipleSegments = 0x1;    // i.e., paired
-            public const int Unmapped = 0x4;
-            public const int NextUnmapped = 0x8;
-            public const int SecondaryAligment = 0x100;
-            public const int Duplicate = 0x400;
+            public const int MultipleSegments               = 0x1;    // i.e., paired
+            public const int AllSegmentsProperlyAligned     = 0x2;
+            public const int Unmapped                       = 0x4;
+            public const int NextUnmapped                   = 0x8;
+            public const int RC                             = 0x10;
+            public const int MateRC                         = 0x20;
+            public const int FirstSegment                   = 0x40;
+            public const int LastSegment                    = 0x80;
+            public const int SecondaryAligment              = 0x100;
+            public const int Duplicate                      = 0x400;
+            public const int SupplementaryAlignment         = 0x800;
 
             // Dictionary of position and bases at position
             public Dictionary<int, char> mappedBases = new Dictionary<int, char>();
@@ -9179,10 +9239,10 @@ namespace ASELib
                 return new HistogramResultLine(fieldGrabber.AsString("minValue"), minValue,  fieldGrabber.AsInt("count"), fieldGrabber.AsDouble("total"), fieldGrabber.AsDouble("pdf"), fieldGrabber.AsDouble("cdf"));
             }
 
-            public HistogramResultLine(string minValue_, double minValueAsDuoble_, int count_, double total_, double pdfValue_, double cdfValue_)
+            public HistogramResultLine(string minValue_, double minValueAsDouble_, int count_, double total_, double pdfValue_, double cdfValue_)
             {
                 minValue = minValue_;
-                minValueAsDouble = minValueAsDuoble_;
+                minValueAsDouble = minValueAsDouble_;
                 count = count_;
                 total = total_;
                 pdfValue = pdfValue_;
@@ -9436,6 +9496,30 @@ namespace ASELib
                 maxSeenValue = Math.Max(maxSeenValue, peer.maxSeenValue);
                 totalSeenValue += peer.totalSeenValue;
                 nValues += peer.nValues;
+            }
+
+            static public PreBucketedHistogram ReadFromSteam(StreamReader inputFile, string name, bool wholeFile)
+            {
+                var resultLines = HistogramResultLine.ReadFromStream(inputFile, wholeFile);
+
+                if (resultLines.Count() < 2 || resultLines[resultLines.Count() - 1].minValue != "More")
+                {
+                    throw new FormatException("ASELib.PreBucketedHistogram.ReadFromStream: found too few results lines, or the last one isn't 'More'");
+                }
+
+                int nBuckets = resultLines.Count() - 1;
+                double minValue = resultLines[0].minValueAsDouble;
+                double maxValue = resultLines[nBuckets - 1].minValueAsDouble;
+                double increment = (maxValue - minValue) / (nBuckets - 1);
+
+                var retVal = new PreBucketedHistogram(minValue, maxValue, increment, name);
+
+                //
+                // Now fill in the actual values in the buckets.
+                //
+
+
+                return retVal;
             }
 
             public long count()
@@ -15179,6 +15263,237 @@ namespace ASELib
 
             public readonly Dictionary<string, int> vcfCounts;
         } // VCFStatistics
+
+        const int MaxNMToTrack = 100;
+        public class ReadStatistics 
+        {
+            public PreBucketedHistogram distributionOfMappedReadsByNM = new PreBucketedHistogram(0, MaxNMToTrack, 1);
+            public PreBucketedHistogram distributionOfMAPQ = new PreBucketedHistogram(0, 61, 1);
+            public PreBucketedHistogram distributionOfPairedReadGap = new PreBucketedHistogram(0, 2000, 5);
+            public PreBucketedHistogram distributionOfReadLengths = new PreBucketedHistogram(0, 200, 1);
+            public long unmappedReads = 0;
+            public long totalReads = 0;
+            public long pairedReads = 0;
+            public long bothHalvesOfPairMapped = 0;
+            public long forwardReads = 0;
+            public long RCReads = 0;
+            public long crossChromosomeMappedPairs = 0;
+            public long secondaryAlignments = 0;
+            public long supplementaryAlignments = 0;
+            
+            public Dictionary<string, int> countOfMappedReadsByChromosome = new Dictionary<string, int>();
+            public long readsInALTContigs = 0;
+            public long readsInNonNormalNonALTContigs = 0; // unplaced parts of the primary assembly
+
+            public ReadStatistics()
+            {
+                foreach (var chromosome in chromosomesWithMitochondria)
+                {
+                    countOfMappedReadsByChromosome.Add(chromosome, 0);
+                }
+            } // ctor
+
+            public void addSAMLine(string samText)
+            {
+                var samLine = new SAMLine(samText);
+                addSAMLine(samLine);
+            }
+
+            public void addSAMLine(SAMLine samLine)
+            { 
+ 
+                totalReads++;
+
+                if (samLine.isPaired())
+                {
+                    pairedReads++;  // We count unmapped paired reads as paired
+
+                    if (samLine.pnext != 0 && samLine.bothHalvesOfPairMapped())
+                    {
+                        bothHalvesOfPairMapped++;
+
+                        if (samLine.rnext != "=" && samLine.rnext != "*" && samLine.rnext != samLine.rname)
+                        {
+                            crossChromosomeMappedPairs++;
+                        } else
+                        {
+                            if (0 != samLine.tlen)
+                            {
+                                distributionOfPairedReadGap.addValue(Math.Abs(samLine.tlen));
+                            }
+                        }
+                    } // both halves of pair mapped
+                } // paired
+
+                distributionOfReadLengths.addValue(samLine.seq.Length);
+
+                if (samLine.isSecondaryAlignment())
+                {
+                    secondaryAlignments++;
+                }
+
+                if (samLine.isSupplementaryAlignment())
+                {
+                    supplementaryAlignments++;
+                }
+
+                if (samLine.isUnmapped())
+                {
+                    unmappedReads++;
+                    return;
+                }
+
+                if (samLine.isRC())
+                {
+                    RCReads++;
+                } else
+                {
+                    forwardReads++;
+                }
+
+                distributionOfMAPQ.addValue(samLine.mapq);
+
+                var contig = samLine.rname.ToLower();
+
+                if (chromosomes.Contains(contig))
+                {
+                    countOfMappedReadsByChromosome[contig]++;
+                } else if (contig.EndsWith("_alt"))
+                {
+                    readsInALTContigs++;
+                } else
+                {
+                    readsInNonNormalNonALTContigs++;
+                }
+
+                if (samLine.NMKnown())
+                {
+                    distributionOfMappedReadsByNM.addValue(samLine.NM());
+                }
+                
+            } // addSAMLine
+
+            public long mappedReads() { return totalReads - unmappedReads; }
+
+            public void WriteToFile(StreamWriter outputFile)
+            {
+                outputFile.WriteLine("Total Reads\tUnmapped Reads\tPaired Reads\tReads in ALT contigs\tReads in Non-Normal, Non-ALT contigs\tBoth Halves of Pair Mapped\tForward\tRC\tCross Chromosome Pairs\tSecondary Alignments\tSupplementary Alignments");
+                outputFile.WriteLine(totalReads + "\t" + unmappedReads + "\t" + pairedReads + "\t" + readsInALTContigs + "\t" + readsInNonNormalNonALTContigs + "\t" + bothHalvesOfPairMapped + "\t" + forwardReads 
+                                     + "\t" + RCReads + "\t" + crossChromosomeMappedPairs + " \t" + secondaryAlignments + "\t" + supplementaryAlignments );
+
+                outputFile.WriteLine();
+                outputFile.WriteLine("Chromosome\tMapped Reads");
+                countOfMappedReadsByChromosome.ToList().ForEach(_ => outputFile.WriteLine(_.Key + "\t" + _.Value));
+
+                outputFile.WriteLine();
+                outputFile.WriteLine("Distribution of NM");
+                distributionOfMappedReadsByNM.WriteHistogram(outputFile);
+
+                outputFile.WriteLine();
+                outputFile.WriteLine("Distribution of MAPQ");
+                distributionOfMAPQ.WriteHistogram(outputFile);
+
+                outputFile.WriteLine();
+                outputFile.WriteLine("Distribution of Paired Read Gap");
+                distributionOfPairedReadGap.WriteHistogram(outputFile);
+
+                outputFile.WriteLine();
+                outputFile.WriteLine("Distribution of Read Lengths");
+                distributionOfReadLengths.WriteHistogram(outputFile);
+            }
+
+
+            public static ReadStatistics ReadFromFile(string inputFilename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(inputFilename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("ASELib.ReadStatictics.ReadFromFile: unable to open input file " + inputFilename);
+                    return null;
+                }
+
+                var result = ReadFromFile(inputFile);
+                inputFile.Close();
+
+                return result;
+            }
+
+
+            public static ReadStatistics ReadFromFile(StreamReader inputFile)
+            {
+                //
+                // The first two lines are a header and the counts.
+                //
+                var headerLines = new List<string>();
+
+                for (int i = 0; i < 2; i++)
+                {
+                    string  inputLine;
+                    while ((inputLine = inputFile.ReadLine()) == "")
+                    {
+                      
+                    }
+
+                    if (inputLine == null)
+                    {
+                        return null;
+                    }
+
+                    headerLines.Add(inputLine);
+                }
+
+                headerLines.Add(inputFile.ReadLine());
+                headerLines.Add(inputFile.ReadLine());
+
+                var headerizedFile = new HeaderizedFile<ReadStatistics>(StreamReaderFromStrings(headerLines), false, false, "", wantedFields.ToList());
+                List<ReadStatistics> result;
+                if (!headerizedFile.ParseFile(Parser, out result))
+                {
+                    return null;
+                }
+
+                if (result.Count() != 1)
+                {
+                    throw new Exception("ASELib.ReadStatistics.ReadFromFile: got more than one result from HeaderizedLine (??)");
+                }
+
+
+                return result[0];
+            } // ReadFromFile
+
+            static ReadStatistics Parser(HeaderizedFile<ReadStatistics>.FieldGrabber fieldGrabber)
+            {
+                var readStatistics = new ReadStatistics();
+                readStatistics.totalReads = fieldGrabber.AsLong("Total Reads");
+                readStatistics.unmappedReads = fieldGrabber.AsLong("Unmapped Reads");
+                readStatistics.pairedReads = fieldGrabber.AsLong("Paired Reads");
+                readStatistics.readsInALTContigs = fieldGrabber.AsLong("Reads in ALT contigs");
+                readStatistics.readsInNonNormalNonALTContigs = fieldGrabber.AsLong("Reads in Non-Normal, Non-ALT contigs");
+                readStatistics.bothHalvesOfPairMapped = fieldGrabber.AsLong("Both Halves of Pair Mapped");
+                readStatistics.forwardReads = fieldGrabber.AsLong("Forward");
+                readStatistics.RCReads = fieldGrabber.AsLong("RC");
+                readStatistics.crossChromosomeMappedPairs = fieldGrabber.AsLong("Cross Chromosome Pairs");
+                readStatistics.secondaryAlignments = fieldGrabber.AsLong("Secondary Alignments");
+                readStatistics.supplementaryAlignments = fieldGrabber.AsLong("Supplementary Alignments");
+
+                return readStatistics;
+            }
+
+            static string[] wantedFields =
+            {
+                "Total Reads", "Unmapped Reads", "Paired Reads", "Reads in ALT contigs", "Reads in Non-Normal, Non-ALT contigs", "Both Halves of Pair Mapped", "Forward", "RC", "Cross Chromosome Pairs", "Secondary Alignments", "Supplementary Alignments"
+            };
+        } // ReadStatistics
+
+        public static StreamReader StreamReaderFromStrings(List<string> strings)
+        {
+            string concatenatedString = "";
+
+            strings.ForEach(_ => concatenatedString += _);
+
+            return new StreamReader(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(concatenatedString)));
+        }
+
 
     } // ASETools
 

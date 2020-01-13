@@ -223,16 +223,18 @@ namespace ASEProcessManager
 
                     nOnOutputLine++;
 
+                    nCasesForThisLine--;
+
                     if (nOnOutputLine >= maxCaseIdsPerLine || outputLine.Length >= maxCharsPerLine || nCasesForThisLine == 0)
                     {
                         script.WriteLine(outputLine);
                         outputLine = "";
                         nOnOutputLine = 0;
+                        nOutputLinesWritten++;
                     }
 
                     nAddedToScript++;
                     nRemainingCases--;
-                    nCasesForThisLine--;
                 } // foreach case
 
                 if (nOnOutputLine != 0)
@@ -4103,6 +4105,14 @@ namespace ASEProcessManager
             static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.PhasingForNearbyVariantsFilename };
         }
 
+        class ReadStaticticsProcessingStage : PerCaseProcessingStage
+        {
+            public ReadStaticticsProcessingStage() : base("Read Statictics", "ComputeReadStatistics.exe", "", perCaseFiles, null, getOutputFile) { }
+
+            static GetCaseFile[] perCaseFiles = { _ => _.tumor_dna_filename, _ => _.tumor_rna_filename, _ => _.normal_dna_filename, _ => (_.normal_rna_file_id == "") ? _.tumor_dna_filename : _.normal_rna_filename };
+            static GetCaseFile[] getOutputFile = { _ => _.read_statictics_filename };
+        }
+
         //
         // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
         //
@@ -4645,7 +4655,7 @@ namespace ASEProcessManager
 
             List<ProcessingStage> processingStages = new List<ProcessingStage>();
 
-			processingStages.Add(new MAFConfigurationProcessingStage());
+            processingStages.Add(new MAFConfigurationProcessingStage());
 			processingStages.Add(new GenerateCasesProcessingStage());
 			processingStages.Add(new AllcountProcesingStage());
 			processingStages.Add(new DownloadProcessingStage());
@@ -4716,6 +4726,9 @@ namespace ASEProcessManager
             processingStages.Add(new SummarizePhasingProcessingStage());
             processingStages.Add(new ExtractVCFStatisticsProcessingStage());
             processingStages.Add(new OverallVCFStatisticsProcessingStage());
+            processingStages.Add(new ReadStaticticsProcessingStage());
+
+
 
             if (checkDependencies)
             {
