@@ -282,7 +282,7 @@ public:
         void    fillInContigLengths();
         void    sortContigsByName();
 
-        inline bool isGenomeLocationALT(GenomeLocation location) {
+        inline bool isGenomeLocationALT(GenomeLocation location) const {
             return location >= genomeLocationOfFirstALTContig;
         }
 

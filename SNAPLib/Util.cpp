@@ -115,7 +115,7 @@ void NWaiter::signal()
 	AllowEventWaitersToProceed(&_waiter);
 }
 
-char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize, size_t desiredLength = 0)
+char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize, size_t desiredLength)
 {
     _ASSERT(desiredLength < outputBufferSize);
 	//
@@ -138,7 +138,7 @@ char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferS
 
 	int nCommas = (nDigits - 1) / 3;
 
-	if (outputBufferSize < nDigits + nCommas + 1) {
+	if (outputBufferSize < (size_t)nDigits + nCommas + 1) {
 		WriteErrorMessage("Internal error: too small buffer for FormatUIntWithCommas, value %lld, outputBufferSize %lld\n", val, outputBufferSize);
 		if (outputBufferSize > 0) {
 			*outputBuffer = 0;
@@ -151,7 +151,7 @@ char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferS
 	//
 	// Now build up the string backwards.
 	//
-	size_t offset = nDigits + nCommas;
+	size_t offset = (size_t)nDigits + nCommas;
 	outputBuffer[offset] = '\0';
 
 	if (0 == val) {

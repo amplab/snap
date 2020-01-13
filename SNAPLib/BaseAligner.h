@@ -121,6 +121,9 @@ public:
     static size_t getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, 
         unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig, unsigned extraSearchDepth);
 
+    static const unsigned UnusedScoreValue = 0xffff;
+
+
 private:
 
     bool hadBigAllocator;
@@ -262,7 +265,6 @@ private:
         return key;
     }
 
-    static const unsigned UnusedScoreValue = 0xffff;
 
     // MAPQ parameters, currently not set to match Mason.  Using #define because VC won't allow "static const double".
 #define SNP_PROB  0.001
@@ -282,7 +284,10 @@ private:
     GenomeLocation bestScoreGenomeLocation;
     unsigned secondBestScore;
     GenomeLocation secondBestScoreGenomeLocation;
-    int      secondBestScoreDirection;
+    bool    secondBestScoreIsALT;
+    unsigned secondBestNonALTScore;
+    GenomeLocation secondBestScoreNonALTGenomeLocation;
+    int secondBestNonALTScoreDirection;
     unsigned scoreLimit;
     unsigned minScoreThreshold; // used in affine gap to elide scoring of missed seed hits
     unsigned lvScores;
@@ -291,11 +296,12 @@ private:
     unsigned affineGapScoresAfterBestFound;
     double probabilityOfAllCandidates;
     double probabilityOfBestCandidate;
+    double probabilityOfAllNonALTCandidates;
+    bool bestCandidateIsALT;
     int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
     unsigned highestWeightListChecked;
 
     double totalProbabilityByDepth[AlignerStats::maxMaxHits];
-    void updateProbabilityMass();
 
         bool
     score(
