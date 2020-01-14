@@ -69,7 +69,7 @@ namespace ComputeReadStatistics
 
         static void HandleOneCase(ASETools.Case case_, int state)
         {
-            try
+            //try
             {
                 var outputDirectory = ASETools.GetDirectoryFromPathname(case_.normal_dna_filename) + @"\..\..\derived_files\" + case_.case_id;
                 Directory.CreateDirectory(outputDirectory);
@@ -102,12 +102,12 @@ namespace ComputeReadStatistics
                 outputFile.WriteLine();
                 outputFile.WriteLine("**done**");
                 outputFile.Close();
-            } catch (Exception e)
+            } /*catch (Exception e)
             {
                 Console.WriteLine("Case " + case_.case_id + " aborted because of exception: " + e.Message + ".");
                 Console.WriteLine("Stack trace: ");
                 Console.WriteLine(e.StackTrace);
-            }
+            }*/
         } // HandleOneCase
 
 
