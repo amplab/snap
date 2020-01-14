@@ -8571,7 +8571,7 @@ namespace ASELib
                     qual += "2";
                 }
 
-                try
+                //try
                 {
 
                     while (offsetInCigarString < cigar.Count())
@@ -8658,11 +8658,11 @@ namespace ASELib
                                 break;
                         } // switch over character in the CIGAR string
                     } // while over the CIGAR string
-                }  catch (Exception e) 
+                }  /*catch (Exception e) 
                 {
                     Console.WriteLine("SAMLine.SAMLine: error parsing cigar string " + cigar + " for read " + rawline);
                     throw e;
-                } // catch
+                } // catch */
                 
 
             } // SAMLine
