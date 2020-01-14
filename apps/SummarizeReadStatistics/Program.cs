@@ -22,7 +22,7 @@ namespace SummarizeReadStatistics
             if (commonData.listOfCases.Any(_ => _.read_statictics_filename == ""))
             {
                 Console.WriteLine("At least one case doesn't have read statistics.");
-                return;
+                //BJB -- to debug before they're all run return;
             }
 
             foreach (var case_ in commonData.listOfCases)

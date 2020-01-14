@@ -9517,7 +9517,13 @@ namespace ASELib
                 //
                 // Now fill in the actual values in the buckets.
                 //
-
+                for (int i = 0; i < nBuckets; i++)
+                {
+                    retVal.buckets[i].count = resultLines[i].count;
+                    retVal.buckets[i].total = resultLines[i].total;
+                    retVal.totalSeenValue += resultLines[i].total;
+                    retVal.nValues += resultLines[i].count;
+                }
 
                 return retVal;
             }
@@ -15422,28 +15428,17 @@ namespace ASELib
             public static ReadStatistics ReadFromFile(StreamReader inputFile)
             {
                 //
-                // The first two lines are a header and the counts.
+                // The first two lines are a header and the counts (possibly preceeded by blank lines), followed by a blank line.
                 //
                 var headerLines = new List<string>();
 
-                for (int i = 0; i < 2; i++)
-                {
-                    string  inputLine;
-                    while ((inputLine = inputFile.ReadLine()) == "")
-                    {
-                      
-                    }
-
-                    if (inputLine == null)
-                    {
-                        return null;
-                    }
-
-                    headerLines.Add(inputLine);
-                }
+                string inputLine;
+                while ((inputLine = inputFile.ReadLine()) == "") { }
 
                 headerLines.Add(inputFile.ReadLine());
                 headerLines.Add(inputFile.ReadLine());
+
+                inputFile.ReadLine();
 
                 var headerizedFile = new HeaderizedFile<ReadStatistics>(StreamReaderFromStrings(headerLines), false, false, "", wantedFields.ToList());
                 List<ReadStatistics> result;
@@ -15457,6 +15452,29 @@ namespace ASELib
                     throw new Exception("ASELib.ReadStatistics.ReadFromFile: got more than one result from HeaderizedLine (??)");
                 }
 
+                inputLine = inputFile.ReadLine();
+                if (inputLine != "Chromosome\tMapped Reads")
+                {
+                    throw new Exception("ASETools.ReadStatictics.ReadFromFile: didn't find Chromosome Mapped Reads line where expected. Got: " + inputLine + " instead.");
+                }
+
+                while ((inputLine = inputFile.ReadLine()) != "")
+                {
+                    var fields = inputLine.Split('\t');
+                    if (fields.Count() != 2)
+                    {
+                        throw new Exception("ASETools.ReadStatictics.ReadFromFile: Chromosme Mapped Reads line didnt' have two fields: " + inputLine);
+                    }
+
+                    result[0].countOfMappedReadsByChromosome[fields[0]] = Convert.ToInt32(fields[1]);
+                }
+
+                inputLine = inputFile.ReadLine();
+                if (inputLine != "Distribution of NM")
+                {
+                    throw new Exception("ASETools.ReadStatictics.ReadFromFile: didn't find Distribution of NM line where expected. Got: " + inputLine + " instead.");
+                }
+                result[0].distributionOfMappedReadsByNM = PreBucketedHistogram.ReadFromSteam(inputFile, "", false);
 
                 return result[0];
             } // ReadFromFile
@@ -15489,7 +15507,7 @@ namespace ASELib
         {
             string concatenatedString = "";
 
-            strings.ForEach(_ => concatenatedString += _);
+            strings.ForEach(_ => concatenatedString += _ + "\n");
 
             return new StreamReader(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(concatenatedString)));
         }
