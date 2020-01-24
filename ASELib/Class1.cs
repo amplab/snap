@@ -1,12 +1,17 @@
 ﻿using MathNet.Numerics;
+using MathNet.Numerics.Distributions;
 using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Diagnostics;
+using System.Diagnostics.Contracts;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
@@ -1320,6 +1325,12 @@ namespace ASELib
             public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
             public string clinical_supplement_file_id = "";
             public List<string> sample_ids = new List<string>();
+            public string normal_miRNA_file_id = "";
+            public string tumor_miRNA_file_id = "";
+            public string tumor_miRNA_expression_quantification_file_id = "";
+            public string normal_miRNA_expression_quantification_file_id = "";
+            public string tumor_isoform_expression_quantification_file_id = "";
+            public string normal_isoform_expression_quantification_file_id = "";
 
             //
             // Pathnames for downloaded files.
@@ -1337,6 +1348,12 @@ namespace ASELib
             public string tumor_fpkm_filename = "";
             public string normal_fpkm_filename = "";
             public string clinical_supplement_filename = "";
+            public string normal_miRNA_filename = "";
+            public string tumor_miRNA_filename = "";
+            public string tumor_miRNA_expression_quantification_filename = "";
+            public string normal_miRNA_expression_quantification_filename = "";
+            public string tumor_isoform_expression_quantification_filename = "";
+            public string normal_isoform_expression_quantification_filename = "";
 
             //
             // Sizes for downloaded files.
@@ -1352,6 +1369,12 @@ namespace ASELib
             public long tumor_fpkm_size = 0;
             public long normal_fpkm_size = 0;
             public long clinical_supplement_size = 0;
+            public long normal_miRNA_size = 0;
+            public long tumor_miRNA_size = 0;
+            public long tumor_miRNA_expression_quantification_size = 0;
+            public long normal_miRNA_expression_quantification_size = 0;
+            public long tumor_isoform_expression_quantification_size = 0;
+            public long normal_isoform_expression_quantification_size = 0;
 
             //
             // Pathnames for derived files.
@@ -1421,6 +1444,12 @@ namespace ASELib
             public string tumor_fpkm_file_md5 = "";
             public string normal_fpkm_file_md5 = "";
             public string clinical_supplement_md5 = "";
+            public string normal_miRNA_md5 = "";
+            public string tumor_miRNA_md5 = "";
+            public string tumor_miRNA_expression_quantification_md5 = "";
+            public string normal_miRNA_expression_quantification_md5 = "";
+            public string tumor_isoform_expression_quantification_md5 = "";
+            public string normal_isoform_expression_quantification_md5 = "";
 
             //
             // Sizes for derived files.
@@ -1622,6 +1651,12 @@ namespace ASELib
                 new FieldInformation("Clinical Supplement File ID",                         c => c.clinical_supplement_file_id, (c, v) => c.clinical_supplement_file_id = v),
                 new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
                 new FieldInformation("Sample IDs",                                          c => c.sampleIdsInCommaSeparatedList(), (c,v) => c.sample_ids = v.Split(',').ToList()),
+                new FieldInformation("Normal miRNA-seq File ID",                            c => c.normal_miRNA_file_id, (c, v) => c.normal_miRNA_file_id = v),
+                new FieldInformation("Tumor miRNA-seq File ID",                             c => c.tumor_miRNA_file_id, (c, v) => c.tumor_miRNA_file_id = v),
+                new FieldInformation("Tumor miRNA Expression Quantification File ID",       c => c.tumor_miRNA_expression_quantification_file_id, (c, v) => c.tumor_miRNA_expression_quantification_file_id = v),
+                new FieldInformation("Normal miRNA Expression Quantification File ID",      c => c.normal_miRNA_expression_quantification_file_id, (c, v) => c.normal_miRNA_expression_quantification_file_id = v),
+                new FieldInformation("Tumor Isoform Expression Quantification File ID",     c => c.tumor_isoform_expression_quantification_file_id, (c, v) => c.tumor_isoform_expression_quantification_file_id = v),
+                new FieldInformation("Normal Isoform Expression Quantification File ID",    c => c.normal_isoform_expression_quantification_file_id, (c, v) => c.normal_isoform_expression_quantification_file_id = v),
 
                 new FieldInformation("Normal DNA Filename",                                 c => c.normal_dna_filename, (c,v) => c.normal_dna_filename = v),
                 new FieldInformation("Tumor DNA Filename",                                  c => c.tumor_dna_filename, (c,v) => c.tumor_dna_filename = v),
@@ -1636,6 +1671,12 @@ namespace ASELib
                 new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
                 new FieldInformation("Decompressed MAF Filename",                           c => c.decompressed_maf_filename, (c,v) => c.decompressed_maf_filename = v),
                 new FieldInformation("Clinical Supplement Filename",                        c => c.clinical_supplement_filename, (c, v) => c.clinical_supplement_filename = v),
+                new FieldInformation("Normal miRNA-seq Filename",                           c => c.normal_miRNA_filename, (c,v) => c.normal_miRNA_filename = v),
+                new FieldInformation("Tumor miRNA-seq Filename",                            c => c.tumor_miRNA_filename, (c,v) => c.tumor_miRNA_filename = v),
+                new FieldInformation("Tumor miRNA Expression Quantification Filename",      c => c.tumor_miRNA_expression_quantification_filename, (c, v) => c.tumor_miRNA_expression_quantification_filename = v),
+                new FieldInformation("Normal miRNA Expression Quantification Filename",     c => c.normal_miRNA_expression_quantification_filename, (c, v) => c.normal_miRNA_expression_quantification_filename = v),
+                new FieldInformation("Tumor Isoform Expression Quantification Filename",    c => c.tumor_isoform_expression_quantification_filename, (c, v) => c.tumor_isoform_expression_quantification_filename = v),
+                new FieldInformation("Normal Isoform Expression Quantification Filename",   c => c.normal_isoform_expression_quantification_filename, (c, v) => c.normal_isoform_expression_quantification_filename = v),
 
                 new FieldInformation("Normal DNA Size",                                     c => Convert.ToString(c.normal_dna_size), (c,v) => c.normal_dna_size = LongFromString(v)),
                 new FieldInformation("Tumor DNA Size",                                      c => Convert.ToString(c.tumor_dna_size), (c,v) => c.tumor_dna_size = LongFromString(v)),
@@ -1648,6 +1689,12 @@ namespace ASELib
                 new FieldInformation("Tumor FPKM Size",                                     c => Convert.ToString(c.tumor_fpkm_size), (c,v) => c.tumor_fpkm_size = LongFromString(v)),
                 new FieldInformation("Normal FPKM Size",                                    c => Convert.ToString(c.normal_fpkm_size), (c,v) => c.normal_fpkm_size = LongFromString(v)),
                 new FieldInformation("Clinical Supplement Size",                            c => Convert.ToString(c.clinical_supplement_size), (c, v) => c.clinical_supplement_size = LongFromString(v)),
+                new FieldInformation("Normal miRNA-seq Size",                               c => Convert.ToString(c.normal_miRNA_size), (c, v) => c.normal_miRNA_size = LongFromString(v)),
+                new FieldInformation("Tumor miRNA-seq Size",                                c => Convert.ToString(c.tumor_miRNA_size), (c, v) => c.tumor_miRNA_size = LongFromString(v)),
+                new FieldInformation("Tumor miRNA Expression Quantification Size",          c => Convert.ToString(c.tumor_miRNA_expression_quantification_size), (c, v) => c.tumor_miRNA_expression_quantification_size = LongFromString(v)),
+                new FieldInformation("Normal miRNA Expression Quantification Size",         c => Convert.ToString(c.normal_miRNA_expression_quantification_size), (c, v) => c.normal_miRNA_expression_quantification_size = LongFromString(v)),
+                new FieldInformation("Tumor Isoform Expression Quantification Size",        c => Convert.ToString(c.tumor_isoform_expression_quantification_size), (c, v) => c.tumor_isoform_expression_quantification_size = LongFromString(v)),
+                new FieldInformation("Normal Isoform Expression Quantification Size",       c => Convert.ToString(c.normal_isoform_expression_quantification_size), (c, v) => c.normal_isoform_expression_quantification_size = LongFromString(v)),
 
                 new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, "Normal DNA Allcount File Size", c => c.normal_dna_allcount_size, (c,v) => c.normal_dna_allcount_size = v),
                 new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, "Tumor DNA Allcount File Size", c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v),
@@ -1706,6 +1753,12 @@ namespace ASELib
                 new FieldInformation("Tumor FPKM MD5",                                      c => c.tumor_fpkm_file_md5, (c,v) => c.tumor_fpkm_file_md5 = v),
                 new FieldInformation("Normal FPKM MD5",                                     c => c.normal_fpkm_file_md5, (c,v) => c.normal_fpkm_file_md5 = v),
                 new FieldInformation("Clinical Supplement MD5",                             c => c.clinical_supplement_md5, (c,v) => c.clinical_supplement_md5 = v),
+                new FieldInformation("Normal miRNA MD5",                                    c => c.normal_miRNA_md5, (c,v) => c.normal_miRNA_md5 = v),
+                new FieldInformation("Tumor miRNA MD5",                                     c => c.tumor_miRNA_md5, (c,v) => c.tumor_miRNA_md5 = v),
+                new FieldInformation("Tumor miRNA Expression Quantification MD5",           c => c.tumor_miRNA_expression_quantification_md5, (c, v) => c.tumor_miRNA_expression_quantification_md5 = v),
+                new FieldInformation("Normal miRNA Expression Quantification MD5",          c => c.normal_miRNA_expression_quantification_md5, (c, v) => c.normal_miRNA_expression_quantification_md5 = v),
+                new FieldInformation("Tumor Isoform Expression Quantification MD5",         c => c.tumor_isoform_expression_quantification_md5, (c, v) => c.tumor_isoform_expression_quantification_md5 = v),
+                new FieldInformation("Normal Isoform Expression Quantification MD5",        c => c.normal_isoform_expression_quantification_md5, (c, v) => c.normal_isoform_expression_quantification_md5 = v),
 
             }; // fieldInformation
 
@@ -1803,30 +1856,26 @@ namespace ASELib
                 }
             }
 
+            delegate void Setter(string value);
+            static void addDownloadedFileLocation(Dictionary<string, DownloadedFile> downloadedFiles, string fileID, Setter setter)
+            {
+                if (fileID != "" && downloadedFiles.ContainsKey(fileID))
+                {
+                    setter(downloadedFiles[fileID].fileInfo.FullName);
+                } else
+                {
+                    setter("");
+                }
+            }
             //
             // Fill in all the derived file locations if they exist.
             //
             public void loadFileLocations(Configuration configuration, Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
             {
 
-                if (downloadedFiles.ContainsKey(normal_dna_file_id))
-                {
-                    normal_dna_filename = downloadedFiles[normal_dna_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    normal_dna_filename = "";
-                }
+                addDownloadedFileLocation(downloadedFiles, normal_dna_file_id, x => normal_dna_filename = x);
 
-                if (downloadedFiles.ContainsKey(tumor_dna_file_id))
-                {
-                    tumor_dna_filename = downloadedFiles[tumor_dna_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    tumor_dna_filename = "";
-                }
-
+                addDownloadedFileLocation(downloadedFiles, tumor_dna_file_id, x => tumor_dna_filename = x);
                 if (normal_rna_file_id != "" && downloadedFiles.ContainsKey(normal_rna_file_id))
                 {
                     normal_rna_filename = downloadedFiles[normal_rna_file_id].fileInfo.FullName;
@@ -1836,15 +1885,7 @@ namespace ASELib
                     normal_rna_filename = "";
                 }
 
-                if (downloadedFiles.ContainsKey(tumor_rna_file_id))
-                {
-                    tumor_rna_filename = downloadedFiles[tumor_rna_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    tumor_rna_filename = "";
-                }
-
+                addDownloadedFileLocation(downloadedFiles, tumor_rna_file_id, x => tumor_rna_filename = x);
                 if (!configuration.isBeatAML)
                 {
                     if (downloadedFiles.ContainsKey(maf_file_id))
@@ -1862,59 +1903,18 @@ namespace ASELib
                     }
                 }
 
-                if (tumor_methylation_file_id != "" && downloadedFiles.ContainsKey(tumor_methylation_file_id))
-                {
-                    tumor_methylation_filename = downloadedFiles[tumor_methylation_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    tumor_methylation_filename = "";
-                }
+                addDownloadedFileLocation(downloadedFiles, tumor_methylation_file_id, x => tumor_methylation_filename = x);
+                addDownloadedFileLocation(downloadedFiles, normal_methylation_file_id, x => normal_methylation_filename = x);
+                addDownloadedFileLocation(downloadedFiles, tumor_copy_number_file_id, x => tumor_copy_number_filename = x);
+                addDownloadedFileLocation(downloadedFiles, normal_copy_number_file_id, x => normal_copy_number_filename = x);
+                addDownloadedFileLocation(downloadedFiles, tumor_fpkm_file_id, x => tumor_fpkm_filename = x);
+                addDownloadedFileLocation(downloadedFiles, normal_fpkm_file_id, x => normal_fpkm_filename = x);
+                addDownloadedFileLocation(downloadedFiles, tumor_isoform_expression_quantification_file_id, x => tumor_isoform_expression_quantification_filename = x);
+                addDownloadedFileLocation(downloadedFiles, normal_isoform_expression_quantification_file_id, x => normal_isoform_expression_quantification_filename = x);
+                addDownloadedFileLocation(downloadedFiles, tumor_miRNA_expression_quantification_file_id, x => tumor_miRNA_expression_quantification_filename = x);
+                addDownloadedFileLocation(downloadedFiles, tumor_miRNA_file_id, x => tumor_miRNA_filename = x);
+                addDownloadedFileLocation(downloadedFiles, normal_miRNA_file_id, x => normal_miRNA_filename = x);
 
-                if (normal_methylation_file_id != "" && downloadedFiles.ContainsKey(normal_methylation_file_id))
-                {
-                    normal_methylation_filename = downloadedFiles[normal_methylation_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    normal_methylation_filename = "";
-                }
-
-                if (tumor_copy_number_file_id != "" && downloadedFiles.ContainsKey(tumor_copy_number_file_id))
-                {
-                    tumor_copy_number_filename = downloadedFiles[tumor_copy_number_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    tumor_copy_number_filename = "";
-                }
-
-                if (normal_copy_number_file_id != "" && downloadedFiles.ContainsKey(normal_copy_number_file_id))
-                {
-                    normal_copy_number_filename = downloadedFiles[normal_copy_number_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    normal_copy_number_filename = "";
-                }
-
-                if (tumor_fpkm_file_id != "" && downloadedFiles.ContainsKey(tumor_fpkm_file_id))
-                {
-                    tumor_fpkm_filename = downloadedFiles[tumor_fpkm_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    tumor_fpkm_filename = "";
-                }
-
-                if (normal_fpkm_file_id != "" && downloadedFiles.ContainsKey(normal_fpkm_file_id))
-                {
-                    normal_fpkm_filename = downloadedFiles[normal_fpkm_file_id].fileInfo.FullName;
-                }
-                else
-                {
-                    normal_fpkm_filename = "";
-                }
 
                 if (!derivedFiles.ContainsKey(case_id))
                 {
@@ -13810,6 +13810,7 @@ namespace ASELib
             public List<string> diseases;
             public Stopwatch timer; // Starts running as soon as this is created
             public Dictionary<string, TCGAClinicalSummaryLine> clinicalSummariesByPatientId;
+            // If you add new things here, be sure to add them to DetermineStateOfTheWorld() in ASEProcessManager.
 
             public static CommonData LoadCommonData(string[] args)
             {
@@ -15511,6 +15512,68 @@ namespace ASELib
 
             return new StreamReader(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(concatenatedString)));
         }
+
+        public class miRNAExpressionQuantification
+        {
+            public readonly string miRNA_ID;
+            public readonly int read_count;
+            public readonly double reads_mer_milion_miRNA_mapped;
+            public readonly bool cross_mapped;
+
+            public static Dictionary<string, miRNAExpressionQuantification> LoadFromFile(string inputFilename) // maps name->miRNAExpressionQuantification
+            {
+                var inputFile = CreateStreamReaderWithRetry(inputFilename);
+                if (inputFile == null)
+                {
+                    return null;
+                }
+
+                string[] wantedFields = { "miRNA_ID", "read_count", "reads_per_million_miRNA_mapped", "cross-mapped" };
+
+                var headerizedFile = new HeaderizedFile<miRNAExpressionQuantification>(inputFile, false, false, "", wantedFields.ToList());
+                List<miRNAExpressionQuantification> listOfmiRNAs;
+
+
+                Dictionary<string, miRNAExpressionQuantification> retVal;
+
+                if (!headerizedFile.ParseFile(parser, out listOfmiRNAs))
+                {
+                    retVal = null;
+                } else
+                {
+                    retVal = listOfmiRNAs.GroupByToDictUnique(_ => _.miRNA_ID);
+                }
+
+                inputFile.Close();
+                return retVal;
+            }
+
+            static miRNAExpressionQuantification parser(HeaderizedFile<miRNAExpressionQuantification>.FieldGrabber fieldGrabber)
+            {
+                bool crossMapped;
+                if (fieldGrabber.AsString("cross-mapped") == "Y")
+                {
+                    crossMapped = true;
+                } 
+                else if (fieldGrabber.AsString("cross-mapped") == "N")
+                {
+                    crossMapped = false;
+                } else
+                {
+                    throw new Exception("ASETools.miRNAExpressionQuantification.parser: cross-mapped column contains neither Y nor N for line " + fieldGrabber.rawLine());
+                }
+
+                return new miRNAExpressionQuantification(fieldGrabber.AsString("miRNA_ID"), fieldGrabber.AsInt("read_count"), fieldGrabber.AsDouble("reads_per_million_miRNA_mapped"), crossMapped);
+            }
+
+            miRNAExpressionQuantification(string miRNA_ID_, int read_count_, double reads_mer_milion_miRNA_mapped_, bool cross_mapped_)
+            {
+                miRNA_ID = miRNA_ID_;
+                read_count = read_count_;
+                reads_mer_milion_miRNA_mapped = reads_mer_milion_miRNA_mapped_;
+                cross_mapped = cross_mapped_;
+            }
+        } // miRNAExpressionQuantification
 
 
     } // ASETools

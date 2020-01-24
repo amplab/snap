@@ -212,10 +212,16 @@ namespace GenerateCases
             int nMissingCopyNumber = 0;
             int nComplete = 0;
             int nWithNormalRNA = 0;
+            int nWithNormalMiRNA = 0;
+            int nWithTumorMiRNA = 0;
             int nWithTumorMethylation = 0;
 			int nWithTNMethylation = 0;
 			int nWithNormalCopyNumber = 0;
             int nWithClinicalSummary = 0;
+            int nWithTumormiRNAExpressionQuantification = 0;
+            int nWithNormalmiRNAExpressionQuantification = 0;
+            int nWithTumorIsoformExpressionQuantification = 0;
+            int nWithNormalIsoformExpressionQuantification = 0;
 
             Console.Write("Loading files for cases...");
             periodicStopwatch.Stop();
@@ -234,6 +240,7 @@ namespace GenerateCases
 const string bamOrTxtCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"BAM\",\"TXT\",\"TSV\"]}}";
 
 var BJBSeenFileDataTypes = new Dictionary<string, int>();
+var BJBSeenExperimentalStrategies = new Dictionary<string, int>();
  
             foreach (var caseEntry in allCases)
             {
@@ -251,6 +258,12 @@ var BJBSeenFileDataTypes = new Dictionary<string, int>();
 				ASETools.GDCFile tumorFPKM = null;
 				ASETools.GDCFile normalFPKM = null;
                 ASETools.GDCFile clinicalSupplement = null;
+                ASETools.GDCFile normalMiRNA = null;
+                ASETools.GDCFile tumorMiRNA = null;
+                ASETools.GDCFile tumorMiRNAExpressionQuantification = null;
+                ASETools.GDCFile normalMiRNAExpressionQuantification = null;
+                ASETools.GDCFile tumorIsoformExpressionQuantification = null;
+                ASETools.GDCFile normalIsoformExpressionQuantification = null;
 
                 from = 0;
 
@@ -321,13 +334,17 @@ var BJBSeenFileDataTypes = new Dictionary<string, int>();
                             
 if (!BJBSeenFileDataTypes.ContainsKey(file.data_type))
 {
-    Console.WriteLine("New file data type: " + file.data_type);
+    Console.WriteLine("New file data type: " + file.data_type + ", format: " + file.data_format);
     BJBSeenFileDataTypes.Add(file.data_type, 0);
 }
 BJBSeenFileDataTypes[file.data_type]++;
 
-							if (file.data_format == "BAM" && file.data_type == "Aligned Reads")
+ 
+
+
+                            if (file.data_format == "BAM" && file.data_type == "Aligned Reads")
 							{
+
 								if (0 == file.cases.Count() || 0 == file.cases[0].samples.Count())
 								{
 									continue;
@@ -359,8 +376,13 @@ BJBSeenFileDataTypes[file.data_type]++;
 
 								bool tumor = type_id < 10;
 
+if (!BJBSeenExperimentalStrategies.ContainsKey(file.experimental_strategy))
+{
+    Console.WriteLine("New experimantal strategy: " + file.experimental_strategy);
+    BJBSeenExperimentalStrategies.Add(file.experimental_strategy, 42);
+}
 
-								if (file.experimental_strategy == "RNA-Seq")
+                                if (file.experimental_strategy == "RNA-Seq")
 								{
 									if (tumor)
 									{
@@ -382,6 +404,17 @@ BJBSeenFileDataTypes[file.data_type]++;
 										normalDNA.Add(file);
 									}
 								}
+                                else if (file.experimental_strategy == "miRNA-Seq")
+                                {
+                                    if (tumor)
+                                    {
+                                        tumorMiRNA = ASETools.GDCFile.selectNewestUpdated(tumorMiRNA, file);
+                                    } 
+                                    else
+                                    {
+                                        normalMiRNA = ASETools.GDCFile.selectNewestUpdated(normalMiRNA, file);
+                                    }
+                                }
 							}
 							else if (file.data_format == "MAF")
 							{
@@ -453,7 +486,29 @@ BJBSeenFileDataTypes[file.data_type]++;
 										normalFPKM = ASETools.GDCFile.selectNewestUpdated(normalFPKM, file);
 									}
 								}
-							} // TXT file
+                                else if (file.data_type == "Isoform Expression Quantification")
+                                {
+                                    if (tumor)
+                                    {
+                                        tumorIsoformExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(tumorIsoformExpressionQuantification, file);
+                                    }
+                                    else
+                                    {
+                                        normalIsoformExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(tumorIsoformExpressionQuantification, file);
+                                    }
+                                }
+                                else if (file.data_type == "miRNA Expression Quantification")
+                                {
+                                    if (tumor)
+                                    {
+                                        tumorMiRNAExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(tumorIsoformExpressionQuantification, file);
+                                    }
+                                    else
+                                    {
+                                        normalMiRNAExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(tumorIsoformExpressionQuantification, file);
+                                    }
+                                }
+                            } // TXT file
                             else if (file.data_format == "BCR Biotab")
                             {
                                 if (file.data_type == "Clinical Supplement")
@@ -565,7 +620,25 @@ BJBSeenFileDataTypes[file.data_type]++;
                             }
                         }
 
-						var hasTumorMethylation = false;
+                        if (null != normalMiRNA)
+                        {
+                            nWithNormalMiRNA++;
+
+                            case_.normal_miRNA_file_id = normalMiRNA.file_id;
+                            case_.normal_miRNA_size = normalMiRNA.file_size;
+                            case_.normal_miRNA_md5 = normalMiRNA.md5sum;
+                        }
+
+                        if (null != tumorMiRNA)
+                        {
+                            nWithTumorMiRNA++;
+
+                            case_.tumor_miRNA_file_id = tumorMiRNA.file_id;
+                            case_.tumor_miRNA_size = tumorMiRNA.file_size;
+                            case_.tumor_miRNA_md5 = tumorMiRNA.md5sum;
+                        }
+
+                        var hasTumorMethylation = false;
 
                         if (null != tumorMethylation)
                         {
@@ -655,6 +728,43 @@ BJBSeenFileDataTypes[file.data_type]++;
                             nWithClinicalSummary++;
                         }
 
+                        if (null != tumorMiRNAExpressionQuantification)
+                        {
+                            case_.tumor_miRNA_expression_quantification_file_id = tumorMiRNAExpressionQuantification.file_id;
+                            case_.tumor_miRNA_expression_quantification_size = tumorMiRNAExpressionQuantification.file_size;
+                            case_.tumor_miRNA_expression_quantification_md5 = tumorMiRNAExpressionQuantification.md5sum;
+
+                            nWithTumormiRNAExpressionQuantification++;
+                        }
+
+                        if (null != normalMiRNAExpressionQuantification)
+                        {
+                            case_.normal_miRNA_expression_quantification_file_id = normalMiRNAExpressionQuantification.file_id;
+                            case_.normal_miRNA_expression_quantification_size = normalMiRNAExpressionQuantification.file_size;
+                            case_.normal_miRNA_expression_quantification_md5 = normalMiRNAExpressionQuantification.md5sum;
+
+                            nWithNormalmiRNAExpressionQuantification++;
+                        }
+
+                        if (null != tumorIsoformExpressionQuantification)
+                        {
+                            case_.tumor_isoform_expression_quantification_file_id = tumorIsoformExpressionQuantification.file_id;
+                            case_.tumor_isoform_expression_quantification_size = tumorIsoformExpressionQuantification.file_size;
+                            case_.tumor_isoform_expression_quantification_md5 = tumorIsoformExpressionQuantification.md5sum;
+
+                            nWithTumorIsoformExpressionQuantification++;
+                        }
+
+                        if (null != normalIsoformExpressionQuantification)
+                        {
+                            case_.normal_isoform_expression_quantification_file_id = normalIsoformExpressionQuantification.file_id;
+                            case_.normal_isoform_expression_quantification_size = normalIsoformExpressionQuantification.file_size;
+                            case_.normal_isoform_expression_quantification_md5 = normalIsoformExpressionQuantification.md5sum;
+
+                            nWithNormalIsoformExpressionQuantification++;
+                        }
+
+
                         case_.maf_file_id = mafFileIds.Intersect(mafManifestFileIds).ToList()[0];
 
                         if (downloadedFiles.ContainsKey(case_.maf_file_id))
@@ -678,7 +788,10 @@ BJBSeenFileDataTypes[file.data_type]++;
             Console.WriteLine("Of " + allCases.Count() + ", " + nMissingTumorDNA + " don't have tumor DNA, " + nMissingNormalDNA + " don't have matched normal DNA, " + nMissingTumorRNA + " don't have tumor RNA, "
                 + nMissingMAF + " don't have MAFs," + nMissingCopyNumber + " don't have copy number, and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA, "
                 + nWithTumorMethylation + " have tumor methylation, and " + nWithTNMethylation + " have both normal and tumor methylation, and "
-                + nWithNormalCopyNumber + " have normal copy number, and " + nWithClinicalSummary + " have clinical summaries");
+                + nWithNormalCopyNumber + " have normal copy number, " + nWithClinicalSummary + " have clinical summaries " + nWithNormalMiRNA + " have normal miRNA, " + nWithTumorMiRNA + " have tumor miRNA"
+                + nWithTumormiRNAExpressionQuantification + " have tumor miRNA expression quantitifcation, " + nWithNormalmiRNAExpressionQuantification + " have normal miRNA expression quantitifcation, "
+                + nWithTumorIsoformExpressionQuantification + " have tumor Isoform expression quantification, and " + nWithNormalIsoformExpressionQuantification + " have normal Isoform expression quantification."
+            );
 
 
 			ASETools.Case.SaveToFile(cases, configuration.casesFilePathname);

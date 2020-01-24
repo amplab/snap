@@ -72,9 +72,10 @@ namespace ASEProcessManager
             int maxCaseIdsPerLine;  // There is also a limit on the total length of the line in characters.
             int maxCharsPerLine;
             int desiredParallelism;
+            bool needsCommonData;
 
             public PerCaseProcessingStage(string stageName_, string binaryName_, string parametersBeforeCaseIds_, GetCaseFile[] getCaseFile, GetOneOffFile[] getOneOffFile, GetCaseFile[] getOutputFile, int desiredParallelism_ = 0, int maxCaseIdsPerLine_ = int.MaxValue, int maxCharsPerLine_ = 5000,
-                GenerateCaseIdOutput generateCaseIdOutput_ = null, GetDownloadableInputFile[] getDownloadableInputFiles = null)
+                GenerateCaseIdOutput generateCaseIdOutput_ = null, GetDownloadableInputFile[] getDownloadableInputFiles = null, bool needsCommonData_ = false)
             {
                 stageName = stageName_;
                 binaryName = binaryName_;
@@ -82,6 +83,7 @@ namespace ASEProcessManager
                 desiredParallelism = desiredParallelism_;
                 maxCaseIdsPerLine = maxCaseIdsPerLine_;
                 maxCharsPerLine = maxCharsPerLine_;
+                needsCommonData = needsCommonData_;
 
                 caseFileInputGetters = getCaseFile == null ? null : getCaseFile.ToList();
 
@@ -1123,7 +1125,9 @@ namespace ASEProcessManager
                     var case_ = caseEntry.Value;
 
                     string[] idsToDownload = {case_.normal_dna_file_id, case_.tumor_dna_file_id, case_.normal_rna_file_id, case_.tumor_rna_file_id, case_.normal_methylation_file_id,
-						case_.tumor_methylation_file_id, case_.normal_copy_number_file_id, case_.tumor_copy_number_file_id};
+						case_.tumor_methylation_file_id, case_.normal_copy_number_file_id, case_.tumor_copy_number_file_id, case_.normal_miRNA_file_id, case_.tumor_miRNA_file_id,
+                        case_.tumor_miRNA_expression_quantification_file_id, case_.normal_miRNA_expression_quantification_file_id, case_.tumor_isoform_expression_quantification_file_id,
+                        case_.normal_isoform_expression_quantification_file_id};
 
                     foreach (var id in idsToDownload) {
                         if (id != null && id != "" && !stateOfTheWorld.downloadedFiles.ContainsKey(id)) {
@@ -1170,28 +1174,38 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_rna_file_id, case_.tumor_rna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_methylation_file_id, case_.tumor_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-        			HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_methylation_file_id, case_.normal_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_methylation_file_id, case_.normal_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_copy_number_file_id, case_.tumor_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-					HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_copy_number_file_id, case_.normal_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-				}
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_copy_number_file_id, case_.normal_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_fpkm_file_id, case_.tumor_fpkm_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_fpkm_file_id, case_.normal_fpkm_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.clinical_supplement_file_id, case_.clinical_supplement_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_miRNA_file_id, case_.normal_miRNA_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_miRNA_file_id, case_.tumor_miRNA_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_miRNA_expression_quantification_file_id, case_.tumor_miRNA_expression_quantification_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_miRNA_expression_quantification_file_id, case_.normal_miRNA_expression_quantification_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_isoform_expression_quantification_file_id, case_.tumor_isoform_expression_quantification_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_isoform_expression_quantification_file_id, case_.normal_isoform_expression_quantification_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+
+                }
             } // EvaluateStage
 
             void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
             {
-                if (fileId == null || fileId == "")
+                if (fileId == null || fileId == "" || null == expectedMD5 || "" == expectedMD5)
                 {
                     //
-                    // There is no file at all (not just not downloaded), so it doesn't count in any of the counts.
+                    // There is no file at all (not just not downloaded), so it doesn't count in any of the counts.  Or, there was no MD5 in the metadata we got from GDC.
                     //
                     return;
                 }
 
-                if (!stateOfTheWorld.downloadedFiles.ContainsKey(fileId) || null == expectedMD5 || "" == expectedMD5)
+                if (!stateOfTheWorld.downloadedFiles.ContainsKey(fileId))
                 {
                     nWaitingForPrerequisites++;
                     return;
@@ -4141,12 +4155,20 @@ namespace ASEProcessManager
             public string scatterGraphsSummaryFile = "";
             public Dictionary<string, string> scatterGraphsByHugoSymbol = new Dictionary<string, string>();
             public ASETools.ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap = new ASETools.ExpressionDistributionByChromosomeMap();
+            public ASETools.CommonData commonData;
+
+            bool commonDataAvailable = false;
+
+            public bool hasCommonData() { return commonDataAvailable; }
 
             public readonly string configurationString = "";
 
-            public void DetermineTheStateOfTheWorld()
+            public void DetermineTheStateOfTheWorld(string [] args)
             {
+                commonData = ASETools.CommonData.LoadCommonData(args);
 
+                commonDataAvailable = commonData != null && commonData.cases != null && commonData.configuration != null && commonData.geneLocationInformation != null && commonData.geneMap != null && commonData.perGeneASEMap != null &&
+                                      commonData.aseCorrection != null && commonData.expressionDistributionByChromosomeMap != null && commonData.diseases != null && commonData.clinicalSummariesByPatientId != null;
 
                 ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles);
 
@@ -4533,7 +4555,7 @@ namespace ASEProcessManager
             bool checkDependencies = configuration.commandLineArgs.Count() >= 1 && configuration.commandLineArgs.Contains("-d");
 
             var stateOfTheWorld = new StateOfTheWorld(configuration);
-            stateOfTheWorld.DetermineTheStateOfTheWorld();
+            stateOfTheWorld.DetermineTheStateOfTheWorld(args);
 
             foreach (var directoryToEnsure in stateOfTheWorld.configuration.neededGlobalDirectories())
             {
