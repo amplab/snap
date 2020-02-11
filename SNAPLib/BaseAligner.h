@@ -215,6 +215,7 @@ private:
         unsigned             weight;
         unsigned             lowestPossibleScore;
         unsigned             bestScore;
+        int                  bestAGScore; // best affine gap score
         GenomeLocation       bestScoreGenomeLocation;
         Direction            direction;
         bool                 allExtantCandidatesScored;
@@ -277,8 +278,10 @@ private:
     unsigned mostSeedsContainingAnyParticularBase[NUM_DIRECTIONS];
     unsigned nSeedsApplied[NUM_DIRECTIONS];
     unsigned bestScore;
+    int bestAGScore;
     GenomeLocation bestScoreGenomeLocation;
     unsigned secondBestScore;
+    int secondBestAGScore;
     GenomeLocation secondBestScoreGenomeLocation;
     int      secondBestScoreDirection;
     unsigned scoreLimit;

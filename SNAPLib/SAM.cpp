@@ -2088,7 +2088,7 @@ SAMFormat::computeCigarString(
     } else if (*o_editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
-            WriteErrorMessage( "WARNING: computeEditDistance returned -1; this shouldn't happen\n");
+            WriteErrorMessage( "WARNING: computeEditDistance returned -1; this shouldn't happen. Read %*.s\n", dataLength, data);
             warningPrinted = true;
         }
         return "*";
@@ -2213,8 +2213,8 @@ SAMFormat::validateCigarString(
 	const char *nextChunkOfCigar = cigarBuf;
 	GenomeDistance offsetInData = 0;
 	const char *reference = genome->getSubstring(genomeLocation, dataLength);
-	if (NULL == reference) {
-		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation);
+    if (NULL == reference) {
+        WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation);
 		soft_exit(1);
 	}
 	GenomeDistance offsetInReference = 0;

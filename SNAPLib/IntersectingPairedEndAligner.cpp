@@ -627,9 +627,9 @@ IntersectingPairedEndAligner::align(
 
 #ifdef _DEBUG
         if (_DumpAlignments) {
-            printf("Scored fewer end candidate %d, set pair %d, read %d, location %llu, seed offset %d, score limit %d, score %d, offset %d\n", (int)(candidate - scoringCandidatePool),
+            printf("Scored fewer end candidate %d, set pair %d, read %d, location %llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d\n", (int)(candidate - scoringCandidatePool),
                 candidate->whichSetPair, readWithFewerHits, candidate->readWithFewerHitsGenomeLocation.location, candidate->seedOffset,
-                scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset);
+                scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset, candidate->agScore);
         }
 #endif // DEBUG
 
@@ -658,9 +658,9 @@ IntersectingPairedEndAligner::align(
                             &mate->genomeOffset, &mate->usedAffineGapScoring, &mate->basesClippedBefore, &mate->basesClippedAfter, &mate->agScore);
 #ifdef _DEBUG
                         if (_DumpAlignments) {
-                            printf("Scored mate candidate %d, set pair %d, read %d, location %llu, seed offset %d, score limit %d, score %d, offset %d\n",
+                            printf("Scored mate candidate %d, set pair %d, read %d, location %llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d\n",
                                 (int)(mate - scoringMateCandidates[candidate->whichSetPair]), candidate->whichSetPair, readWithMoreHits, mate->readWithMoreHitsGenomeLocation.location,
-                                mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset);
+                                mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset, mate->agScore);
                         }
 #endif // _DEBUG
 
@@ -839,11 +839,12 @@ IntersectingPairedEndAligner::align(
                             probabilityOfAllPairs += pairProbability;
     #ifdef  _DEBUG
                             if (_DumpAlignments) {
-                                printf("Added %e (= %e * %e) @ (%llu, %llu), giving new probability of all pairs %e, score %d = %d + %d%s\n",
+                                printf("Added %e (= %e * %e) @ (%llu, %llu), giving new probability of all pairs %e, score %d = %d + %d, agScore %d = %d + %d%s\n",
                                     pairProbability, mate->matchProbability , fewerEndMatchProbability,
                                     candidate->readWithFewerHitsGenomeLocation.location + fewerEndGenomeLocationOffset, mate->readWithMoreHitsGenomeLocation.location + mate->genomeOffset,
                                     probabilityOfAllPairs,
-                                    pairScore, fewerEndScore, mate->score, isBestHit ? " New best hit" : "");
+                                    pairScore, fewerEndScore, mate->score, candidate->agScore + mate->agScore, candidate->agScore, mate->agScore,
+                                    isBestHit ? " New best hit" : "");
                             }
     #endif  // _DEBUG
 

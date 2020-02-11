@@ -429,7 +429,9 @@ Return Value:
     currRoundLowestPossibleScoreOfAnyUnseenLocation[FORWARD] = currRoundLowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
     mostSeedsContainingAnyParticularBase[FORWARD] = mostSeedsContainingAnyParticularBase[RC] = 1;  // Instead of tracking this for real, we're just conservative and use wrapCount+1.  It's faster.
     bestScore = UnusedScoreValue;
+    bestAGScore = -1;
     secondBestScore = UnusedScoreValue;
+    secondBestAGScore = -1;
     nSeedsApplied[FORWARD] = nSeedsApplied[RC] = 0;
     lvScores = 0;
     lvScoresAfterBestFound = 0;
@@ -902,7 +904,7 @@ Return Value:
                 }
 
                 unsigned score = -1;
-                double matchProbability = 0;
+                double matchProbability = 0.0;
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
                 GenomeDistance genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
                 const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
@@ -980,7 +982,7 @@ Return Value:
                                         read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
                                         seedOffset,
                                         limitLeft,
-                                        seedLen, // FIXME: Assumes the rest of the read matches exactly
+                                        seedLen,
                                         &genomeLocationOffset,
                                         &basesClippedBefore,
                                         &score2,
@@ -1018,10 +1020,10 @@ Return Value:
                     }
                     else {
                         score = -1;
-                        agScore = 0;
+                        agScore = -1;
                     }
                 } else { // if we had genome data to compare against
-                    matchProbability = 0;
+                    matchProbability = 0.0;
                 }
 #ifdef TRACE_ALIGNER
                 printf("Computing distance at %u (RC) with limit %d: %d (prob %g)\n",
@@ -1030,7 +1032,8 @@ Return Value:
 
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("Scored %9llu weight %2d limit %d, result %2d %s\n", genomeLocation.location, elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
+                if (_DumpAlignments) printf("Scored %9llu weight %2d limit %d, result %2d %s, agScore %d, matchProb %g\n", genomeLocation.location, elementToScore->weight, 
+                                            scoreLimit, score, elementToScore->direction ? "RC" : "", agScore, matchProbability);
 #endif  // _DEBUG
 
                 candidateToScore->score = score;
@@ -1114,10 +1117,15 @@ Return Value:
                 probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
+                elementToScore->bestAGScore = bestAGScore;
 
-                if (bestScore > score ||
-                   (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
-				// if (matchProbability > probabilityOfBestCandidate) {
+                bool seenNewBestScore = useAffineGap ? 
+                                            (bestAGScore < agScore) ||
+                                            (bestAGScore == agScore && matchProbability > probabilityOfBestCandidate) :
+                                            (bestScore > score) ||
+                                            (bestScore == score && matchProbability > probabilityOfBestCandidate);
+
+                if (seenNewBestScore) {
                     //
                     // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
                     //
@@ -1127,6 +1135,7 @@ Return Value:
                         (!anyNearbyCandidatesAlreadyScored || (GenomeLocationAsInt64(bestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist &&
                                                                GenomeLocationAsInt64(secondBestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist))) {
                             secondBestScore = bestScore;
+                            secondBestAGScore = bestAGScore;
                             secondBestScoreGenomeLocation = bestScoreGenomeLocation;
                             secondBestScoreDirection = primaryResult->direction;
                     }
@@ -1134,31 +1143,32 @@ Return Value:
                     //
                     // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
                     //
-					// if (bestScore >= score) {
-						if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
-							if (secondaryResultBufferSize <= *nSecondaryResults) {
-								*overflowedSecondaryBuffer = true;
-								return true;
-							}
+                    if (bestScore >= score) {
+                        if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
+                            if (secondaryResultBufferSize <= *nSecondaryResults) {
+                                *overflowedSecondaryBuffer = true;
+                                return true;
+                            }
 
-							SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-							result->direction = primaryResult->direction;
-							result->location = bestScoreGenomeLocation;
-							result->mapq = 0;
-							result->score = bestScore;
-							result->status = MultipleHits;
-							result->clippingForReadAdjustment = 0;
-							result->usedAffineGapScoring = primaryResult->usedAffineGapScoring;
-							result->basesClippedBefore = primaryResult->basesClippedBefore;
-							result->basesClippedAfter = primaryResult->basesClippedAfter;
+                            SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                            result->direction = primaryResult->direction;
+                            result->location = bestScoreGenomeLocation;
+                            result->mapq = 0;
+                            result->score = bestScore;
+                            result->status = MultipleHits;
+                            result->clippingForReadAdjustment = 0;
+                            result->usedAffineGapScoring = primaryResult->usedAffineGapScoring;
+                            result->basesClippedBefore = primaryResult->basesClippedBefore;
+                            result->basesClippedAfter = primaryResult->basesClippedAfter;
                             result->agScore = primaryResult->agScore;
 
-							_ASSERT(result->score != -1);
+                            _ASSERT(result->score != -1);
 
-							(*nSecondaryResults)++;
-						}
-					// }
-                    bestScore = score;
+                            (*nSecondaryResults)++;
+                        }
+                    }
+                    bestScore = score < bestScore ? score : bestScore;
+                    bestAGScore = agScore;
                     probabilityOfBestCandidate = matchProbability;
                     _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
                     bestScoreGenomeLocation = genomeLocation;
@@ -1173,11 +1183,15 @@ Return Value:
 
                     lvScoresAfterBestFound = 0;
                 } else {
-                    if (secondBestScore > score) {
+                    bool seenNewSecondBestScore = useAffineGap ? 
+                                                    secondBestAGScore < agScore :
+                                                    secondBestScore > score;
+                    if (seenNewSecondBestScore) {
                         //
                         // A new second best.
                         //
-                        secondBestScore = score;
+                        secondBestScore = score < secondBestScore ? score : secondBestScore;
+                        secondBestAGScore = agScore;
                         secondBestScoreGenomeLocation = genomeLocation;
                         secondBestScoreDirection = elementToScore->direction;
                     }
@@ -1228,6 +1242,8 @@ Return Value:
                     //
                     // nothing will rescue us from a 0 mapq, so just stop looking.
                     //
+                    primaryResult->status = MultipleHits;
+                    primaryResult->mapq = 0;
                     return true;
                 }
 
@@ -1535,6 +1551,7 @@ BaseAligner::HashTableElement::init()
     weight = 0;
     lowestPossibleScore = UnusedScoreValue;
     bestScore = UnusedScoreValue;
+    bestAGScore = -1;
     direction = FORWARD;
     allExtantCandidatesScored = false;
     matchProbabilityForBestScore = 0;
