@@ -217,9 +217,9 @@ Arguments:
     nTable['N'] = 1;
 
     if (allocator) {
-        seedUsed = (BYTE *)allocator->allocate((sizeof(BYTE) * (maxReadSize + 7 + 128) / 8));    // +128 to make sure it extends at both
+        seedUsed = (BYTE *)allocator->allocate((sizeof(BYTE) * ((_int64)maxReadSize + 7 + 128) / 8));    // +128 to make sure it extends at both
     } else {
-        seedUsed = (BYTE *)BigAlloc((sizeof(BYTE) * (maxReadSize + 7 + 128) / 8));    // +128 to make sure it extends at both
+        seedUsed = (BYTE *)BigAlloc((sizeof(BYTE) * ((_int64)maxReadSize + 7 + 128) / 8));    // +128 to make sure it extends at both
     }
 
     seedUsedAsAllocated = seedUsed; // Save the pointer for the delete.
@@ -337,6 +337,7 @@ Return Value:
     primaryResult->basesClippedBefore = 0;
     primaryResult->basesClippedAfter = 0;
     primaryResult->agScore = 0;
+    primaryResult->supplementary = false;
 
     unsigned lookupsThisRun = 0;
 
@@ -433,13 +434,15 @@ Return Value:
     lowestPossibleScoreOfAnyUnseenLocation[FORWARD] = lowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
     currRoundLowestPossibleScoreOfAnyUnseenLocation[FORWARD] = currRoundLowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
     mostSeedsContainingAnyParticularBase[FORWARD] = mostSeedsContainingAnyParticularBase[RC] = 1;  // Instead of tracking this for real, we're just conservative and use wrapCount+1.  It's faster.
-    bestScore = UnusedScoreValue;
-    secondBestScore = UnusedScoreValue;
+
+    scoresForAllAlignments.init();
+    if (altAwareness) {
+        scoresForNonAltAlignments.init();
+    }
+
     nSeedsApplied[FORWARD] = nSeedsApplied[RC] = 0;
     lvScores = 0;
     lvScoresAfterBestFound = 0;
-    probabilityOfAllCandidates = 0.0;
-    probabilityOfBestCandidate = 0.0;
 
     scoreLimit = maxK + extraSearchDepth; // For MAPQ computation
 
@@ -481,6 +484,7 @@ Return Value:
                 if (overflowedSecondaryResultsBuffer) {
                     return false;
                 }
+
                 finalizeSecondaryResults(read[FORWARD], primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return true;
             }
@@ -593,54 +597,67 @@ Return Value:
                     offset = readLen - seedLen - nextSeedToTest;
                 }
 
-                const unsigned prefetchDepth = 30;
-                _int64 limit = min(nHits[direction], (_int64)maxHitsToConsider) + prefetchDepth;
-                for (unsigned iBase = 0 ; iBase < limit; iBase += prefetchDepth) {
-                    //
-                    // This works in two phases: we launch prefetches for a group of hash table lines,
-                    // then we do all of the inserts, and then repeat.
-                    //
+                const unsigned prefetchDepth = 6;
 
-		            _int64 innerLimit = min((_int64)iBase + prefetchDepth, min(nHits[direction], (_int64)maxHitsToConsider));
-                    if (doAlignerPrefetch) {
-                        for (unsigned i = iBase; i < innerLimit; i++) {
-                            if (doesGenomeIndexHave64BitLocations) {
-                                prefetchHashTableBucket(GenomeLocationAsInt64(hits[direction][i]) - offset, direction);
-                            } else {
-                                prefetchHashTableBucket(hits32[direction][i] - offset, direction);
-                            }
-                        }
-                    }
+                //
+                // We keep prefetches outstanding prefetchDepth ahead of where we are.  Start by launching the first
+                // prefetchDepth of them, and then each time we process a hit launch the prefetch for prefetchDepth farther
+                // along, assuming it exists.
+                //
 
-                    for (unsigned i = iBase; i < innerLimit; i++) {
-                        //
-                        // Find the genome location where the beginning of the read would hit, given a match on this seed.
-                        //
-                        GenomeLocation genomeLocationOfThisHit;
+                if (doAlignerPrefetch) {
+                    _int64 prefetchLimit = __min(prefetchDepth, __min(nHits[direction], (_int64)maxHitsToConsider));
+                    for (int prefetchIndex = 0; prefetchIndex < prefetchLimit; prefetchIndex++) {
                         if (doesGenomeIndexHave64BitLocations) {
-                            genomeLocationOfThisHit = hits[direction][i] - offset;
-                        } else {
-                            genomeLocationOfThisHit = hits32[direction][i] - offset;
+                            prefetchHashTableBucket(GenomeLocationAsInt64(hits[direction][prefetchIndex]) - offset, direction);
                         }
-
-                        Candidate *candidate = NULL;
-                        HashTableElement *hashTableElement;
-
-                        findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
-
-                        if (NULL != hashTableElement) {
-                            if (!noOrderedEvaluation) {     // If noOrderedEvaluation, just leave them all on the one-hit weight list so they get evaluated in whatever order
-                                incrementWeight(hashTableElement);
-                            }
-                            candidate->seedOffset = offset;
-                            _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
-                        } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit || noTruncation) {
-                                _ASSERT(offset <= readLen - seedLen);
-                                allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
-                                    offset, &candidate, &hashTableElement);
+                        else {
+                            prefetchHashTableBucket(hits32[direction][prefetchIndex] - offset, direction);
                         }
                     }
                 }
+
+                _int64 limit = min(nHits[direction], (_int64)maxHitsToConsider);
+ 
+
+                for (unsigned i = 0; i < limit; i++) {
+                    //
+                    // Find the genome location where the beginning of the read would hit, given a match on this seed.
+                    //
+                    GenomeLocation genomeLocationOfThisHit;
+                    if (doesGenomeIndexHave64BitLocations) {
+                        genomeLocationOfThisHit = hits[direction][i] - offset;
+                    } else {
+                        genomeLocationOfThisHit = hits32[direction][i] - offset;
+                    }
+
+                    Candidate *candidate = NULL;
+                    HashTableElement *hashTableElement;
+
+                    findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
+
+                    if (NULL != hashTableElement) {
+                        if (!noOrderedEvaluation) {     // If noOrderedEvaluation, just leave them all on the one-hit weight list so they get evaluated in whatever order
+                            incrementWeight(hashTableElement);
+                        }
+                        candidate->seedOffset = offset;
+                        _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
+                    } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit || noTruncation) {
+                            _ASSERT(offset <= readLen - seedLen);
+                            allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
+                                offset, &candidate, &hashTableElement);
+                    }
+
+                    if (doAlignerPrefetch && (_int64)i + prefetchDepth < limit) {
+                        if (doesGenomeIndexHave64BitLocations) {
+                            prefetchHashTableBucket(GenomeLocationAsInt64(hits[direction][i + prefetchDepth]) - offset, direction);
+                        }
+                        else {
+                            prefetchHashTableBucket(hits32[direction][i + prefetchDepth] - offset, direction);
+                        }
+                    }
+                }
+
                 nSeedsApplied[direction]++;
                 currRoundLowestPossibleScoreOfAnyUnseenLocation[direction]++;
                 appliedEitherSeed = true;
@@ -836,7 +853,7 @@ Return Value:
         }
 
         if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit && !noTruncation) || forceResult) {
-            if (weightListToCheck< minWeightToCheck) {
+            if (weightListToCheck < minWeightToCheck) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
                 // answer.
@@ -850,6 +867,7 @@ Return Value:
                     } else {
                         primaryResult->status = MultipleHits;
                     }
+                    primaryResult->supplementary = false;
                     return true;
                 } else {
                     primaryResult->status = NotFound;
@@ -857,6 +875,7 @@ Return Value:
                     return true;
                 }
             } // If we don't still have weight lists to check
+
             //
             // Nothing that we haven't already looked up can possibly be the answer.  Score what we've got and exit.
             //
@@ -962,6 +981,7 @@ Return Value:
 
                         agScore2 = (seedOffset - score2) * matchReward - score2 * subPenalty;
                     }
+
                     if (score1 != -1 && score2 != -1) {
                         // Check if affine gap must be called
                         if (useAffineGap && ((score1 + score2) > maxKForSameAlignment) && elementToScore->lowestPossibleScore <= bestScore) {
@@ -980,6 +1000,7 @@ Return Value:
                                     &score1,
                                     &matchProb1);
                             }
+
                             if (score1 != -1) {
                                 if (seedOffset != 0) {
                                     int limitLeft = scoreLimit - score1;
@@ -1002,13 +1023,13 @@ Return Value:
                                         agScore = 0;
                                     }
                                 }
-                            }
-                            else {
+                            } else {
                                 score = -1;
                                 agScore = 0;
                             }
                         }
                     }
+
                     if (score1 != -1 && score2 != -1) {
                         score = score1 + score2;
                         // Map probabilities for substrings can be multiplied, but make sure to count seed too
@@ -1024,8 +1045,7 @@ Return Value:
                         // We could mark as scored anything in between the old and new genome offsets, but it's probably not worth the effort since this is
                         // so rare and all it would do is same time.
                         //
-                    }
-                    else {
+                    } else {
                         score = -1;
                         agScore = 0;
                     }
@@ -1107,9 +1127,8 @@ Return Value:
 
                     if (NULL != nearbyElement) {
                         if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
-						// if (nearbyElement->matchProbabilityForBestScore >= matchProbability) {
-                            //
-                            // Again, this no better than something nearby we already tried.  Give up.
+                           //
+                            // Again, this is no better than something nearby we already tried.  Give up.
                             //
                             continue;
                         }
@@ -1121,12 +1140,17 @@ Return Value:
 
                 probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - elementToScore->matchProbabilityForBestScore); // need the max due to floating point lossage.
                 probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
+
+                if (altAwareness && genome->isGenomeLocationALT(genomeLocation)) {
+                    probabilityOfAllNonAltCandidates = __max(0.0, probabilityOfAllNonAltCandidates - elementToScore->matchProbabilityForBestScore); // need the max due to floating point lossage.
+                    probabilityOfAllNonAltCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
+                }
+
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
                 if (bestScore > score ||
                    (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
-				// if (matchProbability > probabilityOfBestCandidate) {
                     //
                     // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
                     //
@@ -1137,36 +1161,35 @@ Return Value:
                                                                GenomeLocationAsInt64(secondBestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist))) {
                             secondBestScore = bestScore;
                             secondBestScoreGenomeLocation = bestScoreGenomeLocation;
-                            secondBestScoreDirection = primaryResult->direction;
+                            // This doesn't appear to be used secondBestScoreDirection = primaryResult->direction;
                     }
 
                     //
                     // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
                     //
-					// if (bestScore >= score) {
-						if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
-							if (secondaryResultBufferSize <= *nSecondaryResults) {
-								*overflowedSecondaryBuffer = true;
-								return true;
-							}
-
-							SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-							result->direction = primaryResult->direction;
-							result->location = bestScoreGenomeLocation;
-							result->mapq = 0;
-							result->score = bestScore;
-							result->status = MultipleHits;
-							result->clippingForReadAdjustment = 0;
-							result->usedAffineGapScoring = primaryResult->usedAffineGapScoring;
-							result->basesClippedBefore = primaryResult->basesClippedBefore;
-							result->basesClippedAfter = primaryResult->basesClippedAfter;
-                            result->agScore = primaryResult->agScore;
-
-							_ASSERT(result->score != -1);
-
-							(*nSecondaryResults)++;
+					if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
+						if (secondaryResultBufferSize <= *nSecondaryResults) {
+							*overflowedSecondaryBuffer = true;
+							return true;
 						}
-					// }
+
+						SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+						result->direction = primaryResult->direction;
+						result->location = bestScoreGenomeLocation;
+						result->mapq = 0;
+						result->score = bestScore;
+						result->status = MultipleHits;
+						result->clippingForReadAdjustment = 0;
+						result->usedAffineGapScoring = primaryResult->usedAffineGapScoring;
+						result->basesClippedBefore = primaryResult->basesClippedBefore;
+						result->basesClippedAfter = primaryResult->basesClippedAfter;
+                        result->agScore = primaryResult->agScore;
+
+						_ASSERT(result->score != -1);
+
+						(*nSecondaryResults)++;
+					}
+
                     bestScore = score;
                     probabilityOfBestCandidate = matchProbability;
                     _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
@@ -1188,7 +1211,7 @@ Return Value:
                         //
                         secondBestScore = score;
                         secondBestScoreGenomeLocation = genomeLocation;
-                        secondBestScoreDirection = elementToScore->direction;
+                        // This doesn't appear to be used secondBestScoreDirection = elementToScore->direction;
                     }
 
                     //
@@ -1551,6 +1574,23 @@ BaseAligner::HashTableElement::init()
     agScore = 0;
 }
 
+BaseAligner::ScoreSet::ScoreSet() 
+{
+    init();
+}
+
+void BaseAligner::ScoreSet::init()
+{
+    bestScore = UnusedScoreValue;
+    secondBestScore = UnusedScoreValue;
+
+    bestScoreGenomeLocation = InvalidGenomeLocation;
+    secondBestScoreGenomeLocation = InvalidGenomeLocation;
+
+    probabilityOfAllCandidates = 0;
+    probabilityOfBestCandidate = 0;
+}
+
     void
 BaseAligner::Candidate::init()
 {
@@ -1618,7 +1658,7 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / seedLen);
     }
     size_t candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
-    size_t hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
+    size_t hashTableElementPoolSize = (_int64)maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
     size_t contigCounters;
     if (maxSecondaryAlignmentsPerContig > 0) {
         contigCounters = sizeof(HitsPerContigCounts)* index->getGenome()->getNumContigs();
@@ -1639,10 +1679,10 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         AffineGapVectorized<-1>::getBigAllocatorReservation()          + // our AffineGap objects
         sizeof(char) * maxReadSize * 2                                  + // rcReadData
         sizeof(char) * maxReadSize * 4 + 2 * MAX_K                      + // reversed read (both)
-        sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                      + // seed used
+        sizeof(BYTE) * ((_int64)maxReadSize + 7 + 128) / 8                      + // seed used
         sizeof(HashTableElement) * hashTableElementPoolSize             + // hash table element pool
         sizeof(HashTableAnchor) * candidateHashTablesSize * 2           + // candidate hash table (both)
-        sizeof(HashTableElement) * (maxSeedsToUse + 1)                  + // weight lists
+        sizeof(HashTableElement) * ((_int64)maxSeedsToUse + 1)                  + // weight lists
         sizeof(unsigned) * extraSearchDepth;                              // hitCountByExtraSearchDepth
 }
 

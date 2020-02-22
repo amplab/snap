@@ -63,6 +63,8 @@ struct SingleAlignmentResult {
     int             basesClippedAfter;
     int             agScore;
 
+    bool            supplementary;
+
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
 };

@@ -229,6 +229,21 @@ private:
         Candidate            candidates[hashTableElementSize];
     };
 
+    struct ScoreSet {
+        ScoreSet();
+        void init();
+
+        unsigned bestScore;
+        GenomeLocation bestScoreGenomeLocation;
+        unsigned secondBestScore;
+        GenomeLocation secondBestScoreGenomeLocation;
+
+        double probabilityOfAllCandidates;
+        double probabilityOfBestCandidate;
+
+        // This doesn't appear to be used int      secondBestScoreDirection;
+    };
+
     //
     // Clearing out all of the pointers in the hash tables is expensive relative to running
     // an alignment, because usually the table is much bigger than the number of entries in it.
@@ -278,24 +293,21 @@ private:
     unsigned currRoundLowestPossibleScoreOfAnyUnseenLocation[NUM_DIRECTIONS];
     unsigned mostSeedsContainingAnyParticularBase[NUM_DIRECTIONS];
     unsigned nSeedsApplied[NUM_DIRECTIONS];
-    unsigned bestScore;
-    GenomeLocation bestScoreGenomeLocation;
-    unsigned secondBestScore;
-    GenomeLocation secondBestScoreGenomeLocation;
-    int      secondBestScoreDirection;
+
+    ScoreSet scoresForAllAlignments;
+    ScoreSet scoresForNonAltAlignments;
+
     unsigned scoreLimit;
     unsigned minScoreThreshold; // used in affine gap to elide scoring of missed seed hits
     unsigned lvScores;
     unsigned lvScoresAfterBestFound;
     unsigned affineGapScores;
     unsigned affineGapScoresAfterBestFound;
-    double probabilityOfAllCandidates;
-    double probabilityOfBestCandidate;
+
     int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
     unsigned highestWeightListChecked;
 
     double totalProbabilityByDepth[AlignerStats::maxMaxHits];
-    void updateProbabilityMass();
 
         bool
     score(
