@@ -599,11 +599,24 @@ Genome::genomeLocationInStringForm(GenomeLocation location, char* buffer, size_t
 {
     const Contig* contig = getContigAtLocation(location);
 
+    const char* contigName;
+    GenomeDistance offsetInContig;
+
     if (contig == NULL) {
-        snprintf(buffer, bufferSize, "UnknownContig:%lld", GenomeLocationAsInt64(location));
+        contigName = "UnknownContig";
+        offsetInContig = GenomeLocationAsInt64(location);
     } else {
-        snprintf(buffer, bufferSize, "%s:%lld", contig->name, GenomeLocationAsInt64(location - contig->beginningLocation));
+        contigName = contig->name;
+        offsetInContig = location - contig->beginningLocation;
     }
+
+    snprintf(buffer, bufferSize, "%s:", contigName);
+    size_t usedSize = strlen(buffer);
+
+    const size_t uintBufferSize = 200;
+    char uintBuffer[uintBufferSize];
+
+    snprintf(buffer + usedSize, bufferSize - usedSize, "%s", FormatUIntWithCommas(offsetInContig, uintBuffer, uintBufferSize));
 
     return buffer;
 } // genomeLocationInStringForm

@@ -58,6 +58,7 @@ public:
         bool            i_useAffineGap,           
         bool            i_ignoreAlignmentAdjustmentsForOm,
 		bool			i_altAwareness,
+        int             i_maxScoreGapToPreferNonAltAlignment,
 		int             i_maxSecondaryAlignmentsPerContig,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
@@ -75,6 +76,7 @@ public:
     AlignRead(
         Read                    *read,
         SingleAlignmentResult   *primaryResult,
+        SingleAlignmentResult   *firstALTResult,                        // This only gets filled in if there's a good ALT result that's not the primary result.
         int                      maxEditDistanceForSecondaryResults,
         _int64                   secondaryResultBufferSize,
         _int64                  *nSecondaryResults,
@@ -121,6 +123,9 @@ public:
     static size_t getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, 
         unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig, unsigned extraSearchDepth);
 
+    static const unsigned UnusedScoreValue = 0xffff;
+
+
 private:
 
     bool hadBigAllocator;
@@ -129,6 +134,7 @@ private:
     LandauVishkin<-1> *reverseLandauVishkin;
     bool ownLandauVishkin;
 	bool altAwareness;
+    int maxScoreGapToPreferNonAltAlignment;
 
     // AffineGap<> *affineGap;
     // AffineGap<-1> *reverseAffineGap;
@@ -241,6 +247,8 @@ private:
         double probabilityOfAllCandidates;
         double probabilityOfBestCandidate;
 
+        void updateProbabilitiesForNearbyMatch(double probabilityOfMatchBeingReplaced);   // For the "nearby match" code
+
         // This doesn't appear to be used int      secondBestScoreDirection;
     };
 
@@ -277,7 +285,6 @@ private:
         return key;
     }
 
-    static const unsigned UnusedScoreValue = 0xffff;
 
     // MAPQ parameters, currently not set to match Mason.  Using #define because VC won't allow "static const double".
 #define SNP_PROB  0.001
@@ -293,10 +300,8 @@ private:
     unsigned currRoundLowestPossibleScoreOfAnyUnseenLocation[NUM_DIRECTIONS];
     unsigned mostSeedsContainingAnyParticularBase[NUM_DIRECTIONS];
     unsigned nSeedsApplied[NUM_DIRECTIONS];
-
     ScoreSet scoresForAllAlignments;
     ScoreSet scoresForNonAltAlignments;
-
     unsigned scoreLimit;
     unsigned minScoreThreshold; // used in affine gap to elide scoring of missed seed hits
     unsigned lvScores;
@@ -314,6 +319,7 @@ private:
         bool                     forceResult,
         Read                    *read[NUM_DIRECTIONS],
         SingleAlignmentResult   *primaryResult,
+        SingleAlignmentResult   *firstALTResult,                        // This only gets filled in if there's a good ALT result that's not the primary result.
         int                      maxEditDistanceForSecondaryResults,
         _int64                   secondaryResultBufferSize,
         _int64                  *nSecondaryResults,
