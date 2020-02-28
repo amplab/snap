@@ -473,6 +473,7 @@ Return Value:
                     true,
                     read,
                     primaryResult,
+                    firstALTResult,
                     maxEditDistanceForSecondaryResults,
                     secondaryResultBufferSize,
                     nSecondaryResults,
@@ -480,8 +481,8 @@ Return Value:
                     &overflowedSecondaryResultsBuffer);
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %s\n", 
-                                            primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, genome->genomeLocationInStringForm(primaryResult->location.location, genomeLocationBuffer, genomeLocationBufferSize));
+                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates, non ALT-aware)  at %s\n", 
+                                            primaryResult->score, primaryResult->mapq, scoresForAllAlignments.probabilityOfBestCandidate, scoresForAllAlignments.probabilityOfAllCandidates, genome->genomeLocationInStringForm(primaryResult->location.location, genomeLocationBuffer, genomeLocationBufferSize));
 #endif  // _DEBUG
                 if (overflowedSecondaryResultsBuffer) {
                     return false;
@@ -691,6 +692,7 @@ Return Value:
                 false,
                 read,
                 primaryResult,
+                firstALTResult,
                 maxEditDistanceForSecondaryResults,
                 secondaryResultBufferSize,
                 nSecondaryResults,
@@ -720,6 +722,7 @@ Return Value:
         true,
         read,
         primaryResult,
+        firstALTResult,
         maxEditDistanceForSecondaryResults,
         secondaryResultBufferSize,
         nSecondaryResults,
@@ -727,7 +730,8 @@ Return Value:
         &overflowedSecondaryResultsBuffer);
 
 #ifdef  _DEBUG
-    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %llu\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location.location);
+    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates non ALT-aware) at %llu\n", 
+        primaryResult->score, primaryResult->mapq, scoresForAllAlignments.probabilityOfBestCandidate, scoresForAllAlignments.probabilityOfAllCandidates, primaryResult->location.location);
 #endif  // _DEBUG
 
     if (overflowedSecondaryResultsBuffer) {
@@ -1004,7 +1008,7 @@ Return Value:
 
                     if (score1 != -1 && score2 != -1) {
                         // Check if affine gap must be called
-                        if (useAffineGap && ((score1 + score2) > maxKForSameAlignment) && elementToScore->lowestPossibleScore <= bestScore) {
+                        if (useAffineGap && ((score1 + score2) > maxKForSameAlignment) && elementToScore->lowestPossibleScore <= scoresForAllAlignments.bestScore) {
                             score1 = 0;  score2 = 0;  agScore1 = seedLen; agScore2 = 0;
                             usedAffineGapScoring = true;
                             if (tailStart != readLen) {
