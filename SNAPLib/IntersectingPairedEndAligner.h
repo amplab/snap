@@ -85,7 +85,8 @@ public:
     virtual bool align(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result,
+        PairedAlignmentResult* result,
+        PairedAlignmentResult* firstALTResult,
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
         _int64                *nSecondaryResults,

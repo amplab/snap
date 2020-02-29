@@ -880,15 +880,17 @@ Return Value:
                     }
                 }
 
+                if (scoreSetOfFinalResult == &scoresForNonAltAlignments && scoresForAllAlignments.bestScore <= scoresForNonAltAlignments.bestScore) {
+                    //
+                    // Emit the best ALT alignment as an ALT alignment.  We didn't use it as primary, but it's at least as good as what we found that's not ALT.
+                    //
+                    scoresForAllAlignments.fillInSingleAlignmentResult(firstALTResult, popularSeedsSkipped);
+                    firstALTResult->supplementary = true;
+                }
+
                 primaryResult->score = scoreSetOfFinalResult->bestScore;
                 if (scoreSetOfFinalResult->bestScore <= maxK) {
-                    primaryResult->location = scoreSetOfFinalResult->bestScoreGenomeLocation;
-                    primaryResult->mapq = computeMAPQ(scoreSetOfFinalResult->probabilityOfAllCandidates, scoreSetOfFinalResult->probabilityOfBestCandidate, scoreSetOfFinalResult->bestScore, popularSeedsSkipped);
-                    if (primaryResult->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
-                        primaryResult->status = SingleHit;
-                    } else {
-                        primaryResult->status = MultipleHits;
-                    }
+                    scoreSetOfFinalResult->fillInSingleAlignmentResult(primaryResult, popularSeedsSkipped);
                     primaryResult->supplementary = false;
                     return true;
                 } else {
@@ -943,7 +945,7 @@ Return Value:
                 GenomeLocation genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
                 GenomeLocation elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
 
-                bool genomeLocationIsALT = genome->isGenomeLocationALT(genomeLocation);
+                bool genomeLocationIsNonALT = !genome->isGenomeLocationALT(genomeLocation);
 
                 //
                 // We're about to run edit distance computation on the genome.  Launch a prefetch for it
@@ -1156,125 +1158,37 @@ Return Value:
                         }
                         
                         scoresForAllAlignments.updateProbabilitiesForNearbyMatch(nearbyElement->matchProbabilityForBestScore);
+                        if (genomeLocationIsNonALT) {
+                            scoresForNonAltAlignments.updateProbabilitiesForNearbyMatch(nearbyElement->matchProbabilityForBestScore);
+                        }
                         anyNearbyCandidatesAlreadyScored = true;
-                        probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - nearbyElement->matchProbabilityForBestScore);
                         nearbyElement->matchProbabilityForBestScore = 0;    // keeps us from backing it out twice
                     }
                 }
 
-                probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - elementToScore->matchProbabilityForBestScore); // need the max due to floating point lossage.
-                probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
-
-
-                if (altAwareness && genome->isGenomeLocationALT(genomeLocation)) {
-                    probabilityOfAllNonAltCandidates = __max(0.0, probabilityOfAllNonAltCandidates - elementToScore->matchProbabilityForBestScore); // need the max due to floating point lossage.
-                    probabilityOfAllNonAltCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
+                scoresForAllAlignments.updateProbabilitiesForNewMatch(matchProbability, elementToScore->matchProbabilityForBestScore);
+                if (genomeLocationIsNonALT) {
+                    scoresForNonAltAlignments.updateProbabilitiesForNewMatch(matchProbability, elementToScore->matchProbabilityForBestScore);
                 }
-
 
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
-                if (bestScore > score ||
-                   (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
-
-                    //
-                    // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
-                    //
-
-                    if (updateSecondBestScore(bestScore, bestScoreGenomeLocation, secondBestScore, secondBestScoreGenomeLocation, maxMergeDist, anyNearbyCandidatesAlreadyScored, genomeLocation)) {
-                        secondBestScoreIsALT = secondBestScoreIsALT;
-                    }
-
-
-                    if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxMergeDist > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
-                        (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxMergeDist > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
-                        (!anyNearbyCandidatesAlreadyScored || (GenomeLocationAsInt64(bestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist &&
-                                                               GenomeLocationAsInt64(secondBestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist))) {
-                            secondBestScore = bestScore;
-                            secondBestScoreGenomeLocation = bestScoreGenomeLocation;
-                            // This doesn't appear to be used secondBestScoreDirection = primaryResult->direction;
-
-                    }
-
-                    //
-                    // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
-                    //
-					if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
-						if (secondaryResultBufferSize <= *nSecondaryResults) {
-							*overflowedSecondaryBuffer = true;
-							return true;
-						}
-
-						SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-						result->direction = primaryResult->direction;
-						result->location = bestScoreGenomeLocation;
-						result->mapq = 0;
-						result->score = bestScore;
-						result->status = MultipleHits;
-						result->clippingForReadAdjustment = 0;
-						result->usedAffineGapScoring = primaryResult->usedAffineGapScoring;
-						result->basesClippedBefore = primaryResult->basesClippedBefore;
-						result->basesClippedAfter = primaryResult->basesClippedAfter;
-                        result->agScore = primaryResult->agScore;
-
-						_ASSERT(result->score != -1);
-
-						(*nSecondaryResults)++;
-					}
-
-                    bestScore = score;
-                    probabilityOfBestCandidate = matchProbability;
-                    _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
-                    bestScoreGenomeLocation = genomeLocation;
-                    primaryResult->location = bestScoreGenomeLocation;
-                    primaryResult->score = bestScore;
-                    primaryResult->direction = elementToScore->direction;
-                    primaryResult->usedAffineGapScoring = elementToScore->usedAffineGapScoring;
-                    primaryResult->basesClippedBefore = elementToScore->basesClippedBefore;
-                    primaryResult->basesClippedAfter = elementToScore->basesClippedAfter;
-                    primaryResult->agScore = elementToScore->agScore;
-                    _ASSERT(0 == primaryResult->clippingForReadAdjustment);
-
-                    lvScoresAfterBestFound = 0;
-                } else {
-                    if (secondBestScore > score) {
-                        //
-                        // A new second best.
-                        //
-                        secondBestScore = score;
-                        secondBestScoreGenomeLocation = genomeLocation;
-                        // This doesn't appear to be used secondBestScoreDirection = elementToScore->direction;
-                    }
-
-                    //
-                    // If this is close enough, record it as a secondary alignment.
-                    //
-                    if (-1 != maxEditDistanceForSecondaryResults && NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults && score != -1) {
-                         if (secondaryResultBufferSize <= *nSecondaryResults) {
-                            *overflowedSecondaryBuffer = true;
-                            return true;
-                        }
-
-                        SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-                        result->direction = elementToScore->direction;
-                        result->location = genomeLocation;
-                        result->mapq = 0;
-                        result->score = score;
-                        result->status = MultipleHits;
-                        result->clippingForReadAdjustment = 0;
-                        result->usedAffineGapScoring = elementToScore->usedAffineGapScoring;
-                        result->basesClippedBefore = elementToScore->basesClippedBefore;
-                        result->basesClippedAfter = elementToScore->basesClippedAfter;
-                        result->agScore = elementToScore->agScore;
-
-                        _ASSERT(result->score != -1);
-
-                        (*nSecondaryResults)++;
-                    }
+                scoresForAllAlignments.updateBestAndSecondBestScores(genomeLocation, score, matchProbability, lvScoresAfterBestFound, elementToScore, primaryResult, secondaryResults, nSecondaryResults, secondaryResultBufferSize, 
+                                            anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer);
+                if (*overflowedSecondaryBuffer) {
+                    return true;
                 }
 
-                if (stopOnFirstHit && bestScore <= maxK) {
+                if (genomeLocationIsNonALT) {
+                    //
+                    // Don't update secondary results here; we don't exclude ALT alignments from them, only from the primary result.
+                    //
+                    scoresForNonAltAlignments.updateBestAndSecondBestScores(genomeLocation, score, matchProbability, lvScoresAfterBestFound, elementToScore, primaryResult, NULL, 0, 0, anyNearbyCandidatesAlreadyScored, -1, NULL);
+                }
+                                        
+
+                if (stopOnFirstHit && scoresForAllAlignments.bestScore <= maxK) {
                     // The user just wanted to find reads that match the database within some distance, but doesn't
                     // care about the best alignment. Stop now but mark the result as MultipleHits because we're not
                     // confident that it's the best one.  We don't support mapq in this secnario, because we haven't
@@ -1289,7 +1203,7 @@ Return Value:
                 // all candidates for which we can terminate early without exploring any more MAPQ < 1 alignments
                 // i.e., -10 log10(1 - 1/x) < 1 
                 // i.e.,  x > 4.89 ~ 4.9
-                if (probabilityOfAllCandidates >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
+                if ((altAwareness ? scoresForNonAltAlignments.probabilityOfAllCandidates : scoresForAllAlignments.probabilityOfAllCandidates) >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
                     //
                     // nothing will rescue us from a 0 mapq, so just stop looking.
                     //
@@ -1298,7 +1212,7 @@ Return Value:
 
                 // Update scoreLimit since we may have improved bestScore or secondBestScore
                 if (!noUkkonen) {   // If we've turned off Ukkonen, then don't drop the score limit, just leave it at maxK + extraSearchDepth always
-                    scoreLimit = min(bestScore, maxK) + extraSearchDepth;
+                    scoreLimit = min(scoresForAllAlignments.bestScore, maxK) + extraSearchDepth;
                 } else {
                     _ASSERT(scoreLimit == maxK + extraSearchDepth);
                 }
@@ -1318,31 +1232,6 @@ Return Value:
     return false;
 }
 
-//
-// This is duplicated code between secondBestScore and secondBestNonALTScore, so it's pulled out here.
-//
-    static inline bool
-updateSecondBestScore(
-    unsigned         oldBestScore,
-    GenomeLocation   oldBestScoreGenomeLocation,
-    unsigned        &secondBestScore,
-    GenomeLocation  &secondBestScoreGenomeLocation,
-    int              maxMergeDist,
-    bool             anyNearbyCandidatesAlreadyScored,
-    GenomeLocation   newBestHitGenomeLocation)
-{
-    if ((secondBestScore == BaseAligner::UnusedScoreValue || !(secondBestScoreGenomeLocation + maxMergeDist > newBestHitGenomeLocation && secondBestScoreGenomeLocation < newBestHitGenomeLocation + maxMergeDist)) &&
-        (oldBestScore == BaseAligner::UnusedScoreValue || !(oldBestScoreGenomeLocation + maxMergeDist > newBestHitGenomeLocation && oldBestScoreGenomeLocation < newBestHitGenomeLocation + maxMergeDist)) &&
-        (!anyNearbyCandidatesAlreadyScored || (GenomeLocationAsInt64(oldBestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(newBestHitGenomeLocation) / maxMergeDist &&
-            GenomeLocationAsInt64(secondBestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(newBestHitGenomeLocation) / maxMergeDist))) {
-
-        secondBestScore = oldBestScore;
-        secondBestScoreGenomeLocation = oldBestScoreGenomeLocation;
-
-        return true;
-    }
-    return false;
-}
 
     void
 BaseAligner::prefetchHashTableBucket(GenomeLocation genomeLocation, Direction direction)
@@ -1641,18 +1530,155 @@ BaseAligner::ScoreSet::ScoreSet()
 void BaseAligner::ScoreSet::init()
 {
     bestScore = UnusedScoreValue;
-    secondBestScore = UnusedScoreValue;
-
     bestScoreGenomeLocation = InvalidGenomeLocation;
-    secondBestScoreGenomeLocation = InvalidGenomeLocation;
+    bestScoreDirection = FORWARD;
+    bestScoreUsedAffineGapScoring = false;
+    bestScoreBasesClippedBefore = 0;
+    bestScoreBasesClippedAfter = 0;
+    bestScoreAGScore = 0;
 
     probabilityOfAllCandidates = 0;
     probabilityOfBestCandidate = 0;
+
+    secondBestScore = UnusedScoreValue;
+    secondBestScoreGenomeLocation = InvalidGenomeLocation;
+
+
 }
 
 void BaseAligner::ScoreSet::updateProbabilitiesForNearbyMatch(double probabilityOfMatchBeingReplaced)
 {
     probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - probabilityOfMatchBeingReplaced);
+}
+
+void BaseAligner::ScoreSet::updateProbabilitiesForNewMatch(double newProbability, double matchProbabilityOfNearbyMatch)
+{
+    probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - matchProbabilityOfNearbyMatch); // need the max due to floating point lossage.
+    probabilityOfAllCandidates += newProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
+}
+
+void BaseAligner::ScoreSet::updateBestAndSecondBestScores(
+                                GenomeLocation genomeLocation, 
+                                unsigned score, 
+                                double matchProbability, 
+                                unsigned int &lvScoresAfterBestFound,
+                                BaseAligner::HashTableElement* elementToScore,
+                                SingleAlignmentResult* secondaryResults, 
+                                _int64* nSecondaryResults, 
+                                _int64 secondaryResultBufferSize, 
+                                bool anyNearbyCandidatesAlreadyScored,
+                                int maxEditDistanceForSecondaryResults, 
+                                bool* overflowedSecondaryBuffer)
+{
+    if (bestScore > score ||
+        (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
+
+        //
+        // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
+        //
+
+
+        if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxMergeDist > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
+            (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxMergeDist > genomeLocation&& bestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
+            (!anyNearbyCandidatesAlreadyScored || (GenomeLocationAsInt64(bestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist &&
+                GenomeLocationAsInt64(secondBestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist))) {
+            secondBestScore = bestScore;
+            secondBestScoreGenomeLocation = bestScoreGenomeLocation;
+            // This doesn't appear to be used secondBestScoreDirection = primaryResult->direction;
+
+        }
+
+        //
+        // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
+        //
+        if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
+            if (secondaryResultBufferSize <= *nSecondaryResults) {
+                *overflowedSecondaryBuffer = true;
+                return;
+            }
+
+            SingleAlignmentResult* result = &secondaryResults[*nSecondaryResults];
+            result->direction = bestScoreDirection;
+            result->location = bestScoreGenomeLocation;
+            result->mapq = 0;
+            result->score = bestScore;
+            result->status = MultipleHits;
+            result->clippingForReadAdjustment = 0;
+            result->usedAffineGapScoring = bestScoreUsedAffineGapScoring;
+            result->basesClippedBefore = bestScoreBasesClippedBefore;
+            result->basesClippedAfter = bestScoreBasesClippedAfter;
+            result->agScore = bestScoreAGScore;
+
+            _ASSERT(result->score != -1);
+
+            (*nSecondaryResults)++;
+        }
+
+        bestScore = score;
+        probabilityOfBestCandidate = matchProbability;
+        _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
+        bestScoreGenomeLocation = genomeLocation;
+        bestScoreDirection = elementToScore->direction;
+        bestScoreUsedAffineGapScoring = elementToScore->usedAffineGapScoring;
+        bestScoreBasesClippedBefore = elementToScore->basesClippedBefore;
+        bestScoreBasesClippedAfter = elementToScore->basesClippedAfter;
+        bestScoreAGScore = elementToScore->agScore;
+
+        lvScoresAfterBestFound = 0;
+    } else {
+        if (secondBestScore > score) {
+            //
+            // A new second best.
+            //
+            secondBestScore = score;
+            secondBestScoreGenomeLocation = genomeLocation;
+            // This doesn't appear to be used secondBestScoreDirection = elementToScore->direction;
+        }
+
+        //
+        // If this is close enough, record it as a secondary alignment.
+        //
+        if (-1 != maxEditDistanceForSecondaryResults && NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults && score != -1) {
+            if (secondaryResultBufferSize <= *nSecondaryResults) {
+                *overflowedSecondaryBuffer = true;
+                return;
+            }
+
+            SingleAlignmentResult* result = &secondaryResults[*nSecondaryResults];
+            result->direction = elementToScore->direction;
+            result->location = genomeLocation;
+            result->mapq = 0;
+            result->score = score;
+            result->status = MultipleHits;
+            result->clippingForReadAdjustment = 0;
+            result->usedAffineGapScoring = elementToScore->usedAffineGapScoring;
+            result->basesClippedBefore = elementToScore->basesClippedBefore;
+            result->basesClippedAfter = elementToScore->basesClippedAfter;
+            result->agScore = elementToScore->agScore;
+
+            _ASSERT(result->score != -1);
+
+            (*nSecondaryResults)++;
+        }
+    }
+} // updateBestAndSecondBestScores
+
+void BaseAligner::ScoreSet::fillInSingleAlignmentResult(SingleAlignmentResult* result, int popularSeedsSkipped) {
+    result->agScore = bestScoreAGScore;
+    result->basesClippedAfter = bestScoreBasesClippedAfter;
+    result->basesClippedBefore = bestScoreBasesClippedBefore;
+    result->clippingForReadAdjustment = 0;  // This isn't filled in by align()
+    result->direction = bestScoreDirection;
+    result->location = bestScoreGenomeLocation;
+    result->mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
+    result->score = bestScore;
+
+    if (result->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
+        result->status = SingleHit;
+    }
+    else {
+        result->status = MultipleHits;
+    }
 }
 
     void

@@ -185,6 +185,7 @@ AlignerContext::initialize()
     maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
 	maxSecondaryAlignments = options->maxSecondaryAlignments;
     maxSecondaryAlignmentsPerContig = options->maxSecondaryAlignmentsPerContig;
+    maxScoreGapToPreferNonALTAlignment = options->maxScoreGapToPreferNonALTAlignment;
     useAffineGap = options->useAffineGap;
     matchReward = options->matchReward;
     subPenalty = options->subPenalty;

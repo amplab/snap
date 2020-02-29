@@ -120,6 +120,7 @@ public:
     int                                  maxSecondaryAlignmentAdditionalEditDistance;
 	int									 maxSecondaryAlignments;
     int                                  maxSecondaryAlignmentsPerContig;
+    int                                  maxScoreGapToPreferNonALTAlignment;
 	unsigned							 minReadLength;
     unsigned                             matchReward;
     unsigned                             subPenalty;

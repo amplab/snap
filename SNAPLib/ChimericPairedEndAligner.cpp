@@ -57,6 +57,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         PairedEndAligner    *underlyingPairedEndAligner_,
 	    unsigned            minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
+        int                 maxScoreGapToPreferNonAltAlignment,
         unsigned            matchReward,
         unsigned            subPenalty,
         unsigned            gapOpenPenalty,
@@ -69,7 +70,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
                                                 maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, 
                                                 noUkkonen, noOrderedEvaluation, noTruncation, useAffineGap, 
-                                                ignoreAlignmentAdjustmentsForOm, altAwareness, maxSecondaryAlignmentsPerContig, &lv, &reverseLV, 
+                                                ignoreAlignmentAdjustmentsForOm, altAwareness, maxSecondaryAlignmentsPerContig, maxScoreGapToPreferNonAltAlignment , &lv, &reverseLV,
                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore,
                                                 NULL, allocator);
     
@@ -114,6 +115,7 @@ bool ChimericPairedEndAligner::align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result,
+        PairedAlignmentResult *firstALTResult,
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
         _int64                *nSecondaryResults,
@@ -158,7 +160,7 @@ bool ChimericPairedEndAligner::align(
 		// Let the LVs use the cache that we built up.
 		//
         bool fitInSecondaryBuffer = 
-		underlyingPairedEndAligner->align(read0, read1, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
+		underlyingPairedEndAligner->align(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
             singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, 
             singleEndSecondaryResults);
 
@@ -206,12 +208,15 @@ bool ChimericPairedEndAligner::align(
     _int64 *resultCount[2] = {nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead};
 
     SingleAlignmentResult singleResult[NUM_READS_PER_PAIR];
+    SingleAlignmentResult firstSingleALTResult[NUM_READS_PER_PAIR];
     int singleEndAGScore = 0;
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
         _int64 singleEndSecondaryResultsThisTime = 0;
+
         if (compareWithSingleEndAlignment) {
             pairAGScore += result->agScore[r];
         }
+
         if (read[r]->getDataLength() < minReadLength) {
             result->status[r] = NotFound;
             result->mapq[r] = 0;
@@ -224,11 +229,10 @@ bool ChimericPairedEndAligner::align(
             result->agScore[r] = 0;
             result->fromAlignTogether = false;
             result->alignedAsPair = false;
-        }
-        else {
+        } else {
             // We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
             bool fitInSecondaryBuffer =
-                singleAligner->AlignRead(read[r], &singleResult[r], maxEditDistanceForSecondaryResults,
+                singleAligner->AlignRead(read[r], &singleResult[r], &firstSingleALTResult[r], maxEditDistanceForSecondaryResults,
                     singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
                     maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
 
@@ -244,9 +248,8 @@ bool ChimericPairedEndAligner::align(
             if (compareWithSingleEndAlignment) {
                 singleEndAGScore += singleResult[r].agScore;
             }
-
-        }
-    }
+        } // Not too short
+    } // For each read in the pair
 
     if (!compareWithSingleEndAlignment || (singleEndAGScore >= pairAGScore + 12)) { // FIXME: Add threshold for choosing single-end alignments
         for (int r = 0; r < NUM_READS_PER_PAIR; r++) {

@@ -509,6 +509,7 @@ void PairedAlignerContext::runIterationThread()
         intersectingAligner,
 		minReadLength,
         maxSecondaryAlignmentsPerContig,
+        maxScoreGapToPreferNonALTAlignment,
         matchReward,
         subPenalty,
         gapOpenPenalty,

@@ -163,7 +163,8 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
 IntersectingPairedEndAligner::align(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result,
+        PairedAlignmentResult* result,
+        PairedAlignmentResult* firstALTResult,
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
         _int64                *nSecondaryResults,
@@ -175,6 +176,8 @@ IntersectingPairedEndAligner::align(
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         )
 {
+    firstALTResult = NULL;  // Until this is written.  BJB
+
     result->nLVCalls = 0;
     result->nSmallHits = 0;
     result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
