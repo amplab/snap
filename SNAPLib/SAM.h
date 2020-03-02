@@ -22,6 +22,7 @@ Environment:
 #include "Compat.h"
 #include "LandauVishkin.h"
 #include "AffineGap.h"
+#include "AffineGapVectorized.h"
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
@@ -173,7 +174,7 @@ public:
 
     // Affine gap version
     virtual bool writeRead(
-        const ReaderContext& context, AffineGapWithCigar * ag, char * buffer, size_t bufferSpace,
+        const ReaderContext& context, AffineGapVectorizedWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
         int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
@@ -227,7 +228,7 @@ public:
     static bool
         createSAMLine(
             const Genome * genome,
-            AffineGapWithCigar * ag,
+            AffineGapVectorizedWithCigar * ag,
             // output data
             char* data,
             char* quality,
@@ -273,7 +274,7 @@ public:
         GenomeDistance *o_extraBasesClippedAfter, 
         GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping);
 
-    static void computeCigar(CigarFormat cigarFormat, const Genome * genome, AffineGapWithCigar * ag,
+    static void computeCigar(CigarFormat cigarFormat, const Genome * genome, AffineGapVectorizedWithCigar * ag,
         char * cigarBuf, int cigarBufLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
         GenomeDistance *o_extraBasesClippedAfter,
@@ -286,7 +287,7 @@ private:
         unsigned frontHardClipped, unsigned backHardClipped,
         GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping);
 
-    static const char * computeCigarString(const Genome * genome, AffineGapWithCigar * lv,
+    static const char * computeCigarString(const Genome * genome, AffineGapVectorizedWithCigar * lv,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned frontHardClipped, unsigned backHardClipped,

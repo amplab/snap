@@ -1220,7 +1220,7 @@ SAMFormat::createSAMLine(
     bool
 SAMFormat::createSAMLine(
     const Genome * genome,
-    AffineGapWithCigar * ag,
+    AffineGapVectorizedWithCigar * ag,
     // output data
     char* data,
     char* quality,
@@ -1607,7 +1607,7 @@ SAMFormat::writeRead(
     bool
 SAMFormat::writeRead(
     const ReaderContext& context,
-    AffineGapWithCigar * ag,
+    AffineGapVectorizedWithCigar * ag,
     char * buffer,
     size_t bufferSpace,
     size_t * spaceUsed,
@@ -1931,7 +1931,7 @@ SAMFormat::computeCigar(
 SAMFormat::computeCigar(
     CigarFormat cigarFormat,
     const Genome * genome,
-    AffineGapWithCigar * ag,
+    AffineGapVectorizedWithCigar * ag,
     char * cigarBuf,
     int cigarBufLen,
     const char * data,
@@ -2126,7 +2126,7 @@ SAMFormat::computeCigarString(
     const char *
 SAMFormat::computeCigarString(
         const Genome *              genome,
-        AffineGapWithCigar *        ag,
+        AffineGapVectorizedWithCigar *        ag,
         char *                      cigarBuf,
         int                         cigarBufLen,
         char *                      cigarBufWithClipping,

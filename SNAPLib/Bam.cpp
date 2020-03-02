@@ -717,7 +717,7 @@ public:
         bool alignedAsPair = false) const;
 
     virtual bool writeRead(
-        const ReaderContext& context, AffineGapWithCigar * ag, char * buffer, size_t bufferSpace,
+        const ReaderContext& context, AffineGapVectorizedWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int * o_addFrontClipping,
         int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
@@ -733,7 +733,7 @@ private:
         unsigned frontHardClipping, unsigned backHardClipping,
         GenomeLocation genomeLocation, bool isRC, bool useM, int * o_editDistance, int * o_addFrontClipping);
 
-    static int computeCigarOps(const Genome * genome, AffineGapWithCigar * ag,
+    static int computeCigarOps(const Genome * genome, AffineGapVectorizedWithCigar * ag,
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned frontHardClipping, unsigned backHardClipping,
@@ -1096,7 +1096,7 @@ BAMFormat::writeRead(
     bool
 BAMFormat::writeRead(
     const ReaderContext& context,
-    AffineGapWithCigar * ag,
+    AffineGapVectorizedWithCigar * ag,
     char * buffer,
     size_t bufferSpace,
     size_t * spaceUsed,
@@ -1414,7 +1414,7 @@ BAMFormat::computeCigarOps(
     int
 BAMFormat::computeCigarOps(
     const Genome *              genome,
-    AffineGapWithCigar *        ag,
+    AffineGapVectorizedWithCigar *        ag,
     char *                      cigarBuf,
     int                         cigarBufLen,
     const char *                data,

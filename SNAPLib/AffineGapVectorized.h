@@ -25,10 +25,49 @@ extern double *lv_perfectMatchProbability; // Probability that a read of this le
 
 // #define TRACE_AG
 
+//
+// Helper functions for operations on SSE registers
+//
+static inline int getMax(__m128i x) {
+    x = _mm_max_epi16(x, _mm_srli_si128((x), 8));
+    x = _mm_max_epi16(x, _mm_srli_si128((x), 4));
+    x = _mm_max_epi16(x, _mm_srli_si128((x), 2));
+    return _mm_extract_epi16(x, 0);
+}
+
+static inline int16_t getElem(int index, __m128i x) {
+    int16_t elem;
+    switch (index) {
+    case 0: elem = _mm_extract_epi16(x, 0); break;
+    case 1: elem = _mm_extract_epi16(x, 1); break;
+    case 2: elem = _mm_extract_epi16(x, 2); break;
+    case 3: elem = _mm_extract_epi16(x, 3); break;
+    case 4: elem = _mm_extract_epi16(x, 4); break;
+    case 5: elem = _mm_extract_epi16(x, 5); break;
+    case 6: elem = _mm_extract_epi16(x, 6); break;
+    case 7: elem = _mm_extract_epi16(x, 7); break;
+    default: elem = -1; break;
+    }
+    return elem;
+}
+
+static inline void printElem(__m128i x) {
+    printf("%hi,%hi,%hi,%hi,%hi,%hi,%hi,%hi,", _mm_extract_epi16(x, 0), _mm_extract_epi16(x, 1), _mm_extract_epi16(x, 2), _mm_extract_epi16(x, 3),
+        _mm_extract_epi16(x, 4), _mm_extract_epi16(x, 5), _mm_extract_epi16(x, 6), _mm_extract_epi16(x, 7));
+}
+
+// return (~mask)*v1 | (mask)*v2
+static inline __m128i blend_sse(__m128i v1, __m128i v2, __m128i mask) {
+    v1 = _mm_andnot_si128(mask, v1);
+    v1 = _mm_or_si128(v1, _mm_and_si128(mask, v2));
+    return v1;
+}
+
 enum BacktraceActionType {
     M = 0, 
     D = 1,
-    I = 2
+    I = 2,
+    X = 3
 };
 
 // 
@@ -52,13 +91,6 @@ public:
     }
 
     static size_t getBigAllocatorReservation() { return sizeof(AffineGapVectorized<TEXT_DIRECTION>); }
-
-    // return (~mask)*v1 | (mask)*v2
-    static inline __m128i blend_sse(__m128i v1, __m128i v2, __m128i mask) {
-        v1 = _mm_andnot_si128(mask, v1);
-        v1 = _mm_or_si128(v1, _mm_and_si128(mask, v2));
-        return v1;
-    }
 
     ~AffineGapVectorized()
     {
@@ -999,35 +1031,78 @@ private:
     // Although we need only 1 bit to encode paths into E and F matrix, we use 2 bits to simplify decoding
     //
     __m128i backtraceAction[(MAX_READ_LENGTH + MAX_K) * MAX_VEC_SEGMENTS];
+};
+
+class AffineGapVectorizedWithCigar {
+public:
+    AffineGapVectorizedWithCigar(); // FIXME: Pass scoring parameters
+
+    AffineGapVectorizedWithCigar(int i_matchReward, int i_subPenalty, int i_gapOpenPenalty, int i_gapExtendPenalty);
+
+    // Compute the affine gap score between two strings and write the CIGAR string in cigarBuf.
+    // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
+    int computeGlobalScore(const char* text, int textLen, const char* pattern, int patternLen, int w,
+        char* cigarBuf, int cigarBufLen, bool useM,
+        CigarFormat format = COMPACT_CIGAR_STRING,
+        int* o_cigarBufUsed = NULL, int *o_netDel = NULL, int *o_tailIns = NULL);
+
+    int computeGlobalScoreNormalized(const char* text, int textLen,
+        const char* pattern, int patternLen,
+        int k,
+        char *cigarBuf, int cigarBufLen, bool useM,
+        CigarFormat format, int* o_cigarBufUsed,
+        int* o_addFrontClipping, int *o_netDel = NULL, int* o_tailIns = NULL);
+
+    bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format);
+
+private:
 
     //
-    // Helper functions for operations on SSE registers
+    // Scores for each nucleotide <-> nucleotide transition
     //
-    inline int getMax(__m128i x) {
-        x = _mm_max_epi16(x, _mm_srli_si128((x), 8));
-        x = _mm_max_epi16(x, _mm_srli_si128((x), 4));
-        x = _mm_max_epi16(x, _mm_srli_si128((x), 2));
-        return _mm_extract_epi16(x, 0);
-    }
+    int ntTransitionMatrix[MAX_ALPHABET_SIZE * MAX_ALPHABET_SIZE];
 
-    inline int getElem(int index, __m128i x) {
-        int elem;
-        switch (index) {
-            case 0: elem = _mm_extract_epi16(x, 0); break;
-            case 1: elem = _mm_extract_epi16(x, 1); break;
-            case 2: elem = _mm_extract_epi16(x, 2); break;
-            case 3: elem = _mm_extract_epi16(x, 3); break;
-            case 4: elem = _mm_extract_epi16(x, 4); break;
-            case 5: elem = _mm_extract_epi16(x, 5); break;
-            case 6: elem = _mm_extract_epi16(x, 6); break;
-            case 7: elem = _mm_extract_epi16(x, 7); break;
-            default: elem = -1; break;
-        }
-        return elem;
-    }
+    //
+    // Affine gap scoring parameters
+    //
+    int matchReward;
+    int subPenalty;
+    int gapOpenPenalty;
+    int gapExtendPenalty;
+    int minScoreParam;
+    int maxScoreParam;
 
-    inline void printElem(__m128i x) {
-        printf("%u,%u,%u,%u,%u,%u,%u,%u,", _mm_extract_epi16(x, 0), _mm_extract_epi16(x, 1), _mm_extract_epi16(x, 2), _mm_extract_epi16(x, 3),
-            _mm_extract_epi16(x, 4), _mm_extract_epi16(x, 5), _mm_extract_epi16(x, 6), _mm_extract_epi16(x, 7));
-    }
+    //
+    // Precompute query profile which is a table containing the result of
+    // matching each letter of the alphabet with each character of the pattern
+    // and filling in the appropriate transition score from the ntTransMatrix.
+    // This precomputation saves looking up the ntTransition matrix for each
+    // (ref_i, query_j) in the inner dynamic programming loop.
+    //
+    __m128i qProfile[MAX_ALPHABET_SIZE * MAX_VEC_SEGMENTS];
+
+    // 
+    // H and E arrays used for storing scores in every row
+    //
+    __m128i H[MAX_VEC_SEGMENTS];
+    __m128i Hminus1[MAX_VEC_SEGMENTS];
+    __m128i E[MAX_VEC_SEGMENTS];
+
+    //
+    // Pointers to traceback alignment, one for each of the three affine-gap matrices, F, E and H
+    // Traceback actions are encoded as follows: Bit 5 to Bit 0 - F[5:4], E[3:2], H[1:0]
+    // Although we need only 1 bit to encode paths into E and F matrix, we use 2 bits to simplify decoding
+    //
+    __m128i backtraceAction[(MAX_READ_LENGTH + MAX_K) * MAX_VEC_SEGMENTS];
+
+    //
+    // Structure used for storing (action, count) pairs from backtracking
+    //
+    typedef struct {
+        BacktraceActionType action[MAX_READ_LENGTH];
+        int count[MAX_READ_LENGTH];
+    } LocalCigarResult;
+
+    LocalCigarResult res;
+
 };

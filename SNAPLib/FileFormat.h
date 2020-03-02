@@ -29,6 +29,7 @@ Revision History:
 #include "Genome.h"
 #include "LandauVishkin.h"
 #include "AffineGap.h"
+#include "AffineGapVectorized.h"
 #include "AlignerOptions.h"
 #include "Genome.h"
 
@@ -99,7 +100,7 @@ public:
         bool alignedAsPair = false) const = 0; 
 
     virtual bool writeRead(
-        const ReaderContext& context, AffineGapWithCigar * ag, char * buffer, size_t bufferSpace,
+        const ReaderContext& context, AffineGapVectorizedWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
         int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
