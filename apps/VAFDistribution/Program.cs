@@ -27,7 +27,7 @@ namespace VAFDistribution
 
         class HistogramsAndPValue : IComparable<HistogramsAndPValue>
         {
-            public readonly double p;
+            public readonly double BonferroniCorrectedP;
             public readonly ASETools.PreBucketedHistogram oneMutationHistogram;
             public readonly ASETools.PreBucketedHistogram multipleMutationHistogram;
             public readonly ASETools.PreBucketedHistogram germlineHistogram;
@@ -36,7 +36,7 @@ namespace VAFDistribution
 
             public bool isSignificant()
             {
-                return p <= 0.01;
+                return BonferroniCorrectedP <= 0.01;
             }
 
             public int CompareTo(HistogramsAndPValue peer)
@@ -47,13 +47,13 @@ namespace VAFDistribution
                 //
                 // Sort order: all significant results before any non-significant results.  Then, mean > 0.5 (preferrentially expressing the mutant allele) before mean <= 0.5, then by p value.
                 //
-                if ((p <= 0.01) != (peer.p <= 0.01))
+                if ((BonferroniCorrectedP <= 0.01) != (peer.BonferroniCorrectedP <= 0.01))
                 {
-                    return (p <= 0.01) ? -1 : 1;
+                    return (BonferroniCorrectedP <= 0.01) ? -1 : 1;
                 }
 
                 if ((ourMean > 0.5) == (theirMean > 0.5)) {
-                    return p.CompareTo(peer.p);
+                    return BonferroniCorrectedP.CompareTo(peer.BonferroniCorrectedP);
                 }
 
                 if (ourMean > 0.5)
@@ -66,7 +66,7 @@ namespace VAFDistribution
 
             public HistogramsAndPValue(double p_, ASETools.PreBucketedHistogram oneMutationHistogram_, ASETools.PreBucketedHistogram multipleMutationHistogram_, ASETools.PreBucketedHistogram germlineHistogram_, ASETools.PreBucketedHistogram silentHistogram_, string hugo_symbol_)
             {
-                p = p_;
+                BonferroniCorrectedP = p_;
                 oneMutationHistogram = oneMutationHistogram_;
                 multipleMutationHistogram = multipleMutationHistogram_;
                 germlineHistogram = germlineHistogram_;
@@ -158,6 +158,15 @@ namespace VAFDistribution
 
             var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.vaf_histogram_filename);
             outputFile.WriteLine("Bonferroni correction " + bonferroniCorrection);
+            outputFile.WriteLine();
+
+            outputFile.WriteLine("hugo_symbol\tp (one mutation not coin flip by binomial test, bonferroni corrected)\tn (one mutation)\tmean (one mutation)");
+            foreach (var result in results)
+            {
+                outputFile.WriteLine(result.hugo_symbol + "\t" + result.BonferroniCorrectedP + "\t" + result.oneMutationHistogram.count() + "\t" + result.oneMutationHistogram.mean());
+            }
+
+            outputFile.WriteLine();
 
             outputFile.WriteLine("Histogram of p-Values for binomial test (pre-Bonferroni correction)");
             pValueHistogram.WriteHistogram(outputFile);
@@ -168,9 +177,9 @@ namespace VAFDistribution
 
             foreach (var result in results)
             {
-                if (result.p <= 0.01)
+                if (result.BonferroniCorrectedP <= 0.01)
                 {
-                    Console.WriteLine(result.hugo_symbol + " has p=" + result.p + ", median 1 mutation VAF of " + result.oneMutationHistogram.ComputeHistogram()[50].cdfValue);
+                    Console.WriteLine(result.hugo_symbol + " has p=" + result.BonferroniCorrectedP + ", median 1 mutation VAF of " + result.oneMutationHistogram.ComputeHistogram()[50].cdfValue);
                 }
 
                 var oneMutationLines = result.oneMutationHistogram.ComputeHistogram();
@@ -179,7 +188,7 @@ namespace VAFDistribution
                 var silentLines = result.silentHistogram.ComputeHistogram();
 
                 outputFile.WriteLine("hugo_symbol\tp (one mutation not coin flip by binomial test, bonferroni corrected)\tn (one mutation)\tmean (one mutation)");
-                outputFile.WriteLine(result.hugo_symbol + "\t" + result.p + "\t" + result.oneMutationHistogram.count() + "\t" + result.oneMutationHistogram.mean());
+                outputFile.WriteLine(result.hugo_symbol + "\t" + result.BonferroniCorrectedP + "\t" + result.oneMutationHistogram.count() + "\t" + result.oneMutationHistogram.mean());
                 outputFile.WriteLine("minValue\tone mutation (n = " + result.oneMutationHistogram.count() + ")\tmultiple mutations (n = " + result.multipleMutationHistogram.count() + ")\tgermline variants (n = " + result.germlineHistogram.count() + 
                     ")\tsilent (n = " + result.silentHistogram.count() + ")");
                 for (int i = 0; i < oneMutationLines.Count(); i++)

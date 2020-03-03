@@ -11,6 +11,7 @@ namespace CategorizeTumors
 {
     class Program
     {
+        static string[] firstGenes = { "TP53", "KEAP1", "KRAS", "CDKN2A" }; // Should be a better way to do this.  These are the genes that have significantly altered VAF and underexpress the wild-type allele
 
         class Result : IComparable<Result>
         {
@@ -76,6 +77,17 @@ namespace CategorizeTumors
 
             public int CompareTo(Result peer)
             {
+                if (firstGenes.Contains(hugo_symbol) != firstGenes.Contains(peer.hugo_symbol))
+                {
+                    if (firstGenes.Contains(hugo_symbol))
+                    {
+                        return -1;  // We're first, hence less
+                    }
+
+                    return 1;
+                }
+
+
                 return hugo_symbol.CompareTo(peer.hugo_symbol);
             }
         }

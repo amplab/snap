@@ -494,18 +494,18 @@ if (!BJBSeenExperimentalStrategies.ContainsKey(file.experimental_strategy))
                                     }
                                     else
                                     {
-                                        normalIsoformExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(tumorIsoformExpressionQuantification, file);
+                                        normalIsoformExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(normalIsoformExpressionQuantification, file);
                                     }
                                 }
                                 else if (file.data_type == "miRNA Expression Quantification")
                                 {
                                     if (tumor)
                                     {
-                                        tumorMiRNAExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(tumorIsoformExpressionQuantification, file);
+                                        tumorMiRNAExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(tumorMiRNAExpressionQuantification, file);
                                     }
                                     else
                                     {
-                                        normalMiRNAExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(tumorIsoformExpressionQuantification, file);
+                                        normalMiRNAExpressionQuantification = ASETools.GDCFile.selectNewestUpdated(normalMiRNAExpressionQuantification, file);
                                     }
                                 }
                             } // TXT file

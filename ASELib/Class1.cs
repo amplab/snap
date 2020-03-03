@@ -13,6 +13,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Remoting.Metadata.W3cXsd2001;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
@@ -1572,6 +1573,304 @@ namespace ASELib
             public delegate string ExpectedIdGetter(Case case_);
             public delegate long SizeColumnGetter(Case case_);
             public delegate void SizeColumnSetter(Case case_, long value);
+
+
+            public class DownloadableFileType
+            {
+                public DownloadableFileType(string name_, ColumnGetter fileIdGetter_, ColumnSetter fileIdSetter_, ColumnGetter filenameGetter_, ColumnSetter filenameSetter_, 
+                                            SizeColumnGetter sizeGetter_, SizeColumnSetter sizeSetter_, ColumnGetter md5Getter_, ColumnSetter md5Setter_)
+                {
+                    name = name_;
+                    fileIdGetter = fileIdGetter_;
+                    fileIdSetter = fileIdSetter_;
+                    filenameGetter = filenameGetter_;
+                    filenameSetter = filenameSetter_;
+                    sizeGetter = sizeGetter_;
+                    sizeSetter = sizeSetter_;
+                    md5Getter = md5Getter_;
+                    md5Setter = md5Setter_;
+                }
+
+                public DownloadableFileType(string name_, ColumnGetter fileIdGetter_, ColumnSetter fileIdSetter_, ColumnGetter filenameGetter_, ColumnSetter filenameSetter_,
+                            SizeColumnGetter sizeGetter_, SizeColumnSetter sizeSetter_, ColumnGetter bamMD5Getter_, ColumnSetter bamMD5Setter_, ColumnGetter baiMD5Getter_, ColumnSetter baiMD5Setter_)
+                {
+                    name = name_;
+                    fileIdGetter = fileIdGetter_;
+                    fileIdSetter = fileIdSetter_;
+                    filenameGetter = filenameGetter_;
+                    filenameSetter = filenameSetter_;
+                    sizeGetter = sizeGetter_;
+                    sizeSetter = sizeSetter_;
+                    bamMD5Getter = bamMD5Getter_;
+                    bamMD5Setter = bamMD5Setter_;
+                    baiMD5Getter = baiMD5Getter_;
+                    baiMD5Setter = baiMD5Setter_;
+                }
+
+            public readonly string name;
+            public readonly ColumnGetter fileIdGetter;
+            public readonly ColumnSetter fileIdSetter;
+            public readonly ColumnGetter filenameGetter;
+            public readonly ColumnSetter filenameSetter;
+            public readonly SizeColumnGetter sizeGetter;
+            public readonly SizeColumnSetter sizeSetter;
+            public readonly ColumnGetter md5Getter = null;
+            public readonly ColumnSetter md5Setter = null;
+            public readonly ColumnGetter bamMD5Getter = null;
+            public readonly ColumnSetter bamMD5Setter = null;
+            public readonly ColumnGetter baiMD5Getter = null;
+            public readonly ColumnSetter baiMD5Setter = null;
+
+        }
+
+        public class DerivedFileType
+        {
+            public DerivedFileType(string name_, ColumnGetter filenameGetter_, ColumnSetter filenameSetter_, DerivedFile.Type derivedFileType_, string extension_, ExpectedIdGetter fileIDGetter_, SizeColumnGetter sizeColumnGetter_, SizeColumnSetter sizeColumnSetter_)
+            {
+                name = name_;
+                filenameGetter = filenameGetter_;
+                filenameSetter = filenameSetter_;
+                derivedFileType = derivedFileType_;
+                extension = extension_;
+                fileIDGetter = fileIDGetter_;
+                sizeColumnGetter = sizeColumnGetter_;
+                sizeColumnSetter = sizeColumnSetter_;
+            }
+
+            public readonly string name;
+            public readonly ColumnGetter filenameGetter;
+            public readonly ColumnSetter filenameSetter;
+            public readonly DerivedFile.Type derivedFileType;
+            public readonly string extension;
+            public readonly ExpectedIdGetter fileIDGetter;
+            public readonly SizeColumnGetter sizeColumnGetter;
+            public readonly SizeColumnSetter sizeColumnSetter;
+        } // DerivedFileType
+
+        public static List<DownloadableFileType> downloadableFileTypes; 
+        public static List<DerivedFileType> derivedFileTypes;
+
+        public static Dictionary<string, DownloadableFileType> downloadableFileTypesByName;
+        public static Dictionary<string, DerivedFileType> derivedFileTypesByName;
+
+            class TypeAndFieldInformationInitializer
+            {
+                public TypeAndFieldInformationInitializer()
+                {
+                    downloadableFileTypes = new List<DownloadableFileType>();
+                    derivedFileTypes = new List<DerivedFileType>();
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Normal DNA",
+                                                                        c => c.normal_dna_file_id, (c, v) => c.normal_dna_file_id = v,
+                                                                        c => c.normal_dna_filename, (c, v) => c.normal_dna_filename = v,
+                                                                        c => c.normal_dna_size, (c, v) => c.normal_dna_size = v,
+                                                                        c => c.normal_dna_file_bam_md5, (c, v) => c.normal_dna_file_bam_md5 = v,
+                                                                        c => c.normal_dna_file_bai_md5, (c, v) => c.normal_dna_file_bai_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Tumor DNA",
+                                                                        c => c.tumor_dna_file_id, (c, v) => c.tumor_dna_file_id = v,
+                                                                        c => c.tumor_dna_filename, (c, v) => c.tumor_dna_filename = v,
+                                                                        c => c.tumor_dna_size, (c, v) => c.tumor_dna_size = v,
+                                                                        c => c.tumor_dna_file_bam_md5, (c, v) => c.tumor_dna_file_bam_md5 = v,
+                                                                        c => c.tumor_dna_file_bai_md5, (c, v) => c.tumor_dna_file_bai_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Normal RNA",
+                                                                        c => c.normal_rna_file_id, (c, v) => c.normal_rna_file_id = v,
+                                                                        c => c.normal_rna_filename, (c, v) => c.normal_rna_filename = v,
+                                                                        c => c.normal_rna_size, (c, v) => c.normal_rna_size = v,
+                                                                        c => c.normal_rna_file_bam_md5, (c, v) => c.normal_rna_file_bam_md5 = v,
+                                                                        c => c.normal_rna_file_bai_md5, (c, v) => c.normal_rna_file_bai_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Tumor RNA",
+                                                                        c => c.tumor_rna_file_id, (c, v) => c.tumor_rna_file_id = v,
+                                                                        c => c.tumor_rna_filename, (c, v) => c.tumor_rna_filename = v,
+                                                                        c => c.tumor_rna_size, (c, v) => c.tumor_rna_size = v,
+                                                                        c => c.tumor_rna_file_bam_md5, (c, v) => c.tumor_rna_file_bam_md5 = v,
+                                                                        c => c.tumor_rna_file_bai_md5, (c, v) => c.tumor_rna_file_bai_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("MAF",
+                                                                        c => c.maf_file_id, (c, v) => c.maf_file_id = v,
+                                                                        c => c.maf_filename, (c, v) => c.maf_filename = v,
+                                                                        c => 0, (c, v) => { },
+                                                                        c => "", (c, v) => { })); // MAF doesn't have size or MD5
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Tumor Methylation",
+                                                                        c => c.tumor_methylation_file_id, (c, v) => c.tumor_methylation_file_id = v,
+                                                                        c => c.tumor_methylation_filename, (c, v) => c.tumor_methylation_filename = v,
+                                                                        c => c.tumor_methylation_size, (c, v) => c.tumor_methylation_size = v,
+                                                                        c => c.tumor_methylation_file_md5, (c, v) => c.tumor_methylation_file_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Normal Methylation",
+                                                                        c => c.normal_methylation_file_id, (c, v) => c.normal_methylation_file_id = v,
+                                                                        c => c.normal_methylation_filename, (c, v) => c.normal_methylation_filename = v,
+                                                                        c => c.normal_methylation_size, (c, v) => c.normal_methylation_size = v,
+                                                                        c => c.normal_methylation_file_md5, (c, v) => c.normal_methylation_file_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Tumor Copy Number",
+                                                                        c => c.tumor_copy_number_file_id, (c, v) => c.tumor_copy_number_file_id = v,
+                                                                        c => c.tumor_copy_number_filename, (c, v) => c.tumor_copy_number_filename = v,
+                                                                        c => c.tumor_copy_number_size, (c, v) => c.tumor_copy_number_size = v,
+                                                                        c => c.tumor_copy_number_file_md5, (c, v) => c.tumor_copy_number_file_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Normal Copy Number",
+                                                                        c => c.normal_copy_number_file_id, (c, v) => c.normal_copy_number_file_id = v,
+                                                                        c => c.normal_copy_number_filename, (c, v) => c.normal_copy_number_filename = v,
+                                                                        c => c.normal_copy_number_size, (c, v) => c.normal_copy_number_size = v,
+                                                                        c => c.normal_copy_number_file_md5, (c, v) => c.normal_copy_number_file_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Tumor FPKM",
+                                                                        c => c.tumor_fpkm_file_id, (c, v) => c.tumor_fpkm_file_id = v,
+                                                                        c => c.tumor_fpkm_filename, (c, v) => c.tumor_fpkm_filename = v,
+                                                                        c => c.tumor_fpkm_size, (c, v) => c.tumor_fpkm_size = v,
+                                                                        c => c.tumor_fpkm_file_md5, (c, v) => c.tumor_fpkm_file_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Normal FPKM",
+                                                                        c => c.normal_fpkm_file_id, (c, v) => c.normal_fpkm_file_id = v,
+                                                                        c => c.normal_fpkm_filename, (c, v) => c.normal_fpkm_filename = v,
+                                                                        c => c.normal_fpkm_size, (c, v) => c.normal_fpkm_size = v,
+                                                                        c => c.normal_fpkm_file_md5, (c, v) => c.normal_fpkm_file_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Clinical Supplement",
+                                                                        c => c.clinical_supplement_file_id, (c, v) => c.clinical_supplement_file_id = v,
+                                                                        c => c.clinical_supplement_filename, (c, v) => c.clinical_supplement_filename = v,
+                                                                        c => c.clinical_supplement_size, (c, v) => c.clinical_supplement_size = v,
+                                                                        c => c.clinical_supplement_md5, (c, v) => c.clinical_supplement_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Tumor miRNA-seq",
+                                                                        c => c.tumor_miRNA_file_id, (c, v) => c.tumor_miRNA_file_id = v,
+                                                                        c => c.tumor_miRNA_filename, (c, v) => c.tumor_miRNA_filename = v,
+                                                                        c => c.tumor_miRNA_size, (c, v) => c.tumor_miRNA_size = v,
+                                                                        c => c.tumor_miRNA_md5, (c, v) => c.tumor_miRNA_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Normal miRNA-seq",
+                                                                        c => c.normal_miRNA_file_id, (c, v) => c.normal_miRNA_file_id = v,
+                                                                        c => c.normal_miRNA_filename, (c, v) => c.normal_miRNA_filename = v,
+                                                                        c => c.normal_miRNA_size, (c, v) => c.normal_miRNA_size = v,
+                                                                        c => c.normal_miRNA_md5, (c, v) => c.normal_miRNA_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Tumor miRNA Expression Quantification",
+                                                                        c => c.tumor_miRNA_expression_quantification_file_id, (c, v) => c.tumor_miRNA_expression_quantification_file_id = v,
+                                                                        c => c.tumor_miRNA_expression_quantification_filename, (c, v) => c.tumor_miRNA_expression_quantification_filename = v,
+                                                                        c => c.tumor_miRNA_expression_quantification_size, (c, v) => c.tumor_miRNA_expression_quantification_size = v,
+                                                                        c => c.tumor_miRNA_expression_quantification_md5, (c, v) => c.tumor_miRNA_expression_quantification_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Normal miRNA Expression Quantification",
+                                                                        c => c.normal_miRNA_expression_quantification_file_id, (c, v) => c.normal_miRNA_expression_quantification_file_id = v,
+                                                                        c => c.normal_miRNA_expression_quantification_filename, (c, v) => c.normal_miRNA_expression_quantification_filename = v,
+                                                                        c => c.normal_miRNA_expression_quantification_size, (c, v) => c.normal_miRNA_expression_quantification_size = v,
+                                                                        c => c.normal_miRNA_expression_quantification_md5, (c, v) => c.normal_miRNA_expression_quantification_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Tumor Isoform Expression Quantification",
+                                                                        c => c.tumor_isoform_expression_quantification_file_id, (c, v) => c.tumor_isoform_expression_quantification_file_id = v,
+                                                                        c => c.tumor_isoform_expression_quantification_filename, (c, v) => c.tumor_isoform_expression_quantification_filename = v,
+                                                                        c => c.tumor_isoform_expression_quantification_size, (c, v) => c.tumor_isoform_expression_quantification_size = v,
+                                                                        c => c.tumor_isoform_expression_quantification_md5, (c, v) => c.tumor_isoform_expression_quantification_md5 = v));
+
+                    downloadableFileTypes.Add(new DownloadableFileType("Normal Isoform Expression Quantification",
+                                                                        c => c.normal_isoform_expression_quantification_file_id, (c, v) => c.normal_isoform_expression_quantification_file_id = v,
+                                                                        c => c.normal_isoform_expression_quantification_filename, (c, v) => c.normal_isoform_expression_quantification_filename = v,
+                                                                        c => c.normal_isoform_expression_quantification_size, (c, v) => c.normal_isoform_expression_quantification_size = v,
+                                                                        c => c.normal_isoform_expression_quantification_md5, (c, v) => c.normal_isoform_expression_quantification_md5 = v));
+
+
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA Allcount", c => c.normal_dna_allcount_filename, (c, v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, c => c.normal_dna_allcount_size, (c, v) => c.normal_dna_allcount_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor DNA Allcount", c => c.tumor_dna_allcount_filename, (c, v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal RNA Allcount", c => c.normal_rna_allcount_filename, (c, v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id, c => c.normal_rna_allcount_size, (c, v) => c.normal_rna_allcount_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor RNA Allcount", c => c.tumor_rna_allcount_filename, (c, v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id, c => c.tumor_rna_allcount_size, (c, v) => c.tumor_rna_allcount_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Regional Expression", c => c.regional_expression_filename, (c, v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id, c => c.regional_expression_size, (c, v) => c.regional_expression_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Gene Expression", c => c.gene_expression_filename, (c, v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id, c => c.gene_expression_size, (c, v) => c.gene_expression_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tentative Selected Variants", c => c.tentative_selected_variants_filename, (c, v) => c.tentative_selected_variants_filename = v, DerivedFile.Type.TentativeSelectedVariants, tentativeSelectedVariantsExtension, c => c.normal_dna_file_id, c => c.tentative_selected_variants_size, (c, v) => c.tentative_selected_variants_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA Reads At Selected Variants", c => c.normal_dna_reads_at_tentative_selected_variants_filename, (c, v) => c.normal_dna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtTentativeSelectedVariantsExtension, c => c.normal_dna_file_id, c => c.normal_dna_reads_at_selected_variants_size, (c, v) => c.normal_dna_reads_at_selected_variants_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA Reads At Selected Variants Index", c => c.normal_dna_reads_at_tentative_selected_variants_index_filename, (c, v) => c.normal_dna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.normal_dna_file_id, c => c.normal_dna_reads_at_selected_variants_index_size, (c, v) => c.normal_dna_reads_at_selected_variants_index_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor DNA Reads At Selected Variants", c => c.tumor_dna_reads_at_tentative_selected_variants_filename, (c, v) => c.tumor_dna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtTentativeSelectedVariantsExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_reads_at_selected_variants_size, (c, v) => c.tumor_dna_reads_at_selected_variants_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor DNA Reads At Selected Variants Index", c => c.tumor_dna_reads_at_tentative_selected_variants_index_filename, (c, v) => c.tumor_dna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariantsIndex, tumorDNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_reads_at_selected_variants_index_size, (c, v) => c.tumor_dna_reads_at_selected_variants_index_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal RNA Reads At Selected Variants", c => c.normal_rna_reads_at_tentative_selected_variants_filename, (c, v) => c.normal_rna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariants, normalRNAReadsAtTentativeSelectedVariantsExtension, c => c.normal_rna_file_id, c => c.normal_rna_reads_at_selected_variants_size, (c, v) => c.normal_rna_reads_at_selected_variants_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal RNA Reads At Selected Variants Index", c => c.normal_rna_reads_at_tentative_selected_variants_index_filename, (c, v) => c.normal_rna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariantsIndex, normalRNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.normal_rna_file_id, c => c.normal_rna_reads_at_selected_variants_index_size, (c, v) => c.normal_rna_reads_at_selected_variants_index_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor RNA Reads At Selected Variants", c => c.tumor_rna_reads_at_tentative_selected_variants_filename, (c, v) => c.tumor_rna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtTentativeSelectedVariantsExtension, c => c.tumor_rna_file_id, c => c.tumor_rna_reads_at_selected_variants_size, (c, v) => c.tumor_rna_reads_at_selected_variants_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor RNA Reads At Selected Variants Index", c => c.tumor_rna_reads_at_tentative_selected_variants_index_filename, (c, v) => c.tumor_rna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.tumor_rna_file_id, c => c.tumor_rna_reads_at_selected_variants_index_size, (c, v) => c.tumor_rna_reads_at_selected_variants_index_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tentative Annotated Selected Variants", c => c.tentative_annotated_selected_variants_filename, (c, v) => c.tentative_annotated_selected_variants_filename = v, DerivedFile.Type.TentativeAnnotatedSelectedVariants, tentativeAnnotatedSelectedVariantsExtension, c => c.case_id, c => c.tentative_annotated_selected_variants_size, (c, v) => c.tentative_annotated_selected_variants_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Annotated Selected Variants", c => c.annotated_selected_variants_filename, (c, v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id, c => c.annotated_selected_variants_size, (c, v) => c.annotated_selected_variants_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal Allele Specific Gene Expression", c => c.normal_allele_specific_gene_expression_filename, (c, v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id, c => c.normal_allele_specific_gene_expression_size, (c, v) => c.normal_allele_specific_gene_expression_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor Allele Specific Gene Expression", c => c.tumor_allele_specific_gene_expression_filename, (c, v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id, c => c.tumor_allele_specific_gene_expression_size, (c, v) => c.tumor_allele_specific_gene_expression_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor DNA Gene Coverage", c => c.tumor_dna_gene_coverage_filname, (c, v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_gene_coverage_size, (c, v) => c.tumor_dna_gene_coverage_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("VCF", c => c.vcf_filename, (c, v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id, c => c.vcf_size, (c, v) => c.vcf_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Extracted MAF Lines", c => c.extracted_maf_lines_filename, (c, v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id, c => c.extracted_maf_lines_size, (c, v) => c.extracted_maf_lines_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("All MAF Lines", c => c.all_maf_lines_filename, (c, v) => c.all_maf_lines_filename = v, DerivedFile.Type.AllMAFLines, allMAFLinesExtension, c => c.case_id, c => c.all_maf_lines_size, (c, v) => c.all_maf_lines_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA Mapped Base Count", c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id, c => c.normal_dna_mapped_base_count_size, (c, v) => c.normal_dna_mapped_base_count_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor DNA Mapped Base Count", c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_mapped_base_count_size, (c, v) => c.tumor_dna_mapped_base_count_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal RNA Mapped Base Count", c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id, c => c.normal_rna_mapped_base_count_size, (c, v) => c.normal_rna_mapped_base_count_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor RNA Mapped Base Count", c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id, c => c.tumor_rna_mapped_base_count_size, (c, v) => c.tumor_rna_mapped_base_count_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Selected Variant Counts By Gene", c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Selected Regulatory MAF Lines", c => c.selected_regulatory_maf_filename, (c, v) => c.selected_regulatory_maf_filename = v, DerivedFile.Type.SelectedRegulatoryMAFLines, selectedRegulatoryMAFLinesExtension, c => c.case_id, c => c.selected_regulatory_maf_lines_size, (c, v) => c.selected_regulatory_maf_lines_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Annotated Regulatory Regions", c => c.annotated_regulatory_regions_filename, (c, v) => c.annotated_regulatory_regions_filename = v, DerivedFile.Type.AnnotatedRegulatoryRegions, annotatedBEDLinesExtension, c => c.case_id, c => c.annotated_regulatory_regions_size, (c, v) => c.annotated_regulatory_regions_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Annotated GeneHancer Lines", c => c.annotated_geneHancer_lines_filename, (c, v) => c.annotated_geneHancer_lines_filename = v, DerivedFile.Type.AnnotatedGeneHancer, annotatedGeneHancerLinesExtension, c => c.case_id, c => c.annotated_geneHancer_lines_size, (c, v) => c.annotated_geneHancer_lines_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Regulatory Mutations Near Mutations", c => c.regulatory_mutations_near_mutations_filename, (c, v) => c.regulatory_mutations_near_mutations_filename = v, DerivedFile.Type.RegulatoryMutationsNearMutations, regulatoryMutationsNearMutationsExtension, c => c.case_id, c => c.regulatory_mutations_near_mutations_size, (c, v) => c.regulatory_mutations_near_mutations_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Expression By Gene", c => c.expression_by_gene_filename, (c, v) => c.expression_by_gene_filename = v, DerivedFile.Type.ExpressionByGene, expressionByGeneExtension, c => c.case_id, c => c.expression_by_gene_size, (c, v) => c.expression_by_gene_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Isoform Read Counts", c => c.isoform_read_counts_filename, (c, v) => c.isoform_read_counts_filename = v, DerivedFile.Type.IsoformReadCounts, isoformReadCountsExtension, c => c.case_id, c => c.isoform_read_counts_file_size, (c, v) => c.isoform_read_counts_file_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Compressed VCF", c => c.compressed_vcf_filename, (c, v) => c.compressed_vcf_filename = v, DerivedFile.Type.CompressedVCF, compressedVCFExtension, c => c.normal_dna_file_id, c => c.compressed_vcf_file_size, (c, v) => c.compressed_vcf_file_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Case Metadata", c => c.case_metadata_filename, (c, v) => c.case_metadata_filename = v, DerivedFile.Type.CaseMetadata, caseMetadataExtension, c => c.case_id, c => c.case_metadata_file_size, (c, v) => c.case_metadata_file_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tentative ASVs without CNVs", c => c.tentative_asv_without_cnvs_filename, (c, v) => c.tentative_asv_without_cnvs_filename = v, DerivedFile.Type.TentativeASVsWithoutCNVs, tentativeASVsWithoutCNVsExtension, c => c.case_id, c => c.tentative_asv_without_cnvs_size, (c, v) => c.tentative_asv_without_cnvs_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Variant Phasing", c => c.variant_phasing_filename, (c, v) => c.variant_phasing_filename = v, DerivedFile.Type.VariantPhasing, variantPhasingExtension, c => c.case_id, c => c.variant_phasing_size, (c, v) => c.variant_phasing_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("VCF Statistics", c => c.vcf_statistics_filename, (c, v) => c.vcf_statistics_filename = v, DerivedFile.Type.VCFStatistics, vcfStatisticsExtension, c => c.normal_dna_file_id, c => c.vcf_statistics_size, (c, v) => c.vcf_statistics_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Read Statistics", c => c.read_statictics_filename, (c, v) => c.read_statictics_filename = v, DerivedFile.Type.ReadStatictics, readStatisticsExtension, c => c.case_id, c => c.read_statictics_size, (c, v) => c.read_statictics_size = v));
+
+                    downloadableFileTypesByName = downloadableFileTypes.GroupByToDictUnique(_ => _.name);
+                    derivedFileTypesByName = derivedFileTypes.GroupByToDictUnique(_ => _.name);
+
+                    //
+                    // Now make the FieldInformations.
+                    //
+
+                    AllFields = new List<FieldInformation>();
+                    AllFields.Add(new FieldInformation("Case ID", c => c.case_id.ToLower(), (c, v) => c.case_id = v));
+
+                    foreach (var downloadableFileType in downloadableFileTypes)
+                    {
+                        AllFields.Add(new FieldInformation(downloadableFileType.name + " File ID", downloadableFileType.fileIdGetter, downloadableFileType.fileIdSetter));
+                    }
+
+                    //
+                    // Special metadata that doesn't correspond to a file.
+                    //
+                    AllFields.Add(new FieldInformation("Project ID", c => c.project_id, (c, v) => c.project_id = v));
+                    AllFields.Add(new FieldInformation("Sample IDs", c => c.sampleIdsInCommaSeparatedList(), (c, v) => c.sample_ids = v.Split(',').ToList()));
+
+                    foreach (var downloadableFileType in downloadableFileTypes)
+                    {
+                        AllFields.Add(new FieldInformation(downloadableFileType.name + " Filename", downloadableFileType.filenameGetter, downloadableFileType.filenameSetter));
+                    }
+
+                    foreach (var derivedFileType in derivedFileTypes)
+                    {
+                        AllFields.Add(new FieldInformation(derivedFileType.name + " Filename", derivedFileType.filenameGetter, derivedFileType.filenameSetter, derivedFileType.derivedFileType, derivedFileType.extension, derivedFileType.fileIDGetter, derivedFileType.name + " File Size", derivedFileType.sizeColumnGetter, derivedFileType.sizeColumnSetter));
+                    }
+
+
+                    foreach (var downloadableFileType in downloadableFileTypes)
+                    {
+                        AllFields.Add(new FieldInformation(downloadableFileType.name + " Size", c => Convert.ToString(downloadableFileType.sizeGetter(c)), (c, v) => downloadableFileType.sizeSetter(c, LongFromString(v))));
+                    } //ctor
+
+                    foreach (var downloadableFileType in downloadableFileTypes)
+                    {
+                        if (downloadableFileType.md5Getter != null)
+                        {
+                            AllFields.Add(new FieldInformation(downloadableFileType.name + " MD5", downloadableFileType.md5Getter, downloadableFileType.md5Setter));
+                        } else
+                        {
+                            AllFields.Add(new FieldInformation(downloadableFileType.name + " BAM MD5", downloadableFileType.bamMD5Getter, downloadableFileType.bamMD5Setter));
+                            AllFields.Add(new FieldInformation(downloadableFileType.name + " BAI MD5", downloadableFileType.baiMD5Getter, downloadableFileType.baiMD5Setter));
+                        }
+                    }
+
+                } // ctor
+            } // TypeAndFieldInformationInitializer
+
+            static TypeAndFieldInformationInitializer initializer = new TypeAndFieldInformationInitializer();
+
+            public static List<FieldInformation> AllFields;
+
+
             public class FieldInformation
             {
                 public FieldInformation(string columnName_, ColumnGetter getter_, ColumnSetter setter_, DerivedFile.Type type_, string extension_, ExpectedIdGetter idGetter_, string sizeColumnName_, SizeColumnGetter sizeColumnGetter_, SizeColumnSetter sizeColumnSetter_)
@@ -1634,6 +1933,7 @@ namespace ASELib
                 SizeColumnSetter sizeColumnSetter;
             } // FieldInformation 
 
+#if false
             public static FieldInformation[] AllFields =
             {
                 new FieldInformation("Case ID",                                             c => c.case_id.ToLower(), (c, v) => c.case_id = v),
@@ -1761,6 +2061,7 @@ namespace ASELib
                 new FieldInformation("Normal Isoform Expression Quantification MD5",        c => c.normal_isoform_expression_quantification_md5, (c, v) => c.normal_isoform_expression_quantification_md5 = v),
 
             }; // fieldInformation
+#endif // false
 
 
             static public Case fromSaveFileLine(Dictionary<string, int> fieldMappings, string[] fields)
@@ -2227,7 +2528,7 @@ namespace ASELib
             public int nReadsToIncludeVariant = 30; // How much coverage do we need of a mutation or somatic variant to consider it?
             public string selectedGenesFilename = defaultBaseDirectory + @"seleted_genes.txt";
             public string scriptOutputDirectory = @"\temp\";
-            public string finalResultsDirectory = defaultBaseDirectory + @"final_results\";
+            public string finalResultsDirectory = defaultBaseDirectory + @"final_results\"; // includes the trailing backslash
             public double significanceLevel = 0.01;
             public string geneLocationInformationFilename = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
             public int minSampleCountForHeatMap = 100;
@@ -2285,7 +2586,9 @@ namespace ASELib
             public double repetitiveRegionConfidence = 0.95;   // 
             public int minDistanceBetweenGermlineVariants = 1000;
 
-             public int nWorkerMachines = 120;                 // Over how many machines would we like to evenly split our work?
+            public const int minInstancesOfEachClassToComputeMannWhitney = 10;  // This should be a parameter rather than a compiled-in constant.
+
+            public int nWorkerMachines = 120;                 // Over how many machines would we like to evenly split our work?
 
             public bool isBeatAML = false;
 
@@ -3424,6 +3727,8 @@ namespace ASELib
         public const string UniparentalDisomyHistogramsFilename = "UniparentalDisomyHistograms.txt";
         public const string PhasingForNearbyVariantsFilename = "PhasingForNearbyVariants.txt";
         public const string VCFStatisticsFilename = "VCFStatistics.txt";
+        public const string miRNAExpressionSummaryFilename = "miRNASummary.txt";
+        public const string miRNAExpressionPValueHistogramFilename = "miRNAPValueHistogram.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -3987,9 +4292,20 @@ namespace ASELib
             }
 
             bool ParseFile(Parse parser, FieldGrabberParser fieldGrabbingParser, out Dictionary<string, int> fieldMappings_out, ProcessNewItem processNewItem)
-            { 
+            {
                 fieldMappings_out = null;
 
+                if (wantedFields.Any(x => wantedFields.Where(y => x == y).Count() != 1))
+                {
+                    Console.Write("ASETools.HeaderizedFile.ParseFile: wantedFields contains the following duplicate columns (which will appear more than once in this list):");
+
+                    foreach (var duplicateField in wantedFields.Where(x => wantedFields.Where(y => x == y).Count() != 1))
+                    {
+                        Console.Write(" " + duplicateField);
+                    }
+                    return false;
+                }
+ 
                 if (hasVersion)
                 {
                     var versionString = inputFile.ReadLine();
@@ -8523,6 +8839,18 @@ namespace ASELib
                 return retVal;
             }
 
+            public static SAMLine attemptSAMLine(string rawline)
+            {
+                try
+                {
+                    return new SAMLine(rawline);
+                } catch (Exception e)
+                {
+                    Console.WriteLine("Unable to parse ill-formatted SAM line: '" + rawline + ", got exception " + e.Message);
+                    return null;
+                }
+            }
+
             public SAMLine(string rawline)
             {
                 var fields = rawline.Split('\t');
@@ -11879,6 +12207,11 @@ namespace ASELib
                 return retVal;
             }
 
+            public static List<string> getInputFilenames(Configuration configuration)
+            {
+                return Directory.EnumerateFiles(configuration.patient_metadata_directory).Where(_ => _.EndsWith(".txt")).ToList();
+            }
+
             public readonly string patientId;
             public readonly int days_to_death;
             public readonly string vitalStatus;
@@ -13812,6 +14145,19 @@ namespace ASELib
             public Dictionary<string, TCGAClinicalSummaryLine> clinicalSummariesByPatientId;
             // If you add new things here, be sure to add them to DetermineStateOfTheWorld() in ASEProcessManager.
 
+            public List<string> GetInputFiles()
+            {
+                var retVal = new List<string>();
+
+                retVal.AddRange(ASETools.TCGAClinicalSummaryLine.getInputFilenames(configuration));
+                retVal.Add(configuration.casesFilePathname);
+                retVal.Add(configuration.finalResultsDirectory + ASETools.ASECorrectionFilename);
+                retVal.Add(configuration.geneLocationInformationFilename);
+                retVal.Add(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+                return retVal;
+            }
+
             public static CommonData LoadCommonData(string[] args)
             {
                 var timer = new Stopwatch();
@@ -15300,9 +15646,14 @@ namespace ASELib
                 }
             } // ctor
 
-            public void addSAMLine(string samText)
+            public void addSAMLine(string samText, string filename)
             {
-                var samLine = new SAMLine(samText);
+                var samLine = SAMLine.attemptSAMLine(samText); 
+                if (samLine == null)
+                {
+                    Console.WriteLine("Ignoring bad SAMLine in " + filename);
+                    return;
+                }
                 addSAMLine(samLine);
             }
 

@@ -61,7 +61,7 @@ namespace ComputeReadStatistics
             string inputLine = "";
             while (null != (inputLine = inputFile.ReadLine()))
             {
-                readStatistics.addSAMLine(inputLine);
+                readStatistics.addSAMLine(inputLine, inputFilename);
             }
 
             return readStatistics;

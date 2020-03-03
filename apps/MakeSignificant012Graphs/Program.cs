@@ -262,7 +262,7 @@ namespace MakeSignificant012Graphs
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
 
 
-            var bonferroniLines = ASETools.BonferroniCorrectedASEDistributionLine.readFromFile(configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount_bonferroni.txt");
+            var bonferroniLines = ASETools.BonferroniCorrectedASEDistributionLine.readFromFile(configuration.finalResultsDirectory + ASETools.AlleleSpecificExpressionDistributionByMutationCountFilenameBase + "_bonferroni.txt");
 
 
             if (null == bonferroniLines)

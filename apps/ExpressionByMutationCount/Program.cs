@@ -255,6 +255,7 @@ namespace ExpressionByMutationCount
                     {
                         musToUse = ASETools.BothBools;
                     }
+
                     foreach (var mu in musToUse)
                     {
                         Dictionary<int, List<ExpressionInstance>> byRange;
@@ -611,7 +612,7 @@ namespace ExpressionByMutationCount
 
                 p = ASETools.MannWhitney<ExpressionInstance>.ComputeMannWhitney(
                         instancesToUse,
-                        instances[0], selector, getValue, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, twoTailed, 10);
+                        instances[0], selector, getValue, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, twoTailed, ASETools.Configuration.minInstancesOfEachClassToComputeMannWhitney);
             }
             else
             {

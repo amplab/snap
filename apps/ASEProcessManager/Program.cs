@@ -716,8 +716,9 @@ namespace ASEProcessManager
             string binaryName;
             string parameters;
             bool needsCases;
+            bool needsCommonData;
 
-            public SingleOutputProcessingStage(string stageName_, bool needsCases_, string binaryName_, string parameters_, GetCaseFile[] getCaseFile, GetOneOffFile[] getOneOffFile, GetOneOffFile[] getOutputFile)
+            public SingleOutputProcessingStage(string stageName_, bool needsCases_, string binaryName_, string parameters_, GetCaseFile[] getCaseFile, GetOneOffFile[] getOneOffFile, GetOneOffFile[] getOutputFile, bool needsCommonData_ = false)
             {
                 stageName = stageName_;
                 needsCases = needsCases_;
@@ -729,6 +730,8 @@ namespace ASEProcessManager
                 oneOffFileGetters = (getOneOffFile == null) ? null : getOneOffFile.ToList();
 
                 outputFileGetters = getOutputFile.ToList();
+
+                needsCommonData = needsCommonData_;
             } // ctor
 
             public string GetStageName() { return stageName; }
@@ -747,7 +750,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (caseFileInputGetters != null && caseFileInputGetters.Any(inputGetter => stateOfTheWorld.listOfCases.Any(case_ => inputGetter(case_) == "")))
+                if (caseFileInputGetters != null && caseFileInputGetters.Any(inputGetter => stateOfTheWorld.listOfCases.Any(case_ => inputGetter(case_) == "")) || needsCommonData && !stateOfTheWorld.hasCommonData())
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -770,6 +773,27 @@ namespace ASEProcessManager
                     return true;    // Output doesn't exist, so no dependencies.
                 }
 
+                DateTime commonDataDate = DateTime.Now; // If it doesn't need common data, this is newer than any files, so it will never trigger.
+
+                if (needsCommonData)
+                {
+                    if (!stateOfTheWorld.hasCommonData() || stateOfTheWorld.commonData.GetInputFiles().Any(_ => !File.Exists(_)))
+                    {
+                        Console.WriteLine("Processing stage " + stageName + " depends on common data, but some of it is missing.");
+                        return false;
+                    }
+
+                    foreach (var commonDataFilename in stateOfTheWorld.commonData.GetInputFiles())
+                    {
+                        DateTime fileWriteDate;
+                        if ((fileWriteDate = File.GetLastWriteTime(commonDataFilename)) < commonDataDate)
+                        {
+                            commonDataDate = fileWriteDate;
+                        }
+                    }
+
+                } // needsCommonData
+
                 if (oneOffFileGetters == null && caseFileInputGetters == null)
                 {
                     return true;    // There is no input, so it can't be stale
@@ -780,10 +804,17 @@ namespace ASEProcessManager
 
                 foreach (var outputGetter in outputFileGetters)
                 {
-                    if (File.GetLastWriteTime(outputGetter(stateOfTheWorld)) < oldestOutput)
+                    DateTime outputFileTime;
+                    if ((outputFileTime = File.GetLastWriteTime(outputGetter(stateOfTheWorld))) < oldestOutput)
                     {
                         oldestOutputFilename = outputGetter(stateOfTheWorld);
                         oldestOutput = File.GetLastWriteTime(oldestOutputFilename);
+                    }
+
+                    if (outputFileTime > commonDataDate)
+                    {
+                        Console.WriteLine("Processing stage " + stageName + " has output file " + outputGetter(stateOfTheWorld) + " that is newer than at least one common data input.");
+                        return false;
                     }
                 }
 
@@ -1124,10 +1155,7 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    string[] idsToDownload = {case_.normal_dna_file_id, case_.tumor_dna_file_id, case_.normal_rna_file_id, case_.tumor_rna_file_id, case_.normal_methylation_file_id,
-						case_.tumor_methylation_file_id, case_.normal_copy_number_file_id, case_.tumor_copy_number_file_id, case_.normal_miRNA_file_id, case_.tumor_miRNA_file_id,
-                        case_.tumor_miRNA_expression_quantification_file_id, case_.normal_miRNA_expression_quantification_file_id, case_.tumor_isoform_expression_quantification_file_id,
-                        case_.normal_isoform_expression_quantification_file_id};
+                    var idsToDownload = ASETools.Case.downloadableFileTypes.Select(_ => _.fileIdGetter(case_)).ToList();
 
                     foreach (var id in idsToDownload) {
                         if (id != null && id != "" && !stateOfTheWorld.downloadedFiles.ContainsKey(id)) {
@@ -1170,10 +1198,25 @@ namespace ASEProcessManager
                     return;
                 }
 
+                var filenamesChecked = new HashSet<string>();
+
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
 
+#if true
+                    foreach (var downloadableFileType in ASETools.Case.downloadableFileTypes)
+                    {
+                        if (downloadableFileType.md5Getter == null)
+                        {
+                            HandleFile(stateOfTheWorld, script, hpcScript, downloadableFileType.fileIdGetter(case_), downloadableFileType.bamMD5Getter(case_), ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites, filenamesChecked); // We don't verify BAI
+                        }
+                        else
+                        {
+                            HandleFile(stateOfTheWorld, script, hpcScript, downloadableFileType.fileIdGetter(case_), downloadableFileType.md5Getter(case_), ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites, filenamesChecked);
+                        }
+                    }
+#else // true
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_rna_file_id, case_.tumor_rna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
@@ -1191,19 +1234,21 @@ namespace ASEProcessManager
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_miRNA_expression_quantification_file_id, case_.normal_miRNA_expression_quantification_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_isoform_expression_quantification_file_id, case_.tumor_isoform_expression_quantification_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_isoform_expression_quantification_file_id, case_.normal_isoform_expression_quantification_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+#endif // false
 
                 }
             } // EvaluateStage
 
-            void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
+            void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites, HashSet<string> filenamesChecked)
             {
                 if (fileId == null || fileId == "" || null == expectedMD5 || "" == expectedMD5)
                 {
                     //
-                    // There is no file at all (not just not downloaded), so it doesn't count in any of the counts.  Or, there was no MD5 in the metadata we got from GDC.
+                    // There is no file at all (not just not downloaded), so it doesn't count in any of the counts.
                     //
                     return;
                 }
+
 
                 if (!stateOfTheWorld.downloadedFiles.ContainsKey(fileId))
                 {
@@ -1212,9 +1257,22 @@ namespace ASEProcessManager
                 }
 
                 var downloadedFile = stateOfTheWorld.downloadedFiles[fileId];
+                var filename = downloadedFile.fileInfo.FullName.ToLower();
 
-                if (downloadedFile.fileInfo.FullName.ToLower().EndsWith(".partial")) {
-                    if (downloadedFile.fileInfo.LastWriteTime < DateTime.Now.AddDays(-1)) {
+                if (filenamesChecked.Contains(filename))
+                {
+                    //
+                    // A duplicate.  Ignore it.
+                    //
+                    return;
+                }
+
+                filenamesChecked.Add(filename);
+
+                if (filename.EndsWith(".partial"))
+                {
+                    if (downloadedFile.fileInfo.LastWriteTime < DateTime.Now.AddDays(-1))
+                    {
                         Console.WriteLine("Found partial download file that's more than a day old, it's probably abandoned and should be deleted: " + downloadedFile.fileInfo.FullName);
                     }
                     nWaitingForPrerequisites++;
@@ -1233,9 +1291,9 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ComputeMD5 " + downloadedFile.fileInfo.FullName + " > " + downloadedFile.fileInfo.FullName + ".md5");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ComputeMD5 " + filename + " > " + filename + ".md5");
                 hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ComputeMD5IntoFile.cmd " +
-                    stateOfTheWorld.configuration.hpcBinariesDirectory + " " + downloadedFile.fileInfo.FullName + " " + downloadedFile.fileInfo.FullName + ".md5");
+                    stateOfTheWorld.configuration.hpcBinariesDirectory + " " + filename + " " + filename + ".md5");
                 nAddedToScript++;
             }   // HandleFile
 
@@ -4517,6 +4575,13 @@ namespace ASEProcessManager
             static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.VCFStatisticsFilename };
         } // OverallVCFStatisticsProcessingStage
 
+        class miRNAProcessingStage : SingleOutputProcessingStage
+        {
+            public miRNAProcessingStage() : base("miRNA Expression Analysis", true, "AnalyzeMiRNAExpression.exe", "", getCaseFiles, null, getOutputFiles, true) { }
+            static GetCaseFile[] getCaseFiles = { _ => _.tumor_miRNA_expression_quantification_filename };
+            static GetOneOffFile[] getOutputFiles = { _ => _.configuration.finalResultsDirectory + ASETools.miRNAExpressionSummaryFilename, _ => _.configuration.finalResultsDirectory + ASETools.miRNAExpressionPValueHistogramFilename };
+        }
+
 
         static void Main(string[] args)
         {
@@ -4749,6 +4814,7 @@ namespace ASEProcessManager
             processingStages.Add(new ExtractVCFStatisticsProcessingStage());
             processingStages.Add(new OverallVCFStatisticsProcessingStage());
             processingStages.Add(new ReadStaticticsProcessingStage());
+            processingStages.Add(new miRNAProcessingStage());
 
 
 
