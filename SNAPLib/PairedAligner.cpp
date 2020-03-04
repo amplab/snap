@@ -603,8 +603,9 @@ void PairedAlignerContext::runIterationThread()
 
         _int64 nSecondaryResults;
         _int64 nSingleSecondaryResults[2];
+        PairedAlignmentResult firstALTResult;
 
-        while (!aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
+        while (!aligner->align(reads[0], reads[1], results, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
             maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults)) {
 
             _ASSERT(nSecondaryResults > maxPairedSecondaryHits || nSingleSecondaryResults[0] > maxSingleSecondaryHits);

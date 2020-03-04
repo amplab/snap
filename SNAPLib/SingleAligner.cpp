@@ -133,6 +133,7 @@ SingleAlignerContext::runIterationThread()
             useAffineGap,
             ignoreAlignmentAdjustmentForOm,
 			altAwareness,
+            maxScoreGapToPreferNonALTAlignment,
             maxSecondaryAlignmentsPerContig,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
@@ -216,8 +217,8 @@ SingleAlignerContext::runIterationThread()
             aligner->setMaxK(min(MAX_K, (int)(read->getDataLength() * options->maxDistFraction)));
         }
 #endif
-
-        while (!aligner->AlignRead(read, alignmentResults, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1)) {
+        SingleAlignmentResult firstALTResult;
+        while (!aligner->AlignRead(read, alignmentResults, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1)) {
             //
             // Out of secondary alignment buffer.  Reallocate.
             //

@@ -90,7 +90,7 @@ AlignerOptions::AlignerOptions(
     ignoreAlignmentAdjustmentsForOm(true),
     emitInternalScore(false),
 	altAwareness(true),
-    maxScoreGapToPreferNonAltAlignment(2)
+    maxScoreGapToPreferNonALTAlignment(2)
 {
     if (forPairedEnd) {
         maxDist                 = 32;
@@ -243,7 +243,7 @@ AlignerOptions::usage()
             gapOpenPenalty,
             gapExtendPenalty,
             minAGScore,
-            maxScoreGapToPreferNonAltAlignment
+            maxScoreGapToPreferNonALTAlignment
         );
 
     if (extra != NULL) {
@@ -938,7 +938,7 @@ AlignerOptions::usage()
             return true;
         } else if (strcmp(argv[n], "-asg")) {
             if (n + 1 < argc) {
-                maxScoreGapToPreferNonAltAlignment = atoi(argv[n + 1]);
+                maxScoreGapToPreferNonALTAlignment = atoi(argv[n + 1]);
                 n++;
                 return true;
             } else {

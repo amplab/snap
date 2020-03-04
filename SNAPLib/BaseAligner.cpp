@@ -1174,7 +1174,8 @@ Return Value:
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
-                scoresForAllAlignments.updateBestAndSecondBestScores(genomeLocation, score, matchProbability, lvScoresAfterBestFound, elementToScore, primaryResult, secondaryResults, nSecondaryResults, secondaryResultBufferSize, 
+                scoresForAllAlignments.updateBestAndSecondBestScores(genomeLocation, score, matchProbability, lvScoresAfterBestFound, elementToScore, 
+                                            secondaryResults, nSecondaryResults, secondaryResultBufferSize, 
                                             anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer);
                 if (*overflowedSecondaryBuffer) {
                     return true;
@@ -1184,7 +1185,7 @@ Return Value:
                     //
                     // Don't update secondary results here; we don't exclude ALT alignments from them, only from the primary result.
                     //
-                    scoresForNonAltAlignments.updateBestAndSecondBestScores(genomeLocation, score, matchProbability, lvScoresAfterBestFound, elementToScore, primaryResult, NULL, 0, 0, anyNearbyCandidatesAlreadyScored, -1, NULL);
+                    scoresForNonAltAlignments.updateBestAndSecondBestScores(genomeLocation, score, matchProbability, lvScoresAfterBestFound, elementToScore, NULL, 0, 0, anyNearbyCandidatesAlreadyScored, -1, NULL);
                 }
                                         
 
