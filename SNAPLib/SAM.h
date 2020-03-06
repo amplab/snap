@@ -166,7 +166,7 @@ public:
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
-        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool supplementaryAlignment, int* o_addFrontClipping,
         int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false) const;
@@ -175,7 +175,7 @@ public:
     virtual bool writeRead(
         const ReaderContext& context, AffineGapWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
-        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool supplementaryAlignment, int* o_addFrontClipping,
         int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
@@ -184,7 +184,7 @@ public:
     // calculate data needed to write SAM/BAM record
     // very long argument list since this was extracted from
     // original SAM record writing routine so it could be shared with BAM
-
+    /*
     static bool
     createSAMLine(
         const Genome * genome,
@@ -214,6 +214,7 @@ public:
         GenomeLocation genomeLocation,
         Direction direction,
         bool secondaryAlignment,
+        bool supplementaryAlignment,
         bool useM,
         bool hasMate,
         bool firstInPair,
@@ -223,11 +224,11 @@ public:
         GenomeLocation mateLocation,
         Direction mateDirection,
         GenomeDistance *extraBasesClippedBefore);
+        */
 
     static bool
         createSAMLine(
             const Genome * genome,
-            AffineGapWithCigar * ag,
             // output data
             char* data,
             char* quality,
@@ -253,6 +254,7 @@ public:
             GenomeLocation genomeLocation,
             Direction direction,
             bool secondaryAlignment,
+            bool supplementaryAlignment,
             bool useM,
             bool hasMate,
             bool firstInPair,

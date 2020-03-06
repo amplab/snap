@@ -253,7 +253,7 @@ private:
 
         void updateProbabilitiesForNearbyMatch(double probabilityOfMatchBeingReplaced);   // For the "nearby match" code
         void updateProbabilitiesForNewMatch(double newProbability, double matchProbabilityOfNearbyMatch);
-        void updateBestAndSecondBestScores(
+        void updateBestScore(
             GenomeLocation genomeLocation, 
             unsigned score, 
             double matchProbability, 
@@ -267,12 +267,6 @@ private:
             bool *overflowedSecondaryBuffer);
 
         void fillInSingleAlignmentResult(SingleAlignmentResult* result, int popularSeedsSkipped);
-
-    private:     // Making these private, because they don't appear to be used, and so we shouldn't need to make the effort to keep track of them.
-        unsigned secondBestScore;
-        GenomeLocation secondBestScoreGenomeLocation;
-
-        // This doesn't appear to be used int      secondBestScoreDirection;
     };
 
     //

@@ -99,6 +99,7 @@ struct PairedAlignmentResult {
     int basesClippedBefore[NUM_READS_PER_PAIR];
     int basesClippedAfter[NUM_READS_PER_PAIR];
     int agScore[NUM_READS_PER_PAIR];
+    bool supplementary[NUM_READS_PER_PAIR];
 
 	bool fromAlignTogether;                     // Was this alignment created by aligning both reads together, rather than from some combination of single-end aligners?
 	bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?

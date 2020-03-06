@@ -277,7 +277,10 @@ SingleAlignerContext::runIterationThread()
             stats->extraAlignments += nSecondaryResults + (containsPrimary ? 0 : 1);    // If it doesn't contain the primary, then it's a secondary.
             readWriter->writeReads(readerContext, read, alignmentResults, nSecondaryResults + 1, containsPrimary, useAffineGap);
 
-        }
+            if (altAwareness && firstALTResult.status != NotFound && options->passFilter(read, firstALTResult.status, false, false)) {
+                readWriter->writeReads(readerContext, read, &firstALTResult, 1, false, useAffineGap);
+            }
+        } // If we're writing reads at all
 
         if (options->profile) {
             startTime = timeInMillis();

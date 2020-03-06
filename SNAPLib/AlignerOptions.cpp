@@ -967,6 +967,7 @@ AlignerOptions::passFilter(
     if (filterFlags == 0) {
         return true;
     }
+
     if (tooShort) {
         return (filterFlags & FilterTooShort) != 0;
     }
