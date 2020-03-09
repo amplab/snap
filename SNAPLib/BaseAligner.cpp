@@ -935,6 +935,10 @@ Return Value:
                 GenomeLocation genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
                 GenomeLocation elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
 
+if (!strcmp(genome->getContigAtLocation(genomeLocation)->name, "chr1_KI270760v1_alt")) {
+    printf("ALT name %s\n", genome->getContigAtLocation(genomeLocation)->name);
+}
+
                 bool genomeLocationIsNonALT = !genome->isGenomeLocationALT(genomeLocation);
 if (!genomeLocationIsNonALT) {
     printf("ALT hit!!\n");
