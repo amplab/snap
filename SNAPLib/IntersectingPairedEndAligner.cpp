@@ -124,7 +124,7 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
                                                     unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
                                                     int maxSecondaryAlignmentsPerContig)
 {
-    seedUsed = (BYTE *) allocator->allocate(100 + (maxReadSize + 7) / 8);
+    seedUsed = (BYTE *) allocator->allocate(100 + ((size_t)maxReadSize + 7) / 8);
 
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
         rcReadData[whichRead] = (char *)allocator->allocate(maxReadSize);
@@ -139,7 +139,7 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
 
     scoringCandidatePoolSize = min(maxCandidatePoolSize, maxBigHitsToConsider * maxSeedsToUse * NUM_READS_PER_PAIR);
 
-    scoringCandidates = (ScoringCandidate **) allocator->allocate(sizeof(ScoringCandidate *) * (maxEditDistanceToConsider + maxExtraSearchDepth + 1));  //+1 is for 0.
+    scoringCandidates = (ScoringCandidate **) allocator->allocate(sizeof(ScoringCandidate *) * ((size_t)maxEditDistanceToConsider + maxExtraSearchDepth + 1));  //+1 is for 0.
     scoringCandidatePool = (ScoringCandidate *)allocator->allocate(sizeof(ScoringCandidate) * scoringCandidatePoolSize);
 
     for (unsigned i = 0; i < NUM_READS_PER_PAIR; i++) {
@@ -176,7 +176,7 @@ IntersectingPairedEndAligner::align(
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         )
 {
-    firstALTResult = NULL;  // Until this is written.  BJB
+    firstALTResult->status[0] = firstALTResult->status[1] = NotFound;
 
     result->nLVCalls = 0;
     result->nSmallHits = 0;
@@ -229,7 +229,7 @@ IntersectingPairedEndAligner::align(
 
     //
     // Don't bother if one or both reads are too short.  The minimum read length here is the seed length, but usually there's a longer
-	// minimum enforced by our called
+	// minimum enforced by our caller
     //
     if (read0->getDataLength() < seedLen || read1->getDataLength() < seedLen) {
          return true;
@@ -267,6 +267,7 @@ IntersectingPairedEndAligner::align(
             rcReadQuality[whichRead][i] = read->getQuality()[readLen[whichRead] - i - 1];
             countOfNs += nTable[read->getData()[i]];
         }
+
         reads[whichRead][RC] = &rcReads[whichRead];
         reads[whichRead][RC]->init(read->getId(), read->getIdLength(), rcReadData[whichRead], rcReadQuality[whichRead], read->getDataLength());
     }
@@ -372,6 +373,7 @@ IntersectingPairedEndAligner::align(
                 } else {
                     offset = readLen[whichRead] - seedLen - nextSeedToTest;
                 }
+
                 if (nHits[dir] < maxBigHits) {
                     totalHashTableHits[whichRead][dir] += nHits[dir];
                     if (doesGenomeIndexHave64BitLocations) {
@@ -379,11 +381,11 @@ IntersectingPairedEndAligner::align(
                     } else {
                         hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], beginsDisjointHitSet[dir]);
                     }
-                    beginsDisjointHitSet[dir]= false;
+                    beginsDisjointHitSet[dir] = false;
                 } else {
                     popularSeedsSkipped[whichRead]++;
                 }
-            }
+            } // for each direction
 
             //
             // If we don't have enough seeds left to reach the end of the read, space out the seeds more-or-less evenly.
@@ -408,7 +410,6 @@ IntersectingPairedEndAligner::align(
 #endif  // _DEBUG
 
     Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = {{FORWARD, RC}, {RC, FORWARD}};
-
 
     //
     // Phase 2: find all possible candidates and add them to candidate lists (for the reads with fewer and more hits).
@@ -494,7 +495,7 @@ IntersectingPairedEndAligner::align(
             }
 
             //
-            // Add all of the mate candidates for this fewer side hit.
+            // Add all of the mate candidates for the fewer side hit.
             //
 
             GenomeLocation previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
@@ -592,7 +593,7 @@ IntersectingPairedEndAligner::align(
             if (!setPair[readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
                 break;
             }
-        }
+        } // forever (the loop that does the intersection walk)
     } // For each set pair
 
 
@@ -612,7 +613,6 @@ IntersectingPairedEndAligner::align(
             currentBestPossibleScoreList++;
             continue;
         }
-
 
         //
         // Grab the first candidate on the highest list and score it.
