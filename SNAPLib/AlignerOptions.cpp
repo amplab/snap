@@ -933,10 +933,10 @@ AlignerOptions::usage()
                 }
             }
             return true;
-        } else if (strcmp(argv[n], "-A-")) {
+        } else if (strcmp(argv[n], "-A-") == 0) {
             altAwareness = false;
             return true;
-        } else if (strcmp(argv[n], "-asg")) {
+        } else if (strcmp(argv[n], "-asg") == 0) {
             if (n + 1 < argc) {
                 maxScoreGapToPreferNonALTAlignment = atoi(argv[n + 1]);
                 n++;

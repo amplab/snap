@@ -296,6 +296,8 @@ private:
     
     HashTableElement *weightLists;
     unsigned highestUsedWeightList;
+    unsigned wrapCount;
+    unsigned nAddedToHashTable;
 
     static inline _uint64 hash(_uint64 key) {
         key = key * 131;    // Believe it or not, we spend a long time computing the hash, so we're better off with more table entries and a dopey function.

@@ -32,7 +32,7 @@ Revision History:
 #include "Error.h"
 #include "Util.h"
 
-Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding, unsigned i_maxContigs)
+Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding, unsigned i_maxContigs, bool i_areALTContigsMarked)
 : maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding), maxContigs(i_maxContigs),
   mappedFile(NULL)
 {
@@ -51,6 +51,7 @@ Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned 
     nContigs = 0;
     contigs = new Contig[maxContigs];
     contigsByName = NULL;
+    areALTContigsMarked = i_areALTContigsMarked;
 }
 
     void
@@ -158,7 +159,7 @@ Genome::saveToFile(const char *fileName) const
         return false;
     } 
 
-    fprintf(saveFile,"%lld %d %d\n",nBases, nContigs, (areAltContigsMarked ? GENOME_FLAG_ALT_CONTIGS_MARKED : 0));	
+    fprintf(saveFile,"%lld %d %d\n",nBases, nContigs, (areALTContigsMarked ? GENOME_FLAG_ALT_CONTIGS_MARKED : 0));	
     char *curChar = NULL;
 
     for (int i = 0; i < nContigs; i++) {
@@ -167,7 +168,7 @@ Genome::saveToFile(const char *fileName) const
          if (*curChar == ' '){ *curChar = '_'; }
         }
 
-		if (areAltContigsMarked) {
+		if (areALTContigsMarked) {
 			fprintf(saveFile, "%lld %x %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), contigs[i].name);
 		} else {
 			fprintf(saveFile, "%lld %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), contigs[i].name);
@@ -226,7 +227,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         maxLocation = minLocation + length;
     }
 
-    Genome *genome = new Genome(nBases, length, chromosomePadding);
+    Genome *genome = new Genome(nBases, length, chromosomePadding, nContigs, hasALTContigsMarked);
    
     genome->nBases = nBases;
     genome->nContigs = genome->maxContigs = nContigs;

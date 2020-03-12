@@ -302,7 +302,7 @@ ReadFASTAGenome(
 
     AddRawContigToList(currentContig, &altContigs, &regularContigs, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names, opt_out_alt_names_count, maxSizeForAutomaticALT, autoALT);
 
-    Genome* genome = new Genome(fileSize + (nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + (nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1);
+    Genome* genome = new Genome(fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1, altContigs != NULL);
 
     char* paddingBuffer = new char[(GenomeDistance)chromosomePaddingSize + 1];
     for (unsigned i = 0; i < chromosomePaddingSize; i++) {

@@ -84,7 +84,7 @@ static void usage()
         "                   In particular, this will generally use less memory than the index will use once it's built, so if this doesn't work you\n"
         "                   won't be able to use the index anyway. However, if you've got sufficient memory to begin with, this option will just\n"
         "                   slow down the index build by doing extra, useless IO.\n"
-        " -AutoAlt          Automatically mark ALT contigs.  Any contig thats name ends in '_alt' (regardless of captialization) will be marked ALT.  Others will not.\n"
+        " -AutoAlt-         Don't automatically mark ALT contigs.  Otherwise, any contig thats name ends in '_alt' (regardless of captialization) will be marked ALT.  Others will not.\n"
 		" -maxAltContigSize Specify a size at or below which all contigs are automatically marked ALT, unless overriden by name using the args below\n"
 		" -altContigName    Specify the (case independent) name of an alt to mark a contig.  You can supply this parameter as often as you'd like\n"
 		" -altContigFile    Specify the name of a file with a list of alt contig names, one per line.  You may specify this as often as you'd like\n"
@@ -147,7 +147,7 @@ GenomeIndex::runIndexer(
 	char **altOptInList = NULL;
 	int nAltOptOut = 0;
 	char **altOptOutList = NULL;
-    bool autoALT = false;
+    bool autoALT = true;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -168,7 +168,7 @@ GenomeIndex::runIndexer(
             forceExact = true;
         } else if (strcmp(argv[n], "-hg19") == 0) {
 			WriteErrorMessage("The -hg19 flag is deprecated, ignoring it.\n");
-        } else if (strcmp(argv[n], "-locationSize") == 0) {
+        } else if (_stricmp(argv[n], "-locationSize") == 0) {
             if (n + 1 < argc) {
                 locationSize = atoi(argv[n+1]);
                 if (locationSize < 4 || locationSize > 8) {
@@ -200,7 +200,7 @@ GenomeIndex::runIndexer(
 		} else if (argv[n][0] == '-' && argv[n][1] == 's' && argv[n][2] == 'm') {
 			smallMemory = true;
 		}
-		else if (strcmp(argv[n], "-keysize") == 0) {
+		else if (_stricmp(argv[n], "-keysize") == 0) {
             if (n + 1 < argc) {
                 keySizeInBytes = atoi(argv[n+1]);
                 if (keySizeInBytes < 2 || keySizeInBytes > 8) {
@@ -216,8 +216,8 @@ GenomeIndex::runIndexer(
 		}
 		else if (!strcmp(argv[n], "-bSpace")) {
 			spaceIsAPieceNameTerminator = true;
-		} else if (!strcmp(argv[n], "-AutoAlt")) {
-            autoALT = true;
+		} else if (!_stricmp(argv[n], "-AutoAlt-")) {
+            autoALT = false;
 		} else if (!strcmp(argv[n], "-maxAltContigSize")) {
 			if (n + 1 < argc) {
 				maxSizeForAutomaticALT = atoll(argv[n + 1]);

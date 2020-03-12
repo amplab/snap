@@ -344,6 +344,7 @@ Return Value:
     unsigned lookupsThisRun = 0;
 
     popularSeedsSkipped = 0;
+    nAddedToHashTable = 0;
 
     //
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
@@ -432,7 +433,7 @@ Return Value:
     TRACE("nPossibleSeeds: %d\n", nPossibleSeeds);
 
     unsigned nextSeedToTest = 0;
-    unsigned wrapCount = 0;
+    wrapCount = 0;
     lowestPossibleScoreOfAnyUnseenLocation[FORWARD] = lowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
     currRoundLowestPossibleScoreOfAnyUnseenLocation[FORWARD] = currRoundLowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
     mostSeedsContainingAnyParticularBase[FORWARD] = mostSeedsContainingAnyParticularBase[RC] = 1;  // Instead of tracking this for real, we're just conservative and use wrapCount+1.  It's faster.
@@ -542,7 +543,7 @@ Return Value:
         if (_DumpAlignments) {
             printf("\tSeed offset %2d, %4lld hits, %4lld rcHits.", nextSeedToTest, nHits[0], nHits[1]);
             for (int rc = 0; rc < 2; rc++) {
-                for (unsigned i = 0; i < __min(nHits[rc], 12); i++) {
+                for (unsigned i = 0; i < __min(nHits[rc], 2); i++) {
                     printf(" %sHit at %s.", rc == 1 ? "RC " : "", genome->genomeLocationInStringForm(doesGenomeIndexHave64BitLocations ? hits[rc][i].location : (_int64)hits32[rc][i], genomeLocationBuffer, genomeLocationBufferSize));
                 }
             }
@@ -649,6 +650,7 @@ Return Value:
                             _ASSERT(offset <= readLen - seedLen);
                             allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                 offset, &candidate, &hashTableElement);
+                            nAddedToHashTable++;
                     }
 
                     if (doAlignerPrefetch && (_int64)i + prefetchDepth < limit) {
@@ -732,6 +734,8 @@ Return Value:
 #ifdef  _DEBUG
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates non ALT-aware) at %llu\n", 
         primaryResult->score, primaryResult->mapq, scoresForAllAlignments.probabilityOfBestCandidate, scoresForAllAlignments.probabilityOfAllCandidates, primaryResult->location.location);
+    if (_DumpAlignments && firstALTResult->status != NotFound) printf("\tEmitting ALT result score %d MAPQ %d at %llu\n",
+        firstALTResult->score, firstALTResult->mapq, firstALTResult->location.location);
 #endif  // _DEBUG
 
     if (overflowedSecondaryResultsBuffer) {
@@ -859,6 +863,7 @@ Return Value:
             highestUsedWeightList = weightListToCheck;
         }
 
+
         if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit && !noTruncation) || forceResult) {
             if (weightListToCheck < minWeightToCheck) {
                 //
@@ -866,12 +871,12 @@ Return Value:
                 // answer.
                 //
                 ScoreSet *scoreSetOfFinalResult;
-                if (!altAwareness || scoresForNonAltAlignments.bestScore + maxScoreGapToPreferNonAltAlignment > scoresForAllAlignments.bestScore) {
+                if (!altAwareness || scoresForNonAltAlignments.bestScore > scoresForAllAlignments.bestScore + maxScoreGapToPreferNonAltAlignment) {
                     scoreSetOfFinalResult = &scoresForAllAlignments;
                     firstALTResult->status = NotFound;
                 } else {
                     scoreSetOfFinalResult = &scoresForNonAltAlignments;
-                    if (scoresForAllAlignments.bestScore <= scoresForNonAltAlignments.bestScore) {
+                    if (scoresForAllAlignments.bestScore <= scoresForNonAltAlignments.bestScore && scoresForAllAlignments.bestScoreGenomeLocation != scoresForNonAltAlignments.bestScoreGenomeLocation) {
                         scoresForAllAlignments.fillInSingleAlignmentResult(firstALTResult, popularSeedsSkipped);
                     } else {
                         firstALTResult->status = NotFound;
@@ -894,6 +899,7 @@ Return Value:
             // Nothing that we haven't already looked up can possibly be the answer.  Score what we've got and exit.
             //
             forceResult = true;
+
         } else if (weightListToCheck == 0) {
             //
             // No candidates, look for more.
@@ -935,14 +941,7 @@ Return Value:
                 GenomeLocation genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
                 GenomeLocation elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
 
-if (!strcmp(genome->getContigAtLocation(genomeLocation)->name, "chr1_KI270760v1_alt")) {
-    printf("ALT name %s\n", genome->getContigAtLocation(genomeLocation)->name);
-}
-
                 bool genomeLocationIsNonALT = !genome->isGenomeLocationALT(genomeLocation);
-if (!genomeLocationIsNonALT) {
-    printf("ALT hit!!\n");
-}
 
                 //
                 // We're about to run edit distance computation on the genome.  Launch a prefetch for it
@@ -1082,7 +1081,9 @@ if (!genomeLocationIsNonALT) {
 
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("Scored %s weight %2d limit %d, result %2d %s\n", genome->genomeLocationInStringForm(genomeLocation.location, genomeLocationBuffer, genomeLocationBufferSize), elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
+                if (_DumpAlignments) printf("Scored %s weight %2d limit %d, result %2d %s.  %d added to hash table\n", 
+                    genome->genomeLocationInStringForm(genomeLocation.location, genomeLocationBuffer, genomeLocationBufferSize), elementToScore->weight, scoreLimit, score, 
+                    (elementToScore->direction ? "RC" : ""), nAddedToHashTable);
 #endif  // _DEBUG
 
                 candidateToScore->score = score;
@@ -1127,7 +1128,7 @@ if (!genomeLocationIsNonALT) {
                 //
                 HashTableElement *nearbyElement;
                 GenomeLocation nearbyGenomeLocation;
-                if (-1 != score) {
+                if (-1 != score && score < 2) {
                     nearbyGenomeLocation = elementGenomeLocation + (2*(GenomeLocationAsInt64(elementGenomeLocation) % hashTableElementSize / (hashTableElementSize/2)) - 1) * (hashTableElementSize/2);
                     _ASSERT((GenomeLocationAsInt64(elementGenomeLocation) % hashTableElementSize >= (hashTableElementSize/2) ? elementGenomeLocation + (hashTableElementSize/2) : elementGenomeLocation - (hashTableElementSize/2)) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
 
