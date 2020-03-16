@@ -54,6 +54,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         bool                useAffineGap,
         bool                ignoreAlignmentAdjustmentsForOm,
 		bool				altAwareness,
+        bool                emitALTAlignments,
         PairedEndAligner    *underlyingPairedEndAligner_,
 	    unsigned            minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
@@ -70,7 +71,8 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
                                                 maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, 
                                                 noUkkonen, noOrderedEvaluation, noTruncation, useAffineGap, 
-                                                ignoreAlignmentAdjustmentsForOm, altAwareness, maxSecondaryAlignmentsPerContig, maxScoreGapToPreferNonAltAlignment , &lv, &reverseLV,
+                                                ignoreAlignmentAdjustmentsForOm, altAwareness, emitALTAlignments, maxSecondaryAlignmentsPerContig, 
+                                                maxScoreGapToPreferNonAltAlignment , &lv, &reverseLV,
                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore,
                                                 NULL, allocator);
     

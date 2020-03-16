@@ -133,6 +133,7 @@ SingleAlignerContext::runIterationThread()
             useAffineGap,
             ignoreAlignmentAdjustmentForOm,
 			altAwareness,
+            emitALTAlignments,
             maxScoreGapToPreferNonALTAlignment,
             maxSecondaryAlignmentsPerContig,
             NULL,               // LV (no need to cache in the single aligner)

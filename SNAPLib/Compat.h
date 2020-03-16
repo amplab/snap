@@ -69,6 +69,7 @@ int getpagesize();
 #include <stdint.h>
 #include <assert.h>
 #include <float.h>
+#include <limits.h>
 
 #ifdef __linux__
 #include <sched.h>  // For sched_setaffinity

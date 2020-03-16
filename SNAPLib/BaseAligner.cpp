@@ -62,6 +62,7 @@ BaseAligner::BaseAligner(
     bool            i_useAffineGap,
     bool            i_ignoreAlignmentAdjustmentsForOm,
 	bool            i_altAwareness,
+    bool            i_emitALTAlignments,
     int             i_maxScoreGapToPreferNonAltAlignment,
 	int             i_maxSecondaryAlignmentsPerContig,
     LandauVishkin<1>*i_landauVishkin,
@@ -82,7 +83,8 @@ BaseAligner::BaseAligner(
         gapOpenPenalty(i_gapOpenPenalty), gapExtendPenalty(i_gapExtendPenalty), minAGScore(i_minAGScore),
         minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
         alignmentAdjuster(i_genomeIndex->getGenome()), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm),
-		altAwareness(i_altAwareness), maxScoreGapToPreferNonAltAlignment(i_maxScoreGapToPreferNonAltAlignment)
+		altAwareness(i_altAwareness), emitALTAlignments(i_emitALTAlignments),
+        maxScoreGapToPreferNonAltAlignment(i_maxScoreGapToPreferNonAltAlignment)
 /*++
 
 Routine Description:
@@ -751,7 +753,7 @@ BaseAligner::score(
         bool                     forceResult,
         Read                    *read[NUM_DIRECTIONS],
         SingleAlignmentResult   *primaryResult,
-        SingleAlignmentResult   *firstALTResult,                        // This only gets filled in if there's a good ALT result that's not the primary result.
+        SingleAlignmentResult   *firstALTResult,                        // This only gets filled in if there's a good ALT result that's not the primary result && emitALTAlignments
         int                      maxEditDistanceForSecondaryResults,
         _int64                   secondaryResultBufferSize,
         _int64                  *nSecondaryResults,
@@ -876,7 +878,7 @@ Return Value:
                     firstALTResult->status = NotFound;
                 } else {
                     scoreSetOfFinalResult = &scoresForNonAltAlignments;
-                    if (scoresForAllAlignments.bestScore <= scoresForNonAltAlignments.bestScore && scoresForAllAlignments.bestScoreGenomeLocation != scoresForNonAltAlignments.bestScoreGenomeLocation) {
+                    if (emitALTAlignments && scoresForAllAlignments.bestScore <= scoresForNonAltAlignments.bestScore && scoresForAllAlignments.bestScoreGenomeLocation != scoresForNonAltAlignments.bestScoreGenomeLocation) {
                         scoresForAllAlignments.fillInSingleAlignmentResult(firstALTResult, popularSeedsSkipped);
                     } else {
                         firstALTResult->status = NotFound;

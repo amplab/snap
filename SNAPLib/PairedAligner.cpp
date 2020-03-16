@@ -506,6 +506,7 @@ void PairedAlignerContext::runIterationThread()
         useAffineGap,
         ignoreAlignmentAdjustmentForOm,
 		altAwareness,
+        emitALTAlignments,
         intersectingAligner,
 		minReadLength,
         maxSecondaryAlignmentsPerContig,

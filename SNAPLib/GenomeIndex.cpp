@@ -253,7 +253,7 @@ GenomeIndex::runIndexer(
 					if (NULL != strchr(contigNameBuffer, '\n')) {
 						*strchr(contigNameBuffer, '\n') = '\0';
 					}
-					if (NULL == strchr(contigNameBuffer, '\r')) {
+					if (NULL != strchr(contigNameBuffer, '\r')) {
 						*strchr(contigNameBuffer, '\r') = '\0';
 					}
 					addToCountedListOfStrings(contigNameBuffer, &nAltOptIn, &altOptInList);
@@ -279,7 +279,7 @@ GenomeIndex::runIndexer(
 					if (NULL != strchr(contigNameBuffer, '\n')) {
 						*strchr(contigNameBuffer, '\n') = '\0';
 					}
-					if (NULL == strchr(contigNameBuffer, '\r')) {
+					if (NULL != strchr(contigNameBuffer, '\r')) {
 						*strchr(contigNameBuffer, '\r') = '\0';
 					}
 					addToCountedListOfStrings(contigNameBuffer, &nAltOptOut, &altOptOutList);

@@ -58,6 +58,7 @@ public:
         bool            i_useAffineGap,           
         bool            i_ignoreAlignmentAdjustmentsForOm,
 		bool			i_altAwareness,
+        bool            i_emitALTAlignments,
         int             i_maxScoreGapToPreferNonAltAlignment,
 		int             i_maxSecondaryAlignmentsPerContig,
         LandauVishkin<1>*i_landauVishkin = NULL,
@@ -134,6 +135,7 @@ private:
     LandauVishkin<-1> *reverseLandauVishkin;
     bool ownLandauVishkin;
 	bool altAwareness;
+    bool emitALTAlignments;
     int maxScoreGapToPreferNonAltAlignment;
 
     // AffineGap<> *affineGap;

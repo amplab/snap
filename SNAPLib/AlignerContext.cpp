@@ -182,6 +182,7 @@ AlignerContext::initialize()
 	noTruncation = options->noTruncation;
     ignoreAlignmentAdjustmentForOm = options->ignoreAlignmentAdjustmentsForOm;
 	altAwareness = options->altAwareness;
+    emitALTAlignments = options->emitALTAlignments;
     maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
 	maxSecondaryAlignments = options->maxSecondaryAlignments;
     maxSecondaryAlignmentsPerContig = options->maxSecondaryAlignmentsPerContig;

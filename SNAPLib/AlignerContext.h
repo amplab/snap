@@ -117,6 +117,7 @@ public:
     bool                                 useAffineGap;
     bool                                 ignoreAlignmentAdjustmentForOm;
 	bool								 altAwareness;
+    bool                                 emitALTAlignments;
     int                                  maxSecondaryAlignmentAdditionalEditDistance;
 	int									 maxSecondaryAlignments;
     int                                  maxSecondaryAlignmentsPerContig;

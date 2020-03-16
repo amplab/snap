@@ -90,6 +90,7 @@ AlignerOptions::AlignerOptions(
     ignoreAlignmentAdjustmentsForOm(true),
     emitInternalScore(false),
 	altAwareness(true),
+    emitALTAlignments(false),
     maxScoreGapToPreferNonALTAlignment(2)
 {
     if (forPairedEnd) {
@@ -224,9 +225,11 @@ AlignerOptions::usage()
             "           cost for opening a gap -go (default: %u)\n"
             "           cost for extending a gap -ge (default: %u)\n"
             "           minimum score threshold for read -gt (default: %u)\n"
-            "  -A-  Disable ALT awareness.  The default is to try to map reads to the primary assembly and to generate ALT hits with the supplementary\n"
-            "       alignment SAM flag (0x800), and to compute MAPQ for non-ALT alignments using only non-ALT hits.  This flag disables that behavior and\n"
-            "       results in ALT-oblivious behavior."
+            "  -A-  Disable ALT awareness.  The default is to try to map reads to the primary assembly and only to choose ALT alignments when they're much better,\n"
+            "       and to compute MAPQ for non-ALT alignments using only non-ALT hits. This flag disables that behavior and results in ALT-oblivious behavior.\n"
+            "  -ea  Emit ALT alignments.  When the aligner is ALT aware (i.e., -A- isn't specified) if it finds an ALT alignment that would have been\n"
+            "       the primary alignment if -A- had been specified but isn't without -A-, SNAP will emit the read with the supplementary alignment\n"
+            "       flag set and MAPQ computed across all potential mappings, both primary and ALT\n"
             "  -asg Maximum score gap to prefer a non-ALT alignment.  If the best non-ALT alignment is more than this much worse than the best ALT alignment\n"
             "       emit the ALT alignment as the primary result rather than as a supplementary result. (default: %u)\n"
 		,
@@ -824,7 +827,7 @@ AlignerOptions::usage()
                                 WriteErrorMessage("The ID tag on the read group line specified by -R must not be empty\n");
                                 return false;
                             }
-                            char* newReadGroup = new char[idTagSize + 1]; // +1 for null.
+                            char* newReadGroup = new char[(size_t)idTagSize + 1]; // +1 for null.
                             memcpy(newReadGroup, buffer + i + 1, idTagSize);
                             newReadGroup[idTagSize] = '\0';
                             defaultReadGroup = newReadGroup; // +1 for null.
@@ -933,8 +936,12 @@ AlignerOptions::usage()
                 }
             }
             return true;
-        } else if (strcmp(argv[n], "-A-") == 0) {
+        }
+        else if (strcmp(argv[n], "-A-") == 0) {
             altAwareness = false;
+            return true;
+        } else if (strcmp(argv[n], "-ea") == 0) {
+            emitALTAlignments = true;
             return true;
         } else if (strcmp(argv[n], "-asg") == 0) {
             if (n + 1 < argc) {
