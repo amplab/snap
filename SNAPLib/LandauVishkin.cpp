@@ -164,7 +164,7 @@ int LandauVishkinWithCigar::computeEditDistance(
     const char* t = text;
     char* cigarBufStart = cigarBuf;
     if (NULL == text) {
-        return -1;            // This happens when we're trying to read past the end of the genome.
+        return ScoreAboveLimit;            // This happens when we're trying to read past the end of the genome.
     }
 
     int end = min(patternLen, textLen);
@@ -293,7 +293,7 @@ done1:
 
     // Could not align strings with at most K edits
     *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
-    return -1;
+    return ScoreAboveLimit;
 
 got_answer:
 	// We're done. First, let's see whether we can reach e errors with no indels. Otherwise, we'll
@@ -637,7 +637,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     } else {
         bool ok = BAMAlignment::decodeCigar(cigarBuf, cigarBufLen, bamOps, bamOpCount);
         if (! ok) {
-            return -1;
+            return ScoreAboveLimit;
         }
         if (o_cigarBufUsed != NULL) {
             *o_cigarBufUsed = (int)strlen(cigarBuf) + 1;

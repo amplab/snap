@@ -371,6 +371,11 @@ SimpleReadWriter::writePairs(
     size_t staticUsedBuffer[NUM_READS_PER_PAIR][staticUsedBufferSize];
     GenomeLocation staticLocationBuffer[NUM_READS_PER_PAIR][staticUsedBufferSize];
 
+    _int64 NullNSingleResults[NUM_READS_PER_PAIR] = { 0,0 };
+    if (NULL == nSingleResults) {
+        nSingleResults = NullNSingleResults;
+    }
+
     checkIfTooSlow();
 
     GenomeLocation *finalLocations[NUM_READS_PER_PAIR];
@@ -558,8 +563,7 @@ SimpleReadWriter::writePairs(
                 if (locations[0] <= locations[1]) {
                     newWriteOrder[0] = 0;
                     newWriteOrder[1] = 1;
-                }
-                else {
+                } else {
                     newWriteOrder[0] = 1;
                     newWriteOrder[1] = 0;
                 }
@@ -626,8 +630,7 @@ SimpleReadWriter::writePairs(
                             }
                         }
                     }
-                }
-                else {
+                } else {
                     while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
                         reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
                         true, singleResults[whichRead][whichAlignment].supplementary, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag)) {

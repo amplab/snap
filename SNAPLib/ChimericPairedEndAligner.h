@@ -109,4 +109,6 @@ private:
 
 	GenomeIndex *index;
 	unsigned	minReadLength;
+
+    bool emitALTAlignments;
 };

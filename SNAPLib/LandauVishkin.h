@@ -15,6 +15,7 @@ extern double *lv_indelProbabilities;  // Maps indels by length to probability o
 extern double *lv_phredToProbability;  // Maps ASCII phred character to probability of error, including 
 extern double *lv_perfectMatchProbability; // Probability that a read of this length has no mutations
 
+#if 0 // This appears to be unused
 struct LVResult {
     short k;
     short result;
@@ -32,8 +33,7 @@ struct LVResult {
 
     inline bool isValid() { return k != -1; }
 };
-
-
+#endif // 0 
 
 static inline void memsetint(int* p, int value, int count)
 {
@@ -92,7 +92,7 @@ public:
 {
 }
 
-    // Compute the edit distance between two strings, if it is <= k, or return -1 otherwise.
+    // Compute the edit distance between two strings, if it is <= k, or return ScoreAboveLimit otherwise.
 
 	//
 	// The essential method is to build up the L array row by row.  L[e][d] is the farthest that you can get
@@ -149,7 +149,7 @@ public:
         if (NULL != matchProbability) {
             *matchProbability = 0.0;
         }
-        return -1;
+        return ScoreAboveLimit;
     }
  
     if (NULL != matchProbability) {
@@ -179,7 +179,7 @@ public:
             //
             // The deletions at the end pushed us oevr the score limit.
             //
-            return -1;
+            return ScoreAboveLimit;
         }
         return result;
     }
@@ -265,7 +265,7 @@ public:
     } // for e
 
 	if (MAX_K + 1 == lastBestD) {
-		return -1;
+		return ScoreAboveLimit;
 	}
 
 got_answer:
@@ -481,7 +481,7 @@ public:
     LandauVishkinWithCigar();
 
     // Compute the edit distance between two strings and write the CIGAR string in cigarBuf.
-    // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
+    // Returns ScoreAboveLimit if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
     int computeEditDistance(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
                             CigarFormat format = COMPACT_CIGAR_STRING,
@@ -525,3 +525,5 @@ private:
     int backtraceMatched[MAX_K+1];
     int backtraceD[MAX_K+1];
 };
+
+const int ScoreAboveLimit = -1; // A score value that means "we didn't compute the score because it was above the score limit."

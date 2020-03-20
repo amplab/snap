@@ -53,6 +53,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         bool          useAffineGap_,    
         bool          ignoreAlignmentAdjustmentsForOm_,
 		bool		  altAwareness_,
+        unsigned      maxScoreGapToPreferNonAltAlignment_,
         unsigned      matchReward_,
         unsigned      subPenalty_,
         unsigned      gapOpenPenalty_,
@@ -62,7 +63,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
     extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), useAffineGap(useAffineGap_),
     maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), altAwareness(altAwareness_),
-    matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), minAGScore(minAGScore_)
+    maxScoreGapToPreferNonAltAlignment(maxScoreGapToPreferNonAltAlignment_), matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), minAGScore(minAGScore_)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -110,6 +111,7 @@ IntersectingPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, un
     CountingBigAllocator countingAllocator;
     {
         IntersectingPairedEndAligner aligner; // This has to be in a nested scope so its destructor is called before that of the countingAllocator
+
         aligner.index = index;
         aligner.doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -215,14 +217,10 @@ IntersectingPairedEndAligner::align(
 
     Read rcReads[NUM_READS_PER_PAIR];
 
-    GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
-    Direction bestResultDirection[NUM_READS_PER_PAIR];
-    unsigned bestResultScore[NUM_READS_PER_PAIR];
+    ScoreSet scoresForAllAlignments;
+    ScoreSet scoresForNonAltAlignments;
+
     unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
-    bool bestResultUsedAffineGapScoring[NUM_READS_PER_PAIR] = { false };
-    int bestResultBasesClippedBefore[NUM_READS_PER_PAIR] = { 0 };
-    int bestResultBasesClippedAfter[NUM_READS_PER_PAIR] = { 0 };
-    int bestResultAGScore[NUM_READS_PER_PAIR] = { 0 };
 
     reads[0][FORWARD] = read0;
     reads[1][FORWARD] = read1;
@@ -295,11 +293,10 @@ IntersectingPairedEndAligner::align(
     // Initialize the member variables that are effectively stack locals, but are in the object
     // to avoid having to pass them to score.
     //
-    double probabilityOfBestPair = 0;
+    
     localBestPairProbability[0] = 0;
     localBestPairProbability[1] = 0;
-    double probabilityOfAllPairs = 0;
-    unsigned bestPairScore = 65536;
+    
     unsigned scoreLimit = maxK + extraSearchDepth;
 
     //
@@ -516,8 +513,10 @@ IntersectingPairedEndAligner::align(
 
 #ifdef _DEBUG
                 if (_DumpAlignments) {
-                    printf("SetPair %d, added more hits candidate %d at genome location %llu, bestPossibleScore %d, seedOffset %d\n",
-                            whichSetPair, lowestFreeScoringMateCandidate[whichSetPair], lastGenomeLocationForReadWithMoreHits.location,
+                    printf("SetPair %d, added more hits candidate %d at genome location %s:%llu, bestPossibleScore %d, seedOffset %d\n",
+                            whichSetPair, lowestFreeScoringMateCandidate[whichSetPair], 
+                            genome->getContigAtLocation(lastGenomeLocationForReadWithMoreHits)->name,
+                            lastGenomeLocationForReadWithMoreHits - genome->getContigAtLocation(lastGenomeLocationForReadWithMoreHits)->beginningLocation,
                             bestPossibleScoreForReadWithMoreHits,
                             lastSeedOffsetForReadWithMoreHits);
                 }
@@ -579,8 +578,9 @@ IntersectingPairedEndAligner::align(
 
 #ifdef _DEBUG
                 if (_DumpAlignments) {
-                    printf("SetPair %d, added fewer hits candidate %d at genome location %llu, bestPossibleScore %d, seedOffset %d\n",
-                            whichSetPair, lowestFreeScoringCandidatePoolEntry, lastGenomeLocationForReadWithFewerHits.location,
+                    printf("SetPair %d, added fewer hits candidate %d at genome location %s:%llu, bestPossibleScore %d, seedOffset %d\n",
+                            whichSetPair, lowestFreeScoringCandidatePoolEntry, 
+                            genome->getContigAtLocation(lastGenomeLocationForReadWithFewerHits)->name, lastGenomeLocationForReadWithFewerHits - genome->getContigAtLocation(lastGenomeLocationForReadWithFewerHits)->beginningLocation,
                             lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits,
                             lastSeedOffsetForReadWithFewerHits);
                 }
@@ -623,21 +623,26 @@ IntersectingPairedEndAligner::align(
         double fewerEndMatchProbability;
         int fewerEndGenomeLocationOffset;
 
+        bool nonALTAlignment = (!altAwareness) || !genome->isGenomeLocationALT(candidate->readWithFewerHitsGenomeLocation);
+
         scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsGenomeLocation,
             candidate->seedOffset, scoreLimit, &fewerEndScore, &fewerEndMatchProbability, &fewerEndGenomeLocationOffset, &candidate->usedAffineGapScoring,
             &candidate->basesClippedBefore, &candidate->basesClippedAfter, &candidate->agScore);
 
-        _ASSERT(-1 == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
+        _ASSERT(ScoreAboveLimit == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
 
 #ifdef _DEBUG
         if (_DumpAlignments) {
-            printf("Scored fewer end candidate %d, set pair %d, read %d, location %llu, seed offset %d, score limit %d, score %d, offset %d\n", (int)(candidate - scoringCandidatePool),
-                candidate->whichSetPair, readWithFewerHits, candidate->readWithFewerHitsGenomeLocation.location, candidate->seedOffset,
+            printf("Scored fewer end candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d\n", (int)(candidate - scoringCandidatePool),
+                candidate->whichSetPair, readWithFewerHits, 
+                genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation)->name, 
+                candidate->readWithFewerHitsGenomeLocation - genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation)->beginningLocation,
+                candidate->seedOffset,
                 scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset);
         }
 #endif // DEBUG
 
-        if (fewerEndScore != -1) {
+        if (fewerEndScore != ScoreAboveLimit) {
             //
             // Find and score mates.  The index in scoringMateCandidateIndex is the lowest mate (i.e., the highest index number).
             //
@@ -656,24 +661,26 @@ IntersectingPairedEndAligner::align(
                     // If we haven't yet scored this mate, or we've scored it and not gotten an answer, but had a higher score limit than we'd
                     // use now, score it.
                     //
-                    if (mate->score == -2 || mate->score == -1 && mate->scoreLimit < scoreLimit - fewerEndScore) {
+                    if (mate->score == ScoringMateCandidate::LocationNotYetScored || mate->score == ScoreAboveLimit && mate->scoreLimit < scoreLimit - fewerEndScore) {
 	                    scoreLocation(readWithMoreHits, setPairDirection[candidate->whichSetPair][readWithMoreHits], GenomeLocationAsInt64(mate->readWithMoreHitsGenomeLocation),
                             mate->seedOffset, scoreLimit - fewerEndScore, &mate->score, &mate->matchProbability,
                             &mate->genomeOffset, &mate->usedAffineGapScoring, &mate->basesClippedBefore, &mate->basesClippedAfter, &mate->agScore);
 #ifdef _DEBUG
                         if (_DumpAlignments) {
-                            printf("Scored mate candidate %d, set pair %d, read %d, location %llu, seed offset %d, score limit %d, score %d, offset %d\n",
-                                (int)(mate - scoringMateCandidates[candidate->whichSetPair]), candidate->whichSetPair, readWithMoreHits, mate->readWithMoreHitsGenomeLocation.location,
+                            printf("Scored mate candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d\n",
+                                (int)(mate - scoringMateCandidates[candidate->whichSetPair]), candidate->whichSetPair, readWithMoreHits, 
+                                genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation)->name,
+                                mate->readWithMoreHitsGenomeLocation - genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation)->beginningLocation,
                                 mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset);
                         }
 #endif // _DEBUG
 
-                        _ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
+                        _ASSERT(ScoreAboveLimit == mate->score || mate->score >= mate->bestPossibleScore);
 
                         mate->scoreLimit = scoreLimit - fewerEndScore;
                     }
 
-                    if (mate->score != -1) {
+                    if (mate->score != ScoreAboveLimit) {
                         double pairProbability = mate->matchProbability * fewerEndMatchProbability;
                         unsigned pairScore = mate->score + fewerEndScore;
                         //
@@ -713,7 +720,7 @@ IntersectingPairedEndAligner::align(
                             }
                         }
 
-                        bool merged;
+                        bool eliminatedByMerge; // Did we merge away this result.  If this is false, we may still have merged away a previous result.
 
                         double oldPairProbability;
 
@@ -730,128 +737,115 @@ IntersectingPairedEndAligner::align(
                             mergeAnchor->init(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
                                 pairProbability, pairScore);
 
-                            merged = false;
+                            eliminatedByMerge = false;
                             oldPairProbability = 0;
                             candidate->mergeAnchor = mergeAnchor;
                         } else {
-                            merged = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
+                            eliminatedByMerge = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
                                 pairProbability, pairScore, &oldPairProbability);
                         }
 
-                        if (!merged) {
+                        if (!eliminatedByMerge) {
                             //
                             // Back out the probability of the old match that we're merged with, if any.  The max
                             // is necessary because a + b - b is not necessarily a in floating point.  If there
-                            // was no merge, the oldPairProbability is 0.
+                            // was no merge, the oldPairProbability is 0. 
                             //
-                            probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
 
-                            bool isBestHit = false;
-
-                            // if (pairScore <= maxK && (pairScore < bestPairScore ||
-                            //    (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
-                            if (pairProbability > probabilityOfBestPair) {
-								//
-                                // A new best hit.
-                                //
-                                if (maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= bestPairScore - pairScore) {
-                                    //
-                                    // Move the old best to be a secondary alignment.  This won't happen on the first time we get a valid alignment,
-                                    // because bestPairScore is initialized to be very large.
-                                    //
-                                    //
-                                    if (*nSecondaryResults >= secondaryResultBufferSize) {
-                                        *nSecondaryResults = secondaryResultBufferSize + 1;
-                                        return false;
-                                    }
-
-                                    PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-                                    result->alignedAsPair = true;
-                                    result->fromAlignTogether = true;
-
-                                    for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-                                        result->direction[r] = bestResultDirection[r];
-                                        result->location[r] = bestResultGenomeLocation[r];
-                                        result->mapq[r] = 0;
-                                        result->score[r] = bestResultScore[r];
-                                        result->status[r] = MultipleHits;
-                                        result->usedAffineGapScoring[r] = bestResultUsedAffineGapScoring[r];
-                                        result->basesClippedBefore[r] = bestResultBasesClippedBefore[r];
-                                        result->basesClippedAfter[r] = bestResultBasesClippedAfter[r];
-                                        result->agScore[r] = bestResultAGScore[r];
-                                    }
- 
-                                    (*nSecondaryResults)++;
-
-                                }
-                                bestPairScore = pairScore;
-                                probabilityOfBestPair = pairProbability;
-                                bestResultGenomeLocation[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
-                                bestResultGenomeLocation[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
-                                bestResultScore[readWithFewerHits] = fewerEndScore;
-                                bestResultScore[readWithMoreHits] = mate->score;
-                                bestResultDirection[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
-                                bestResultDirection[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
-                                bestResultUsedAffineGapScoring[readWithFewerHits] = candidate->usedAffineGapScoring;
-                                bestResultUsedAffineGapScoring[readWithMoreHits] = mate->usedAffineGapScoring;
-                                bestResultBasesClippedBefore[readWithFewerHits] = candidate->basesClippedBefore;
-                                bestResultBasesClippedAfter[readWithFewerHits] = candidate->basesClippedAfter;
-                                bestResultBasesClippedBefore[readWithMoreHits] = mate->basesClippedBefore;
-                                bestResultBasesClippedAfter[readWithMoreHits] = mate->basesClippedAfter;
-                                bestResultAGScore[readWithFewerHits] = candidate->agScore;
-                                bestResultAGScore[readWithMoreHits] = mate->agScore;
-
-                                if (!noUkkonen) {
-                                    scoreLimit = bestPairScore + extraSearchDepth;
-                                }
-
-                                isBestHit = true;
-                            } else {
-                                if (maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - bestPairScore) {
-                                    //
-                                    // A secondary result to save.
-                                    //
-                                    if (*nSecondaryResults >= secondaryResultBufferSize) {
-                                        *nSecondaryResults = secondaryResultBufferSize + 1;
-                                        return false;
-                                    }
-
-                                    PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-                                    result->alignedAsPair = true;
-                                    result->direction[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
-                                    result->direction[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
-                                    result->fromAlignTogether = true;
-                                    result->location[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
-                                    result->location[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
-                                    result->mapq[0] = result->mapq[1] = 0;
-                                    result->score[readWithMoreHits] = mate->score;
-                                    result->score[readWithFewerHits] = fewerEndScore;
-                                    result->status[readWithFewerHits] = result->status[readWithMoreHits] = MultipleHits;
-                                    result->usedAffineGapScoring[readWithMoreHits] = mate->usedAffineGapScoring;
-                                    result->usedAffineGapScoring[readWithFewerHits] = candidate->usedAffineGapScoring;
-                                    result->basesClippedBefore[readWithFewerHits] = candidate->basesClippedBefore;
-                                    result->basesClippedAfter[readWithFewerHits] = candidate->basesClippedAfter;
-                                    result->basesClippedBefore[readWithMoreHits] = mate->basesClippedBefore;
-                                    result->basesClippedAfter[readWithMoreHits] = mate->basesClippedAfter;
-                                    result->agScore[readWithMoreHits] = mate->agScore;
-                                    result->agScore[readWithFewerHits] = candidate->agScore;
-
-                                    (*nSecondaryResults)++;
-                                }
+                            scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbability);
+                            if (nonALTAlignment) {
+                                scoresForNonAltAlignments.updateProbabilityOfAllPairs(oldPairProbability);
                             }
 
-                            probabilityOfAllPairs += pairProbability;
+                            if (pairProbability > scoresForAllAlignments.probabilityOfBestPair && maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= scoresForAllAlignments.bestPairScore - pairScore) {
+                                //
+                                // Move the old best to be a secondary alignment.  This won't happen on the first time we get a valid alignment,
+                                // because bestPairScore is initialized to be very large.
+                                //
+                                //
+                                if (*nSecondaryResults >= secondaryResultBufferSize) {
+                                    *nSecondaryResults = secondaryResultBufferSize + 1;
+                                    return false;
+                                }
+
+                                PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                                result->alignedAsPair = true;
+                                result->fromAlignTogether = true;
+
+                                for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+                                    result->direction[r] = scoresForAllAlignments.bestResultDirection[r];
+                                    result->location[r] = scoresForAllAlignments.bestResultGenomeLocation[r];
+                                    result->mapq[r] = 0;
+                                    result->score[r] = scoresForAllAlignments.bestResultScore[r];
+                                    result->status[r] = MultipleHits;
+                                    result->usedAffineGapScoring[r] = scoresForAllAlignments.bestResultUsedAffineGapScoring[r];
+                                    result->basesClippedBefore[r] = scoresForAllAlignments.bestResultBasesClippedBefore[r];
+                                    result->basesClippedAfter[r] = scoresForAllAlignments.bestResultBasesClippedAfter[r];
+                                    result->agScore[r] = scoresForAllAlignments.bestResultAGScore[r];
+                                }
+ 
+                                (*nSecondaryResults)++;
+
+                            } // If we're saving the old best score as a secondary result
+
+                            if (nonALTAlignment) {
+                                scoresForNonAltAlignments.updateBestHitIfNeeded(pairScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
+                            }
+
+                            bool updatedBestScore = scoresForAllAlignments.updateBestHitIfNeeded(pairScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
+
+                            if (!noUkkonen) {
+                                scoreLimit = __min(scoresForNonAltAlignments.bestPairScore + extraSearchDepth, scoresForAllAlignments.bestPairScore + extraSearchDepth + maxScoreGapToPreferNonAltAlignment);
+                            }
+                            
+                            if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore) {
+                                
+                                //
+                                // A secondary result to save.
+                                //
+                                if (*nSecondaryResults >= secondaryResultBufferSize) {
+                                    *nSecondaryResults = secondaryResultBufferSize + 1;
+                                    return false;
+                                }
+
+                                PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                                result->alignedAsPair = true;
+                                result->direction[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
+                                result->direction[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
+                                result->fromAlignTogether = true;
+                                result->location[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
+                                result->location[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
+                                result->mapq[0] = result->mapq[1] = 0;
+                                result->score[readWithMoreHits] = mate->score;
+                                result->score[readWithFewerHits] = fewerEndScore;
+                                result->status[readWithFewerHits] = result->status[readWithMoreHits] = MultipleHits;
+                                result->usedAffineGapScoring[readWithMoreHits] = mate->usedAffineGapScoring;
+                                result->usedAffineGapScoring[readWithFewerHits] = candidate->usedAffineGapScoring;
+                                result->basesClippedBefore[readWithFewerHits] = candidate->basesClippedBefore;
+                                result->basesClippedAfter[readWithFewerHits] = candidate->basesClippedAfter;
+                                result->basesClippedBefore[readWithMoreHits] = mate->basesClippedBefore;
+                                result->basesClippedAfter[readWithMoreHits] = mate->basesClippedAfter;
+                                result->agScore[readWithMoreHits] = mate->agScore;
+                                result->agScore[readWithFewerHits] = candidate->agScore;
+
+                                (*nSecondaryResults)++;
+                            }
+
+                            
     #ifdef  _DEBUG
                             if (_DumpAlignments) {
-                                printf("Added %e (= %e * %e) @ (%llu, %llu), giving new probability of all pairs %e, score %d = %d + %d%s\n",
+                                printf("Added %e (= %e * %e) @ (%s:%llu, %s:%llu), giving new probability of all pairs %e, score %d = %d + %d%s\n",
                                     pairProbability, mate->matchProbability , fewerEndMatchProbability,
-                                    candidate->readWithFewerHitsGenomeLocation.location + fewerEndGenomeLocationOffset, mate->readWithMoreHitsGenomeLocation.location + mate->genomeOffset,
-                                    probabilityOfAllPairs,
-                                    pairScore, fewerEndScore, mate->score, isBestHit ? " New best hit" : "");
+                                    genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation.location + fewerEndGenomeLocationOffset)->name,
+                                    (candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset) - genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation.location + fewerEndGenomeLocationOffset)->beginningLocation,
+                                    genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset)->name,
+                                    (mate->readWithMoreHitsGenomeLocation + mate->genomeOffset) - genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation.location + mate->genomeOffset)->beginningLocation,
+                                    scoresForNonAltAlignments.probabilityOfAllPairs,
+                                    pairScore, fewerEndScore, mate->score, updatedBestScore ? " New best hit" : "");
                             }
     #endif  // _DEBUG
 
-                            if (probabilityOfAllPairs >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
+                            if ((altAwareness ? scoresForNonAltAlignments.probabilityOfAllPairs : scoresForAllAlignments.probabilityOfAllPairs) >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
                                 //
                                 // Nothing will rescue us from a 0 MAPQ, so just stop looking.
                                 //
@@ -878,46 +872,75 @@ IntersectingPairedEndAligner::align(
         scoringCandidates[currentBestPossibleScoreList] = candidate->scoreListNext;
      }
 
-doneScoring:
+ doneScoring:
 
-    if (bestPairScore == 65536) {
+     ScoreSet* scoreSetToEmit;
+     if ((!altAwareness) || scoresForNonAltAlignments.bestPairScore > scoresForAllAlignments.bestPairScore + maxScoreGapToPreferNonAltAlignment) {
+         scoreSetToEmit = &scoresForAllAlignments;
+     } else {
+         scoreSetToEmit = &scoresForNonAltAlignments;
+     }
+
+    if (scoreSetToEmit->bestPairScore == 65536) {
         //
         // Found nothing.
         //
         for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
             result->location[whichRead] = InvalidGenomeLocation;
             result->mapq[whichRead] = 0;
-            result->score[whichRead] = -1;
+            result->score[whichRead] = ScoreAboveLimit;
             result->status[whichRead] = NotFound;
             result->clippingForReadAdjustment[whichRead] = 0;
             result->usedAffineGapScoring[whichRead] = false;
             result->basesClippedBefore[whichRead] = 0;
             result->basesClippedAfter[whichRead] = 0;
-            result->agScore[whichRead] = -1;
+            result->agScore[whichRead] = ScoreAboveLimit;
+
+            firstALTResult->status[whichRead] = NotFound;
 #ifdef  _DEBUG
             if (_DumpAlignments) {
                 printf("No sufficiently good pairs found.\n");
             }
 #endif  // DEBUG
         }
+
+        
     } else {
-        for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-            result->location[whichRead] = bestResultGenomeLocation[whichRead];
-            result->direction[whichRead] = bestResultDirection[whichRead];
-            result->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestResultScore[whichRead], popularSeedsSkipped[0] + popularSeedsSkipped[1]);
-            result->status[whichRead] = result->mapq[whichRead] > MAPQ_LIMIT_FOR_SINGLE_HIT ? SingleHit : MultipleHits;
-            result->score[whichRead] = bestResultScore[whichRead];
-            result->clippingForReadAdjustment[whichRead] = 0;
-            result->usedAffineGapScoring[whichRead] = bestResultUsedAffineGapScoring[whichRead];
-            result->basesClippedBefore[whichRead] = bestResultBasesClippedBefore[whichRead];
-            result->basesClippedAfter[whichRead] = bestResultBasesClippedAfter[whichRead];
-            result->agScore[whichRead] = bestResultAGScore[whichRead];
+        scoreSetToEmit->fillInResult(result, popularSeedsSkipped);
+        if (altAwareness && scoreSetToEmit == &scoresForNonAltAlignments &&
+            (scoresForAllAlignments.bestResultGenomeLocation[0] != scoresForNonAltAlignments.bestResultGenomeLocation[0] || 
+             scoresForAllAlignments.bestResultGenomeLocation[1] != scoresForNonAltAlignments.bestResultGenomeLocation[1]))
+
+        {
+            _ASSERT(genome->isGenomeLocationALT(scoresForAllAlignments.bestResultGenomeLocation[0]));
+            scoresForAllAlignments.fillInResult(firstALTResult, popularSeedsSkipped);
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++)
+            {
+                firstALTResult->supplementary[whichRead] = true;
+            }
+        } else {
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++)
+            {
+                firstALTResult->status[whichRead] = NotFound;
+            }
         }
 #ifdef  _DEBUG
             if (_DumpAlignments) {
-                printf("Returned %llu %s %llu %s with MAPQ %d and %d, probability of all pairs %e, probability of best pair %e\n",
-                    result->location[0].location, result->direction[0] == RC ? "RC" : "", result->location[1].location, result->direction[1] == RC ? "RC" : "", result->mapq[0], result->mapq[1],
-                    probabilityOfAllPairs, probabilityOfBestPair);
+                printf("Returned %s:%llu %s %s:%llu %s with MAPQ %d and %d, probability of all pairs %e, probability of best pair %e, pair score %d\n",
+                    genome->getContigAtLocation(result->location[0])->name, result->location[0] - genome->getContigAtLocation(result->location[0])->beginningLocation,
+                    result->direction[0] == RC ? "RC" : "", 
+                    genome->getContigAtLocation(result->location[1])->name, result->location[1] - genome->getContigAtLocation(result->location[1])->beginningLocation, 
+                    result->direction[1] == RC ? "RC" : "", result->mapq[0], result->mapq[1], scoreSetToEmit->probabilityOfAllPairs, scoreSetToEmit->probabilityOfBestPair,
+                    scoreSetToEmit->bestPairScore);
+
+                if (firstALTResult->status[0] != NotFound) {
+                    printf("Returned first ALT Result %s:%llu %s %s:%llu %s with MAPQ %d and %d, probability of all pairs %e, probability of best pair %e, pair score %d\n",
+                        genome->getContigAtLocation(firstALTResult->location[0])->name, firstALTResult->location[0] - genome->getContigAtLocation(firstALTResult->location[0])->beginningLocation,
+                        firstALTResult->direction[0] == RC ? "RC" : "",
+                        genome->getContigAtLocation(firstALTResult->location[1])->name, firstALTResult->location[1] - genome->getContigAtLocation(firstALTResult->location[1])->beginningLocation,
+                        firstALTResult->direction[1] == RC ? "RC" : "", firstALTResult->mapq[0], firstALTResult->mapq[1], scoresForAllAlignments.probabilityOfAllPairs, scoresForAllAlignments.probabilityOfBestPair,
+                        scoresForAllAlignments.bestPairScore);
+                } // If we're also returning an ALT result
             }
 #endif  // DEBUG
     }
@@ -938,7 +961,7 @@ doneScoring:
         //
         alignmentAdjuster.AdjustAlignments(inputReads, result);
         if (result->status[0] != NotFound && result->status[1] != NotFound && !ignoreAlignmentAdjustmentsForOm) {
-            bestPairScore = result->score[0] + result->score[1];
+            scoreSetToEmit->bestPairScore = result->score[0] + result->score[1];
         }
 
         for (int i = 0; i < *nSecondaryResults; i++) {
@@ -947,7 +970,7 @@ doneScoring:
             }
             alignmentAdjuster.AdjustAlignments(inputReads, &secondaryResults[i]);
             if (secondaryResults[i].status[0] != NotFound && secondaryResults[i].status[1] != NotFound && !ignoreAlignmentAdjustmentsForOm) {
-                bestPairScore = __min(bestPairScore, (unsigned)(secondaryResults[i].score[0] + secondaryResults[i].score[1]));
+                scoreSetToEmit->bestPairScore = __min(scoreSetToEmit->bestPairScore, (unsigned)(secondaryResults[i].score[0] + secondaryResults[i].score[1]));
             }
         }
     } else {
@@ -960,7 +983,7 @@ doneScoring:
 
     int i = 0;
     while (i < *nSecondaryResults) {
-        if ((int)(secondaryResults[i].score[0] + secondaryResults[i].score[1]) >(int)bestPairScore + maxEditDistanceForSecondaryResults || 
+        if ((int)(secondaryResults[i].score[0] + secondaryResults[i].score[1]) >(int)scoreSetToEmit->bestPairScore + maxEditDistanceForSecondaryResults ||
             secondaryResults[i].status[0] == NotFound || secondaryResults[i].status[1] == NotFound) {
 
             secondaryResults[i] = secondaryResults[(*nSecondaryResults) - 1];
@@ -1072,10 +1095,10 @@ IntersectingPairedEndAligner::scoreLocation(
     *genomeLocationOffset = 0;
 
     if (NULL == data) {
-        *score = -1;
+        *score = ScoreAboveLimit;
         *matchProbability = 0;
         *genomeLocationOffset = 0;
-        *agScore = -1;
+        *agScore = ScoreAboveLimit;
         return;
     }
 
@@ -1113,7 +1136,7 @@ IntersectingPairedEndAligner::scoreLocation(
 
     agScore1 = (seedLen + readLen - tailStart - score1) * matchReward - score1 * subPenalty;
 
-    if (score1 != -1) {
+    if (score1 != ScoreAboveLimit) {
         int limitLeft = scoreLimit - score1;
         totalIndels = 0;
         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
@@ -1121,7 +1144,7 @@ IntersectingPairedEndAligner::scoreLocation(
 
         agScore2 = (seedOffset - score2) * matchReward - score2 * subPenalty;
     }
-    if (score1 != -1 && score2 != -1) {
+    if (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit) {
         if (useAffineGap && (score1 + score2) > maxKForSameAlignment) {
             score1 = 0;  score2 = 0;  agScore1 = seedLen; agScore2 = 0;
             *usedAffineGapScoring = true;
@@ -1138,7 +1161,7 @@ IntersectingPairedEndAligner::scoreLocation(
                     &score1,
                     &matchProb1);
             }
-            if (score1 != -1) {
+            if (score1 != ScoreAboveLimit) {
                 if (seedOffset != 0) {
                     int limitLeft = scoreLimit - score1;
                     agScore2 = reverseAffineGap->computeScore(data + seedOffset,
@@ -1155,21 +1178,21 @@ IntersectingPairedEndAligner::scoreLocation(
 
                     agScore2 -= (seedLen);
 
-                    if (score2 == -1) {
-                        *score = -1;
+                    if (score2 == ScoreAboveLimit) {
+                        *score = ScoreAboveLimit;
                         *genomeLocationOffset = 0;
                         *agScore = 0;
                     }
                 }
             }
             else {
-                *score = -1;
+                *score = ScoreAboveLimit;
                 *genomeLocationOffset = 0;
                 *agScore = 0;
             }
         }
     }
-    if (score1 != -1 && score2 != -1) {
+    if (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit) {
         *score = score1 + score2;
         _ASSERT(*score <= scoreLimit);
         // Map probabilities for substrings can be multiplied, but make sure to count seed too
@@ -1178,7 +1201,7 @@ IntersectingPairedEndAligner::scoreLocation(
         *agScore = agScore1 + agScore2;
     }
     else {
-        *score = -1;
+        *score = ScoreAboveLimit;
         *agScore = 0;
         *matchProbability = 0;
     }
@@ -1553,5 +1576,55 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
 
     _ASSERT(!"NOTREACHED");
 }
+
+void IntersectingPairedEndAligner::ScoreSet::updateProbabilityOfAllPairs(double oldPairProbability) 
+{
+    probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
+}
+
+bool IntersectingPairedEndAligner::ScoreSet::updateBestHitIfNeeded(int pairScore, double pairProbability, int fewerEndScore, int readWithMoreHits, GenomeDistance fewerEndGenomeLocationOffset, ScoringCandidate* candidate, ScoringMateCandidate* mate)
+{
+    probabilityOfAllPairs += pairProbability;
+    int readWithFewerHits = 1 - readWithMoreHits;
+
+    if (pairProbability > probabilityOfBestPair) {
+        bestPairScore = pairScore;
+        probabilityOfBestPair = pairProbability;
+        bestResultGenomeLocation[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
+        bestResultGenomeLocation[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
+        bestResultScore[readWithFewerHits] = fewerEndScore;
+        bestResultScore[readWithMoreHits] = mate->score;
+        bestResultDirection[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
+        bestResultDirection[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
+        bestResultUsedAffineGapScoring[readWithFewerHits] = candidate->usedAffineGapScoring;
+        bestResultUsedAffineGapScoring[readWithMoreHits] = mate->usedAffineGapScoring;
+        bestResultBasesClippedBefore[readWithFewerHits] = candidate->basesClippedBefore;
+        bestResultBasesClippedAfter[readWithFewerHits] = candidate->basesClippedAfter;
+        bestResultBasesClippedBefore[readWithMoreHits] = mate->basesClippedBefore;
+        bestResultBasesClippedAfter[readWithMoreHits] = mate->basesClippedAfter;
+        bestResultAGScore[readWithFewerHits] = candidate->agScore;
+        bestResultAGScore[readWithMoreHits] = mate->agScore;
+
+        return true;
+    } else {
+        return false;
+    }
+} // updateBestHitIfNeeded
+
+void IntersectingPairedEndAligner::ScoreSet::fillInResult(PairedAlignmentResult* result, unsigned *popularSeedsSkipped) 
+{
+    for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+        result->location[whichRead] = bestResultGenomeLocation[whichRead];
+        result->direction[whichRead] = bestResultDirection[whichRead];
+        result->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestResultScore[whichRead], popularSeedsSkipped[0] + popularSeedsSkipped[1]);
+        result->status[whichRead] = result->mapq[whichRead] > MAPQ_LIMIT_FOR_SINGLE_HIT ? SingleHit : MultipleHits;
+        result->score[whichRead] = bestResultScore[whichRead];
+        result->clippingForReadAdjustment[whichRead] = 0;
+        result->usedAffineGapScoring[whichRead] = bestResultUsedAffineGapScoring[whichRead];
+        result->basesClippedBefore[whichRead] = bestResultBasesClippedBefore[whichRead];
+        result->basesClippedAfter[whichRead] = bestResultBasesClippedAfter[whichRead];
+        result->agScore[whichRead] = bestResultAGScore[whichRead];
+    } // for each read in the pair
+} // fillInResult
 
 const unsigned IntersectingPairedEndAligner::maxMergeDistance = 31;

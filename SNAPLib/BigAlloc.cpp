@@ -484,6 +484,12 @@ BigAllocator::~BigAllocator()
     BigDealloc(basePointer);
 }
 
+size_t
+BigAllocator::amountAllocated()
+{
+    return allocPointer - basePointer;
+}
+
 void *
 BigAllocator::allocate(size_t amountToAllocate)
 {
@@ -497,6 +503,7 @@ BigAllocator::allocate(size_t amountToAllocate)
 
     if (allocPointer + amountToAllocate > basePointer + maxMemory) {
         WriteErrorMessage("BigAllocator: allocating too much memory, %lld > %lld\n", allocPointer + amountToAllocate  - basePointer , maxMemory);
+        PrintBigAllocProfile(); // This is a noop unless PROFILE_BIG_ALLOC is defined (at the top of BigAlloc.h)
         soft_exit(1);
     }
  
@@ -533,7 +540,7 @@ BigAllocator::checkCanaries()
 
     void *
 CountingBigAllocator::allocate(size_t sizeToAllocate)
-{            
+{           
     size += sizeToAllocate + allocationGranularity - 1; // Add in the max roundoff
 
     Allocation *allocation = new Allocation;

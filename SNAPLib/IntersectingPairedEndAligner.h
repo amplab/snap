@@ -55,7 +55,8 @@ public:
 		bool		  noTruncation_,
         bool          useAffineGap_,
         bool          ignoreAlignmentAdjustmentsForOm_,
-		bool		  altAwareness,
+		bool		  altAwareness_,
+        unsigned      maxScoreGapToPreferNonAltAlignment_,
         unsigned      matchReward_,
         unsigned      subPenalty_,
         unsigned      gapOpenPenalty_,
@@ -153,6 +154,7 @@ private:
     bool            useAffineGap;
     bool            ignoreAlignmentAdjustmentsForOm;
 	bool			altAwareness;
+    unsigned        maxScoreGapToPreferNonAltAlignment;
 
     // Affine gap scoring parameters
     int             matchReward;
@@ -210,7 +212,7 @@ private:
         // lookup, it goes here.
         //
         GL singletonGenomeLocation[2];  // The [2] is because we need to look one before sometimes, and that allows space
-    };
+    }; // HashTableLookup
     
     //
     // A set of seed hits, represented by the lookups that came out of the big hash table.  It can be over 32 or
@@ -285,7 +287,7 @@ private:
         GenomeLocation                      mostRecentLocationReturned;
 		unsigned		                    maxMergeDistance;
         bool                                doesGenomeIndexHave64BitLocations;
-    };
+    }; // HashTableHitSet
 
     HashTableHitSet *                       hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
 
@@ -322,7 +324,7 @@ private:
         // matching things that are possibly much more than maxMatchDistance apart.
         //
         GenomeLocation  genomeLocationOfNearestMatchedCandidate;
-    };
+    }; // HitLocation
 
 
     char *rcReadData[NUM_READS_PER_PAIR];                   // the reverse complement of the data for each read
@@ -413,7 +415,7 @@ private:
         //
         bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, 
                         double *oldMatchProbability); 
-    };
+    }; // MergeAnchor
 
     //
     // We keep track of pairs of locations to score using two structs, one for each end.  The ends for the read with fewer hits points into
@@ -442,7 +444,7 @@ private:
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
             bestPossibleScore = bestPossibleScore_;
             seedOffset = seedOffset_;
-            score = -2;
+            score = LocationNotYetScored;
             scoreLimit = -1;
             matchProbability = 0;
             genomeOffset = 0;
@@ -451,7 +453,9 @@ private:
             basesClippedAfter = 0;
             agScore = 0;
         }
-    };
+
+        static const int LocationNotYetScored = -2;
+    }; // ScoringMateCandidate
 
     struct ScoringCandidate {
         ScoringCandidate *      scoreListNext;              // This is a singly-linked list
@@ -484,7 +488,7 @@ private:
             basesClippedAfter = 0;
             agScore = 0;
          }
-    };
+    }; // ScoringCandidate
 
     //
     // A pool of scoring candidates.  For each alignment call, we free them all by resetting lowestFreeScoringCandidatePoolEntry to 0,
@@ -519,9 +523,49 @@ private:
     struct HitsPerContigCounts {
         _int64  epoch;              // Rather than zeroing this whole array every time, we just bump the epoch number; results with an old epoch are considered zero
         int     hits;
-    };
+    }; // HitsPerContigCounts
 
     HitsPerContigCounts *hitsPerContigCounts;   // How many alignments are we reporting for each contig.  Used to implement -mpc, otheriwse unallocated.
     int maxSecondaryAlignmentsPerContig;
     _int64 contigCountEpoch;
-};
+
+    struct ScoreSet {
+        ScoreSet() {
+            init();
+        }
+
+        void init() {
+            for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
+                bestResultGenomeLocation[i] = InvalidGenomeLocation;
+                bestResultScore[i] = ScoreAboveLimit;
+                bestResultBasesClippedBefore[i] = 0;
+                bestResultBasesClippedAfter[i] = 0;
+                bestResultAGScore[i] = 0;
+            }
+
+            probabilityOfBestPair = 0;
+            probabilityOfAllPairs = 0;
+            bestPairScore = 65536;
+        } // init()
+
+        void updateProbabilityOfAllPairs(double oldPairProbability);
+        bool updateBestHitIfNeeded(int pairScore, double pairProbability, int fewerEndScore, int readWithMoreHits, GenomeDistance fewerEndGenomeLocationOffset, ScoringCandidate* candidate, ScoringMateCandidate* mate); // returns true iff it updated the best hit
+        void fillInResult(PairedAlignmentResult* result, unsigned *popularSeedsSkipped);
+
+        GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
+        Direction bestResultDirection[NUM_READS_PER_PAIR];
+        unsigned bestResultScore[NUM_READS_PER_PAIR];
+        bool bestResultUsedAffineGapScoring[NUM_READS_PER_PAIR];
+        int bestResultBasesClippedBefore[NUM_READS_PER_PAIR];
+        int bestResultBasesClippedAfter[NUM_READS_PER_PAIR];
+        int bestResultAGScore[NUM_READS_PER_PAIR];
+
+        double probabilityOfBestPair;
+        double probabilityOfAllPairs;
+        unsigned bestPairScore;
+
+        Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {RC, FORWARD} };
+    }; // ScoreSet
+
+
+}; // IntersectingPairedEndAligner

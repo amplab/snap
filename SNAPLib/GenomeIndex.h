@@ -303,3 +303,5 @@ protected:
     void fillInLookedUpResults32(const unsigned *subEntry, _int64 *nHits, const unsigned **hits);
     void fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHits, const GenomeLocation **hits, GenomeLocation *singleHitLocation);
 };
+
+extern Genome::Contig ContigForInvalidGenomeLocation;

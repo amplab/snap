@@ -357,6 +357,12 @@ SetInvalidGenomeLocation(unsigned locationSize)
     } else {
         InvalidGenomeLocation = ((_int64) 1 << (locationSize * 8)) - 1;
     }
+
+    ContigForInvalidGenomeLocation.beginningLocation = InvalidGenomeLocation;
+    ContigForInvalidGenomeLocation.isALT = false;
+    ContigForInvalidGenomeLocation.length = 1;
+    ContigForInvalidGenomeLocation.name = "InvalidGenomeLocation";
+    ContigForInvalidGenomeLocation.nameLength = (int)strlen(ContigForInvalidGenomeLocation.name);
 }
 
     bool

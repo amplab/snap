@@ -216,8 +216,7 @@ void PairedAlignerStats::add(const AbstractStats * i_other)
             nLVCallsByTimeHistogram[lvCalls][timeBucket] += other->nLVCallsByTimeHistogram[lvCalls][timeBucket];
         }
     }
-
-}
+} // PairedAlignerStats::add
 
 void PairedAlignerStats::printHistograms(FILE* output)
 {
@@ -304,7 +303,7 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
     }
 
     return AlignerOptions::parse(argv, argc, n, done);
-}
+} // PairedAlignerOptions::parse
 
 PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
     : AlignerContext( 0,  NULL, NULL, i_extension)
@@ -348,11 +347,9 @@ PairedAlignerContext::compareBySpacing(const void *first_, const void *second_)
 
     if (firstDist < secondDist) {
         return -1;
-    }
-    else if (firstDist > secondDist) {
+    } else if (firstDist > secondDist) {
         return 1;
-    }
-    else {
+    } else {
         return 0;
     }
 }
@@ -428,7 +425,7 @@ void PairedAlignerContext::runIterationThread()
             // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
             if (!ignoreMismatchedIDs && !readIdsMatch(reads[0], reads[1])) {
                 unsigned n[2] = {min(reads[0]->getIdLength(), 200u), min(reads[1]->getIdLength(), 200u)};
-                char* p[2] = {(char*) alloca(n[0] + 1), (char*) alloca(n[1] + 1)};
+                char* p[2] = {(char*) alloca((size_t)n[0] + 1), (char*) alloca((size_t)n[1] + 1)};
                 memcpy(p[0], reads[0]->getId(), n[0]); p[0][n[0]] = 0;
                 memcpy(p[1], reads[1]->getId(), n[1]); p[1][n[1]] = 0;
                 WriteErrorMessage( "Unmatched read IDs '%s' and '%s'.  Use the -I option to ignore this.\n", p[0], p[1]);
@@ -486,9 +483,8 @@ void PairedAlignerContext::runIterationThread()
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
-                                                                useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness,
+                                                                useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment,
                                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore);
-
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
@@ -693,6 +689,10 @@ void PairedAlignerContext::runIterationThread()
 
         if (NULL != readWriter) {
             readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary, useAffineGap);
+
+            if (emitALTAlignments && (firstALTResult.status[0] != NotFound || firstALTResult.status[1] != NotFound)) {
+                readWriter->writePairs(readerContext, reads, &firstALTResult, 1, NULL, 0, true, useAffineGap);
+            }
         }
 
         if (options->profile) {

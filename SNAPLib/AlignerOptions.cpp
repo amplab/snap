@@ -7,6 +7,7 @@ Module Name:
 Abstract:
 
     Common parameters for running single & paired alignment.
+    Common parameters for running single & paired alignment.
 
 Authors:
 

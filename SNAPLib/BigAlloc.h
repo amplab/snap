@@ -87,6 +87,8 @@ public:
 
     virtual void *allocate(size_t amountToAllocate);
 
+    size_t amountAllocated();
+
 #ifdef _DEBUG
     void checkCanaries();
 #else  // DEBUG

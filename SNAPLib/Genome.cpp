@@ -479,10 +479,14 @@ Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, in
     return false;
 }
 
+Genome::Contig ContigForInvalidGenomeLocation;
 
     const Genome::Contig *
 Genome::getContigAtLocation(GenomeLocation location) const
 {
+    if (location == InvalidGenomeLocation) {
+        return &ContigForInvalidGenomeLocation;
+    }
     _ASSERT(location < nBases);
     int low = 0;
     int high = nContigs - 1;

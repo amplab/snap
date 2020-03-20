@@ -54,7 +54,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         bool                useAffineGap,
         bool                ignoreAlignmentAdjustmentsForOm,
 		bool				altAwareness,
-        bool                emitALTAlignments,
+        bool                emitALTAlignments_,
         PairedEndAligner    *underlyingPairedEndAligner_,
 	    unsigned            minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
@@ -65,14 +65,14 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         unsigned            gapExtendPenalty,
         unsigned            minAGScore,
         BigAllocator        *allocator)
-		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
+		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), emitALTAlignments(emitALTAlignments_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
                                                 maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, 
                                                 noUkkonen, noOrderedEvaluation, noTruncation, useAffineGap, 
-                                                ignoreAlignmentAdjustmentsForOm, altAwareness, emitALTAlignments, maxSecondaryAlignmentsPerContig, 
-                                                maxScoreGapToPreferNonAltAlignment , &lv, &reverseLV,
+                                                ignoreAlignmentAdjustmentsForOm, altAwareness, emitALTAlignments, maxScoreGapToPreferNonAltAlignment,
+                                                maxSecondaryAlignmentsPerContig, &lv, &reverseLV,
                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore,
                                                 NULL, allocator);
     
@@ -136,12 +136,15 @@ bool ChimericPairedEndAligner::align(
     result->usedAffineGapScoring[0] = result->usedAffineGapScoring[1] = false;
     result->basesClippedBefore[0] = result->basesClippedBefore[1] = 0;
     result->basesClippedAfter[0] = result->basesClippedAfter[1] = 0;
+    result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
     result->agScore[0] = result->agScore[1] = 0;
+
+    firstALTResult->status[0] = firstALTResult->status[1] = NotFound;
 
 	if (read0->getDataLength() < minReadLength && read1->getDataLength() < minReadLength) {
         TRACE("Reads are both too short -- returning");
 		for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-			result->location[whichRead] = 0;
+			result->location[whichRead] = InvalidGenomeLocation;
 			result->mapq[whichRead] = 0;
 			result->score[whichRead] = 0;
 			result->status[whichRead] = NotFound;
@@ -181,8 +184,7 @@ bool ChimericPairedEndAligner::align(
 		if (forceSpacing) {
 			if (result->status[0] == NotFound) {
 				result->fromAlignTogether = false;
-			}
-			else {
+			} else {
 				_ASSERT(result->status[1] != NotFound); // If one's not found, so is the other
 			}
 			return true;
@@ -223,7 +225,7 @@ bool ChimericPairedEndAligner::align(
             result->status[r] = NotFound;
             result->mapq[r] = 0;
             result->direction[r] = FORWARD;
-            result->location[r] = 0;
+            result->location[r] = InvalidGenomeLocation;
             result->score[r] = 0;
             result->usedAffineGapScoring[r] = false;
             result->basesClippedBefore[r] = 0;
@@ -231,6 +233,9 @@ bool ChimericPairedEndAligner::align(
             result->agScore[r] = 0;
             result->fromAlignTogether = false;
             result->alignedAsPair = false;
+            result->clippingForReadAdjustment[r] = 0;
+
+            firstALTResult->status[r] = NotFound;   // Don't need to fill in the rest, this suppresses writing it
         } else {
             // We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
             bool fitInSecondaryBuffer =
@@ -259,14 +264,16 @@ bool ChimericPairedEndAligner::align(
                 result->status[r] = NotFound;
                 result->mapq[r] = 0;
                 result->direction[r] = FORWARD;
-                result->location[r] = 0;
+                result->location[r] = InvalidGenomeLocation;
                 result->score[r] = 0;
                 result->usedAffineGapScoring[r] = false;
                 result->basesClippedBefore[r] = 0;
                 result->basesClippedAfter[r] = 0;
                 result->agScore[r] = 0;
-            }
-            else {
+                result->clippingForReadAdjustment[r] = 0;
+
+                firstALTResult->status[r] = NotFound;   // Don't need to fill in the rest, this suppresses writing it
+            } else {
                 result->status[r] = singleResult[r].status;
                 result->mapq[r] = singleResult[r].mapq / 3;   // Heavy quality penalty for chimeric reads
                 result->direction[r] = singleResult[r].direction;
@@ -287,7 +294,9 @@ bool ChimericPairedEndAligner::align(
 
 #ifdef _DEBUG
     if (_DumpAlignments) {
-        printf("ChimericPairedEndAligner: (%llu, %llu) score (%d, %d), MAPQ (%d, %d)\n\n\n",result->location[0].location, result->location[1].location,
+        printf("ChimericPairedEndAligner: (%s:%llu, %s:%llu) score (%d, %d), MAPQ (%d, %d)\n\n\n",
+            index->getGenome()->getContigAtLocation(result->location[0])->name, result->location[0] - index->getGenome()->getContigAtLocation(result->location[0])->beginningLocation,
+            index->getGenome()->getContigAtLocation(result->location[1])->name, result->location[1] - index->getGenome()->getContigAtLocation(result->location[1])->beginningLocation,
             result->score[0], result->score[1], result->mapq[0], result->mapq[1]);
     }
 #endif // _DEBUG
