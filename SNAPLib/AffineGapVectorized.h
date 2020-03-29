@@ -257,6 +257,7 @@ public:
             __m128i m, h, temp, e = v_zero, f = v_zero, max = v_zero;
 
             int maxScoreRow = 0;
+            int localAlignmentPatternOffset = -1;
 
             // Load h from the previous row
             h = _mm_load_si128(Hptr + numVec - 1);
@@ -387,12 +388,13 @@ public:
                     if (result) {
                         CountLeadingZeroes(result, zeroes);
                         int patternOffset = zeroes * numVec + j;
-                        bestLocalAlignmentPatternOffset = (bestLocalAlignmentPatternOffset > patternOffset) ? bestLocalAlignmentPatternOffset : patternOffset;
-                        _ASSERT(bestLocalAlignmentPatternOffset < patternLen); // Scores outside the pattern boundaries should never be the maximum in the row
+                        localAlignmentPatternOffset = (localAlignmentPatternOffset > patternOffset) ? localAlignmentPatternOffset : patternOffset;
+                        _ASSERT(localAlignmentPatternOffset < patternLen); // Scores outside the pattern boundaries should never be the maximum in the row
                     }
                 }
                 bestLocalAlignmentScore = maxScoreRow;
                 bestLocalAlignmentTextOffset = i;
+                bestLocalAlignmentPatternOffset = localAlignmentPatternOffset;
             }
             
             // Swap roles of H and Hminus1 for the next row
