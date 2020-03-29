@@ -225,6 +225,7 @@ private:
         unsigned             weight;
         unsigned             lowestPossibleScore;
         unsigned             bestScore;
+        int                  bestAGScore;
         GenomeLocation       bestScoreGenomeLocation;
         Direction            direction;
         bool                 allExtantCandidatesScored;
@@ -258,6 +259,8 @@ private:
         void updateBestScore(
             GenomeLocation genomeLocation, 
             unsigned score, 
+            bool useAffineGap, 
+            int agScore, 
             double matchProbability, 
             unsigned int& lvScoresAfterBestFound, 
             BaseAligner::HashTableElement *elementToScore, 

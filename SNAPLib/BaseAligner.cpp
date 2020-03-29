@@ -955,7 +955,7 @@ Return Value:
                 }
 
                 unsigned score = ScoreAboveLimit;
-                double matchProbability = 0;
+                double matchProbability = 0.0;
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
                 GenomeDistance genomeDataLength = (GenomeDistance)readDataLength + MAX_K; // Leave extra space in case the read has deletions
                 const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
@@ -1035,7 +1035,7 @@ Return Value:
                                         read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
                                         seedOffset,
                                         limitLeft,
-                                        seedLen, // FIXME: Assumes the rest of the read matches exactly
+                                        seedLen,
                                         &genomeLocationOffset,
                                         &basesClippedBefore,
                                         &score2,
@@ -1045,12 +1045,12 @@ Return Value:
 
                                     if (score2 == ScoreAboveLimit) {
                                         score = ScoreAboveLimit;
-                                        agScore = 0;
+                                        agScore = -1;
                                     }
                                 }
                             } else {
                                 score = ScoreAboveLimit;
-                                agScore = 0;
+                                agScore = -1;
                             }
                         }
                     }
@@ -1072,10 +1072,10 @@ Return Value:
                         //
                     } else {
                         score = ScoreAboveLimit;
-                        agScore = 0;
+                        agScore = -1;
                     }
                 } else { // if we had genome data to compare against
-                    matchProbability = 0;
+                    matchProbability = 0.0;
                 }
 #ifdef TRACE_ALIGNER
                 printf("Computing distance at %u (RC) with limit %d: %d (prob %g)\n",
@@ -1084,9 +1084,10 @@ Return Value:
 
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("Scored %s weight %2d limit %d, result %2d %s.  %d added to hash table\n", 
+                if (_DumpAlignments) printf("Scored %s weight %2d limit %d, result %2d %s, agScore %d, usedAffine %d, matchProb %g.  %d added to hash table\n", 
                     genome->genomeLocationInStringForm(genomeLocation.location, genomeLocationBuffer, genomeLocationBufferSize), elementToScore->weight, scoreLimit, score, 
-                    (elementToScore->direction ? "RC" : ""), nAddedToHashTable);
+                    (elementToScore->direction ? "RC" : ""), agScore, usedAffineGapScoring, matchProbability, 
+                    nAddedToHashTable);
 #endif  // _DEBUG
 
                 candidateToScore->score = score;
@@ -1175,7 +1176,7 @@ Return Value:
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
-                scoresForAllAlignments.updateBestScore(genomeLocation, score, matchProbability, lvScoresAfterBestFound, elementToScore, 
+                scoresForAllAlignments.updateBestScore(genomeLocation, score, useAffineGap, agScore, matchProbability, lvScoresAfterBestFound, elementToScore, 
                                             secondaryResults, nSecondaryResults, secondaryResultBufferSize, 
                                             anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer);
                 if (*overflowedSecondaryBuffer) {
@@ -1186,7 +1187,8 @@ Return Value:
                     //
                     // Don't update secondary results here; we don't exclude ALT alignments from them, only from the primary result.
                     //
-                    scoresForNonAltAlignments.updateBestScore(genomeLocation, score, matchProbability, lvScoresAfterBestFound, elementToScore, NULL, 0, 0, anyNearbyCandidatesAlreadyScored, -1, NULL);
+                    scoresForNonAltAlignments.updateBestScore(genomeLocation, score, useAffineGap, agScore, matchProbability, lvScoresAfterBestFound, elementToScore, 
+                                                   NULL, 0, 0, anyNearbyCandidatesAlreadyScored, -1, NULL);
                 }
                                         
 
@@ -1519,6 +1521,7 @@ BaseAligner::HashTableElement::init()
     weight = 0;
     lowestPossibleScore = UnusedScoreValue;
     bestScore = UnusedScoreValue;
+    bestAGScore = -1;
     direction = FORWARD;
     allExtantCandidatesScored = false;
     matchProbabilityForBestScore = 0;
@@ -1539,7 +1542,7 @@ void BaseAligner::ScoreSet::init()
     bestScoreUsedAffineGapScoring = false;
     bestScoreBasesClippedBefore = 0;
     bestScoreBasesClippedAfter = 0;
-    bestScoreAGScore = 0;
+    bestScoreAGScore = -1;
 
     probabilityOfAllCandidates = 0;
     probabilityOfBestCandidate = 0;
@@ -1559,6 +1562,8 @@ void BaseAligner::ScoreSet::updateProbabilitiesForNewMatch(double newProbability
 void BaseAligner::ScoreSet::updateBestScore(
                                 GenomeLocation genomeLocation, 
                                 unsigned score, 
+                                bool useAffineGap, 
+                                int agScore, 
                                 double matchProbability, 
                                 unsigned int &lvScoresAfterBestFound,
                                 BaseAligner::HashTableElement* elementToScore,
@@ -1569,36 +1574,42 @@ void BaseAligner::ScoreSet::updateBestScore(
                                 int maxEditDistanceForSecondaryResults, 
                                 bool* overflowedSecondaryBuffer)
 {
-    if (bestScore > score ||
-        (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
+    bool seenNewBestScore = useAffineGap ? 
+                           (bestScoreAGScore < agScore) ||
+                           (bestScoreAGScore == agScore && matchProbability > probabilityOfBestCandidate) : 
+                           (bestScore > score) ||
+                           (bestScore == score && matchProbability > probabilityOfBestCandidate);
+    if (seenNewBestScore) {
+        if (bestScore >= score) {
+            //
+            // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
+            //
+            if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
+                if (secondaryResultBufferSize <= *nSecondaryResults) {
+                    *overflowedSecondaryBuffer = true;
+                    return;
+                }
 
-        //
-        // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
-        //
-        if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
-            if (secondaryResultBufferSize <= *nSecondaryResults) {
-                *overflowedSecondaryBuffer = true;
-                return;
+                SingleAlignmentResult* result = &secondaryResults[*nSecondaryResults];
+                result->direction = bestScoreDirection;
+                result->location = bestScoreGenomeLocation;
+                result->mapq = 0;
+                result->score = bestScore;
+                result->status = MultipleHits;
+                result->clippingForReadAdjustment = 0;
+                result->usedAffineGapScoring = bestScoreUsedAffineGapScoring;
+                result->basesClippedBefore = bestScoreBasesClippedBefore;
+                result->basesClippedAfter = bestScoreBasesClippedAfter;
+                result->agScore = bestScoreAGScore;
+
+                _ASSERT(result->score != ScoreAboveLimit);
+
+                (*nSecondaryResults)++;
             }
-
-            SingleAlignmentResult* result = &secondaryResults[*nSecondaryResults];
-            result->direction = bestScoreDirection;
-            result->location = bestScoreGenomeLocation;
-            result->mapq = 0;
-            result->score = bestScore;
-            result->status = MultipleHits;
-            result->clippingForReadAdjustment = 0;
-            result->usedAffineGapScoring = bestScoreUsedAffineGapScoring;
-            result->basesClippedBefore = bestScoreBasesClippedBefore;
-            result->basesClippedAfter = bestScoreBasesClippedAfter;
-            result->agScore = bestScoreAGScore;
-
-            _ASSERT(result->score != ScoreAboveLimit);
-
-            (*nSecondaryResults)++;
         }
 
-        bestScore = score;
+        bestScore = score < bestScore ? score : bestScore;
+        bestScoreAGScore = agScore;
         probabilityOfBestCandidate = matchProbability;
         _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
         bestScoreGenomeLocation = genomeLocation;
@@ -1606,7 +1617,6 @@ void BaseAligner::ScoreSet::updateBestScore(
         bestScoreUsedAffineGapScoring = elementToScore->usedAffineGapScoring;
         bestScoreBasesClippedBefore = elementToScore->basesClippedBefore;
         bestScoreBasesClippedAfter = elementToScore->basesClippedAfter;
-        bestScoreAGScore = elementToScore->agScore;
 
         lvScoresAfterBestFound = 0;
     } else {
@@ -1647,6 +1657,7 @@ void BaseAligner::ScoreSet::fillInSingleAlignmentResult(SingleAlignmentResult* r
     result->location = bestScoreGenomeLocation;
     result->mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
     result->score = bestScore;
+    result->usedAffineGapScoring = bestScoreUsedAffineGapScoring;
 
     if (result->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
         result->status = SingleHit;

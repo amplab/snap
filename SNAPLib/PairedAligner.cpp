@@ -231,7 +231,8 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
     maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
     quicklyDropUnpairedReads(true),
-    inferSpacing(false)
+    inferSpacing(false),
+    maxSeedsSingleEnd(25)
 {
 }
 
@@ -254,11 +255,13 @@ void PairedAlignerOptions::usageMessage()
         "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
         "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
         "  -ins infer min and max spacing by aligning a batch of reads. Default: false\n"
+        "  -N   max seeds when running in single-end mode of chimeric aligner. Default: %d\n"
         ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
-        DEFAULT_MAX_CANDIDATE_POOL_SIZE);
+        DEFAULT_MAX_CANDIDATE_POOL_SIZE,
+        25);
 }
 
 bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
@@ -300,6 +303,12 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
     } else if (strcmp(argv[n], "-ins") == 0) {
         inferSpacing = true;
         return true;
+    } else if (strcmp(argv[n], "-N") == 0) {
+        if (n + 1 < argc) {
+            maxSeedsSingleEnd = atoi(argv[n+1]);
+            n += 1;
+            return true;
+        }
     }
 
     return AlignerOptions::parse(argv, argc, n, done);
@@ -324,6 +333,7 @@ bool PairedAlignerContext::initialize()
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
     inferSpacing = options2->inferSpacing;
+    maxSeedsSingleEnd = options2->maxSeedsSingleEnd;
 
 	return true;
 }
@@ -456,7 +466,7 @@ void PairedAlignerContext::runIterationThread()
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
                                                                 maxSecondaryAlignmentsPerContig);
 
-    memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
+    memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), maxSeedsSingleEnd, seedCoverage, maxDist,
         extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
     _int64 maxPairedSecondaryHits;
@@ -491,7 +501,7 @@ void PairedAlignerContext::runIterationThread()
         maxReadSize,
         maxHits,
         maxDist,
-        numSeedsFromCommandLine,
+        maxSeedsSingleEnd,
         seedCoverage,
 		minWeightToCheck,
         forceSpacing,

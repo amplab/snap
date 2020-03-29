@@ -214,6 +214,7 @@ bool ChimericPairedEndAligner::align(
     SingleAlignmentResult singleResult[NUM_READS_PER_PAIR];
     SingleAlignmentResult firstSingleALTResult[NUM_READS_PER_PAIR];
     int singleEndAGScore = 0;
+    bool chooseSingleEndMapq = true;
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
         _int64 singleEndSecondaryResultsThisTime = 0;
 
@@ -254,9 +255,22 @@ bool ChimericPairedEndAligner::align(
 
             if (compareWithSingleEndAlignment) {
                 singleEndAGScore += singleResult[r].agScore;
+                if (result->agScore[r] >= singleResult[r].agScore) {
+                    chooseSingleEndMapq = false;
+                }
             }
         } // Not too short
     } // For each read in the pair
+
+    if (chooseSingleEndMapq) {
+        for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+            //
+            // If the single-end aligner returns a lower MAPQ choose that for the result
+            //
+            result->mapq[r] = __min(result->mapq[r], singleResult[r].mapq);
+        }
+    }
+
 
     if (!compareWithSingleEndAlignment || (singleEndAGScore >= pairAGScore + 12)) { // FIXME: Add threshold for choosing single-end alignments
         for (int r = 0; r < NUM_READS_PER_PAIR; r++) {

@@ -6,6 +6,7 @@
 #include "Genome.h"
 
 const int MAX_K = 63;
+const int ScoreAboveLimit = -1; // A score value that means "we didn't compute the score because it was above the score limit."
 
 //
 // These are global so there are only one for both senses of the template
@@ -526,4 +527,3 @@ private:
     int backtraceD[MAX_K+1];
 };
 
-const int ScoreAboveLimit = -1; // A score value that means "we didn't compute the score because it was above the score limit."

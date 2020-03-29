@@ -633,12 +633,13 @@ IntersectingPairedEndAligner::align(
 
 #ifdef _DEBUG
         if (_DumpAlignments) {
-            printf("Scored fewer end candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d\n", (int)(candidate - scoringCandidatePool),
+            printf("Scored fewer end candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d\n", 
+                (int)(candidate - scoringCandidatePool),
                 candidate->whichSetPair, readWithFewerHits, 
                 genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation)->name, 
                 candidate->readWithFewerHitsGenomeLocation - genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation)->beginningLocation,
                 candidate->seedOffset,
-                scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset);
+                scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset, candidate->agScore);
         }
 #endif // DEBUG
 
@@ -667,11 +668,11 @@ IntersectingPairedEndAligner::align(
                             &mate->genomeOffset, &mate->usedAffineGapScoring, &mate->basesClippedBefore, &mate->basesClippedAfter, &mate->agScore);
 #ifdef _DEBUG
                         if (_DumpAlignments) {
-                            printf("Scored mate candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d\n",
+                            printf("Scored mate candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d\n",
                                 (int)(mate - scoringMateCandidates[candidate->whichSetPair]), candidate->whichSetPair, readWithMoreHits, 
                                 genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation)->name,
                                 mate->readWithMoreHitsGenomeLocation - genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation)->beginningLocation,
-                                mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset);
+                                mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset, mate->agScore);
                         }
 #endif // _DEBUG
 
@@ -834,14 +835,14 @@ IntersectingPairedEndAligner::align(
                             
     #ifdef  _DEBUG
                             if (_DumpAlignments) {
-                                printf("Added %e (= %e * %e) @ (%s:%llu, %s:%llu), giving new probability of all pairs %e, score %d = %d + %d%s\n",
+                                printf("Added %e (= %e * %e) @ (%s:%llu, %s:%llu), giving new probability of all pairs %e, score %d = %d + %d, agScore %d = %d + %d%s\n",
                                     pairProbability, mate->matchProbability , fewerEndMatchProbability,
                                     genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation.location + fewerEndGenomeLocationOffset)->name,
                                     (candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset) - genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation.location + fewerEndGenomeLocationOffset)->beginningLocation,
                                     genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset)->name,
                                     (mate->readWithMoreHitsGenomeLocation + mate->genomeOffset) - genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation.location + mate->genomeOffset)->beginningLocation,
                                     scoresForNonAltAlignments.probabilityOfAllPairs,
-                                    pairScore, fewerEndScore, mate->score, updatedBestScore ? " New best hit" : "");
+                                    pairScore, fewerEndScore, mate->score, candidate->agScore + mate->agScore, candidate->agScore, mate->agScore, updatedBestScore ? " New best hit" : "");
                             }
     #endif  // _DEBUG
 

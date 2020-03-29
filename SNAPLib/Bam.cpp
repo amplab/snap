@@ -1380,7 +1380,7 @@ BAMFormat::computeCigarOps(
     } else if (*o_editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
-            WriteErrorMessage("WARNING: computeEditDistance returned -1; this shouldn't happen\n");
+            WriteErrorMessage( "WARNING: computeEditDistance returned -1; this shouldn't happen. Read %.*s\n", dataLength, data);
             warningPrinted = true;
         }
         return 0;
@@ -1462,10 +1462,10 @@ BAMFormat::computeCigarOps(
         basesClippedAfter += backClippingMissedByLV;
         dataLength -= backClippingMissedByLV;
 
-        if (dataLength > 101) {
-            WriteErrorMessage("computeCigarString: Data length negative for read:%.*s, isRC:%d\n", 101, data - basesClippedBefore, isRC);
-            soft_exit(1);
-        }
+        // if (dataLength > 101) {
+        //     WriteErrorMessage("computeCigarString: Data length negative for read:%.*s, isRC:%d\n", 101, data - basesClippedBefore, isRC);
+        //     soft_exit(1);
+        // }
 
         //
         // If we have hard clipping, add in the cigar string for it.

@@ -77,6 +77,7 @@ protected:
     bool                ignoreMismatchedIDs;
     bool                quicklyDropUnpairedReads;
     bool                inferSpacing;
+    int                 maxSeedsSingleEnd;
 
     GenomeDistance pairedEndSpacing[DEFAULT_BATCH_SIZE_IS_ESTIMATION];      // Spacing between reads aligned as FR pairs
     static int compareBySpacing(const void *first_, const void *second_);
@@ -101,4 +102,5 @@ struct PairedAlignerOptions : public AlignerOptions
     unsigned    maxCandidatePoolSize;
     bool        quicklyDropUnpairedReads;
     bool        inferSpacing;
+    int         maxSeedsSingleEnd;
 };
