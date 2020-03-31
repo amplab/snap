@@ -67,7 +67,7 @@ private:
     DataWriter* writer;
     const Genome* genome;
     LandauVishkinWithCigar lvc;
-    AffineGapWithCigar agc;
+    AffineGapVectorizedWithCigar agc;
 
     void checkIfTooSlow();
     bool killIfTooSlow;

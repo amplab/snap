@@ -1013,33 +1013,71 @@ Return Value:
                             score1 = 0;  score2 = 0;  agScore1 = seedLen; agScore2 = 0;
                             usedAffineGapScoring = true;
                             if (tailStart != readLen) {
-                                agScore1 = affineGap->computeScore(data + tailStart,
-                                    textLen,
-                                    readToScore->getData() + tailStart,
-                                    readToScore->getQuality() + tailStart,
-                                    readLen - tailStart,
-                                    scoreLimit,
-                                    seedLen,
-                                    NULL,
-                                    &basesClippedAfter,
-                                    &score1,
-                                    &matchProb1);
+                                int patternLen = readLen - tailStart;
+                                //
+                                // Try banded affine-gap when pattern is long and band needed is small
+                                //
+                                if (patternLen >= (3 * (2 * scoreLimit + 1))) {
+                                    agScore1 = affineGap->computeScoreBanded(data + tailStart,
+                                        textLen,
+                                        readToScore->getData() + tailStart,
+                                        readToScore->getQuality() + tailStart,
+                                        readLen - tailStart,
+                                        scoreLimit,
+                                        seedLen,
+                                        NULL,
+                                        &basesClippedAfter,
+                                        &score1,
+                                        &matchProb1);
+                                }
+                                else {
+                                    agScore1 = affineGap->computeScore(data + tailStart,
+                                        textLen,
+                                        readToScore->getData() + tailStart,
+                                        readToScore->getQuality() + tailStart,
+                                        readLen - tailStart,
+                                        scoreLimit,
+                                        seedLen,
+                                        NULL,
+                                        &basesClippedAfter,
+                                        &score1,
+                                        &matchProb1);
+                                }
                             }
 
                             if (score1 != ScoreAboveLimit) {
                                 if (seedOffset != 0) {
                                     int limitLeft = scoreLimit - score1;
-                                    agScore2 = reverseAffineGap->computeScore(data + seedOffset,
-                                        seedOffset + limitLeft,
-                                        reversedRead[elementToScore->direction] + readLen - seedOffset,
-                                        read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
-                                        seedOffset,
-                                        limitLeft,
-                                        seedLen,
-                                        &genomeLocationOffset,
-                                        &basesClippedBefore,
-                                        &score2,
-                                        &matchProb2);
+                                    int patternLen = seedOffset;
+                                    //
+                                    // Try banded affine-gap when pattern is long and band needed is small
+                                    //
+                                    if (patternLen >= (3 * (2 * limitLeft + 1))) {
+                                        agScore2 = reverseAffineGap->computeScoreBanded(data + seedOffset,
+                                            seedOffset + limitLeft,
+                                            reversedRead[elementToScore->direction] + readLen - seedOffset,
+                                            read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
+                                            seedOffset,
+                                            limitLeft,
+                                            seedLen,
+                                            &genomeLocationOffset,
+                                            &basesClippedBefore,
+                                            &score2,
+                                            &matchProb2);
+                                    }
+                                    else {
+                                        agScore2 = reverseAffineGap->computeScore(data + seedOffset,
+                                            seedOffset + limitLeft,
+                                            reversedRead[elementToScore->direction] + readLen - seedOffset,
+                                            read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
+                                            seedOffset,
+                                            limitLeft,
+                                            seedLen,
+                                            &genomeLocationOffset,
+                                            &basesClippedBefore,
+                                            &score2,
+                                            &matchProb2);
+                                    }
 
                                     agScore2 -= (seedLen);
 
