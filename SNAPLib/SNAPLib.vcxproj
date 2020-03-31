@@ -219,6 +219,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AffineGap.cpp" />
+    <ClCompile Include="AffineGapVectorized.cpp" />
     <ClCompile Include="AlignerContext.cpp" />
     <ClCompile Include="AlignerOptions.cpp" />
     <ClCompile Include="AlignerStats.cpp" />
