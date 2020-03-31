@@ -52,7 +52,7 @@ using namespace std;
 
 using util::stringEndsWith;
 
-static const int DEFAULT_MIN_SPACING = 50;
+static const int DEFAULT_MIN_SPACING = 1;
 static const int DEFAULT_MAX_SPACING = 1000;
 
 struct PairedAlignerStats : public AlignerStats
@@ -242,6 +242,9 @@ void PairedAlignerOptions::usageMessage()
     WriteErrorMessage(
         "\n"
         "  -s   min and max spacing to allow between paired ends (default: %d %d).\n"
+        "       If it can't find an alignment in that range, it will run both reads\n"
+        "       through  the single-end aligner.\n"
+        "  -ins Infer inter-read spacing by periodially looking at the observed distances\n"
         "  -fs  force spacing to lie between min and max.\n"
         "  -H   max hits for intersecting aligner (default: %d).\n"
         "  -mcp specifies the maximum candidate pool size (An internal data structure. \n"
@@ -254,7 +257,6 @@ void PairedAlignerOptions::usageMessage()
         "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
         "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
         "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
-        "  -ins infer min and max spacing by aligning a batch of reads. Default: false\n"
         "  -N   max seeds when running in single-end mode of chimeric aligner. Default: %d\n"
         ,
         DEFAULT_MIN_SPACING,
@@ -272,6 +274,7 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         if (n + 2 < argc) {
             minSpacing = atoi(argv[n+1]);
             maxSpacing = atoi(argv[n+2]);
+            inferSpacing = false;
             n += 2;
             return true;
         } 
@@ -302,6 +305,9 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         return true;
     } else if (strcmp(argv[n], "-ins") == 0) {
         inferSpacing = true;
+        return true;
+    } else if (strcmp(argv[n], "-ins-") == 0) {
+        inferSpacing = false;
         return true;
     } else if (strcmp(argv[n], "-N") == 0) {
         if (n + 1 < argc) {

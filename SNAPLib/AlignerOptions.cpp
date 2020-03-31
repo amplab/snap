@@ -73,7 +73,7 @@ AlignerOptions::AlignerOptions(
     noUkkonen(false),
     noOrderedEvaluation(false),
 	noTruncation(false),
-    useAffineGap(false),
+    useAffineGap(true),
     matchReward(1),
     subPenalty(4),
     gapOpenPenalty(6),
@@ -219,8 +219,8 @@ AlignerOptions::usage()
             "       value starting with X, Y or Z.  So, -is ZQ will cause SNAP to write ZQ:i:3 on a read with internal score 3.  Generally, the internal scores\n"
             "       are the same as the NM values, except that they contain penalties for soft clipping reads that hang over the end of contigs (but not for\n"
             "       soft clipping that's due to # quality scores or that was present in the input SAM/BAM file and retained due to -pc)\n"
-            "  -G   enable affine gap scoring (default: false)\n"
-            "       Scoring parameters (works only when -G is used)\n"
+            "  -G-  disable affine gap scoring (default: true)\n"
+            "       Scoring parameters (works only when -G- is not used)\n"
             "           cost for match -gm (default: %u)\n"
             "           cost for substitution -gs (default: %u)\n"
             "           cost for opening a gap -go (default: %u)\n"
@@ -650,6 +650,9 @@ AlignerOptions::usage()
             return true;
         } else if (strcmp(argv[n], "-G") == 0) {
             useAffineGap = true;
+            return true;
+        } else if (strcmp(argv[n], "-G-") == 0) {
+            useAffineGap = false;
             return true;
         } else if (strcmp(argv[n], "-gm") == 0) {
             if (n + 1 >= argc) {
