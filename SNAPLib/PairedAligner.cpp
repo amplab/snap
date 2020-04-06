@@ -501,11 +501,13 @@ void PairedAlignerContext::runIterationThread()
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
                                                                 useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment,
                                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore);
+static volatile long BJBWarningPrinted = 0;
+if (InterlockedIncrement(&BJBWarningPrinted) == 1) fprintf(stderr, "WARNING: Fixing maxHits for single-end aligner beneath paired-end aligner to 300\n");
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
         maxReadSize,
-        maxHits,
+        /*BJB maxHits*/ 300,
         maxDist,
         maxSeedsSingleEnd,
         seedCoverage,

@@ -61,6 +61,8 @@ typedef HANDLE EventObject;
 #define bit_rotate_left64(value, shift) _rotl64(value, shift)
 
 int getpagesize();
+
+#define BINARY_NAME "snap.exe"
 #else   // _MSC_VER
 
 #include <pthread.h>
@@ -161,6 +163,7 @@ inline _uint64 bit_rotate_left64(_uint64 value, unsigned shift)
     return value << (shift %64) | (value >> (64 - shift%64));
 }
 
+#define BINARY_NAME "snap-aligner"
 #endif  // _MSC_VER
 
 struct NamedPipe;	// It's bi-directional, which in Unix means it's actually two pipes

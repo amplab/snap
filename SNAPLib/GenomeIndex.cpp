@@ -55,22 +55,22 @@ const char *GenomeFileName = "Genome";
 static void usage()
 {
     WriteErrorMessage(
-        "Usage: snap-aligner index <input.fa> <output-dir> [<options>]\n"
+        "Usage: %s index <input.fa> <output-dir> [<options>]\n"
         "Options:\n"
         "  -s               Seed size (default: %d)\n"
         "  -h               Hash table slack (default: %.1f)\n"
-
-        " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
+        " -t                Specify the maximum number of threads to use. Default is the number of cores. Do not leave a space after the -t, e.g., -t16\n"
         " -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
         "                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
         "                   the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
         "                   indicating that a space is a terminator.\n"
-        " -bSpace           Indicates that the space character is a terminator for chromosome names (see -B above).  This may be used in addition\n"
+        " -bSpace           Indicates that the space and tab characters are terminators for chromosome names (see -B above).  This may be used in addition\n"
         "                   to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
-        " -pPadding         Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
+        " -p                Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
         "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
-        "                   read you'll process.  Default is %d\n"
-        " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
+        "                   read you'll process.  Default is %d.  Specify the amount of padding directly after -p without a space.\n"
+        " -H                Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
+        "                   Specify the histogram file name directly after -H without leaving a space.\n"
         " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
         " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
         " -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
@@ -91,6 +91,7 @@ static void usage()
 		" -nonAltContigName Specify the name of a contig that's not an alt, regardless of its size\n"
 		" -nonAltContigFile Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
 			,
+            BINARY_NAME,
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
             DEFAULT_PADDING,
