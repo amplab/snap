@@ -1017,7 +1017,7 @@ Return Value:
                                 //
                                 // Try banded affine-gap when pattern is long and band needed is small
                                 //
-                                if (patternLen >= (3 * (2 * scoreLimit + 1))) {
+                                if (patternLen >= (3 * (2 * (int)scoreLimit + 1))) {
                                     agScore1 = affineGap->computeScoreBanded(data + tailStart,
                                         textLen,
                                         readToScore->getData() + tailStart,
@@ -1790,13 +1790,13 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         // AffineGap<>::getBigAllocatorReservation()                       + 
         // AffineGap<-1>::getBigAllocatorReservation()                     + // our AffineGap objects
         AffineGapVectorized<>::getBigAllocatorReservation()             + 
-        AffineGapVectorized<-1>::getBigAllocatorReservation()          + // our AffineGap objects
+        AffineGapVectorized<-1>::getBigAllocatorReservation()           + // our AffineGap objects
         sizeof(char) * maxReadSize * 2                                  + // rcReadData
         sizeof(char) * maxReadSize * 4 + 2 * MAX_K                      + // reversed read (both)
-        sizeof(BYTE) * ((_int64)maxReadSize + 7 + 128) / 8                      + // seed used
+        sizeof(BYTE) * ((_int64)maxReadSize + 7 + 128) / 8              + // seed used
         sizeof(HashTableElement) * hashTableElementPoolSize             + // hash table element pool
         sizeof(HashTableAnchor) * candidateHashTablesSize * 2           + // candidate hash table (both)
-        sizeof(HashTableElement) * ((_int64)maxSeedsToUse + 1)                  + // weight lists
+        sizeof(HashTableElement) * ((_int64)maxSeedsToUse + 1)          + // weight lists
         sizeof(unsigned) * extraSearchDepth;                              // hitCountByExtraSearchDepth
 }
 

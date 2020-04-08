@@ -665,7 +665,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                 _int64 value;
                 if (locationSize > 4) {
                     value = 0;
-                    memcpy((char *)&value, values64 + locationSize * i, locationSize);   // assumes little endian
+                    memcpy((char *)&value, values64 + (_int64)locationSize * i, locationSize);   // assumes little endian
                 } else {
                     value = values32[i];
                 }
@@ -700,7 +700,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                     if (locationSize > 4) {
 					    index->overflowTable64[overflowTableIndex] = nOccurrences;
                         _int64 newValue = overflowTableIndex + countOfBases;
-                        memcpy(values64 + locationSize * i, &newValue, locationSize);   // Assumes little endian
+                        memcpy(values64 + (_int64)locationSize * i, &newValue, locationSize);   // Assumes little endian
                     } else {
 					    index->overflowTable32[overflowTableIndex] = (unsigned)nOccurrences;
                         values32[i] = (unsigned)(overflowTableIndex + countOfBases);
@@ -935,9 +935,6 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
     *o_nTables = nHashTablesToBuild;
     return hashTables;
 }
-
-
-
 
 GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL), mappedOverflowTable(NULL), mappedTables(NULL)
 {

@@ -501,13 +501,11 @@ void PairedAlignerContext::runIterationThread()
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
                                                                 useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment,
                                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore);
-static volatile long BJBWarningPrinted = 0;
-if (InterlockedIncrement(&BJBWarningPrinted) == 1) fprintf(stderr, "WARNING: Fixing maxHits for single-end aligner beneath paired-end aligner to 300\n");
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
         maxReadSize,
-        /*BJB maxHits*/ 300,
+        maxHits,
         maxDist,
         maxSeedsSingleEnd,
         seedCoverage,
@@ -591,6 +589,7 @@ if (InterlockedIncrement(&BJBWarningPrinted) == 1) fprintf(stderr, "WARNING: Fix
             result.basesClippedBefore[0] = result.basesClippedBefore[1] = 0;
             result.basesClippedAfter[0] = result.basesClippedAfter[1] = 0;
             result.agScore[0] = result.agScore[1] = 0;
+            result.supplementary[0] = result.supplementary[1] = false;
 
             bool pass0 = options->passFilter(reads[0], result.status[0], true, false);
             bool pass1 = options->passFilter(reads[1], result.status[1], true, false);

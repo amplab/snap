@@ -1154,7 +1154,7 @@ IntersectingPairedEndAligner::scoreLocation(
                 //
                 // Try banded affine-gap when pattern is long and band needed is small
                 //
-                if (patternLen >= (3 * (2 * scoreLimit + 1))) {
+                if (patternLen >= (3 * (2 * (int)scoreLimit + 1))) {
                     agScore1 = affineGap->computeScoreBanded(data + tailStart,
                         textLen,
                         readToScore->getData() + tailStart,

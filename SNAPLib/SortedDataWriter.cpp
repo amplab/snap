@@ -516,7 +516,7 @@ DataWriterSupplier::sorted(
 {
     const int bufferCount = 3;
     const size_t bufferSpace = tempBufferMemory > 0 ? tempBufferMemory : (numThreads * (size_t)1 << 30);
-    const size_t bufferSize = bufferSpace / (bufferCount * numThreads);
+    const size_t bufferSize = bufferSpace / ((size_t)bufferCount * numThreads);
     DataWriter::FilterSupplier* filterSupplier =
         new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler, bufferSize, bufferSpace, emitInternalScore, internalScoreTag, encoder);
     return DataWriterSupplier::create(tempFileName, bufferSize, emitInternalScore, internalScoreTag, filterSupplier, NULL, bufferCount);

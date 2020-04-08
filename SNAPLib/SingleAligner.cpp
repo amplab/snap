@@ -199,6 +199,7 @@ SingleAlignerContext::runIterationThread()
                     result.usedAffineGapScoring = false;
                     result.basesClippedBefore = 0;
                     result.basesClippedAfter = 0;
+                    result.supplementary = false;
                     readWriter->writeReads(readerContext, read, &result, 1, true, useAffineGap);
                 }
                 stats->uselessReads++;

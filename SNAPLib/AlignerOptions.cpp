@@ -130,13 +130,18 @@ AlignerOptions::usage()
             "  -h   maximum hits to consider per seed (default: %d)\n"
             "  -ms  minimum seed matches per location (default: %d)\n"
             "  -t   number of threads (default is one per core)\n"
-            "  -b   bind each thread to its processor (this is the default)\n"
-            " --b   Don't bind each thread to its processor (note the double dash)\n"
+            "  -b-  Don't bind each thread to its processor (note the double dash)\n"
             "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
             "       with small caches or lots of cores/cache\n"
             "  -so  sort output file by alignment location\n"
             "  -sm  memory to use for sorting in Gb\n"
+            " -sid  Specifies the sort intermediate directory.  When SNAP is sorting, it aligns the reads in the order in which they come in, and writes\n"
+            "       the aligned reads in batches to a temporary file.  When the aligning is done, it does a merge sort from the temporary file into the\n"
+            "       final output file.  By default, the intermediate file is in the same directory as the output file, but for performance or space\n"
+            "       reasons, you might want to put it elsewhere.  If so, use this option.\n"            
             "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
+            "  -S   suppress additional processing (sorted BAM output only)\n"
+            "       i=index, d=duplicate marking\n"
             "  -f   stop on first match within edit distance limit (filtering mode)\n"
             "  -F   filter output (a=aligned only, s=single hit only (MAPQ >= %d), u=unaligned only, l=long enough to align (see -mrl))\n"
             "  -E   an alternate (and fully general) way to specify filter options.  Emit only these types s = single hit (MAPQ >= %d), m = multiple hit (MAPQ < %d),\n"
@@ -145,8 +150,6 @@ AlignerOptions::usage()
             "       as -F a, -E ux is the same as -F u, and so forth.\n"
             "       When filtering in paired-end mode (either with -F or -E) unless you specify the b flag a read will be emitted if it's mate pair passes the filter\n"
             "       Even if the read itself does not.  If you specify b mode, then a read will be emitted only if it and its partner both pass the filter.\n"
-            "  -S   suppress additional processing (sorted BAM output only)\n"
-            "       i=index, d=duplicate marking\n"
 #if     USE_DEVTEAM_OPTIONS
             "  -I   ignore IDs that don't match in the paired-end aligner\n"
 #ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
@@ -155,11 +158,8 @@ AlignerOptions::usage()
 #endif  // USE_DEVTEAM_OPTIONS
             "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
             "       bases from front and back of read respectively; default: back only (-C-+)\n"
-            "  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
-            "       match) rather than = and X (sequence (mis-)match).  This is the default\n"
             "  -=   use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
             "  -pf  specify the name of a file to contain the run speed\n"
-            "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)  This is the default\n"
             "  -hp  Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
             "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default %d\n"
             "  -rg  Specify the default read group if it is not specified in the input file\n"
@@ -207,10 +207,7 @@ AlignerOptions::usage()
             "       with limited memory, where some alignment tasks will push SNAP into paging, and take disproportinaltely long.  This allows the script\n"
             "       to move on to the next alignment.  Only works when generating output, and not during the sort phase.  If you're running out of memory\n"
             "       sorting, try using -di.\n"
-            " -sid  Specifies the sort intermediate directory.  When SNAP is sorting, it aligns the reads in the order in which they come in, and writes\n"
-            "       the aligned reads in batches to a temporary file.  When the aligning is done, it does a merge sort from the temporary file into the\n"
-            "       final output file.  By default, the intermediate file is in the same directory as the output file, but for performance or space\n"
-            "       reasons, you might want to put it elsewhere.  If so, use this option.\n"
+
             " -pro  Profile alignment to give you an idea of how much time is spent aligning and how much waiting for IO\n"
             "  -ae  Apply the end-of-contig soft clipping before the -om processing rather than after it.  A read that's soft clipped because of hanging off one end or the other\n"
             "       of a contig does not have a penalty in its NM tag, but it does in SNAP's internal scoring.  This flag says to use the NM value for -om processing\n"
@@ -379,40 +376,31 @@ AlignerOptions::usage()
             }
             n += argsConsumed;
             return true;
-        }
-        else if (strcmp(argv[n], "-P") == 0) {
+        } else if (strcmp(argv[n], "-P") == 0) {
             doAlignerPrefetch = false;
             return true;
-        }
-        else if (strcmp(argv[n], "-kts") == 0) {
+        } else if (strcmp(argv[n], "-kts") == 0) {
             killIfTooSlow = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-b") == 0) {
+        } else if (strcmp(argv[n], "-b") == 0) {
             bindToProcessors = true;
             return true;
-        }
-        else if (strcmp(argv[n], "--b") == 0) {
+        } else if (strcmp(argv[n], "--b") == 0 || strcmp(argv[n], "-b-") == 0) {
             bindToProcessors = false;
             return true;
-        }
-        else if (strcmp(argv[n], "-so") == 0) {
+        } else if (strcmp(argv[n], "-so") == 0) {
             sortOutput = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-map") == 0) {
+        } else if (strcmp(argv[n], "-map") == 0) {
             mapIndex = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-pre") == 0) {
+        } else if (strcmp(argv[n], "-pre") == 0) {
             prefetchIndex = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-ae") == 0) {
+        } else if (strcmp(argv[n], "-ae") == 0) {
             ignoreAlignmentAdjustmentsForOm = false;
             return true;
-        }
-        else if (strcmp(argv[n], "-S") == 0) {
+        } else if (strcmp(argv[n], "-S") == 0) {
             if (n + 1 < argc) {
                 n++;
                 for (const char* p = argv[n]; *p; p++) {
@@ -423,24 +411,25 @@ AlignerOptions::usage()
                     case 'd':
                         noDuplicateMarking = true;
                         break;
+#if 0   // This is unused, so I took it out of the arg parsing to avoid unusual behavior if you were to do something like -S i d q, expecting q to be an input file.
                     case 'q':
                         noQualityCalibration = true;
                         break;
+
+#endif // 0
                     default:
                         return false;
                     }
                 }
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-sm") == 0) {
+        } else if (strcmp(argv[n], "-sm") == 0) {
             if (n + 1 < argc && argv[n + 1][0] >= '0' && argv[n + 1][0] <= '9') {
                 sortMemory = atoi(argv[n + 1]);
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-is") == 0) {
+        } else if (strcmp(argv[n], "-is") == 0) {
             if (n + 1 >= argc || strlen(argv[n + 1]) != 2 || argv[n + 1][0] < 'X' || argv[n + 1][0] > 'Z' || argv[n + 1][1] < 'A' || argv[n + 1][1] > 'Z') {
                 WriteErrorMessage("-is switch must be followed by two letter tag that consists of X, Y, or Z and a capital letter.\n");
                 return false;

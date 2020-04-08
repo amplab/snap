@@ -78,7 +78,7 @@ struct AlignerOptions : public AbstractOptions
     bool                sortOutput;
     bool                noIndex;
     bool                noDuplicateMarking;
-    bool                noQualityCalibration;
+    bool                noQualityCalibration;   // This doesn't appear to be used.  
     unsigned            sortMemory; // total output sorting buffer size in Gb
     unsigned            filterFlags;
     bool                explorePopularSeeds;
