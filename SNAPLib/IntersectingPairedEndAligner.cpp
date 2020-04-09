@@ -681,7 +681,7 @@ IntersectingPairedEndAligner::align(
                         mate->scoreLimit = scoreLimit - fewerEndScore;
                     }
 
-                    if (mate->score != ScoreAboveLimit) {
+                    if (mate->score != ScoreAboveLimit && fewerEndScore + mate->score <= scoreLimit) { // We need to check to see that we're below scoreLimit because we may have scored this earlier when scoreLimit was higher.
                         double pairProbability = mate->matchProbability * fewerEndMatchProbability;
                         unsigned pairScore = mate->score + fewerEndScore;
                         //

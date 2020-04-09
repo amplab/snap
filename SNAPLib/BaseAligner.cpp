@@ -482,7 +482,7 @@ Return Value:
                     &overflowedSecondaryResultsBuffer);
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates, non ALT-aware)  at %s:%llu\n", 
+                if (_DumpAlignments) printf("Final result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates, non ALT-aware)  at %s:%llu\n\n", 
                                             primaryResult->score, primaryResult->mapq, scoresForAllAlignments.probabilityOfBestCandidate, scoresForAllAlignments.probabilityOfAllCandidates, 
                                             genome->getContigAtLocation(primaryResult->location)->name, primaryResult->location - genome->getContigAtLocation(primaryResult->location)->beginningLocation);
 #endif  // _DEBUG
@@ -734,10 +734,10 @@ Return Value:
         &overflowedSecondaryResultsBuffer);
 
 #ifdef  _DEBUG
-    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates non ALT-aware) at %s:%llu\n", 
+    if (_DumpAlignments) printf("Final result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates non ALT-aware) at %s:%llu\n", 
         primaryResult->score, primaryResult->mapq, scoresForAllAlignments.probabilityOfBestCandidate, scoresForAllAlignments.probabilityOfAllCandidates, 
         genome->getContigAtLocation(primaryResult->location)->name, primaryResult->location - genome->getContigAtLocation(primaryResult->location)->beginningLocation);
-    if (_DumpAlignments && firstALTResult->status != NotFound) printf("\tEmitting ALT result score %d MAPQ %d at %llu\n",
+    if (_DumpAlignments && firstALTResult->status != NotFound) printf("Emitting ALT result score %d MAPQ %d at %llu\n",
         firstALTResult->score, firstALTResult->mapq, firstALTResult->location.location);
 #endif  // _DEBUG
 
@@ -1122,7 +1122,7 @@ Return Value:
 
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("Scored %s weight %2d limit %d, result %2d %s, agScore %d, usedAffine %d, matchProb %g.  %d added to hash table\n", 
+                if (_DumpAlignments) printf("\t\tScored %s weight %2d limit %d, result %2d %s, agScore %d, usedAffine %d, matchProb %g.  %d added to hash table\n", 
                     genome->genomeLocationInStringForm(genomeLocation.location, genomeLocationBuffer, genomeLocationBufferSize), elementToScore->weight, scoreLimit, score, 
                     (elementToScore->direction ? "RC" : ""), agScore, usedAffineGapScoring, matchProbability, 
                     nAddedToHashTable);

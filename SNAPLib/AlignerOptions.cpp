@@ -357,11 +357,16 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-t") == 0) {
+        } else if (strcmp(argv[n], "-t") == 0) {
             if (n + 1 < argc) {
                 numThreads = atoi(argv[n + 1]);
                 n++;
+
+                if (numThreads < 1) {
+                    WriteErrorMessage("Number of threads must be at least one.\n");
+                    return false;
+                }
+ 
                 return true;
             }
         }
@@ -622,19 +627,16 @@ AlignerOptions::usage()
             n++;
 
             return true;
-        }
-        else if (strcmp(argv[n], "-xf") == 0) {
+        } else if (strcmp(argv[n], "-xf") == 0) {
             if (n + 1 < argc) {
                 n++;
                 expansionFactor = (float)atof(argv[n]);
                 return expansionFactor > 0;
             }
-        }
-        else if (strcmp(argv[n], "-pc") == 0) {
+        } else if (strcmp(argv[n], "-pc") == 0) {
             preserveClipping = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-pro") == 0) {
+        } else if (strcmp(argv[n], "-pro") == 0) {
             profile = true;
             return true;
         } else if (strcmp(argv[n], "-G") == 0) {
