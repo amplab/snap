@@ -6,11 +6,100 @@ using System.Threading.Tasks;
 using System.IO;
 using ASELib;
 using System.Diagnostics;
+using System.Security.Cryptography;
 
 namespace SampleFastq
 {
     class Program
     {
+        class FASTQRead
+        {
+            byte[] data;
+            int idLength;
+            int queryLength; // equals quality length
+
+            static public FASTQRead ReadFromStream(StreamReader inputFile)
+            {
+                var idLine = inputFile.ReadLine();
+                var queryLine = inputFile.ReadLine();
+                var plusLine = inputFile.ReadLine();
+                var qualityLine = inputFile.ReadLine();
+
+                if (qualityLine == null)
+                {
+                    if (idLine != null)
+                    {
+                        throw new Exception("Ill-formatted FASTQ file or read error.");
+                    }
+
+                    return null;
+                }
+
+                if (!idLine.StartsWith("@"))
+                {
+                    throw new Exception("FASTQ ID line doens't start with an @");
+                }
+
+                if (plusLine != "+")
+                {
+                    throw new Exception("FASTQ plus line isn't a plus.");
+                }
+
+                if (queryLine.Length != qualityLine.Length)
+                {
+                    throw new Exception("FASTQ query and quality lines don't match in length");
+                }
+
+                var read = new FASTQRead();
+                read.data = new byte[idLine.Length - 1 + 2 * queryLine.Length]; // -1 is because we don't bother to store the @
+                read.idLength = idLine.Length - 1;
+                read.queryLength = queryLine.Length;
+
+                int offsetInData = 0;
+                for (int i = 1; i < idLine.Length; i++)
+                {
+                    read.data[offsetInData++] = Convert.ToByte(idLine[i]);
+                }
+
+                for (int i = 0; i < queryLine.Length; i++)
+                {
+                    read.data[offsetInData++] = Convert.ToByte(queryLine[i]);
+                }
+
+                for (int i = 0; i < qualityLine.Length; i++)
+                {
+                    read.data[offsetInData++] = Convert.ToByte(qualityLine[i]);
+                }
+                return read;
+            } // factory
+
+            public void WriteToStream(StreamWriter outputFile)
+            {
+                string idLine = "@";
+                for (int i = 0; i < idLength; i++)
+                {
+                    idLine += Convert.ToChar(data[i]);
+                }
+                outputFile.WriteLine(idLine);
+
+                string queryString = "";
+                for (int i = idLength; i < idLength + queryLength; i++)
+                {
+                    queryString += Convert.ToChar(data[i]);
+                }
+
+                outputFile.WriteLine(queryString);
+                outputFile.WriteLine("+");
+
+                string quality = "";
+                for (int i = idLength + queryLength; i < idLength + 2 * queryLength; i++)
+                {
+                    quality += Convert.ToChar(data[i]);
+                }
+
+                outputFile.WriteLine(quality);
+            }
+        }
         static void Main(string[] args)
         {
             if (args.Count() != 3 && args.Count() != 5)
@@ -22,136 +111,141 @@ namespace SampleFastq
             Stopwatch timer = new Stopwatch();
             timer.Start();
 
-            string input1Name = args[1];
-            string input2Name = (args.Count() == 5) ? args[2] : null;
-            string output1Name = (args.Count() == 5) ? args[3] : args[2];
-            string output2Name = (args.Count() == 5) ? args[4] : null;
+            int nInputFiles = args.Count() == 5 ? 2 : 1;
+
+            string input0Name = args[1];
+            string input1Name = (nInputFiles == 2) ? args[2] : null;
+            string output0Name = (nInputFiles == 2) ? args[3] : args[2];
+            string output1Name = (nInputFiles == 2) ? args[4] : null;
  
             var nReadsToWrite = Convert.ToInt64(args[0]);
-            var nReadsWritten = 0;
 
-            var input1 = ASETools.CreateStreamReaderWithRetryCompressedBasedOnFilename(input1Name);
-            if (null == input1)
+            var input0 = ASETools.CreateStreamReaderWithRetryCompressedBasedOnFilename(input0Name);
+            if (null == input0)
             {
-                Console.WriteLine("Unable to open input file " + input1Name);
+                Console.WriteLine("Unable to open input file " + input0Name);
                 return;
             }
 
-            StreamReader input2;
-            if (input2Name != null)
+            StreamReader input1;
+            if (nInputFiles == 2)
             {
-                input2 = ASETools.CreateStreamReaderWithRetryCompressedBasedOnFilename(input2Name);
-                if (input2 == null)
+                input1 = ASETools.CreateStreamReaderWithRetryCompressedBasedOnFilename(input1Name);
+                if (input1 == null)
                 {
-                    Console.WriteLine("Unable to open file " + input2Name);
+                    Console.WriteLine("Unable to open file " + input1Name);
                     return;
                 }
             }
             else
             {
-                input2 = null;
+                input1 = null;
             }
 
-            var output1 = ASETools.CreateStreamWriterWithRetry(output1Name);
-            if (null == output1)
+            var output0 = ASETools.CreateStreamWriterWithRetry(output0Name);
+            if (null == output0)
             {
-                Console.WriteLine("Unable to open output file " + output1Name);
+                Console.WriteLine("Unable to open output file " + output0Name);
                 return;
             }
 
-            StreamWriter output2;
-            if (output2Name != null)
+            StreamWriter output1;
+            if (nInputFiles == 2)
             {
-                output2 = ASETools.CreateStreamWriterWithRetry(output2Name);
-                if (null == output2)
+                output1 = ASETools.CreateStreamWriterWithRetry(output1Name);
+                if (null == output1)
                 {
-                    Console.WriteLine("Unable to open output file " + output2Name);
+                    Console.WriteLine("Unable to open output file " + output1Name);
                     return;
                 }
             } else
             {
-                output2 = null;
+                output1 = null;
             }
 
-            var input1Size = new FileInfo(input1Name).Length;
+            StreamReader[] inputFiles = { input0, input1};
+            StreamWriter[] outputFiles = { output0, output1 };
 
-            long input1SizeConsumed = 0;
-            long input1LineGroupsConsumed = 0;
-
-            const int nLinesPerFastqRead = 4;
-            string[] lines1 = new string[nLinesPerFastqRead];
-            string[] lines2 = new string[nLinesPerFastqRead];
-            for (int i = 0; i < nLinesPerFastqRead; i++)
+            var reads = new List<FASTQRead>[nInputFiles];
+            for (int whichFile = 0; whichFile < nInputFiles; whichFile++)
             {
-                lines2[i] = null;
+                reads[whichFile] = new List<FASTQRead>();
             }
 
             var random = new Random();
 
-            int nPerDot;
-            ASETools.PrintMessageAndNumberBar("Writing", "reads", nReadsToWrite, out nPerDot);
-
-
+            Console.Write("Reading input files, 1 dot/1,000,000 reads (in each file): ");
+            int nRead = 0;
 
             while (true)
             {
-                for (int i = 0; i < nLinesPerFastqRead; i++)
+                int nFailedReads = 0;
+                for (int whichFile = 0; whichFile < nInputFiles; whichFile++)
                 {
-                    lines1[i] = input1.ReadLine();
-                    if (input2 != null)
+                    var read = FASTQRead.ReadFromStream(inputFiles[whichFile]);
+                    if (read == null)
                     {
-                        lines2[i] = input2.ReadLine();
+                        nFailedReads++;
+                    } else
+                    {
+                        reads[whichFile].Add(read);
                     }
                 }
 
-                if (lines1[0] == null)
+                if (nFailedReads != 0)
                 {
-                    if (lines1.Any(_ => _!= null) || lines2.Any(_ => _ != null))
+                    if (nFailedReads != nInputFiles)
                     {
-                        Console.WriteLine("Input file wasn't a multiple of " + nLinesPerFastqRead + " lines.");
+                        Console.WriteLine("Read error or input files didn't have the same number of reads");
                         return;
                     }
-
                     break;
                 }
 
-                input1LineGroupsConsumed++;
-                input1SizeConsumed += lines1.Select(_ => _.Length).Sum();
-
-                var estimatedLinesRemaining = (input1Size - input1SizeConsumed) / ((double)input1SizeConsumed/input1LineGroupsConsumed);
-                if (random.NextDouble()  < (nReadsToWrite - nReadsWritten) / estimatedLinesRemaining)
+                nRead++;
+                if (nRead % 1000000 == 0)
                 {
-                    lines1.ToList().ForEach(_ => output1.WriteLine(_));
-                    if (output2 != null)
-                    {
-                        lines2.ToList().ForEach(_ => output2.WriteLine(_));
-                    }
-                    nReadsWritten++;
+                    Console.Write(".");
+                }
+            } // while we have something to read
+            Console.WriteLine();
 
-                    if (nReadsWritten % nPerDot == 0)
-                    {
-                        Console.Write(".");
-                    }
+            int []indexArray = new int[nRead];
+            for (int i = 0; i < nRead; i++)
+            {
+                indexArray[i] = i;
+            }
 
-                    if (nReadsWritten == nReadsToWrite)
-                    {
-                        break;
-                    }
+            int nPerDot;
+            ASETools.PrintMessageAndNumberBar("Writing", "reads", nReadsToWrite, out nPerDot);
+
+            int nRemaining = nRead;
+            for (int nWritten = 0; nWritten < nReadsToWrite; nWritten++)
+            {
+                int whichIndex = random.Next(0, nRemaining - 1);
+                int whichRead = indexArray[whichIndex];
+
+                for (int whichFile = 0; whichFile < nInputFiles; whichFile++)
+                {
+                    reads[whichFile][whichRead].WriteToStream(outputFiles[whichFile]);
                 }
 
+                indexArray[whichIndex] = indexArray[nRemaining - 1];
+                nRemaining--;
 
-            } // while (true)
+                if ((nWritten + 1) % nPerDot == 0)
+                {
+                    Console.Write(".");
+                }
+            }
 
-            output1.Close();
-
-            if (null != output2)
+            foreach (var outputFile in outputFiles)
             {
-                output2.Close();
+                outputFile.Close();
             }
 
             Console.WriteLine();
-
-            Console.WriteLine("Wrote " + nReadsWritten + " FASTQ reads in " + ASETools.ElapsedTimeInSeconds(timer));
+            Console.WriteLine("Wrote " + nReadsToWrite + " FASTQ reads in " + ASETools.ElapsedTimeInSeconds(timer));
         } // Main
     }
 }
