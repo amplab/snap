@@ -816,11 +816,8 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
         stats->incrementScore(result->score[0], result->score[1]);
     }
 
-    if (result->fromAlignTogether) {
-        stats->recordAlignTogetherMapqAndTime(__max(result->mapq[0], result->mapq[1]), result->nanosInAlignTogether, result->nSmallHits, result->nLVCalls);
-    }
-
     if (result->alignedAsPair) {
+        stats->recordAlignTogetherMapqAndTime(__max(result->mapq[0], result->mapq[1]), result->nanosInAlignTogether, result->nSmallHits, result->nLVCalls);
         stats->alignedAsPairs += 2; // They are a pair, after all.  Hence, +2.
     }
 }

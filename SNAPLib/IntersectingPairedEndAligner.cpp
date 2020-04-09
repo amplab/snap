@@ -771,7 +771,6 @@ IntersectingPairedEndAligner::align(
 
                                 PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
                                 result->alignedAsPair = true;
-                                result->fromAlignTogether = true;
 
                                 for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
                                     result->direction[r] = scoresForAllAlignments.bestResultDirection[r];
@@ -813,7 +812,6 @@ IntersectingPairedEndAligner::align(
                                 result->alignedAsPair = true;
                                 result->direction[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
                                 result->direction[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
-                                result->fromAlignTogether = true;
                                 result->location[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
                                 result->location[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
                                 result->mapq[0] = result->mapq[1] = 0;

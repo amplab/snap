@@ -68,7 +68,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
 		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), emitALTAlignments(emitALTAlignments_)
 {
     // Create single-end aligners.
-    singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
+    singleAligner = new (allocator) BaseAligner(index, maxHits, maxK / 2  /* allocate half to each end instead of letting it float like when they're aligned together */, maxReadSize,
                                                 maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, 
                                                 noUkkonen, noOrderedEvaluation, noTruncation, useAffineGap, 
                                                 ignoreAlignmentAdjustmentsForOm, altAwareness, emitALTAlignments, maxScoreGapToPreferNonAltAlignment,
@@ -150,7 +150,6 @@ bool ChimericPairedEndAligner::align(
 			result->status[whichRead] = NotFound;
 		}
 		result->alignedAsPair = false;
-		result->fromAlignTogether = false;
 		result->nanosInAlignTogether = 0;
 		result->nLVCalls = 0;
 		result->nSmallHits = 0;
@@ -178,12 +177,11 @@ bool ChimericPairedEndAligner::align(
 		_int64 end = timeInNanos();
 
 		result->nanosInAlignTogether = end - start;
-		result->fromAlignTogether = true;
 		result->alignedAsPair = true;
 
 		if (forceSpacing) {
 			if (result->status[0] == NotFound) {
-				result->fromAlignTogether = false;
+				result->alignedAsPair = false;
 			} else {
 				_ASSERT(result->status[1] != NotFound); // If one's not found, so is the other
 			}
@@ -232,7 +230,6 @@ bool ChimericPairedEndAligner::align(
             result->basesClippedBefore[r] = 0;
             result->basesClippedAfter[r] = 0;
             result->agScore[r] = 0;
-            result->fromAlignTogether = false;
             result->alignedAsPair = false;
             result->clippingForReadAdjustment[r] = 0;
 
@@ -302,7 +299,6 @@ bool ChimericPairedEndAligner::align(
                 _ASSERT(result->basesClippedBefore[r] >= 0);
             }
         }
-        result->fromAlignTogether = false;
         result->alignedAsPair = false;
     }
 
