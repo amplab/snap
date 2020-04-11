@@ -129,6 +129,8 @@ public:
 
 private:
 
+    inline int scoreLimit(bool forALT);
+
     bool hadBigAllocator;
 
     LandauVishkin<> *landauVishkin;
@@ -242,7 +244,7 @@ private:
         ScoreSet();
         void init();
 
-        unsigned bestScore;
+        int bestScore;
         GenomeLocation bestScoreGenomeLocation;
         Direction bestScoreDirection;
         bool bestScoreUsedAffineGapScoring;
@@ -326,7 +328,7 @@ private:
     unsigned nSeedsApplied[NUM_DIRECTIONS];
     ScoreSet scoresForAllAlignments;
     ScoreSet scoresForNonAltAlignments;
-    unsigned scoreLimit;
+    //unsigned scoreLimit;
     unsigned minScoreThreshold; // used in affine gap to elide scoring of missed seed hits
     unsigned lvScores;
     unsigned lvScoresAfterBestFound;

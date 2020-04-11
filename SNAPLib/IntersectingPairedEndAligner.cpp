@@ -880,7 +880,7 @@ IntersectingPairedEndAligner::align(
          scoreSetToEmit = &scoresForNonAltAlignments;
      }
 
-    if (scoreSetToEmit->bestPairScore == 65536) {
+    if (scoreSetToEmit->bestPairScore == TooBigScoreValue) {
         //
         // Found nothing.
         //

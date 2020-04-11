@@ -7,6 +7,7 @@
 
 const int MAX_K = 63;
 const int ScoreAboveLimit = -1; // A score value that means "we didn't compute the score because it was above the score limit."
+const int TooBigScoreValue = 65536; // This is much bigger than any score we'll ever see
 
 //
 // These are global so there are only one for both senses of the template
@@ -15,26 +16,6 @@ const int ScoreAboveLimit = -1; // A score value that means "we didn't compute t
 extern double *lv_indelProbabilities;  // Maps indels by length to probability of occurance.
 extern double *lv_phredToProbability;  // Maps ASCII phred character to probability of error, including 
 extern double *lv_perfectMatchProbability; // Probability that a read of this length has no mutations
-
-#if 0 // This appears to be unused
-struct LVResult {
-    short k;
-    short result;
-    short netIndel;
-    double matchProbability;
-
-    LVResult() { k = -1; result = -1; netIndel = 0;}
-
-    LVResult(short k_, short result_, short netIndel_, double matchProbability_) { 
-        k = k_; 
-        result = result_; 
-        netIndel = netIndel_; 
-        matchProbability = matchProbability_;
-    }
-
-    inline bool isValid() { return k != -1; }
-};
-#endif // 0 
 
 static inline void memsetint(int* p, int value, int count)
 {
@@ -125,6 +106,11 @@ public:
     int localNetIndel;
     int localTotalIndels;
 	int d;
+
+    if (k < 0) {
+        return ScoreAboveLimit;
+    }
+
     if (NULL == o_netIndel) {
         //
         // If the user doesn't want netIndel, just use a stack local to avoid

@@ -545,7 +545,7 @@ private:
 
             probabilityOfBestPair = 0;
             probabilityOfAllPairs = 0;
-            bestPairScore = 65536;
+            bestPairScore = TooBigScoreValue;
         } // init()
 
         void updateProbabilityOfAllPairs(double oldPairProbability);

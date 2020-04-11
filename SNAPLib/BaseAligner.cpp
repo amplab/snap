@@ -323,6 +323,8 @@ Return Value:
     firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
     highestWeightListChecked = 0;
 
+    scoresForAllAlignments.bestScore = scoresForNonAltAlignments.bestScore = TooBigScoreValue;
+
     unsigned maxSeedsToUse;
     if (0 != maxSeedsToUseFromCommandLine) {
         maxSeedsToUse = maxSeedsToUseFromCommandLine;
@@ -446,8 +448,6 @@ Return Value:
     nSeedsApplied[FORWARD] = nSeedsApplied[RC] = 0;
     lvScores = 0;
     lvScoresAfterBestFound = 0;
-
-    scoreLimit = maxK + extraSearchDepth; // For MAPQ computation
 
     while (nSeedsApplied[FORWARD] + nSeedsApplied[RC] < maxSeedsToUse) {
         //
@@ -641,13 +641,15 @@ Return Value:
 
                     findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
 
+                    bool candidateIsALT = altAwareness && genome->isGenomeLocationALT(genomeLocationOfThisHit);
+
                     if (NULL != hashTableElement) {
                         if (!noOrderedEvaluation) {     // If noOrderedEvaluation, just leave them all on the one-hit weight list so they get evaluated in whatever order
                             incrementWeight(hashTableElement);
                         }
                         candidate->seedOffset = offset;
                         _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
-                    } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit || noTruncation) {
+                    } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit(candidateIsALT) || noTruncation) {
                             _ASSERT(offset <= readLen - seedLen);
                             allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                 offset, &candidate, &hashTableElement);
@@ -703,7 +705,7 @@ Return Value:
                 &overflowedSecondaryResultsBuffer)) {
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %s:%llu\n", primaryResult->score, primaryResult->mapq, 
+                if (_DumpAlignments) printf("Final result score %d MAPQ %d at %s:%llu\n", primaryResult->score, primaryResult->mapq, 
                     genome->getContigAtLocation(primaryResult->location)->name, primaryResult->location - genome->getContigAtLocation(primaryResult->location)->beginningLocation);
 #endif  // _DEBUG
                 if (overflowedSecondaryResultsBuffer) {
@@ -867,7 +869,7 @@ Return Value:
         }
 
 
-        if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit && !noTruncation) || forceResult) {
+        if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > max(scoreLimit(true), scoreLimit(false)) && !noTruncation) || forceResult) {
             if (weightListToCheck < minWeightToCheck) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
@@ -923,7 +925,8 @@ Return Value:
             genome->prefetchData(elementToScore->weightNext->baseGenomeLocation);
         }
 
-        if (elementToScore->lowestPossibleScore <= scoreLimit) {
+        int scoreLimitForThisElement = scoreLimit(altAwareness && genome->isGenomeLocationALT(elementToScore->baseGenomeLocation)); // All nearby genome locations are either ALT or non-ALT, so it's OK to be close here
+        if (elementToScore->lowestPossibleScore <= scoreLimitForThisElement) {
 
             unsigned long candidateIndexToScore;
             _uint64 candidatesMask = elementToScore->candidatesUsed;
@@ -944,7 +947,7 @@ Return Value:
                 GenomeLocation genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
                 GenomeLocation elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
 
-                bool genomeLocationIsNonALT = !genome->isGenomeLocationALT(genomeLocation);
+                bool genomeLocationIsNonALT = (!altAwareness) || !genome->isGenomeLocationALT(genomeLocation);
 
                 //
                 // We're about to run edit distance computation on the genome.  Launch a prefetch for it
@@ -992,13 +995,13 @@ Return Value:
                     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));
                     int textLen = (int)__min(genomeDataLength - tailStart, 0x7ffffff0);
                     score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
-                        scoreLimit, &matchProb1, NULL, &totalIndels);
+                        scoreLimitForThisElement, &matchProb1, NULL, &totalIndels);
 
                     agScore1 = (seedLen + readLen - tailStart - score1) * matchReward - score1 * subPenalty;
 
                     if (score1 != ScoreAboveLimit) {
                         // The tail of the read matched; now let's reverse match the reference genome and the head
-                        int limitLeft = scoreLimit - score1;
+                        int limitLeft = scoreLimitForThisElement - score1;
                         totalIndels = 0;
                         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
                             read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2,
@@ -1017,13 +1020,13 @@ Return Value:
                                 //
                                 // Try banded affine-gap when pattern is long and band needed is small
                                 //
-                                if (patternLen >= (3 * (2 * (int)scoreLimit + 1))) {
+                                if (patternLen >= (3 * (2 * scoreLimitForThisElement + 1))) {
                                     agScore1 = affineGap->computeScoreBanded(data + tailStart,
                                         textLen,
                                         readToScore->getData() + tailStart,
                                         readToScore->getQuality() + tailStart,
                                         readLen - tailStart,
-                                        scoreLimit,
+                                        scoreLimitForThisElement,
                                         seedLen,
                                         NULL,
                                         &basesClippedAfter,
@@ -1036,7 +1039,7 @@ Return Value:
                                         readToScore->getData() + tailStart,
                                         readToScore->getQuality() + tailStart,
                                         readLen - tailStart,
-                                        scoreLimit,
+                                        scoreLimitForThisElement,
                                         seedLen,
                                         NULL,
                                         &basesClippedAfter,
@@ -1047,7 +1050,7 @@ Return Value:
 
                             if (score1 != ScoreAboveLimit) {
                                 if (seedOffset != 0) {
-                                    int limitLeft = scoreLimit - score1;
+                                    int limitLeft = scoreLimitForThisElement - score1;
                                     int patternLen = seedOffset;
                                     //
                                     // Try banded affine-gap when pattern is long and band needed is small
@@ -1122,8 +1125,9 @@ Return Value:
 
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\t\tScored %s weight %2d limit %d, result %2d %s, agScore %d, usedAffine %d, matchProb %g.  %d added to hash table\n", 
-                    genome->genomeLocationInStringForm(genomeLocation.location, genomeLocationBuffer, genomeLocationBufferSize), elementToScore->weight, scoreLimit, score, 
+                if (_DumpAlignments) printf("\t\t%cScored %s weight %2d limit %d, result %2d %s, agScore %d, usedAffine %d, matchProb %g.  %d added to hash table\n", 
+                    score != ScoreAboveLimit ? '*' : ' ',
+                    genome->genomeLocationInStringForm(genomeLocation.location, genomeLocationBuffer, genomeLocationBufferSize), elementToScore->weight, scoreLimitForThisElement, score, 
                     (elementToScore->direction ? "RC" : ""), agScore, usedAffineGapScoring, matchProbability, 
                     nAddedToHashTable);
 #endif  // _DEBUG
@@ -1214,7 +1218,7 @@ Return Value:
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
-                scoresForAllAlignments.updateBestScore(genomeLocation, score, useAffineGap, agScore, matchProbability, lvScoresAfterBestFound, elementToScore, 
+                scoresForAllAlignments.updateBestScore(genomeLocation, score, usedAffineGapScoring, agScore, matchProbability, lvScoresAfterBestFound, elementToScore,
                                             secondaryResults, nSecondaryResults, secondaryResultBufferSize, 
                                             anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer);
                 if (*overflowedSecondaryBuffer) {
@@ -1225,7 +1229,7 @@ Return Value:
                     //
                     // Don't update secondary results here; we don't exclude ALT alignments from them, only from the primary result.
                     //
-                    scoresForNonAltAlignments.updateBestScore(genomeLocation, score, useAffineGap, agScore, matchProbability, lvScoresAfterBestFound, elementToScore, 
+                    scoresForNonAltAlignments.updateBestScore(genomeLocation, score, usedAffineGapScoring, agScore, matchProbability, lvScoresAfterBestFound, elementToScore,
                                                    NULL, 0, 0, anyNearbyCandidatesAlreadyScored, -1, NULL);
                 }
                                         
@@ -1252,13 +1256,6 @@ Return Value:
                     (altAwareness ? scoresForNonAltAlignments : scoresForAllAlignments).fillInSingleAlignmentResult(primaryResult, popularSeedsSkipped);
                     firstALTResult->status = NotFound;
                     return true;
-                }
-
-                // Update scoreLimit since we may have improved bestScore or secondBestScore
-                if (!noUkkonen) {   // If we've turned off Ukkonen, then don't drop the score limit, just leave it at maxK + extraSearchDepth always
-                    scoreLimit = min(scoresForAllAlignments.bestScore, maxK) + extraSearchDepth;
-                } else {
-                    _ASSERT(scoreLimit == maxK + extraSearchDepth);
                 }
             }   // While candidates exist in the element
         }   // If the element could possibly affect the result
@@ -1831,7 +1828,7 @@ BaseAligner::finalizeSecondaryResults(
         if (primaryResult->status != NotFound) {
             bestScore = primaryResult->score;
         } else {
-            bestScore = 65536;
+            bestScore = TooBigScoreValue;
         }
 
         for (int i = 0; i < *nSecondaryResults; i++) {
@@ -1931,4 +1928,18 @@ BaseAligner::finalizeSecondaryResults(
         qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), SingleAlignmentResult::compareByScore);
         *nSecondaryResults = maxSecondaryResults;   // Just truncate it
     }
-}
+} // BaseAligner::finalizeSecondaryResults
+
+    int
+BaseAligner::scoreLimit(bool forALT) 
+{
+    if (noUkkonen) {
+        return maxK + extraSearchDepth; // We're testing the value of truncating our searches by not doing so.
+    }
+
+    if (forALT) {
+        return min(maxK + extraSearchDepth, min(scoresForAllAlignments.bestScore + extraSearchDepth, scoresForNonAltAlignments.bestScore - maxScoreGapToPreferNonAltAlignment));
+    }
+
+    return min(maxK + extraSearchDepth, min(scoresForAllAlignments.bestScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments.bestScore + extraSearchDepth));
+} // BaseAligner::scoreLimit
