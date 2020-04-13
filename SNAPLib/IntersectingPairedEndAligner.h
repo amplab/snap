@@ -138,8 +138,8 @@ private:
     unsigned        maxReadSize;
     unsigned        maxHits;
     unsigned        maxBigHits;
-    unsigned        extraSearchDepth;
-    unsigned        maxK;
+    int             extraSearchDepth;
+    int             maxK;
     unsigned        numSeedsFromCommandLine;
     double          seedCoverage;
     static const unsigned MAX_MAX_SEEDS = 30;
@@ -154,7 +154,7 @@ private:
     bool            useAffineGap;
     bool            ignoreAlignmentAdjustmentsForOm;
 	bool			altAwareness;
-    unsigned        maxScoreGapToPreferNonAltAlignment;
+    int             maxScoreGapToPreferNonAltAlignment;
 
     // Affine gap scoring parameters
     int             matchReward;
@@ -372,8 +372,8 @@ private:
             Direction            direction,
             GenomeLocation       genomeLocation,
             unsigned             seedOffset,
-            unsigned             scoreLimit,
-            unsigned            *score,
+            int                  scoreLimit,
+            int                 *score,
             double              *matchProbability,
             int                 *genomeLocationOffset,   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
             bool                *usedAffineGapScoring = NULL,
@@ -381,6 +381,7 @@ private:
             int                 *basesClippedAfter = NULL,
             int                 *agScore = NULL
     );
+
 
     //
     // These are used to keep track of places where we should merge together candidate locations for MAPQ purposes, because they're sufficiently
@@ -430,9 +431,9 @@ private:
         //
         double                  matchProbability;
         GenomeLocation          readWithMoreHitsGenomeLocation;
-        unsigned                bestPossibleScore;
-        unsigned                score;
-        unsigned                scoreLimit;             // The scoreLimit with which score was computed
+        int                     bestPossibleScore;
+        int                     score;
+        int                     scoreLimit;             // The scoreLimit with which score was computed
         unsigned                seedOffset;
         int                     genomeOffset;
         bool                    usedAffineGapScoring;
@@ -562,10 +563,11 @@ private:
 
         double probabilityOfBestPair;
         double probabilityOfAllPairs;
-        unsigned bestPairScore;
+        int bestPairScore;
 
         Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {RC, FORWARD} };
     }; // ScoreSet
 
+    inline int computeScoreLimit(bool nonALTAlignment, const ScoreSet* scoresForAllAlignments, const ScoreSet* scoresForNonAltAlignments);
 
 }; // IntersectingPairedEndAligner

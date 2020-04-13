@@ -206,7 +206,7 @@ IntersectingPairedEndAligner::align(
 #endif  // _DEBUG
 
     lowestFreeScoringCandidatePoolEntry = 0;
-    for (unsigned k = 0; k <= maxK + extraSearchDepth; k++) {
+    for (int k = 0; k <= maxK + extraSearchDepth; k++) {
         scoringCandidates[k] = NULL;
     }
 
@@ -270,7 +270,7 @@ IntersectingPairedEndAligner::align(
         reads[whichRead][RC]->init(read->getId(), read->getIdLength(), rcReadData[whichRead], rcReadQuality[whichRead], read->getDataLength());
     }
 
-    if (countOfNs > maxK) {
+    if ((int)countOfNs > maxK) {
         return true;
     }
 
@@ -297,8 +297,6 @@ IntersectingPairedEndAligner::align(
     localBestPairProbability[0] = 0;
     localBestPairProbability[1] = 0;
     
-    unsigned scoreLimit = maxK + extraSearchDepth;
-
     //
     // Phase 1: do the hash table lookups for each of the seeds for each of the reads and add them to the hit sets.
     //
@@ -411,7 +409,7 @@ IntersectingPairedEndAligner::align(
     //
     // Phase 2: find all possible candidates and add them to candidate lists (for the reads with fewer and more hits).
     //
-    unsigned maxUsedBestPossibleScoreList = 0;
+    int maxUsedBestPossibleScoreList = 0;
 
     for (unsigned whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
         HashTableHitSet *setPair[NUM_READS_PER_PAIR];
@@ -537,7 +535,7 @@ IntersectingPairedEndAligner::align(
             // And finally add the hit from the fewer hit side.  To compute its best possible score, we need to look at all of the mates; we couldn't do it in the
             // loop immediately above because some of them might have already been in the mate list from a different, nearby fewer hit location.
             //
-			unsigned bestPossibleScoreForReadWithFewerHits;
+			int bestPossibleScoreForReadWithFewerHits;
 			
 			if (noTruncation) {
 				bestPossibleScoreForReadWithFewerHits = 0;
@@ -545,7 +543,7 @@ IntersectingPairedEndAligner::align(
 				bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
 			}
 
-            unsigned lowestBestPossibleScoreOfAnyPossibleMate = maxK + extraSearchDepth;
+            int lowestBestPossibleScoreOfAnyPossibleMate = maxK + extraSearchDepth;
             for (int i = lowestFreeScoringMateCandidate[whichSetPair] - 1; i >= 0; i--) {
                 if (scoringMateCandidates[whichSetPair][i].readWithMoreHitsGenomeLocation > lastGenomeLocationForReadWithFewerHits + maxSpacing) {
                     break;
@@ -567,7 +565,7 @@ IntersectingPairedEndAligner::align(
                 // If we have noOrderedEvaluation set, just stick everything on list 0, regardless of what it really is.  This will cause us to
                 // evaluate the candidates in more-or-less inverse genome order.
                 //
-                unsigned bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
+                int bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
 
                 scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits, whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
                                                                                 lastSeedOffsetForReadWithFewerHits, bestPossibleScoreForReadWithFewerHits,
@@ -600,12 +598,17 @@ IntersectingPairedEndAligner::align(
     //
     // Phase 3: score and merge the candidates we've found.
     //
-    unsigned currentBestPossibleScoreList = 0;
-    scoreLimit = maxK + extraSearchDepth;
+    int currentBestPossibleScoreList = 0;
+
     //
     // Loop until we've scored all of the candidates, or proven that what's left must have too high of a score to be interesting.
+    // 
     //
-    while (currentBestPossibleScoreList <= maxUsedBestPossibleScoreList && currentBestPossibleScoreList <= scoreLimit) {
+    while (currentBestPossibleScoreList <= maxUsedBestPossibleScoreList && 
+            currentBestPossibleScoreList <= extraSearchDepth + min(maxK, max(   // Never look for worse than our worst interesting score
+                                                                           min(scoresForAllAlignments.bestPairScore, scoresForNonAltAlignments.bestPairScore - maxScoreGapToPreferNonAltAlignment),   // Worst we care about for ALT
+                                                                           min(scoresForAllAlignments.bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments.bestPairScore)))) // And for non-ALT
+    {
         if (scoringCandidates[currentBestPossibleScoreList] == NULL) {
             //
             // No more candidates on this list.  Skip to the next one.
@@ -619,11 +622,21 @@ IntersectingPairedEndAligner::align(
         //
         ScoringCandidate *candidate = scoringCandidates[currentBestPossibleScoreList];
 
-        unsigned fewerEndScore;
+        int fewerEndScore;
         double fewerEndMatchProbability;
         int fewerEndGenomeLocationOffset;
 
         bool nonALTAlignment = (!altAwareness) || !genome->isGenomeLocationALT(candidate->readWithFewerHitsGenomeLocation);
+
+        int scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
+
+        if (currentBestPossibleScoreList > scoreLimit) {
+            //
+            // Remove us from the head of the list and proceed to the next candidate to score.  We can get here becuase now we know ALT/non-ALT, which have different limits.
+            //
+            scoringCandidates[currentBestPossibleScoreList] = candidate->scoreListNext;
+            continue;
+        }
 
         scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsGenomeLocation,
             candidate->seedOffset, scoreLimit, &fewerEndScore, &fewerEndMatchProbability, &fewerEndGenomeLocationOffset, &candidate->usedAffineGapScoring,
@@ -683,7 +696,7 @@ IntersectingPairedEndAligner::align(
 
                     if (mate->score != ScoreAboveLimit && fewerEndScore + mate->score <= scoreLimit) { // We need to check to see that we're below scoreLimit because we may have scored this earlier when scoreLimit was higher.
                         double pairProbability = mate->matchProbability * fewerEndMatchProbability;
-                        unsigned pairScore = mate->score + fewerEndScore;
+                        int pairScore = mate->score + fewerEndScore;
                         //
                         // See if this should be ignored as a merge, or if we need to back out a previously scored location
                         // because it's a worse version of this location.
@@ -758,7 +771,7 @@ IntersectingPairedEndAligner::align(
                                 scoresForNonAltAlignments.updateProbabilityOfAllPairs(oldPairProbability);
                             }
 
-                            if (pairProbability > scoresForAllAlignments.probabilityOfBestPair && maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= scoresForAllAlignments.bestPairScore - pairScore) {
+                            if (pairProbability > scoresForAllAlignments.probabilityOfBestPair && maxEditDistanceForSecondaryResults != -1 && maxEditDistanceForSecondaryResults >= scoresForAllAlignments.bestPairScore - pairScore) {
                                 //
                                 // Move the old best to be a secondary alignment.  This won't happen on the first time we get a valid alignment,
                                 // because bestPairScore is initialized to be very large.
@@ -795,10 +808,10 @@ IntersectingPairedEndAligner::align(
                             bool updatedBestScore = scoresForAllAlignments.updateBestHitIfNeeded(pairScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
 
                             if (!noUkkonen) {
-                                scoreLimit = __min(scoresForNonAltAlignments.bestPairScore + extraSearchDepth, scoresForAllAlignments.bestPairScore + extraSearchDepth + maxScoreGapToPreferNonAltAlignment);
+                                scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
                             }
                             
-                            if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore) {
+                            if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore) {
                                 
                                 //
                                 // A secondary result to save.
@@ -969,7 +982,7 @@ IntersectingPairedEndAligner::align(
             }
             alignmentAdjuster.AdjustAlignments(inputReads, &secondaryResults[i]);
             if (secondaryResults[i].status[0] != NotFound && secondaryResults[i].status[1] != NotFound && !ignoreAlignmentAdjustmentsForOm) {
-                scoreSetToEmit->bestPairScore = __min(scoreSetToEmit->bestPairScore, (unsigned)(secondaryResults[i].score[0] + secondaryResults[i].score[1]));
+                scoreSetToEmit->bestPairScore = __min(scoreSetToEmit->bestPairScore, secondaryResults[i].score[0] + secondaryResults[i].score[1]);
             }
         }
     } else {
@@ -1075,8 +1088,8 @@ IntersectingPairedEndAligner::scoreLocation(
     Direction            direction,
     GenomeLocation       genomeLocation,
     unsigned             seedOffset,
-    unsigned             scoreLimit,
-    unsigned            *score,
+    int                  scoreLimit,
+    int                 *score,
     double              *matchProbability,
     int                 *genomeLocationOffset,
     bool                *usedAffineGapScoring,
@@ -1085,6 +1098,10 @@ IntersectingPairedEndAligner::scoreLocation(
     int                 *agScore)
 {
     nLocationsScored++;
+
+    if (noUkkonen) {
+        scoreLimit = maxK + extraSearchDepth;
+    }
 
     Read *readToScore = reads[whichRead][direction];
     unsigned readDataLength = readToScore->getDataLength();
@@ -1665,3 +1682,18 @@ void IntersectingPairedEndAligner::ScoreSet::fillInResult(PairedAlignmentResult*
 } // fillInResult
 
 const unsigned IntersectingPairedEndAligner::maxMergeDistance = 31;
+
+int IntersectingPairedEndAligner::computeScoreLimit(bool nonALTAlignment, const ScoreSet * scoresForAllAlignments, const ScoreSet * scoresForNonAltAlignments)
+{
+    if (nonALTAlignment) {
+        //
+        // For a non-ALT alignment to matter, it must be no worse than maxScoreGapToPreferNonAltAlignment of the best ALT alignment and at least as good as the best non-ALT alignment.
+        //
+        return extraSearchDepth + min(scoresForAllAlignments->bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments->bestPairScore);
+    } else {
+        //
+        // For an ALT alignment to matter, it has to be at least maxScoreGapToPreferNonAltAlignment better than the best non-ALT alignment, and better than the best ALT alignment.
+        //
+        return extraSearchDepth + min(scoresForAllAlignments->bestPairScore, scoresForNonAltAlignments->bestPairScore - maxScoreGapToPreferNonAltAlignment);
+    }
+}
