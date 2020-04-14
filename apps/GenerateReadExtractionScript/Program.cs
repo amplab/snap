@@ -232,7 +232,7 @@ namespace GenerateScriptFromVariants
 
                 process.WaitForExit();
 
-                Console.WriteLine("Generate consolodated extracted reads for case id " + case_.case_id + " exited with code " + process.ExitCode);
+                Console.WriteLine("Generate consolodated extracted reads for case id " + case_.case_id + " exited with code " + process.ExitCode + "(0x" + String.Format("{0:X}", process.ExitCode) + ")");
 
 
                 if (process.ExitCode != 0)
