@@ -632,7 +632,7 @@ IntersectingPairedEndAligner::align(
 
         if (currentBestPossibleScoreList > scoreLimit) {
             //
-            // Remove us from the head of the list and proceed to the next candidate to score.  We can get here becuase now we know ALT/non-ALT, which have different limits.
+            // Remove us from the head of the list and proceed to the next candidate to score.  We can get here because now we know ALT/non-ALT, which have different limits.
             //
             scoringCandidates[currentBestPossibleScoreList] = candidate->scoreListNext;
             continue;
@@ -807,9 +807,7 @@ IntersectingPairedEndAligner::align(
 
                             bool updatedBestScore = scoresForAllAlignments.updateBestHitIfNeeded(pairScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
 
-                            if (!noUkkonen) {
-                                scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
-                            }
+                            scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
                             
                             if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore) {
                                 
