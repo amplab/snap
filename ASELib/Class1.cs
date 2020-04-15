@@ -319,7 +319,7 @@ namespace ASELib
             public const string filteredHeaderLine = unfilteredHeaderLine +
                     "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
 
-            public const string percentileHeaderLine = filteredHeaderLine + 
+            public const string percentileHeaderLine = filteredHeaderLine +
                 "frac min 2ref\tfrac 10th %ile 2ref\tfrac 20th %ile 2ref\tfrac 30th %ile 2ref\tfrac 40th %ile 2ref\tfrac 50th %ile 2ref\tfrac 60th %ile 2ref\tfrac 70th %ile 2ref\tfrac 80th %ile 2ref\tfrac 90th %ile 2ref\tfrac max 2ref\t" +
                 "frac min 2alt\tfrac 10th %ile 2alt\tfrac 20th %ile 2alt\tfrac 30th %ile 2alt\tfrac 40th %ile 2alt\tfrac 50th %ile 2alt\tfrac 60th %ile 2alt\tfrac 70th %ile 2alt\tfrac 80th %ile 2alt\tfrac 90th %ile 2alt\tfrac max 2alt\t" +
                 "frac min all\tfrac 10th %ile all\tfrac 20th %ile all\tfrac 30th %ile all\tfrac 40th %ile all\tfrac 50th %ile all\tfrac 60th %ile all\tfrac 70th %ile all\tfrac 80th %ile all\tfrac 90th %ile all\tfrac max all";
@@ -393,7 +393,7 @@ namespace ASELib
             }
 
 
- 
+
 
             public int CompareByDiseaseAndChromosome(GeneScatterGraphLine peer)
             {
@@ -592,7 +592,7 @@ namespace ASELib
                 wantedFields.AddRange(wantedFieldsArrayFieldsAdditionalForFiltered.ToList());
                 wantedFields.AddRange(wantedFieldsArrayFieldsAdditionalForPercentiles.ToList());
 
-                foreach (var filename in Directory.EnumerateFiles(directoryName, GeneScatterGraphLinesWithPercentilesPrefix +  "*"))
+                foreach (var filename in Directory.EnumerateFiles(directoryName, GeneScatterGraphLinesWithPercentilesPrefix + "*"))
                 {
                     if (filename == "")
                     {
@@ -699,7 +699,7 @@ namespace ASELib
                 return isASECandidate(out whyNot, copyNumber, configuration, perGeneASEMap, geneMap, repetitiveRegionMap);
             }
 
-            public bool isASECandidate(out string whyNot, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, ASERepetitiveRegionMap repetitiveRegionMap, 
+            public bool isASECandidate(out string whyNot, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, ASERepetitiveRegionMap repetitiveRegionMap,
                 bool ignoreNonseMediatedDecay = false)
 
             {
@@ -863,7 +863,7 @@ namespace ASELib
             }
 
             public int length()
-            { 
+            {
                 return end - start;
             }
 
@@ -983,7 +983,7 @@ namespace ASELib
 
             public bool containsLocusInCodingAndKnownExpressionRegion(string locusChromosome, int locus, ExpressionFile expressionFile)
             {
-                return expressionFile.valueKnown(locusChromosome, locus) &&  isoforms.Any(isoform => isoform.chromosome == locusChromosome && isoform.exons.Any(exon => exon.start <= locus && exon.end >= locus));
+                return expressionFile.valueKnown(locusChromosome, locus) && isoforms.Any(isoform => isoform.chromosome == locusChromosome && isoform.exons.Any(exon => exon.start <= locus && exon.end >= locus));
             }
 
             public int size()
@@ -1023,7 +1023,7 @@ namespace ASELib
                 var nIsoforms = isoforms.Count();
 
                 int minValue = int.MaxValue;
-                for (int i = 0; i < nIsoforms; i++ )
+                for (int i = 0; i < nIsoforms; i++)
                 {
                     minValue = Math.Min(minValue, Math.Abs(isoforms[i].txStart - locus));
                 }
@@ -1422,6 +1422,15 @@ namespace ASELib
             public string variant_phasing_filename = "";
             public string vcf_statistics_filename = "";
             public string read_statictics_filename = "";
+            public string snap_realigned_normal_dna_filename = "";
+            public string snap_realigned_tumor_dna_filename = "";
+            public string snap_realigned_normal_dna_statictics_filename = "";
+            public string snap_realigned_tumor_dna_statictics_filename = "";
+            public string bowtie_realigned_normal_dna_filename = "";
+            public string bowtie_realigned_tumor_dna_filename = "";
+            public string bowtie_realigned_normal_dna_statictics_filename = "";
+            public string bowtie_realigned_tumor_dna_statictics_filename = "";
+
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -1499,7 +1508,14 @@ namespace ASELib
             public long variant_phasing_size = 0;
             public long vcf_statistics_size = 0;
             public long read_statictics_size = 0;
-
+            public long snap_realigned_normal_dna_size = 0;
+            public long snap_realigned_tumor_dna_size = 0;
+            public long snap_realigned_normal_dna_statictics_size = 0;
+            public long snap_realigned_tumor_dna_statictics_size = 0;
+            public long bowtie_realigned_normal_dna_size = 0;
+            public long bowtie_realigned_tumor_dna_size = 0;
+            public long bowtie_realigned_normal_dna_statictics_size = 0;
+            public long bowtie_realigned_tumor_dna_statictics_size = 0;
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
             // so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
@@ -1577,7 +1593,7 @@ namespace ASELib
 
             public class DownloadableFileType
             {
-                public DownloadableFileType(string name_, ColumnGetter fileIdGetter_, ColumnSetter fileIdSetter_, ColumnGetter filenameGetter_, ColumnSetter filenameSetter_, 
+                public DownloadableFileType(string name_, ColumnGetter fileIdGetter_, ColumnSetter fileIdSetter_, ColumnGetter filenameGetter_, ColumnSetter filenameSetter_,
                                             SizeColumnGetter sizeGetter_, SizeColumnSetter sizeSetter_, ColumnGetter md5Getter_, ColumnSetter md5Setter_)
                 {
                     name = name_;
@@ -1607,51 +1623,51 @@ namespace ASELib
                     baiMD5Setter = baiMD5Setter_;
                 }
 
-            public readonly string name;
-            public readonly ColumnGetter fileIdGetter;
-            public readonly ColumnSetter fileIdSetter;
-            public readonly ColumnGetter filenameGetter;
-            public readonly ColumnSetter filenameSetter;
-            public readonly SizeColumnGetter sizeGetter;
-            public readonly SizeColumnSetter sizeSetter;
-            public readonly ColumnGetter md5Getter = null;
-            public readonly ColumnSetter md5Setter = null;
-            public readonly ColumnGetter bamMD5Getter = null;
-            public readonly ColumnSetter bamMD5Setter = null;
-            public readonly ColumnGetter baiMD5Getter = null;
-            public readonly ColumnSetter baiMD5Setter = null;
+                public readonly string name;
+                public readonly ColumnGetter fileIdGetter;
+                public readonly ColumnSetter fileIdSetter;
+                public readonly ColumnGetter filenameGetter;
+                public readonly ColumnSetter filenameSetter;
+                public readonly SizeColumnGetter sizeGetter;
+                public readonly SizeColumnSetter sizeSetter;
+                public readonly ColumnGetter md5Getter = null;
+                public readonly ColumnSetter md5Setter = null;
+                public readonly ColumnGetter bamMD5Getter = null;
+                public readonly ColumnSetter bamMD5Setter = null;
+                public readonly ColumnGetter baiMD5Getter = null;
+                public readonly ColumnSetter baiMD5Setter = null;
 
-        }
-
-        public class DerivedFileType
-        {
-            public DerivedFileType(string name_, ColumnGetter filenameGetter_, ColumnSetter filenameSetter_, DerivedFile.Type derivedFileType_, string extension_, ExpectedIdGetter fileIDGetter_, SizeColumnGetter sizeColumnGetter_, SizeColumnSetter sizeColumnSetter_)
-            {
-                name = name_;
-                filenameGetter = filenameGetter_;
-                filenameSetter = filenameSetter_;
-                derivedFileType = derivedFileType_;
-                extension = extension_;
-                fileIDGetter = fileIDGetter_;
-                sizeColumnGetter = sizeColumnGetter_;
-                sizeColumnSetter = sizeColumnSetter_;
             }
 
-            public readonly string name;
-            public readonly ColumnGetter filenameGetter;
-            public readonly ColumnSetter filenameSetter;
-            public readonly DerivedFile.Type derivedFileType;
-            public readonly string extension;
-            public readonly ExpectedIdGetter fileIDGetter;
-            public readonly SizeColumnGetter sizeColumnGetter;
-            public readonly SizeColumnSetter sizeColumnSetter;
-        } // DerivedFileType
+            public class DerivedFileType
+            {
+                public DerivedFileType(string name_, ColumnGetter filenameGetter_, ColumnSetter filenameSetter_, DerivedFile.Type derivedFileType_, string extension_, ExpectedIdGetter fileIDGetter_, SizeColumnGetter sizeColumnGetter_, SizeColumnSetter sizeColumnSetter_)
+                {
+                    name = name_;
+                    filenameGetter = filenameGetter_;
+                    filenameSetter = filenameSetter_;
+                    derivedFileType = derivedFileType_;
+                    extension = extension_;
+                    fileIDGetter = fileIDGetter_;
+                    sizeColumnGetter = sizeColumnGetter_;
+                    sizeColumnSetter = sizeColumnSetter_;
+                }
 
-        public static List<DownloadableFileType> downloadableFileTypes; 
-        public static List<DerivedFileType> derivedFileTypes;
+                public readonly string name;
+                public readonly ColumnGetter filenameGetter;
+                public readonly ColumnSetter filenameSetter;
+                public readonly DerivedFile.Type derivedFileType;
+                public readonly string extension;
+                public readonly ExpectedIdGetter fileIDGetter;
+                public readonly SizeColumnGetter sizeColumnGetter;
+                public readonly SizeColumnSetter sizeColumnSetter;
+            } // DerivedFileType
 
-        public static Dictionary<string, DownloadableFileType> downloadableFileTypesByName;
-        public static Dictionary<string, DerivedFileType> derivedFileTypesByName;
+            public static List<DownloadableFileType> downloadableFileTypes;
+            public static List<DerivedFileType> derivedFileTypes;
+
+            public static Dictionary<string, DownloadableFileType> downloadableFileTypesByName;
+            public static Dictionary<string, DerivedFileType> derivedFileTypesByName;
 
             class TypeAndFieldInformationInitializer
             {
@@ -1813,6 +1829,14 @@ namespace ASELib
                     derivedFileTypes.Add(new DerivedFileType("Variant Phasing", c => c.variant_phasing_filename, (c, v) => c.variant_phasing_filename = v, DerivedFile.Type.VariantPhasing, variantPhasingExtension, c => c.case_id, c => c.variant_phasing_size, (c, v) => c.variant_phasing_size = v));
                     derivedFileTypes.Add(new DerivedFileType("VCF Statistics", c => c.vcf_statistics_filename, (c, v) => c.vcf_statistics_filename = v, DerivedFile.Type.VCFStatistics, vcfStatisticsExtension, c => c.normal_dna_file_id, c => c.vcf_statistics_size, (c, v) => c.vcf_statistics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Read Statistics", c => c.read_statictics_filename, (c, v) => c.read_statictics_filename = v, DerivedFile.Type.ReadStatictics, readStatisticsExtension, c => c.case_id, c => c.read_statictics_size, (c, v) => c.read_statictics_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Normal DNA", c => c.snap_realigned_normal_dna_filename, (c, v) => c.snap_realigned_normal_dna_filename = v, DerivedFile.Type.SnapRealignedNormalDNA, snapRealignedNormalDNAExtension, c => c.normal_dna_file_id, c => c.snap_realigned_normal_dna_size, (c, v) => c.snap_realigned_normal_dna_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Tumor DNA", c => c.snap_realigned_tumor_dna_filename, (c, v) => c.snap_realigned_tumor_dna_filename = v, DerivedFile.Type.SnapRealignedTumorDNA, snapRealignedTumorDNAExtension, c => c.tumor_dna_file_id, c => c.snap_realigned_tumor_dna_size, (c, v) => c.snap_realigned_tumor_dna_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Normal DNA Statictics", c => c.snap_realigned_normal_dna_statictics_filename, (c, v) => c.snap_realigned_normal_dna_statictics_filename = v, DerivedFile.Type.SnapNormalDNAStatictics, snapRealignedNormalDNAStaticticsExtension, c => c.normal_dna_file_id, c => c.snap_realigned_normal_dna_statictics_size, (c, v) => c.snap_realigned_normal_dna_statictics_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Tumor DNA Statictics", c => c.snap_realigned_tumor_dna_statictics_filename, (c, v) => c.snap_realigned_tumor_dna_statictics_filename = v, DerivedFile.Type.SnapTumorDNAStatictics, snapRealignedTumorDNAStatisticsExtension, c => c.tumor_dna_file_id, c => c.snap_realigned_tumor_dna_statictics_size, (c, v) => c.snap_realigned_tumor_dna_statictics_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA", c => c.bowtie_realigned_normal_dna_filename, (c, v) => c.bowtie_realigned_normal_dna_filename = v, DerivedFile.Type.BowtieRealignedNormalDNA, bowtieRealignedNormalDNAExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_size, (c, v) => c.bowtie_realigned_normal_dna_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA", c => c.bowtie_realigned_tumor_dna_filename, (c, v) => c.bowtie_realigned_tumor_dna_filename = v, DerivedFile.Type.BowtieRealignedTumorDNA, bowtieRealignedTumorDNAExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_size, (c, v) => c.bowtie_realigned_tumor_dna_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA Statictics", c => c.bowtie_realigned_normal_dna_statictics_filename, (c, v) => c.bowtie_realigned_normal_dna_statictics_filename = v, DerivedFile.Type.BowtieNormalDNAStatictics, bowtieRealignedNormalDNAStaticticsExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_statictics_size, (c, v) => c.bowtie_realigned_normal_dna_statictics_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA Statictics", c => c.bowtie_realigned_tumor_dna_statictics_filename, (c, v) => c.bowtie_realigned_tumor_dna_statictics_filename = v, DerivedFile.Type.BowtieTumorDNAStatictics, bowtieRealignedTumorDNAStatisticsExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_statictics_size, (c, v) => c.bowtie_realigned_tumor_dna_statictics_size = v));
 
                     downloadableFileTypesByName = downloadableFileTypes.GroupByToDictUnique(_ => _.name);
                     derivedFileTypesByName = derivedFileTypes.GroupByToDictUnique(_ => _.name);
@@ -2299,7 +2323,7 @@ namespace ASELib
                 }
             } // getReadsAtSelectedVariantsFilename
 
- 
+
             public string getReadsAtTentativeSelectedVariantsIndexFilename(bool tumor, bool dna)
             {
                 if (tumor)
@@ -2386,7 +2410,7 @@ namespace ASELib
                         return new StreamWriter(filename);
                     } else
                     {
-                        return new StreamWriter(filename, false, new  UTF8Encoding(), bufferSize);  // false means don't append
+                        return new StreamWriter(filename, false, new UTF8Encoding(), bufferSize);  // false means don't append
                     }
                 }
                 catch (IOException e)
@@ -2512,7 +2536,7 @@ namespace ASELib
 
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-16";
             public string localIndexDirectory
-                = @"d:\gdc\indices\hg38-16";
+                = @"d:\gdc\indices\hg38-20-large";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
@@ -2988,7 +3012,7 @@ namespace ASELib
 
             public Dictionary<string, Dictionary<string, string>> map = new Dictionary<string, Dictionary<string, string>>(); // disease->chromosome->filename
 
-            static string[] wantedFields = { "disease", "chromosome", "filename"};
+            static string[] wantedFields = { "disease", "chromosome", "filename" };
 
         } // ExpressionDistributionByChromosomeMap
 
@@ -3711,6 +3735,14 @@ namespace ASELib
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
         public const string readStatisticsExtension = ".read_statistics";
+        public const string snapRealignedNormalDNAExtension = ".snap-normal-dna.bam";
+        public const string snapRealignedTumorDNAExtension = ".snap-tumor-dna.bam";
+        public const string snapRealignedNormalDNAStaticticsExtension = ".snap-normal-dna-statictics.txt";
+        public const string snapRealignedTumorDNAStatisticsExtension = ".snap-tumor-dna-statictics.txt";
+        public const string bowtieRealignedNormalDNAExtension = ".bowtie-normal-dna.bam";
+        public const string bowtieRealignedTumorDNAExtension = ".bowtie-tumor-dna.bam";
+        public const string bowtieRealignedNormalDNAStaticticsExtension = ".bowtie-normal-dna-statictics.txt";
+        public const string bowtieRealignedTumorDNAStatisticsExtension = ".bowtie-tumor-dna-statictics.txt";
 
         public const string MethylationDistributionsFilename = "MethylationDistributions.txt";
         public const string MethylationCorrelationsFilename = "MethylationCorrelations.txt";
@@ -3777,8 +3809,9 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage, TentativeSelectedVariants,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations, 
-                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs, VariantPhasing, VCFStatistics, ReadStatictics
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations,
+                AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs, VariantPhasing, VCFStatistics, ReadStatictics,
+                SnapRealignedNormalDNA, SnapRealignedTumorDNA, SnapNormalDNAStatictics, SnapTumorDNAStatictics, BowtieRealignedNormalDNA, BowtieRealignedTumorDNA, BowtieNormalDNAStatictics, BowtieTumorDNAStatictics
             };
         } // DerivedFile
 
@@ -4305,7 +4338,7 @@ namespace ASELib
                     }
                     return false;
                 }
- 
+
                 if (hasVersion)
                 {
                     var versionString = inputFile.ReadLine();
@@ -4955,7 +4988,7 @@ namespace ASELib
 
                 var retVal = new MethylationDistribution();
 
-                foreach(var line in lines)
+                foreach (var line in lines)
                 {
                     if (!retVal.lineMap.ContainsKey(line.contig))
                     {
@@ -5420,7 +5453,7 @@ namespace ASELib
 
             if (size / divisor > 9)
             {
-                return "" + (size + divisor/2) / divisor + suffix;
+                return "" + (size + divisor / 2) / divisor + suffix;
             }
 
             return "" + size / divisor + "." + ((size * 10 + divisor / 20) / divisor) % 10 + suffix;
@@ -6330,7 +6363,7 @@ namespace ASELib
             {
                 nRegionsIncludedTumor++;
                 totalTumorExpression += z;
- 
+
                 minTumorExpression = Math.Min(minTumorExpression, z);
                 maxTumorExpression = Math.Max(maxTumorExpression, z);
 
@@ -8709,7 +8742,7 @@ namespace ASELib
             }
 
             public bool IsASECandidate(out string whyNot, bool isTumor, Dictionary<bool, List<CopyNumberVariation>> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int inputMinRNACoverage = -1, int inputMinDNACoverage = -1)
-            { 
+            {
                 if (!isTumor && normalRNAReadCounts == null)
                 {
                     whyNot = "No Normal RNA";
@@ -8991,7 +9024,7 @@ namespace ASELib
                     Console.WriteLine("SAMLine.SAMLine: error parsing cigar string " + cigar + " for read " + rawline);
                     throw e;
                 } // catch */
-                
+
 
             } // SAMLine
 
@@ -9077,17 +9110,17 @@ namespace ASELib
             public readonly int nonclippedBases;
             public readonly string[] optionalFields;
 
-            public const int MultipleSegments               = 0x1;    // i.e., paired
-            public const int AllSegmentsProperlyAligned     = 0x2;
-            public const int Unmapped                       = 0x4;
-            public const int NextUnmapped                   = 0x8;
-            public const int RC                             = 0x10;
-            public const int MateRC                         = 0x20;
-            public const int FirstSegment                   = 0x40;
-            public const int LastSegment                    = 0x80;
-            public const int SecondaryAligment              = 0x100;
-            public const int Duplicate                      = 0x400;
-            public const int SupplementaryAlignment         = 0x800;
+            public const int MultipleSegments = 0x1;    // i.e., paired
+            public const int AllSegmentsProperlyAligned = 0x2;
+            public const int Unmapped = 0x4;
+            public const int NextUnmapped = 0x8;
+            public const int RC = 0x10;
+            public const int MateRC = 0x20;
+            public const int FirstSegment = 0x40;
+            public const int LastSegment = 0x80;
+            public const int SecondaryAligment = 0x100;
+            public const int Duplicate = 0x400;
+            public const int SupplementaryAlignment = 0x800;
 
             // Dictionary of position and bases at position
             public Dictionary<int, char> mappedBases = new Dictionary<int, char>();
@@ -9143,9 +9176,9 @@ namespace ASELib
             return outputPathname + @"\";
         }
 
-        public static string GetDataDirectoryFromFilename(string filename, Configuration configuration)
+        public static string GetDataDirectoryFromFilename(string filename, Configuration configuration, bool forceDerivedFilesDirectory = false)
         {
-            bool isDerivedFilesDirectory = filename.Contains(configuration.derivedFilesDirectory);  // Derived files are stored in dataDirectory\..\derivedFiles
+            bool isDerivedFilesDirectory = filename.Contains(configuration.derivedFilesDirectory) || forceDerivedFilesDirectory;  // Derived files are stored in dataDirectory\..\derivedFiles
             foreach (var dataDirectory in configuration.dataDirectories)
             {
                 if (filename.ToLower().StartsWith(dataDirectory.ToLower()) || isDerivedFilesDirectory && filename.ToLower().StartsWith((GoUpFilesystemLevels(dataDirectory, 1) + configuration.derivedFilesDirectory).ToLower()))
@@ -9564,7 +9597,7 @@ namespace ASELib
                 {
                     minValue = fieldGrabber.AsDouble("minValue");
                 }
-                return new HistogramResultLine(fieldGrabber.AsString("minValue"), minValue,  fieldGrabber.AsInt("count"), fieldGrabber.AsDouble("total"), fieldGrabber.AsDouble("pdf"), fieldGrabber.AsDouble("cdf"));
+                return new HistogramResultLine(fieldGrabber.AsString("minValue"), minValue, fieldGrabber.AsInt("count"), fieldGrabber.AsDouble("total"), fieldGrabber.AsDouble("pdf"), fieldGrabber.AsDouble("cdf"));
             }
 
             public HistogramResultLine(string minValue_, double minValueAsDouble_, int count_, double total_, double pdfValue_, double cdfValue_)
@@ -9792,7 +9825,7 @@ namespace ASELib
 
                 double desiredPercentileAsDouble = (double)desiredPercentile / 100;
 
-                for (int i = 0; i < lines.Count()-1; i++)
+                for (int i = 0; i < lines.Count() - 1; i++)
                 {
                     if (lines[i].cdfValue >= desiredPercentileAsDouble)
                     {
@@ -10141,7 +10174,7 @@ namespace ASELib
                 for (var i = 0; i < nRegions; i++)
                 {
                     foreach (bool exclusive in BothBools) {
-                        wantedFields.AddRange(SingleExpressionResult.getHeaders(false, exclusive, "" + regionIndexToString(i))); 
+                        wantedFields.AddRange(SingleExpressionResult.getHeaders(false, exclusive, "" + regionIndexToString(i)));
                     }
                 }
 
@@ -10281,8 +10314,8 @@ namespace ASELib
             return (1 << regionIndex) * 1000;
         }
 
- 
-        public class AVLTree<TValue>  where TValue : IComparable
+
+        public class AVLTree<TValue> where TValue : IComparable
         {
             public static AVLTree<TValue> CreateFromList(List<TValue> list)
             {
@@ -10297,7 +10330,7 @@ namespace ASELib
 
                 public Node left = null, right = null, parent = null;
 
-                public enum Balance { AVLLeft, AVLBalanced, AVLRight, AVLNew};
+                public enum Balance { AVLLeft, AVLBalanced, AVLRight, AVLNew };
                 public Balance balance = Balance.AVLNew;
 
                 public int checkAndReturnDepth()
@@ -10428,7 +10461,7 @@ namespace ASELib
                     Insert(value);
                 }
             }
-            
+
             public bool findMin(out TValue returnValue)
             {
                 if (root == null)
@@ -10597,7 +10630,7 @@ namespace ASELib
 
 
             public bool FindFirstLessThan(TValue key, out TValue retVal)
-            { 
+            {
                 Node currentNode = root;
                 Node lastLessThan = null;
 
@@ -11262,137 +11295,137 @@ namespace ASELib
 
         } // AVLTree
 
-		public static void Shuffle<T>(IList<T> list)
-		{
-			Random rng = new Random();
+        public static void Shuffle<T>(IList<T> list)
+        {
+            Random rng = new Random();
 
-			int n = list.Count;
-			while (n > 1)
-			{
-				n--;
-				int k = rng.Next(n + 1);
-				T value = list[k];
-				list[k] = list[n];
-				list[n] = value;
-			}
-		}
+            int n = list.Count;
+            while (n > 1)
+            {
+                n--;
+                int k = rng.Next(n + 1);
+                T value = list[k];
+                list[k] = list[n];
+                list[n] = value;
+            }
+        }
 
-		public class EnsembleGeneFile
-		{
-			static Tuple<string, string> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
-			{
-				var ensemblId = fields[fieldMappings["Gene stable ID"]];
-				var geneName = fields[fieldMappings["Gene name"]];
+        public class EnsembleGeneFile
+        {
+            static Tuple<string, string> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+            {
+                var ensemblId = fields[fieldMappings["Gene stable ID"]];
+                var geneName = fields[fieldMappings["Gene name"]];
 
-				return new Tuple<string, string>(ensemblId, geneName);
-			}
+                return new Tuple<string, string>(ensemblId, geneName);
+            }
 
-			public static Dictionary<string, string> ReadFile(string filename)
-			{
-				StreamReader inputFile = CreateStreamReaderWithRetry(filename);
+            public static Dictionary<string, string> ReadFile(string filename)
+            {
+                StreamReader inputFile = CreateStreamReaderWithRetry(filename);
 
-				var wantedFields = new List<string>();
-				wantedFields.Add("Gene stable ID");
-				wantedFields.Add("Gene name");
+                var wantedFields = new List<string>();
+                wantedFields.Add("Gene stable ID");
+                wantedFields.Add("Gene name");
 
-				var headerizedFile = new HeaderizedFile<Tuple<string, string>>(inputFile, false, false, "", wantedFields);
+                var headerizedFile = new HeaderizedFile<Tuple<string, string>>(inputFile, false, false, "", wantedFields);
 
-				List<Tuple<string, string>> linesFromThisFile;
+                List<Tuple<string, string>> linesFromThisFile;
 
-				headerizedFile.ParseFile(ParseLine, out linesFromThisFile);
+                headerizedFile.ParseFile(ParseLine, out linesFromThisFile);
 
-				return linesFromThisFile.ToDictionary(r => r.Item1, r => r.Item2);
-			}
-		}
+                return linesFromThisFile.ToDictionary(r => r.Item1, r => r.Item2);
+            }
+        }
 
-		public class CopyNumberVariation
-		{
-			//public string Sample; This changed to GDC_aliquot in the new data, but we're not using it, so I just deleted it.
-			public string Chromosome;
-			public int Start;
-			public int End;
-			public int Num_Probes;
-			public double Segment_Mean;
+        public class CopyNumberVariation
+        {
+            //public string Sample; This changed to GDC_aliquot in the new data, but we're not using it, so I just deleted it.
+            public string Chromosome;
+            public int Start;
+            public int End;
+            public int Num_Probes;
+            public double Segment_Mean;
 
-			CopyNumberVariation(
-				string Chromosome_,
-				int Start_,
-				int End_,
-				int Num_Probes_,
-				double Segment_Mean_)
-			{
-				Chromosome = Chromosome_;
-				Start = Start_;
-				End = End_;
-				Num_Probes = Num_Probes_;
-				Segment_Mean = Segment_Mean_;
-			}
-			static CopyNumberVariation ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
-			{
-				// Start and End can be formatted in scientific notation, so we convert them accordingly
-				return new CopyNumberVariation(
-					fields[fieldMappings["Chromosome"]],
-					Convert.ToInt32(Double.Parse(fields[fieldMappings["Start"]], System.Globalization.NumberStyles.Float)),
-					Convert.ToInt32(Double.Parse(fields[fieldMappings["End"]], System.Globalization.NumberStyles.Float)),
-					Convert.ToInt32(fields[fieldMappings["Num_Probes"]]),
-					Convert.ToDouble(fields[fieldMappings["Segment_Mean"]])
-					);
-			}
+            CopyNumberVariation(
+                string Chromosome_,
+                int Start_,
+                int End_,
+                int Num_Probes_,
+                double Segment_Mean_)
+            {
+                Chromosome = Chromosome_;
+                Start = Start_;
+                End = End_;
+                Num_Probes = Num_Probes_;
+                Segment_Mean = Segment_Mean_;
+            }
+            static CopyNumberVariation ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+            {
+                // Start and End can be formatted in scientific notation, so we convert them accordingly
+                return new CopyNumberVariation(
+                    fields[fieldMappings["Chromosome"]],
+                    Convert.ToInt32(Double.Parse(fields[fieldMappings["Start"]], System.Globalization.NumberStyles.Float)),
+                    Convert.ToInt32(Double.Parse(fields[fieldMappings["End"]], System.Globalization.NumberStyles.Float)),
+                    Convert.ToInt32(fields[fieldMappings["Num_Probes"]]),
+                    Convert.ToDouble(fields[fieldMappings["Segment_Mean"]])
+                    );
+            }
 
-			public bool OverlapsLocus(string Chromosome_, int Start_, int End_)
-			{
-				if (this.Chromosome != Chromosome_)
-				{
-					return false;
-				}
+            public bool OverlapsLocus(string Chromosome_, int Start_, int End_)
+            {
+                if (this.Chromosome != Chromosome_)
+                {
+                    return false;
+                }
 
-				if (this.Start < End_ && this.End > Start_)
-				{
-					return true;
-				}
-				else
-				{
-					return false;
-				}
-			}
+                if (this.Start < End_ && this.End > Start_)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
 
-			static public int getBasesinCNV(List<CopyNumberVariation> CNVs, double threshold = 0.2)
-			{
-				return CNVs.Select(r => r.End - r.Start).Sum();
-			}
+            static public int getBasesinCNV(List<CopyNumberVariation> CNVs, double threshold = 0.2)
+            {
+                return CNVs.Select(r => r.End - r.Start).Sum();
+            }
 
-			static public List<CopyNumberVariation> ReadFile(string filename)
-			{
+            static public List<CopyNumberVariation> ReadFile(string filename)
+            {
                 if (filename == "")
                 {
                     return null;
                 }
 
-				StreamReader inputFile;
+                StreamReader inputFile;
 
-				inputFile = CreateStreamReaderWithRetry(filename);
+                inputFile = CreateStreamReaderWithRetry(filename);
 
-				var neededFields = new List<string>();
-				neededFields.Add("Chromosome");
-				neededFields.Add("Start");
-				neededFields.Add("End");
-				neededFields.Add("Num_Probes");
-				neededFields.Add("Segment_Mean");
+                var neededFields = new List<string>();
+                neededFields.Add("Chromosome");
+                neededFields.Add("Start");
+                neededFields.Add("End");
+                neededFields.Add("Num_Probes");
+                neededFields.Add("Segment_Mean");
 
-				var headerizedFile = new HeaderizedFile<CopyNumberVariation>(inputFile, false, false, "#version gdc-1.0.0", neededFields);
+                var headerizedFile = new HeaderizedFile<CopyNumberVariation>(inputFile, false, false, "#version gdc-1.0.0", neededFields);
 
-				List<CopyNumberVariation> result;
+                List<CopyNumberVariation> result;
 
-				if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
-				{
-					Console.WriteLine("Error reading Annotation File " + filename);
-					return null;
-				}
+                if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
+                {
+                    Console.WriteLine("Error reading Annotation File " + filename);
+                    return null;
+                }
 
-				inputFile.Close();
+                inputFile.Close();
 
-				return result;
-			} // ReadFile
+                return result;
+            } // ReadFile
 
             static public Dictionary<bool, List<CopyNumberVariation>> ReadBothFiles(Case case_)
             {
@@ -11415,86 +11448,86 @@ namespace ASELib
         } // CopyNumberVariation
 
         public class IGV
-		{
-			// writes batch file that visualizes CNV, normal and tumor DNA, as well as tumor RNA
-			// specify case, output file and optional position, in the form of "Gene_name"
-			// or "chrX:start-end"
-			public static void writeBatchFile(ASETools.Case case_, string filename, string position = "")
-			{
-				var outFile = ASETools.CreateStreamWriterWithRetry(filename);
+        {
+            // writes batch file that visualizes CNV, normal and tumor DNA, as well as tumor RNA
+            // specify case, output file and optional position, in the form of "Gene_name"
+            // or "chrX:start-end"
+            public static void writeBatchFile(ASETools.Case case_, string filename, string position = "")
+            {
+                var outFile = ASETools.CreateStreamWriterWithRetry(filename);
 
-				// start new session
-				outFile.WriteLine("new");
+                // start new session
+                outFile.WriteLine("new");
 
-				// Write normal CNV data
-				if (case_.normal_copy_number_filename != "")
-				{
-					outFile.WriteLine("load " + case_.normal_copy_number_filename);
-				}
+                // Write normal CNV data
+                if (case_.normal_copy_number_filename != "")
+                {
+                    outFile.WriteLine("load " + case_.normal_copy_number_filename);
+                }
 
-				// Write normal CNV data
-				if (case_.tumor_copy_number_filename != "")
-				{
-					outFile.WriteLine("load " + case_.tumor_copy_number_filename);
-				}
+                // Write normal CNV data
+                if (case_.tumor_copy_number_filename != "")
+                {
+                    outFile.WriteLine("load " + case_.tumor_copy_number_filename);
+                }
 
-				// load normal DNA, tumor DNA and tumor RNA
-				outFile.WriteLine("load " + case_.normal_dna_filename);
-				outFile.WriteLine("load " + case_.tumor_dna_filename);
-				outFile.WriteLine("load " + case_.tumor_rna_filename);
+                // load normal DNA, tumor DNA and tumor RNA
+                outFile.WriteLine("load " + case_.normal_dna_filename);
+                outFile.WriteLine("load " + case_.tumor_dna_filename);
+                outFile.WriteLine("load " + case_.tumor_rna_filename);
 
-				if (position != "")
-				{
-					outFile.WriteLine("goto " + position);
-				}
+                if (position != "")
+                {
+                    outFile.WriteLine("goto " + position);
+                }
 
-				outFile.Close();
+                outFile.Close();
 
-			}
-		}
+            }
+        }
 
 
-		public class FPKMFile
-		{
-			public static Dictionary<string, double> ReadFile(string filename, Configuration configuration)
-			{
-				// first, load in default ensembl id => gene names
-				var idMap = EnsembleGeneFile.ReadFile(configuration.ensemblToGeneFilename);
+        public class FPKMFile
+        {
+            public static Dictionary<string, double> ReadFile(string filename, Configuration configuration)
+            {
+                // first, load in default ensembl id => gene names
+                var idMap = EnsembleGeneFile.ReadFile(configuration.ensemblToGeneFilename);
 
-				StreamReader inputFile;
+                StreamReader inputFile;
 
-				if (filename.Count() > 2 && filename.Substring(filename.Count() - 3, 3) == ".gz")
-				{
-					inputFile = CreateCompressedStreamReaderWithRetry(filename);
-				}
-				else
-				{
-					inputFile = CreateStreamReaderWithRetry(filename);
-				}
+                if (filename.Count() > 2 && filename.Substring(filename.Count() - 3, 3) == ".gz")
+                {
+                    inputFile = CreateCompressedStreamReaderWithRetry(filename);
+                }
+                else
+                {
+                    inputFile = CreateStreamReaderWithRetry(filename);
+                }
 
-				var result = new Dictionary<string, double>();
+                var result = new Dictionary<string, double>();
 
-				string line;
-				while ((line = inputFile.ReadLine()) != null)
-				{
-					var split = line.Split('\t');
-					var ens_id = split[0].Split('.').First();
-					var fpkm = Convert.ToDouble(split[1]);
+                string line;
+                while ((line = inputFile.ReadLine()) != null)
+                {
+                    var split = line.Split('\t');
+                    var ens_id = split[0].Split('.').First();
+                    var fpkm = Convert.ToDouble(split[1]);
 
-					string geneName;
-					if (idMap.TryGetValue(ens_id, out geneName))
-					{
-						// there are some inconsistent genes appearing more than once
-						if (!result.ContainsKey(geneName))
-						{
-							result.Add(geneName, fpkm);
-						}
-					}
-				}
+                    string geneName;
+                    if (idMap.TryGetValue(ens_id, out geneName))
+                    {
+                        // there are some inconsistent genes appearing more than once
+                        if (!result.ContainsKey(geneName))
+                        {
+                            result.Add(geneName, fpkm);
+                        }
+                    }
+                }
 
-				inputFile.Close();
-				return result;
-			}
+                inputFile.Close();
+                return result;
+            }
         } // FPKMFile
 
         public class AllSignificantResultsLine
@@ -11561,9 +11594,9 @@ namespace ASELib
 
         public class ASEMapLine
         {
-            public static List<ASEMapLine>ReadFile(string pathnmame)
+            public static List<ASEMapLine> ReadFile(string pathnmame)
             {
-                string [] wantedFields = { "Chromosome", "locus", "tumor", "n cases", "index", "mean", "standard deviation" };
+                string[] wantedFields = { "Chromosome", "locus", "tumor", "n cases", "index", "mean", "standard deviation" };
 
                 var inputFile = CreateStreamReaderWithRetry(pathnmame);
                 if (inputFile == null)
@@ -11656,8 +11689,8 @@ namespace ASELib
             static ASEMapPerGeneLine parseLine(ASETools.HeaderizedFile<ASEMapPerGeneLine>.FieldGrabber fieldGrabber)
             {
                 return new ASEMapPerGeneLine(fieldGrabber.AsString("Hugo Symbol"), fieldGrabber.AsInt("n Tumor Samples"), fieldGrabber.AsDouble("mean Tumor ASE"), fieldGrabber.AsDouble("standard deviation of Tumor ASE"), fieldGrabber.AsDouble("Tumor Fraction of RNA at Variant Sites"),
-                    fieldGrabber.AsInt("n Normal Samples"), fieldGrabber.AsDouble("mean Normal ASE"), fieldGrabber.AsDouble("standard deviation of Normal ASE"), fieldGrabber.AsDouble("Normal Fraction of RNA at Variant Sites"), 
-                    fieldGrabber.AsDouble("Tumor ASE minus Normal ASE"), 
+                    fieldGrabber.AsInt("n Normal Samples"), fieldGrabber.AsDouble("mean Normal ASE"), fieldGrabber.AsDouble("standard deviation of Normal ASE"), fieldGrabber.AsDouble("Normal Fraction of RNA at Variant Sites"),
+                    fieldGrabber.AsDouble("Tumor ASE minus Normal ASE"),
                     fieldGrabber.AsString("chromosome"), fieldGrabber.AsInt("min locus"),
                     fieldGrabber.AsInt("max locus"));
             }
@@ -11693,7 +11726,7 @@ namespace ASELib
 
             public readonly string hugo_symbol;
             public readonly Dictionary<bool, SampleData> sampleData = new Dictionary<bool, SampleData>();
- 
+
             public readonly double TumorExcessASEOverNormal;   // Signed difference between tumor meanASE and normal meanASE
             public readonly string chromosome;
             public readonly int minLocus;
@@ -12250,7 +12283,7 @@ namespace ASELib
             var retVal = new List<KaplanMeierPoint>();
             for (int day = 0; day <= longestSurvivor; day++)
             {
-                if (day == 0 || fractionAliveByDay[day] != fractionAliveByDay[day-1]) {
+                if (day == 0 || fractionAliveByDay[day] != fractionAliveByDay[day - 1]) {
                     retVal.Add(new KaplanMeierPoint(day, fractionAliveByDay[day]));
                 }
             }
@@ -12313,7 +12346,7 @@ namespace ASELib
                     fieldGrabber.AsStringEmptyForNA("RNA_Outliers"));
             }
 
-            BeatAMLSampleMapping(string patientId_, string AML_Original_LabID_, string Normal_Original_LabID_, string AML_SeqID_, string Normal_SeqID_, string AML_BAM_, string Normal_BAM_, string AML_Outliers_, string Normal_Outliers_, 
+            BeatAMLSampleMapping(string patientId_, string AML_Original_LabID_, string Normal_Original_LabID_, string AML_SeqID_, string Normal_SeqID_, string AML_BAM_, string Normal_BAM_, string AML_Outliers_, string Normal_Outliers_,
                 string RNA_SeqID_, string RNA_BAM_, string RNA_Outliers_)
             {
                 patientId = patientId_;
@@ -12434,7 +12467,7 @@ namespace ASELib
             public readonly double normalMinChromosome, normalMedianChromosome, normalMaxChromosome;
         }  // PerCaseASE
 
-        public class WorkerThreadHelper<TQueueItem, TPerThreadState>  where TPerThreadState : new()
+        public class WorkerThreadHelper<TQueueItem, TPerThreadState> where TPerThreadState : new()
         {
             public delegate void HandleOneItem(TQueueItem item, TPerThreadState perThreadState);
             public delegate void FinishUp(TPerThreadState perThreadState);
@@ -12544,12 +12577,12 @@ namespace ASELib
             List<Thread> threads;
         } // WorkerThreadHelper
 
-        public class ASVThreadingHelper<TPerThreadState>  where TPerThreadState : new()
+        public class ASVThreadingHelper<TPerThreadState> where TPerThreadState : new()
         {
 
             public delegate void HandleOneCase(Case case_, TPerThreadState state, List<AnnotatedVariant> variantsForThisCase, ASECorrection aseCorrection, Dictionary<bool, List<CopyNumberVariation>> copyNumber);
             public delegate bool ASVDecider(AnnotatedVariant asv, Dictionary<bool, List<CopyNumberVariation>> copyNumber);
-            public ASVThreadingHelper(List<Case> casesToProcess, ASECorrection aseCorrection_, ASVDecider asvDecider_, HandleOneCase handleOneCase_, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp_, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued_, 
+            public ASVThreadingHelper(List<Case> casesToProcess, ASECorrection aseCorrection_, ASVDecider asvDecider_, HandleOneCase handleOneCase_, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp_, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued_,
                 int nItemsPerDot = 0)
             {
                 aseCorrection = aseCorrection_;
@@ -12566,12 +12599,12 @@ namespace ASELib
             }
             public static ASVThreadingHelper<TPerThreadState> create(List<Case> casesToProcess, bool useSomatic, bool useGermline, bool tumor, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap,
                 GeneMap geneMap, ASECorrection aseCorrection,
-                HandleOneCase handleOneCase, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued, 
-                int inputMinRNACoverage = -1, int inputMinDNACoverage = -1, 
+                HandleOneCase handleOneCase, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued,
+                int inputMinRNACoverage = -1, int inputMinDNACoverage = -1,
                 int nItemsPerDot = 0)
             {
                 return new ASVThreadingHelper<TPerThreadState>(casesToProcess, aseCorrection,
-                    (v,c) => ((v.somaticMutation && useSomatic && !v.isSilent()) || (!v.somaticMutation && useGermline)) &&
+                    (v, c) => ((v.somaticMutation && useSomatic && !v.isSilent()) || (!v.somaticMutation && useGermline)) &&
                         v.IsASECandidate(tumor, c, configuration, perGeneASEMap, geneMap, inputMinRNACoverage, inputMinDNACoverage),
                     handleOneCase, finishUp, itemDequeued, nItemsPerDot);
             }
@@ -12621,7 +12654,7 @@ namespace ASELib
                 return ASVThreadingHelper<TPerThreadState>.create(casesToProcess, useSomatic, useGermline, tumor, configuration, perGeneASEMap, geneMap, aseCorrection, handleOneCase, finishUp, itemDequeued, inputMinRNACoverage, inputMinDNACoverage, nItemsPerDot);
             }
 
-            public static ASVThreadingHelper<TPerThreadState> create(List<Case> casesToProcess, Configuration configuration, ASVDecider asvDecider, 
+            public static ASVThreadingHelper<TPerThreadState> create(List<Case> casesToProcess, Configuration configuration, ASVDecider asvDecider,
                 HandleOneCase handleOneCase, WorkerThreadHelper<Case, TPerThreadState>.FinishUp finishUp, WorkerThreadHelper<Case, TPerThreadState>.ItemDequeued itemDequeued, int nItemsPerDot = 0)
             {
                 Dictionary<string, ASEMapPerGeneLine> perGeneASEMap;
@@ -12680,7 +12713,7 @@ namespace ASELib
                 {
                     finishUp(perThreadState);
                 }
-             }
+            }
 
             void ItemDequeued()
             {
@@ -12733,7 +12766,7 @@ namespace ASELib
 
                 var retVal = new ASECorrection();
                 retVal.maxReadDepth = maxReadDepth;
-                retVal.correction = new double[retVal.maxReadDepth+1, 101];
+                retVal.correction = new double[retVal.maxReadDepth + 1, 101];
 
                 for (int i = 0; i <= maxReadDepth; i++)
                 {
@@ -12926,7 +12959,7 @@ namespace ASELib
                 int maxReadDepth = -1;
 
                 string inputLine;
-                while (null  != (inputLine = inputFile.ReadLine()))
+                while (null != (inputLine = inputFile.ReadLine()))
                 {
                     if (inputLine.StartsWith("ASE distributon for tumor: "))
                     {
@@ -12969,7 +13002,7 @@ namespace ASELib
                 }
 
                 var retVal = new MeasuredASEMatrix(nDiscreteASEValues, maxReadDepth);
-                foreach(var rowEntry in rows)
+                foreach (var rowEntry in rows)
                 {
                     for (int i = 0; i < nDiscreteASEValues; i++)
                     {
@@ -13161,7 +13194,7 @@ namespace ASELib
             {
                 var retVal = new ExpressionDistribution(fieldGrabber.AsString("Chromosome"), fieldGrabber.AsInt("Locus"), fieldGrabber.AsDouble("min"), fieldGrabber.AsDouble("max"));
 
-                for (int i = 10; i < 100; i+= 10)
+                for (int i = 10; i < 100; i += 10)
                 {
                     retVal.percentiles[i / 10 - 1] = fieldGrabber.AsDouble(i + "th %ile");
                 }
@@ -13281,7 +13314,7 @@ namespace ASELib
 #
 # A copy of the GNU General Public License is available at
 # https://www.R-project.org/Licenses/
-         */ 
+         */
 
         public static double binomialTest(int x, int n, double p, BinomalTestType alternative)
         {
@@ -13333,41 +13366,41 @@ namespace ASELib
                          */
 
 
-                            double d = MathNet.Numerics.Distributions.Binomial.PMF(p, n, x);
-                            double m = n * p;
-                            if (x == m) // As if floating point multiplication will ever do this
-                            {
-                                return 1;
-                            }
+                        double d = MathNet.Numerics.Distributions.Binomial.PMF(p, n, x);
+                        double m = n * p;
+                        if (x == m) // As if floating point multiplication will ever do this
+                        {
+                            return 1;
+                        }
 
-                            double relErr = 1 + 1e-7;
+                        double relErr = 1 + 1e-7;
 
-                            if (x < m)
+                        if (x < m)
+                        {
+                            int y = 0;
+                            for (int i = (int)Math.Ceiling(m); i <= n; i++)
                             {
-                                int y = 0;
-                                for (int i = (int)Math.Ceiling(m); i <= n; i++)
+                                if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
                                 {
-                                    if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
-                                    {
-                                        y++;
-                                    }
+                                    y++;
                                 }
-
-                                return MathNet.Numerics.Distributions.Binomial.CDF(p, n, x) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, n - y));
                             }
-                            else
+
+                            return MathNet.Numerics.Distributions.Binomial.CDF(p, n, x) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, n - y));
+                        }
+                        else
+                        {
+                            int y = 0;
+                            for (int i = 0; i <= Math.Floor(m); i++)
                             {
-                                int y = 0;
-                                for (int i = 0; i <= Math.Floor(m); i++)
+                                if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
                                 {
-                                    if (MathNet.Numerics.Distributions.Binomial.PMF(p, n, i) <= d * relErr)
-                                    {
-                                        y++;
-                                    }
+                                    y++;
                                 }
-
-                                return MathNet.Numerics.Distributions.Binomial.CDF(p, n, y - 1) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, x - 1));
                             }
+
+                            return MathNet.Numerics.Distributions.Binomial.CDF(p, n, y - 1) + (1 - MathNet.Numerics.Distributions.Binomial.CDF(p, n, x - 1));
+                        }
 
 
                     default:
@@ -13383,19 +13416,19 @@ namespace ASELib
         // BED file format at http://uswest.ensembl.org/info/website/upload/bed.html
         public class BEDLine : IComparable
         {
-            public readonly string      chrom;
-            public readonly int         chromStart;
-            public readonly int         chromEnd;
-            public readonly string      name;
-            public readonly int         score;
-            public readonly string      strand;         // probably could be a char
-            public readonly int         thickStart;
-            public readonly int         thickEnd;
-            public readonly string      itemRGB;
+            public readonly string chrom;
+            public readonly int chromStart;
+            public readonly int chromEnd;
+            public readonly string name;
+            public readonly int score;
+            public readonly string strand;         // probably could be a char
+            public readonly int thickStart;
+            public readonly int thickEnd;
+            public readonly string itemRGB;
 
             // The rest of the fields aren't filled in for the files we're using, so ignore them.
 
-            public BEDLine(string chrom_, int chromStart_, int chromEnd_, string name_, int score_, string strand_, int thickStart_, int thickEnd_, string itemRGB_) 
+            public BEDLine(string chrom_, int chromStart_, int chromEnd_, string name_, int score_, string strand_, int thickStart_, int thickEnd_, string itemRGB_)
             {
                 chrom = chrom_;
                 chromStart = chromStart_;
@@ -13473,7 +13506,7 @@ namespace ASELib
 
             public static List<AnnotatedBEDLine> ReadFromFile(string filename)
             {
-                string[] wantedFields = {"Chrom", "ChromStart",  "ChromEnd", "name", "score", "strand", "thickStart", "thickEnd", "itemRGB", "nBasesWithCoverage", "nMutations", "nMutationsBelow40Percent", "nMutationsAbove60Percent"};
+                string[] wantedFields = { "Chrom", "ChromStart", "ChromEnd", "name", "score", "strand", "thickStart", "thickEnd", "itemRGB", "nBasesWithCoverage", "nMutations", "nMutationsBelow40Percent", "nMutationsAbove60Percent" };
 
                 var inputFile = CreateStreamReaderWithRetry(filename);
                 if (null == inputFile)
@@ -13615,7 +13648,7 @@ namespace ASELib
                     return null;
                 }
 
-                string [] wantedFields = {"SeqID", "Original_LabID", "PatientID",  "Design_PatientID", "Diagnosis", "SpecificDiagnosis",  "Secondary_Specific_Diagnosis", "Tertiary_Specific_Diagnosis", "DiagnosisClass",
+                string[] wantedFields = {"SeqID", "Original_LabID", "PatientID",  "Design_PatientID", "Diagnosis", "SpecificDiagnosis",  "Secondary_Specific_Diagnosis", "Tertiary_Specific_Diagnosis", "DiagnosisClass",
                                           "SpecimenType", "SampleGroup", "SpecimenSite", "CaptureGroup", "Sequential_CaptureGroup", "FlowCell", "Lane", "CoreProjectID", "CoreRunID",  "CoreFlowCellID", "CoreSampleID", "Outliers",
                                            "Specimen_HasRNASeq", "Patient_HasRNASeq"};
 
@@ -13758,7 +13791,7 @@ namespace ASELib
 
                 var geneHancerMutationsPerBase = new Dictionary<string, double>();
                 var allGeneHancers = fieldGrabber.AsString("GeneHancers and frac mutated");
-                if (allGeneHancers != "" )
+                if (allGeneHancers != "")
                 {
                     foreach (var geneHancerString in allGeneHancers.Split(';'))
                     {
@@ -13771,10 +13804,10 @@ namespace ASELib
                         geneHancerMutationsPerBase.Add(fields[0], Convert.ToDouble(fields[1]));
                     }
                 }
- 
 
-                return new RegulatoryMutationsNearGene(fieldGrabber.AsString("Hugo_Symbol"), fieldGrabber.AsInt("Non-Silent Mutation Count"), fieldGrabber.AsInt("Non - Silent Mutations with Low VAF"), 
-                    fieldGrabber.AsInt("Non - Silent Mutations with Moderate VAF"), fieldGrabber.AsInt("Non - Silent Mutations with High VAF"), fieldGrabber.AsInt("Silent Mutations"),  
+
+                return new RegulatoryMutationsNearGene(fieldGrabber.AsString("Hugo_Symbol"), fieldGrabber.AsInt("Non-Silent Mutation Count"), fieldGrabber.AsInt("Non - Silent Mutations with Low VAF"),
+                    fieldGrabber.AsInt("Non - Silent Mutations with Moderate VAF"), fieldGrabber.AsInt("Non - Silent Mutations with High VAF"), fieldGrabber.AsInt("Silent Mutations"),
                     fieldGrabber.AsInt("Not ASE Candidates"), mutationsPerCoveredBaseByRange, geneHancerMutationsPerBase);
             } // Parse
 
@@ -13882,7 +13915,7 @@ namespace ASELib
             }
 
             int nToCut = 0;
-            while (paddedString[GuidStringLength -  nToCut - 1] == 'x')
+            while (paddedString[GuidStringLength - nToCut - 1] == 'x')
             {
                 nToCut++;
             }
@@ -14129,7 +14162,7 @@ namespace ASELib
                 return line;
             }
         } // AnnotatedGeneHancerLine
-        
+
         public class CommonData // Stuff that's typically used by most of the apps, all rolled up into one place so I don't have to keep copying the initialization code into each new app
         {
             public readonly Dictionary<string, Case> cases;
@@ -14815,7 +14848,7 @@ namespace ASELib
         {
             public readonly string caseID;
             Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata = null; // tumor->dna=>metadata
-            Dictionary<bool, Dictionary<bool,  string>> sample = null; // tumor->dna->sample ID
+            Dictionary<bool, Dictionary<bool, string>> sample = null; // tumor->dna->sample ID
 
             public CaseMetadata(string caseID_, Dictionary<bool, Dictionary<bool, string>> sample_, Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata_)
             {
@@ -14834,7 +14867,7 @@ namespace ASELib
                 return sample[tumor][dna];
             }
 
-            static List<CaseMetadata> ReadFromFile(string filename)
+            public static CaseMetadata ReadFromFile(string filename)
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
 
@@ -14876,7 +14909,7 @@ namespace ASELib
                     throw new Exception("CaseMetadata.ReadFromFile: file " + filename + " has wrong line count: " + parsedMetadata.Count());
                 }
 
-                return parsedMetadata;
+                return parsedMetadata[0];
             } // ReadFromFile
 
             public static string getSpecifier(bool tumor, bool dna)
@@ -14908,7 +14941,7 @@ namespace ASELib
             {
                 Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata = new Dictionary<bool, Dictionary<bool, BAMMetadata>>();
                 Dictionary<bool, Dictionary<bool, string>> sample = new Dictionary<bool, Dictionary<bool, string>>();
- 
+
                 foreach (var tumor in BothBools)
                 {
                     bamMetadata.Add(tumor, new Dictionary<bool, BAMMetadata>());
@@ -15303,7 +15336,7 @@ namespace ASELib
                 for (int i = 0; i < 2; i++) {
                     foreach (var contig in fastas[i].contigs)
                     {
-                        if (!fastas[1-i].contigs.ContainsKey(contig.Key))
+                        if (!fastas[1 - i].contigs.ContainsKey(contig.Key))
                         {
                             Console.WriteLine("One FASTA has contig " + contig.Key + ", which isn't in the other");
                             equal = false;
@@ -15339,7 +15372,7 @@ namespace ASELib
 
                 return equal;
 
-                
+
             }
         } // FASTA
 
@@ -15347,7 +15380,7 @@ namespace ASELib
 
 
         public static void MergeDictionaries<K, V>(Dictionary<K, V> into, Dictionary<K, V> from, MergeDictionaryValues<V> mergeFunction)
-        { 
+        {
             foreach (var k in from.Select(_ => _.Key))
             {
                 if (!into.ContainsKey(k))
@@ -15361,7 +15394,7 @@ namespace ASELib
             } // for each key in from
         }
 
-        public static void MergeDictionaries<K,V>(Dictionary<K, List<V>> into, Dictionary<K,List<V>> from)
+        public static void MergeDictionaries<K, V>(Dictionary<K, List<V>> into, Dictionary<K, List<V>> from)
         {
             foreach (var k in from.Select(_ => _.Key))
             {
@@ -15519,28 +15552,28 @@ namespace ASELib
             static VariantPairPhasing ParseOneLine(HeaderizedFile<VariantPairPhasing>.FieldGrabber fieldGrabber)
             {
                 return new VariantPairPhasing(
-                                contig_:                fieldGrabber.AsString("Contig"),
-                                locus0_:                fieldGrabber.AsInt("locus 0"),
-                                locus1_:                fieldGrabber.AsInt("locus 1"),
-                                somatic0_:              fieldGrabber.AsBool("Somatic 0"),
-                                somatic1_:              fieldGrabber.AsBool("Somatic 1"),
-                                ref0_:                  fieldGrabber.AsString("Ref 0"),
-                                ref1_:                  fieldGrabber.AsString("Ref 1"),
-                                alt0_:                  fieldGrabber.AsString("Alt 0"),
-                                alt1_:                  fieldGrabber.AsString("Alt 1"),
-                                dnaRR:                  fieldGrabber.AsInt("DNA ref ref"),
-                                dnaRA:                  fieldGrabber.AsInt("DNA ref alt"),
-                                dnaAR:                  fieldGrabber.AsInt("DNA alt ref"),
-                                dnaAA:                  fieldGrabber.AsInt("DNA alt alt"),
-                                rnaRR:                  fieldGrabber.AsInt("RNA ref ref"),
-                                rnaRA:                  fieldGrabber.AsInt("RNA ref alt"),
-                                rnaAR:                  fieldGrabber.AsInt("RNA alt ref"),
-                                rnaAA:                  fieldGrabber.AsInt("RNA alt alt"),
-                                dnaWeird:               fieldGrabber.AsInt("DNA weird"),
-                                rnaWeird:               fieldGrabber.AsInt("RNA weird"),
-                                dnaConsistent_:         fieldGrabber.AsBool("DNA consistent"),
-                                rnaConsistent_:         fieldGrabber.AsBool("RNA consistent"),
-                                mutuallyConsistent_:    fieldGrabber.AsBool("DNA consistent with RNA")
+                                contig_: fieldGrabber.AsString("Contig"),
+                                locus0_: fieldGrabber.AsInt("locus 0"),
+                                locus1_: fieldGrabber.AsInt("locus 1"),
+                                somatic0_: fieldGrabber.AsBool("Somatic 0"),
+                                somatic1_: fieldGrabber.AsBool("Somatic 1"),
+                                ref0_: fieldGrabber.AsString("Ref 0"),
+                                ref1_: fieldGrabber.AsString("Ref 1"),
+                                alt0_: fieldGrabber.AsString("Alt 0"),
+                                alt1_: fieldGrabber.AsString("Alt 1"),
+                                dnaRR: fieldGrabber.AsInt("DNA ref ref"),
+                                dnaRA: fieldGrabber.AsInt("DNA ref alt"),
+                                dnaAR: fieldGrabber.AsInt("DNA alt ref"),
+                                dnaAA: fieldGrabber.AsInt("DNA alt alt"),
+                                rnaRR: fieldGrabber.AsInt("RNA ref ref"),
+                                rnaRA: fieldGrabber.AsInt("RNA ref alt"),
+                                rnaAR: fieldGrabber.AsInt("RNA alt ref"),
+                                rnaAA: fieldGrabber.AsInt("RNA alt alt"),
+                                dnaWeird: fieldGrabber.AsInt("DNA weird"),
+                                rnaWeird: fieldGrabber.AsInt("RNA weird"),
+                                dnaConsistent_: fieldGrabber.AsBool("DNA consistent"),
+                                rnaConsistent_: fieldGrabber.AsBool("RNA consistent"),
+                                mutuallyConsistent_: fieldGrabber.AsBool("DNA consistent with RNA")
                                 );
 
             } // ParseOneLine
@@ -15618,7 +15651,7 @@ namespace ASELib
         } // VCFStatistics
 
         const int MaxNMToTrack = 100;
-        public class ReadStatistics 
+        public class ReadStatistics
         {
             public PreBucketedHistogram distributionOfMappedReadsByNM = new PreBucketedHistogram(0, MaxNMToTrack, 1);
             public PreBucketedHistogram distributionOfMAPQ = new PreBucketedHistogram(0, 61, 1);
@@ -15633,7 +15666,7 @@ namespace ASELib
             public long crossChromosomeMappedPairs = 0;
             public long secondaryAlignments = 0;
             public long supplementaryAlignments = 0;
-            
+
             public Dictionary<string, int> countOfMappedReadsByChromosome = new Dictionary<string, int>();
             public long readsInALTContigs = 0;
             public long readsInNonNormalNonALTContigs = 0; // unplaced parts of the primary assembly
@@ -15648,7 +15681,7 @@ namespace ASELib
 
             public void addSAMLine(string samText, string filename)
             {
-                var samLine = SAMLine.attemptSAMLine(samText); 
+                var samLine = SAMLine.attemptSAMLine(samText);
                 if (samLine == null)
                 {
                     Console.WriteLine("Ignoring bad SAMLine in " + filename);
@@ -15658,8 +15691,8 @@ namespace ASELib
             }
 
             public void addSAMLine(SAMLine samLine)
-            { 
- 
+            {
+
                 totalReads++;
 
                 if (samLine.isPaired())
@@ -15728,7 +15761,7 @@ namespace ASELib
                 {
                     distributionOfMappedReadsByNM.addValue(samLine.NM());
                 }
-                
+
             } // addSAMLine
 
             public long mappedReads() { return totalReads - unmappedReads; }
@@ -15736,8 +15769,8 @@ namespace ASELib
             public void WriteToFile(StreamWriter outputFile)
             {
                 outputFile.WriteLine("Total Reads\tUnmapped Reads\tPaired Reads\tReads in ALT contigs\tReads in Non-Normal, Non-ALT contigs\tBoth Halves of Pair Mapped\tForward\tRC\tCross Chromosome Pairs\tSecondary Alignments\tSupplementary Alignments");
-                outputFile.WriteLine(totalReads + "\t" + unmappedReads + "\t" + pairedReads + "\t" + readsInALTContigs + "\t" + readsInNonNormalNonALTContigs + "\t" + bothHalvesOfPairMapped + "\t" + forwardReads 
-                                     + "\t" + RCReads + "\t" + crossChromosomeMappedPairs + " \t" + secondaryAlignments + "\t" + supplementaryAlignments );
+                outputFile.WriteLine(totalReads + "\t" + unmappedReads + "\t" + pairedReads + "\t" + readsInALTContigs + "\t" + readsInNonNormalNonALTContigs + "\t" + bothHalvesOfPairMapped + "\t" + forwardReads
+                                     + "\t" + RCReads + "\t" + crossChromosomeMappedPairs + " \t" + secondaryAlignments + "\t" + supplementaryAlignments);
 
                 outputFile.WriteLine();
                 outputFile.WriteLine("Chromosome\tMapped Reads");
@@ -15905,7 +15938,7 @@ namespace ASELib
                 if (fieldGrabber.AsString("cross-mapped") == "Y")
                 {
                     crossMapped = true;
-                } 
+                }
                 else if (fieldGrabber.AsString("cross-mapped") == "N")
                 {
                     crossMapped = false;
@@ -15925,6 +15958,44 @@ namespace ASELib
                 cross_mapped = cross_mapped_;
             }
         } // miRNAExpressionQuantification
+
+        //
+        // This is like Convert.ToInt32, except it removes any commas and if the string extends beyond the number it will truncate it.  Strings that don't start
+        // with a number will still throw a format exception.
+        //
+        public static int GetIntFromString(string value)
+        {
+            var withoutCommas = value.Replace(",", "");
+
+            for (int i = 0; i < withoutCommas.Length; i++)
+            {
+                if (withoutCommas[i] < '0' || withoutCommas[i] > '9')
+                {
+                    withoutCommas = withoutCommas.Substring(0, i);
+                    break;
+                }
+            }
+
+            return Convert.ToInt32(withoutCommas);
+        } // GetIntFromString
+
+        //
+        // This is like Convert.ToInt32, except it allows stuff to be after the value in the string.
+        //
+        public static double GetDoubleFromString(string value)
+        {
+            for (int i = 0; i < value.Length; i++)
+            {
+                if ((value[i] < '0' || value[i] > '9') && value[i] != '-' && value[i] != 'e' && value[i] != '+' && value[i] != '.')
+                {
+                    value = value.Substring(0, i);
+                    break;
+                }
+            }
+
+            return Convert.ToDouble(value);
+        } // GetDoubleFromString
+
 
 
     } // ASETools
