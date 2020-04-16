@@ -4610,15 +4610,18 @@ namespace ASEProcessManager
 
                 ASETools.Case.ColumnGetter getInputFilename = c => (tumor ? c.tumor_dna_filename : c.normal_dna_filename);
                 ASETools.Case.ColumnGetter getFinishedFilename = c => (tumor ? c.snap_realigned_tumor_dna_filename : c.snap_realigned_normal_dna_filename);
+                ASETools.Case.ColumnGetter getBaiFilename = c => (tumor ? c.snap_realigned_tumor_dna_bai_filename : c.snap_realigned_normal_dna_bai_filename);
                 ASETools.Case.ColumnGetter getRealignmentStatsFilename = c => (tumor ? c.snap_realigned_tumor_dna_statictics_filename : c.snap_realigned_normal_dna_statictics_filename);
 
                 foreach (var case_ in stateOfTheWorld.listOfCases)
                 {
+                    var fileId = tumor ? case_.tumor_dna_file_id : case_.normal_dna_file_id;
+
                     if (getInputFilename(case_) == "" || case_.case_metadata_filename == "")
                     {
                         nWaitingForPrerequisites++;
                     } 
-                    else if (getFinishedFilename(case_) != "" && getRealignmentStatsFilename(case_) != "")
+                    else if (getFinishedFilename(case_) != "" && getRealignmentStatsFilename(case_) != "" && getBaiFilename(case_) != "")
                     {
                         nDone++;
                     } 
@@ -4635,11 +4638,11 @@ namespace ASEProcessManager
                             var bamMetadata = metadata.getBAMMetadata(tumor, true);
 
                             nAddedToScript++;
-                            script.WriteLine("SnapTimer " +
-                                ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + case_.case_id + (tumor ? ASETools.snapRealignedTumorDNAStatisticsExtension : ASETools.snapRealignedNormalDNAStaticticsExtension) +
-                                stateOfTheWorld.configuration.binariesDirectory + "snap.exe " + (bamMetadata.isPaired ? "paired" : "single") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 60 " + getInputFilename(case_) +
-                                @" -mrl 40 -sid d:\temp\ -o " + ASETools.GetDataDirectoryFromFilename(getInputFilename(case_), stateOfTheWorld.configuration, true) + @"\" + case_.case_id + @"\" + case_.case_id +
-                                (tumor ? ASETools.snapRealignedTumorDNAExtension : ASETools.snapRealignedNormalDNAExtension));
+                            script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SnapTimer.exe " +
+                                ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + (tumor ? ASETools.snapRealignedTumorDNAStatisticsExtension : ASETools.snapRealignedNormalDNAStaticticsExtension) + " " +
+                                (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 60 " + getInputFilename(case_) +
+                                @" -mrl 40 -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
+                                fileId + (tumor ? ASETools.snapRealignedTumorDNAExtension : ASETools.snapRealignedNormalDNAExtension));
                         }
 
                     } // We thought we had everything

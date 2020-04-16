@@ -51,6 +51,8 @@ namespace SnapTimer
             Stopwatch runTimer = new Stopwatch();
             runTimer.Start();
 
+            var startTime = DateTime.Now;
+
             Process process;
             try
             {
@@ -75,6 +77,8 @@ namespace SnapTimer
 
             process.WaitForExit();
             runTimer.Stop();
+
+            var stopTime = DateTime.Now;
 
             if (snapOutput.Count() < 7)
             {
@@ -144,9 +148,9 @@ namespace SnapTimer
                 return; // We already have an error message printed.
             }
 
-            outputFile.WriteLine("Overall Runtime (s)\tLoading Time (s)\tTime in Aligner (s)\tSort Time (s)\tTotal Reads\tAligned, MAPQ >= 10\tAligned, MAPQ < 10\tUnaligned\tToo Short/Too Many Ns\t%Pairs\tReads/s");
+            outputFile.WriteLine("Overall Runtime (s)\tLoading Time (s)\tTime in Aligner (s)\tSort Time (s)\tTotal Reads\tAligned, MAPQ >= 10\tAligned, MAPQ < 10\tUnaligned\tToo Short/Too Many Ns\t%Pairs\tReads/s\tStart Time\tStop Time");
             outputFile.WriteLine(ASETools.GetIntFromString(ASETools.ElapsedTimeInSeconds(runTimer)) + "\t" + loadingTime + "\t" + timeInAligner + "\t" + sortTime + "\t" + totalReads + "\t" + alignedHQ + "\t" + alignedLQ + "\t" + unaligned + "\t" +
-                                 tooShort + "\t" + pairs + "\t" + speed);
+                                 tooShort + "\t" + pairs + "\t" + speed + "\t" + startTime.ToString() + "\t" + stopTime.ToString());
 
             snapOutput.ForEach(_ => outputFile.WriteLine(_));
             outputFile.WriteLine("**done**");

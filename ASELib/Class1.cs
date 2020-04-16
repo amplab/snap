@@ -1423,11 +1423,15 @@ namespace ASELib
             public string vcf_statistics_filename = "";
             public string read_statictics_filename = "";
             public string snap_realigned_normal_dna_filename = "";
+            public string snap_realigned_normal_dna_bai_filename = "";
             public string snap_realigned_tumor_dna_filename = "";
+            public string snap_realigned_tumor_dna_bai_filename = "";
             public string snap_realigned_normal_dna_statictics_filename = "";
             public string snap_realigned_tumor_dna_statictics_filename = "";
             public string bowtie_realigned_normal_dna_filename = "";
+            public string bowtie_realigned_normal_dna_bai_filename = "";
             public string bowtie_realigned_tumor_dna_filename = "";
+            public string bowtie_realigned_tumor_dna_bai_filename = "";
             public string bowtie_realigned_normal_dna_statictics_filename = "";
             public string bowtie_realigned_tumor_dna_statictics_filename = "";
 
@@ -1509,11 +1513,15 @@ namespace ASELib
             public long vcf_statistics_size = 0;
             public long read_statictics_size = 0;
             public long snap_realigned_normal_dna_size = 0;
+            public long snap_realigned_normal_dna_bai_size = 0;
             public long snap_realigned_tumor_dna_size = 0;
+            public long snap_realigned_tumor_dna_bai_size = 0;
             public long snap_realigned_normal_dna_statictics_size = 0;
             public long snap_realigned_tumor_dna_statictics_size = 0;
             public long bowtie_realigned_normal_dna_size = 0;
+            public long bowtie_realigned_normal_dna_bai_size = 0;
             public long bowtie_realigned_tumor_dna_size = 0;
+            public long bowtie_realigned_tumor_dna_bai_size = 0;
             public long bowtie_realigned_normal_dna_statictics_size = 0;
             public long bowtie_realigned_tumor_dna_statictics_size = 0;
             //
@@ -1830,11 +1838,15 @@ namespace ASELib
                     derivedFileTypes.Add(new DerivedFileType("VCF Statistics", c => c.vcf_statistics_filename, (c, v) => c.vcf_statistics_filename = v, DerivedFile.Type.VCFStatistics, vcfStatisticsExtension, c => c.normal_dna_file_id, c => c.vcf_statistics_size, (c, v) => c.vcf_statistics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Read Statistics", c => c.read_statictics_filename, (c, v) => c.read_statictics_filename = v, DerivedFile.Type.ReadStatictics, readStatisticsExtension, c => c.case_id, c => c.read_statictics_size, (c, v) => c.read_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Normal DNA", c => c.snap_realigned_normal_dna_filename, (c, v) => c.snap_realigned_normal_dna_filename = v, DerivedFile.Type.SnapRealignedNormalDNA, snapRealignedNormalDNAExtension, c => c.normal_dna_file_id, c => c.snap_realigned_normal_dna_size, (c, v) => c.snap_realigned_normal_dna_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Normal DNA BAI", c => c.snap_realigned_normal_dna_bai_filename, (c, v) => c.snap_realigned_normal_dna_bai_filename = v, DerivedFile.Type.SnapRealignedNormalDNABai, snapRealignedNormalDNABaiExtension, c => c.normal_dna_file_id, c => c.snap_realigned_normal_dna_bai_size, (c, v) => c.snap_realigned_normal_dna_bai_size = v));
                     derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Tumor DNA", c => c.snap_realigned_tumor_dna_filename, (c, v) => c.snap_realigned_tumor_dna_filename = v, DerivedFile.Type.SnapRealignedTumorDNA, snapRealignedTumorDNAExtension, c => c.tumor_dna_file_id, c => c.snap_realigned_tumor_dna_size, (c, v) => c.snap_realigned_tumor_dna_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Tumor DNA BAI", c => c.snap_realigned_tumor_dna_bai_filename, (c, v) => c.snap_realigned_tumor_dna_bai_filename = v, DerivedFile.Type.SnapRealignedTumorDNABai, snapRealignedTumorDNABaiExtension, c => c.tumor_dna_file_id, c => c.snap_realigned_tumor_dna_bai_size, (c, v) => c.snap_realigned_tumor_dna_bai_size = v));
                     derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Normal DNA Statictics", c => c.snap_realigned_normal_dna_statictics_filename, (c, v) => c.snap_realigned_normal_dna_statictics_filename = v, DerivedFile.Type.SnapNormalDNAStatictics, snapRealignedNormalDNAStaticticsExtension, c => c.normal_dna_file_id, c => c.snap_realigned_normal_dna_statictics_size, (c, v) => c.snap_realigned_normal_dna_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("SNAP Realigned Tumor DNA Statictics", c => c.snap_realigned_tumor_dna_statictics_filename, (c, v) => c.snap_realigned_tumor_dna_statictics_filename = v, DerivedFile.Type.SnapTumorDNAStatictics, snapRealignedTumorDNAStatisticsExtension, c => c.tumor_dna_file_id, c => c.snap_realigned_tumor_dna_statictics_size, (c, v) => c.snap_realigned_tumor_dna_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA", c => c.bowtie_realigned_normal_dna_filename, (c, v) => c.bowtie_realigned_normal_dna_filename = v, DerivedFile.Type.BowtieRealignedNormalDNA, bowtieRealignedNormalDNAExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_size, (c, v) => c.bowtie_realigned_normal_dna_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA BAI", c => c.bowtie_realigned_normal_dna_bai_filename, (c, v) => c.bowtie_realigned_normal_dna_bai_filename = v, DerivedFile.Type.BowtieRealignedNormalDNABai, bowtieRealignedNormalDNABaiExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_bai_size, (c, v) => c.bowtie_realigned_normal_dna_bai_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA", c => c.bowtie_realigned_tumor_dna_filename, (c, v) => c.bowtie_realigned_tumor_dna_filename = v, DerivedFile.Type.BowtieRealignedTumorDNA, bowtieRealignedTumorDNAExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_size, (c, v) => c.bowtie_realigned_tumor_dna_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA BAI", c => c.bowtie_realigned_tumor_dna_bai_filename, (c, v) => c.bowtie_realigned_tumor_dna_bai_filename = v, DerivedFile.Type.BowtieRealignedTumorDNABai, bowtieRealignedTumorDNABaiExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_bai_size, (c, v) => c.bowtie_realigned_tumor_dna_bai_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA Statictics", c => c.bowtie_realigned_normal_dna_statictics_filename, (c, v) => c.bowtie_realigned_normal_dna_statictics_filename = v, DerivedFile.Type.BowtieNormalDNAStatictics, bowtieRealignedNormalDNAStaticticsExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_statictics_size, (c, v) => c.bowtie_realigned_normal_dna_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA Statictics", c => c.bowtie_realigned_tumor_dna_statictics_filename, (c, v) => c.bowtie_realigned_tumor_dna_statictics_filename = v, DerivedFile.Type.BowtieTumorDNAStatictics, bowtieRealignedTumorDNAStatisticsExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_statictics_size, (c, v) => c.bowtie_realigned_tumor_dna_statictics_size = v));
 
@@ -2536,7 +2548,7 @@ namespace ASELib
 
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-16";
             public string localIndexDirectory
-                = @"d:\gdc\indices\hg38-20-large";
+                = @"d:\sequence\indices\hg38-20-large";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
@@ -3736,11 +3748,15 @@ namespace ASELib
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
         public const string readStatisticsExtension = ".read_statistics";
         public const string snapRealignedNormalDNAExtension = ".snap-normal-dna.bam";
+        public const string snapRealignedNormalDNABaiExtension = ".snap-normal-dna.bam.bai";
         public const string snapRealignedTumorDNAExtension = ".snap-tumor-dna.bam";
+        public const string snapRealignedTumorDNABaiExtension = ".snap-tumor-dna.bam.bai";
         public const string snapRealignedNormalDNAStaticticsExtension = ".snap-normal-dna-statictics.txt";
         public const string snapRealignedTumorDNAStatisticsExtension = ".snap-tumor-dna-statictics.txt";
         public const string bowtieRealignedNormalDNAExtension = ".bowtie-normal-dna.bam";
+        public const string bowtieRealignedNormalDNABaiExtension = ".bowtie-normal-dna.bam.bai";
         public const string bowtieRealignedTumorDNAExtension = ".bowtie-tumor-dna.bam";
+        public const string bowtieRealignedTumorDNABaiExtension = ".bowtie-tumor-dna.bam.bai";
         public const string bowtieRealignedNormalDNAStaticticsExtension = ".bowtie-normal-dna-statictics.txt";
         public const string bowtieRealignedTumorDNAStatisticsExtension = ".bowtie-tumor-dna-statictics.txt";
 
@@ -3811,7 +3827,8 @@ namespace ASELib
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations,
                 AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs, VariantPhasing, VCFStatistics, ReadStatictics,
-                SnapRealignedNormalDNA, SnapRealignedTumorDNA, SnapNormalDNAStatictics, SnapTumorDNAStatictics, BowtieRealignedNormalDNA, BowtieRealignedTumorDNA, BowtieNormalDNAStatictics, BowtieTumorDNAStatictics
+                SnapRealignedNormalDNA, SnapRealignedNormalDNABai, SnapRealignedTumorDNA, SnapRealignedTumorDNABai, SnapNormalDNAStatictics, SnapTumorDNAStatictics,
+                BowtieRealignedNormalDNA, BowtieRealignedNormalDNABai, BowtieRealignedTumorDNA, BowtieRealignedTumorDNABai, BowtieNormalDNAStatictics, BowtieTumorDNAStatictics
             };
         } // DerivedFile
 
@@ -3993,7 +4010,7 @@ namespace ASELib
 
                         totalBytesInDownloadedFiles += (ulong)downloadedFile.fileInfo.Length;
                     }
-                } // foreach subdir
+                } // foreach subdir of downloaded
 
                 string derivedFilesDirectory = downloadedFilesDirectory + @"..\" + configuration.derivedFilesDirectory;
                 foreach (var derivedCase in Directory.EnumerateDirectories(derivedFilesDirectory))
@@ -4075,7 +4092,7 @@ namespace ASELib
 
             var state = new ScanFilesystemState();
             var threads = new List<Thread>();
-
+            
             foreach (var directory in configuration.dataDirectories)
             {
                 threads.Add(new Thread(() => ScanOneFilesystem(configuration, directory, state, stopwatch, paddingLength + directoryHeader.Count())));
@@ -9176,18 +9193,28 @@ namespace ASELib
             return outputPathname + @"\";
         }
 
-        public static string GetDataDirectoryFromFilename(string filename, Configuration configuration, bool forceDerivedFilesDirectory = false)
+        public static string GetDataDirectoryFromFilename(string filename, Configuration configuration)
         {
-            bool isDerivedFilesDirectory = filename.Contains(configuration.derivedFilesDirectory) || forceDerivedFilesDirectory;  // Derived files are stored in dataDirectory\..\derivedFiles
             foreach (var dataDirectory in configuration.dataDirectories)
             {
-                if (filename.ToLower().StartsWith(dataDirectory.ToLower()) || isDerivedFilesDirectory && filename.ToLower().StartsWith((GoUpFilesystemLevels(dataDirectory, 1) + configuration.derivedFilesDirectory).ToLower()))
+                if (filename.ToLower().StartsWith(dataDirectory.ToLower()))
                 {
                     return dataDirectory;
                 }
             }
 
             return "none";
+        }
+
+        public static string GetDerivedFiledDirectoryFromFilename(string filename, Configuration configuration)
+        {
+            var dataDirectory = GetDataDirectoryFromFilename(filename, configuration);
+            if (dataDirectory == "none")
+            {
+                return dataDirectory;
+            }
+
+            return dataDirectory.Substring(0, dataDirectory.LastIndexOf(@"downloaded_files\")) + @"derived_files\";
         }
 
         public static List<string> GetListOfDiseases(Dictionary<string, Case> cases)
@@ -14892,6 +14919,8 @@ namespace ASELib
                         neededFields.Add(specifier + "min insert");
                         neededFields.Add(specifier + "max insert");
                         neededFields.Add(specifier + "median insert");
+                        neededFields.Add(specifier + "mean insert");
+                        neededFields.Add(specifier + "median read length");
 
                         neededFields.Add(specifier + "Sample");
                     } // dna
