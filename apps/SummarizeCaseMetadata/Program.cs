@@ -134,19 +134,29 @@ namespace SummarizeCaseMetadata
                 {
                     int nCases = (!tumor && !dna) ? commonData.listOfCases.Where(_ => _.normal_rna_file_id != "").Count() : commonData.listOfCases.Count();
                     outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " nPaired " + nPaired[tumor][dna] + " of " + nCases + ", fraction " + (double)nPaired[tumor][dna] / nCases);
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " distribution of min read length");
                     minReadLengthHistogram[tumor][dna].WriteHistogram(outputFile);
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " distribution of max read length");
                     maxReadLengthHistogram[tumor] [dna].WriteHistogram(outputFile);
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " distribution of mean read length");
                     meanReadLengthHistogram[tumor] [dna].WriteHistogram(outputFile);
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " distribution of median read length");
                     medianReadLengthHistogram[tumor] [dna].WriteHistogram(outputFile);
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " distribution of min insert length");
                     minInsert[tumor] [dna].WriteHistogram(outputFile);
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " distribution of max insert length");
                     maxInsert[tumor] [dna].WriteHistogram(outputFile);
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " distribution of mean insert length");
                     meanInsert[tumor] [dna].WriteHistogram(outputFile);
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " distribution of median insert length");
                     medianInsert[tumor] [dna].WriteHistogram(outputFile);
                 } // dna
             } // tumor
 
             outputFile.WriteLine("**done**");
-            outputFile.Close(); 
+            outputFile.Close();
+
+            Console.WriteLine("Processed " + commonData.listOfCases.Count() + " cases in " + ASETools.ElapsedTimeInSeconds(commonData.timer));
         } // Main
     }
 }
