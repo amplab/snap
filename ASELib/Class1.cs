@@ -29,6 +29,9 @@ namespace ASELib
             tumorToString.Add(true, "Tumor");
             tumorToString.Add(false, "Normal");
 
+            dnaToString.Add(true, "DNA");
+            dnaToString.Add(false, "RNA");
+
             chromosomeSizes.ToList().ForEach(x => chromosomeSizesByName.Add(x.name, x));
             chromosomeSizes.ToList().ForEach(x => chromosomeSizesByName.Add(chromosomeNameToNonChrForm(x.name), x));
         }
@@ -3777,6 +3780,7 @@ namespace ASELib
         public const string VCFStatisticsFilename = "VCFStatistics.txt";
         public const string miRNAExpressionSummaryFilename = "miRNASummary.txt";
         public const string miRNAExpressionPValueHistogramFilename = "miRNAPValueHistogram.txt";
+        public const string CaseMetadataSummaryFilename = "CaseMetadataSummary.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -9558,6 +9562,7 @@ namespace ASELib
 
         public static bool[] BothBools = { true, false };   // There's probably something like this in the runtime, but whatever.
         public static Dictionary<bool, string> tumorToString = new Dictionary<bool, string>();  // true -> Tumor, false -> Normal
+        public static Dictionary<bool, string> dnaToString = new Dictionary<bool, string>();
         public static string[] BothGenders = { "male", "female" };
 
         public class HistogramResultLine

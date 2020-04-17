@@ -7,6 +7,7 @@ using ASELib;
 using System.IO;
 using System.Diagnostics;
 using System.Runtime.Remoting.Messaging;
+using System.Linq.Expressions;
 
 namespace ASEProcessManager
 {
@@ -4186,6 +4187,14 @@ namespace ASEProcessManager
             static GetCaseFile[] getOutputFile = { _ => _.read_statictics_filename };
         }
 
+        class SummarizeCaseMetadataProcessingStage : SingleOutputProcessingStage
+        {
+            public SummarizeCaseMetadataProcessingStage() : base("Summarize Case Metadata", true, "SummarizeCaseMetadata.exe", "", getInputFile, null, getOutputFile) { }
+
+            static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.CaseMetadataSummaryFilename };
+            static GetCaseFile[] getInputFile = { _ => _.case_metadata_filename };
+        }
+
         //
         // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
         //
@@ -4887,6 +4896,7 @@ namespace ASEProcessManager
             processingStages.Add(new ReadStaticticsProcessingStage());
             processingStages.Add(new miRNAProcessingStage());
             processingStages.Add(new SNAPRealignmentStage(false)); // Only do normal for now (tumor == false)
+            processingStages.Add(new SummarizeCaseMetadataProcessingStage());
 
             if (checkDependencies)
             {
