@@ -1437,6 +1437,10 @@ namespace ASELib
             public string bowtie_realigned_tumor_dna_bai_filename = "";
             public string bowtie_realigned_normal_dna_statictics_filename = "";
             public string bowtie_realigned_tumor_dna_statictics_filename = "";
+            public string normal_dna_fastq_filename = "";
+            public string normal_dna_fastq_second_end = "";
+            public string tumor_dna_fastq = "";
+            public string tumor_dna_fastq_second_end = "";
 
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
@@ -1527,6 +1531,10 @@ namespace ASELib
             public long bowtie_realigned_tumor_dna_bai_size = 0;
             public long bowtie_realigned_normal_dna_statictics_size = 0;
             public long bowtie_realigned_tumor_dna_statictics_size = 0;
+            public long normal_dna_fastq_size = 0;
+            public long normal_dna_fastq_second_end_size = 0;
+            public long tumor_dna_fastq_size = 0;
+            public long tumor_dna_fastq_second_end_size = 0;
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
             // so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
@@ -1852,6 +1860,8 @@ namespace ASELib
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA BAI", c => c.bowtie_realigned_tumor_dna_bai_filename, (c, v) => c.bowtie_realigned_tumor_dna_bai_filename = v, DerivedFile.Type.BowtieRealignedTumorDNABai, bowtieRealignedTumorDNABaiExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_bai_size, (c, v) => c.bowtie_realigned_tumor_dna_bai_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA Statictics", c => c.bowtie_realigned_normal_dna_statictics_filename, (c, v) => c.bowtie_realigned_normal_dna_statictics_filename = v, DerivedFile.Type.BowtieNormalDNAStatictics, bowtieRealignedNormalDNAStaticticsExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_statictics_size, (c, v) => c.bowtie_realigned_normal_dna_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA Statictics", c => c.bowtie_realigned_tumor_dna_statictics_filename, (c, v) => c.bowtie_realigned_tumor_dna_statictics_filename = v, DerivedFile.Type.BowtieTumorDNAStatictics, bowtieRealignedTumorDNAStatisticsExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_statictics_size, (c, v) => c.bowtie_realigned_tumor_dna_statictics_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ", c => c.normal_dna_fastq_filename, (c, v) => c.normal_dna_fastq_filename = v, DerivedFile.Type.NormalDNAFastq, normalFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_size, (c, v) => c.normal_dna_fastq_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ Second End", c => c.normal_dna_fastq_filename, (c, v) => c.normal_dna_fastq_second_end = v, DerivedFile.Type.NormalDNAFastqSecondEnd, normalFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_size, (c, v) => c.normal_dna_fastq_size = v));
 
                     downloadableFileTypesByName = downloadableFileTypes.GroupByToDictUnique(_ => _.name);
                     derivedFileTypesByName = derivedFileTypes.GroupByToDictUnique(_ => _.name);
@@ -3762,6 +3772,10 @@ namespace ASELib
         public const string bowtieRealignedTumorDNABaiExtension = ".bowtie-tumor-dna.bam.bai";
         public const string bowtieRealignedNormalDNAStaticticsExtension = ".bowtie-normal-dna-statictics.txt";
         public const string bowtieRealignedTumorDNAStatisticsExtension = ".bowtie-tumor-dna-statictics.txt";
+        public const string normalFastqExtension = ".normal_1.fastq";
+        public const string normalSecondEndFastqExtension = ".normal_2.fastq";
+        public const string tumorFastqExtension = ".tumor_1.fastq";
+        public const string tumorSecondEndFastqExtension = ".tumor_2.fastq";
 
         public const string MethylationDistributionsFilename = "MethylationDistributions.txt";
         public const string MethylationCorrelationsFilename = "MethylationCorrelations.txt";
@@ -3832,11 +3846,11 @@ namespace ASELib
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations,
                 AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs, VariantPhasing, VCFStatistics, ReadStatictics,
                 SnapRealignedNormalDNA, SnapRealignedNormalDNABai, SnapRealignedTumorDNA, SnapRealignedTumorDNABai, SnapNormalDNAStatictics, SnapTumorDNAStatictics,
-                BowtieRealignedNormalDNA, BowtieRealignedNormalDNABai, BowtieRealignedTumorDNA, BowtieRealignedTumorDNABai, BowtieNormalDNAStatictics, BowtieTumorDNAStatictics
+                BowtieRealignedNormalDNA, BowtieRealignedNormalDNABai, BowtieRealignedTumorDNA, BowtieRealignedTumorDNABai, BowtieNormalDNAStatictics, BowtieTumorDNAStatictics, NormalDNAFastq, NormalDNAFastqSecondEnd, TumorDNAFastq, TumorDNAFastqSecondEnd
             };
         } // DerivedFile
 
-        class ScanFilesystemState
+        public class ScannedFilesystem
         {
             public ulong totalFreeBytes = 0;
             public ulong totalStorageBytes = 0;
@@ -3847,9 +3861,22 @@ namespace ASELib
 
             public List<DownloadedFile> downloadedFiles = new List<DownloadedFile>();
             public List<DerivedFile> derivedFiles = new List<DerivedFile>();
+
+            public void mergeWith(ScannedFilesystem peer)
+            {
+                totalFreeBytes += peer.totalFreeBytes;
+                totalStorageBytes += peer.totalStorageBytes;
+                totalBytesInDownloadedFiles += peer.totalBytesInDownloadedFiles;
+                totalBytesInDerivedFiles += peer.totalBytesInDerivedFiles;
+                nDownloadedFiles += peer.nDownloadedFiles;
+                nDerivedFiles += peer.nDerivedFiles;
+
+                downloadedFiles.AddRange(peer.downloadedFiles);
+                derivedFiles.AddRange(peer.derivedFiles);
+            }
         }
 
-        static void ScanOneFilesystem(Configuration configuration, string downloadedFilesDirectory, ScanFilesystemState state, Stopwatch stopwatch, int directoryFieldLength)
+        static void ScanOneFilesystem(Configuration configuration, string downloadedFilesDirectory, ScannedFilesystem state, Stopwatch stopwatch, int directoryFieldLength)
         {
             if (!Directory.Exists(downloadedFilesDirectory))
             {
@@ -4066,7 +4093,7 @@ namespace ASELib
         //
         // Grovel the file system(s) to look for downloaded and derived files.  Returns a dictionary that maps from file_id -> DownloadedFile object.
         //
-        public static void ScanFilesystems(Configuration configuration, out Dictionary<string, DownloadedFile> downloadedFiles, out Dictionary<string, List<DerivedFile>> derivedFiles)
+        public static void ScanFilesystems(Configuration configuration, out Dictionary<string, DownloadedFile> downloadedFiles, out Dictionary<string, List<DerivedFile>> derivedFiles, out Dictionary<string, ScannedFilesystem> fileSystems)
         {
             var stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -4094,16 +4121,21 @@ namespace ASELib
             }
             Console.WriteLine(" ---------------- ------------- ---------- ---------");
 
-            var state = new ScanFilesystemState();
+            var perDirectoryState = new Dictionary<string, ScannedFilesystem>();
+            configuration.dataDirectories.ForEach(_ => perDirectoryState.Add(_, new ScannedFilesystem()));
+
             var threads = new List<Thread>();
             
             foreach (var directory in configuration.dataDirectories)
             {
-                threads.Add(new Thread(() => ScanOneFilesystem(configuration, directory, state, stopwatch, paddingLength + directoryHeader.Count())));
+                threads.Add(new Thread(() => ScanOneFilesystem(configuration, directory, perDirectoryState[directory], stopwatch, paddingLength + directoryHeader.Count())));
             } // foreach data directory
 
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
+
+            fileSystems = perDirectoryState;
+            var state = new ScannedFilesystem();
 
             downloadedFiles = new Dictionary<string, DownloadedFile>();
             derivedFiles = new Dictionary<string, List<DerivedFile>>();
@@ -16030,7 +16062,58 @@ namespace ASELib
             return Convert.ToDouble(value);
         } // GetDoubleFromString
 
+        public class BiasedRandom<KeyType>
+        {
+            public BiasedRandom(List<KeyValuePair<KeyType, ulong>> biasValues)
+            {
+                biasValues.ForEach(_ => sortedBiasValues.Add(_));
 
+                sortedBiasValues.Sort(comparer);
+                biasTotal = 0;
+                for (int i = 0; i < sortedBiasValues.Count(); i++)  // What genius decided that ulong shoudln't have .Sum() implemented??
+                {
+                    biasTotal += sortedBiasValues[i].Value;
+                }
+            }
+
+            public KeyType select()
+            {
+                //
+                // Code for long-valued rand in C# cribbed from https://gist.github.com/subena22jf/c7bb027ea99127944981 and modified slightly
+                //
+ 
+                ulong ulongRand;
+                do
+                {
+                    byte[] buf = new byte[8];
+                    rand.NextBytes(buf);
+                    ulongRand = (ulong)BitConverter.ToInt64(buf, 0);
+                } while (ulongRand > ulong.MaxValue - ((ulong.MaxValue % biasTotal) + 1) % biasTotal);
+
+                ulong runningTotal = 0;
+                for (int i = 0; i < sortedBiasValues.Count(); i++)
+                {
+                    runningTotal += sortedBiasValues[i].Value;  // It's not at all clear that we need to sort for this to work...
+
+                    if (ulongRand <= runningTotal)
+                    {
+                        return sortedBiasValues[i].Key;
+                    }
+                }
+
+                throw new Exception("BaisedRandom.select(): shouldn't get here.  biasTotal = " + biasTotal + " ulongRand = " + ulongRand + " runningTotal = " + runningTotal);
+            }
+
+
+            ulong biasTotal;
+            List<KeyValuePair<KeyType, ulong>> sortedBiasValues = new List<KeyValuePair<KeyType, ulong>>();
+            Random rand = new Random();
+
+            static int comparer(KeyValuePair<KeyType, ulong> first, KeyValuePair<KeyType, ulong> second)
+            {
+                return first.Value.CompareTo(second.Value);
+            }
+        }
 
     } // ASETools
 

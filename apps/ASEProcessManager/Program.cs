@@ -4224,6 +4224,8 @@ namespace ASEProcessManager
             public Dictionary<string, string> scatterGraphsByHugoSymbol = new Dictionary<string, string>();
             public ASETools.ExpressionDistributionByChromosomeMap expressionDistributionByChromosomeMap = new ASETools.ExpressionDistributionByChromosomeMap();
             public ASETools.CommonData commonData;
+            Dictionary<string, ASETools.ScannedFilesystem> fileSystems = null;
+            ASETools.BiasedRandom<string> randomFilesystemByFreeSpace = null;
 
             bool commonDataAvailable = false;
 
@@ -4238,7 +4240,10 @@ namespace ASEProcessManager
                 commonDataAvailable = commonData != null && commonData.cases != null && commonData.configuration != null && commonData.geneLocationInformation != null && commonData.geneMap != null && commonData.perGeneASEMap != null &&
                                       commonData.aseCorrection != null && commonData.expressionDistributionByChromosomeMap != null && commonData.diseases != null && commonData.clinicalSummariesByPatientId != null;
 
-                ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles);
+                
+                ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles, out fileSystems);
+
+                randomFilesystemByFreeSpace = new ASETools.BiasedRandom<string>(fileSystems.Select(_ => new KeyValuePair<string, ulong>(_.Key, _.Value.totalFreeBytes)).ToList());
 
                 if (File.Exists(configuration.selectedGenesFilename))
                 {
