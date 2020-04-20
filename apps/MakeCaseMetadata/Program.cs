@@ -64,55 +64,10 @@ namespace MakeCaseMetadata
                 } // dna
             } // tumor
 
+            var metadata = new ASETools.CaseMetadata(case_.case_id, sample, bamMetadata);
+
             var outputFilename = ASETools.GetDirectoryFromPathname(case_.normal_dna_reads_at_tentative_selected_variants_filename) + @"\" + case_.case_id + ASETools.caseMetadataExtension;
-            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-            if (null == outputFile)
-            {
-                Console.WriteLine("Unable to open output file " + outputFilename);
-                return;
-            }
-
-            outputFile.Write("Case ID");
-            foreach (var tumor in ASETools.BothBools)
-            {
-                foreach (var dna in ASETools.BothBools)
-                {
-                    var specifier = ASETools.CaseMetadata.getSpecifier(tumor, dna);
-                    outputFile.Write("\t" + specifier + "is paired");
-                    outputFile.Write("\t" + specifier + "min read length");
-                    outputFile.Write("\t" + specifier + "max read length");
-                    outputFile.Write("\t" + specifier + "mean read length");
-                    outputFile.Write("\t" + specifier + "median read length");
-                    outputFile.Write("\t" + specifier + "min insert");
-                    outputFile.Write("\t" + specifier + "max insert");
-                    outputFile.Write("\t" + specifier + "mean insert");
-                    outputFile.Write("\t" + specifier + "median insert");
-                    outputFile.Write("\t" + specifier + "Sample");
-                }
-            }
-            outputFile.WriteLine();
-
-            outputFile.Write(case_.case_id);
-            foreach (var tumor in ASETools.BothBools)
-            {
-                foreach (var dna in ASETools.BothBools)
-                {
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].isPaired);
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].minReadLength);
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].maxReadLength);
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].meanReadLength);
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].medianReadLength);
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].minInsert);
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].maxInsert);
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].meanInsert);
-                    outputFile.Write("\t" + bamMetadata[tumor][dna].medianInsert);
-                    outputFile.Write("\t" + sample[tumor][dna]);
-                } // dna
-            } // tumor
-
-            outputFile.WriteLine();
-            outputFile.WriteLine("**done**");
-            outputFile.Close();
+            ASETools.CaseMetadata.WriteToFile(outputFilename, metadata);
         } // HandleOneCase
 
         static ASETools.BAMMetadata GetBamMetadataFromFile(string filename)

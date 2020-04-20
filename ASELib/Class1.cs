@@ -3795,6 +3795,7 @@ namespace ASELib
         public const string miRNAExpressionSummaryFilename = "miRNASummary.txt";
         public const string miRNAExpressionPValueHistogramFilename = "miRNAPValueHistogram.txt";
         public const string CaseMetadataSummaryFilename = "CaseMetadataSummary.txt";
+        public const string ConsolodatedCaseMetadataFilename = "ConsolodatedCaseMetadata.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -6037,7 +6038,6 @@ namespace ASELib
         public static string WindowsToLinuxPathname(string windowsPathname)
         {
             string[] components = windowsPathname.Split('\\');
-
 
             if (components.Count() < 5)
             {
@@ -14910,28 +14910,18 @@ namespace ASELib
 
         public class CaseMetadata
         {
-            public readonly string caseID;
+            public readonly string case_id;
             Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata = null; // tumor->dna=>metadata
             Dictionary<bool, Dictionary<bool, string>> sample = null; // tumor->dna->sample ID
 
             public CaseMetadata(string caseID_, Dictionary<bool, Dictionary<bool, string>> sample_, Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata_)
             {
-                caseID = caseID_;
+                case_id = caseID_;
                 sample = sample_;
                 bamMetadata = bamMetadata_;
             }
 
-            public BAMMetadata getBAMMetadata(bool tumor, bool dna)
-            {
-                return bamMetadata[tumor][dna];
-            }
-
-            public string getSample(bool tumor, bool dna)
-            {
-                return sample[tumor][dna];
-            }
-
-            public static CaseMetadata ReadFromFile(string filename)
+            public static Dictionary<string, CaseMetadata> ReadConsolodatedCaseMetadata(string filename)
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
 
@@ -14970,13 +14960,33 @@ namespace ASELib
 
                 inputFile.Close();
 
+                var result = new Dictionary<string, CaseMetadata>();
+                parsedMetadata.ForEach(_ => result.Add(_.case_id, _));
+
+                return result;
+            } // ReadConsolodatedCaseMetadata
+
+            public BAMMetadata getBAMMetadata(bool tumor, bool dna)
+            {
+                return bamMetadata[tumor][dna];
+            }
+
+            public string getSample(bool tumor, bool dna)
+            {
+                return sample[tumor][dna];
+            }
+
+            public static CaseMetadata ReadFromFile(string filename)
+            {
+                var parsedMetadata = ReadConsolodatedCaseMetadata(filename);
+
                 if (parsedMetadata.Count() != 1)
                 {
                     throw new Exception("CaseMetadata.ReadFromFile: file " + filename + " has wrong line count: " + parsedMetadata.Count());
                 }
 
-                return parsedMetadata[0];
-            } // ReadFromFile
+                return parsedMetadata.ToList()[0].Value;
+            }
 
             public static string getSpecifier(bool tumor, bool dna)
             {
@@ -15046,6 +15056,69 @@ namespace ASELib
 
                 return new CaseMetadata(fieldGrabber.AsString("Case ID"), sample, bamMetadata);
             } // parser
+
+            public static void WriteToFile(string outputFilename, CaseMetadata metadata)
+            {
+                var listOfMetadata = new List<CaseMetadata>();
+                listOfMetadata.Add(metadata);
+                WriteToFile(outputFilename, listOfMetadata);
+            }
+
+            public static void WriteToFile(string outputFilename, List<CaseMetadata> allMetadata)
+            {
+                var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+                if (null == outputFile)
+                {
+                    Console.WriteLine("Unable to open output file " + outputFilename);
+                    return;
+                }
+
+                outputFile.Write("Case ID");
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    foreach (var dna in ASETools.BothBools)
+                    {
+                        var specifier = ASETools.CaseMetadata.getSpecifier(tumor, dna);
+                        outputFile.Write("\t" + specifier + "is paired");
+                        outputFile.Write("\t" + specifier + "min read length");
+                        outputFile.Write("\t" + specifier + "max read length");
+                        outputFile.Write("\t" + specifier + "mean read length");
+                        outputFile.Write("\t" + specifier + "median read length");
+                        outputFile.Write("\t" + specifier + "min insert");
+                        outputFile.Write("\t" + specifier + "max insert");
+                        outputFile.Write("\t" + specifier + "mean insert");
+                        outputFile.Write("\t" + specifier + "median insert");
+                        outputFile.Write("\t" + specifier + "Sample");
+                    }
+                }
+                outputFile.WriteLine();
+
+                foreach (var metadata in allMetadata)
+                {
+
+                    outputFile.Write(metadata.case_id);
+                    foreach (var tumor in ASETools.BothBools)
+                    {
+                        foreach (var dna in ASETools.BothBools)
+                        {
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].isPaired);
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].minReadLength);
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].maxReadLength);
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].meanReadLength);
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].medianReadLength);
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].minInsert);
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].maxInsert);
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].meanInsert);
+                            outputFile.Write("\t" + metadata.bamMetadata[tumor][dna].medianInsert);
+                            outputFile.Write("\t" + metadata.sample[tumor][dna]);
+                        } // dna
+                    } // tumor
+
+                    outputFile.WriteLine();
+                }
+                outputFile.WriteLine("**done**");
+                outputFile.Close();
+            }
         }// CaseMetadata
 
         public static void RunAndWaitForProcess(string binaryName, string commandLine)

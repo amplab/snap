@@ -262,6 +262,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnapTimer", "apps\SnapTimer
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SummarizeCaseMetadata", "apps\SummarizeCaseMetadata\SummarizeCaseMetadata.csproj", "{9D16CC71-1EE8-4BBE-A2BF-0DAD6C99FCAA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CreateConsolodatedCaseMetadata", "apps\CreateConsolodatedCaseMetadata\CreateConsolodatedCaseMetadata.csproj", "{710171C4-D753-49FB-99B9-3349D7D4230C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2038,6 +2040,22 @@ Global
 		{9D16CC71-1EE8-4BBE-A2BF-0DAD6C99FCAA}.Release|Win32.Build.0 = Release|Any CPU
 		{9D16CC71-1EE8-4BBE-A2BF-0DAD6C99FCAA}.Release|x64.ActiveCfg = Release|x64
 		{9D16CC71-1EE8-4BBE-A2BF-0DAD6C99FCAA}.Release|x64.Build.0 = Release|x64
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Debug|Win32.Build.0 = Debug|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Debug|x64.ActiveCfg = Debug|x64
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Debug|x64.Build.0 = Debug|x64
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Release|Win32.ActiveCfg = Release|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Release|Win32.Build.0 = Release|Any CPU
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Release|x64.ActiveCfg = Release|x64
+		{710171C4-D753-49FB-99B9-3349D7D4230C}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
