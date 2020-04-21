@@ -63,9 +63,13 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         unsigned            subPenalty,
         unsigned            gapOpenPenalty,
         unsigned            gapExtendPenalty,
-        unsigned            minAGScore,
+        int                 minScoreRealignment_,
+        int                 minScoreGapRealignmentALT_,
+        int                 minAGScoreImprovement_,
         BigAllocator        *allocator)
-		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), emitALTAlignments(emitALTAlignments_)
+		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), emitALTAlignments(emitALTAlignments_), 
+           maxKSingleEnd(maxK / 2),
+           minScoreRealignment(minScoreRealignment_), minScoreGapRealignmentALT(minScoreGapRealignmentALT_), minAGScoreImprovement(minAGScoreImprovement_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK / 2  /* allocate half to each end instead of letting it float like when they're aligned together */, maxReadSize,
@@ -73,7 +77,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
                                                 noUkkonen, noOrderedEvaluation, noTruncation, useAffineGap, 
                                                 ignoreAlignmentAdjustmentsForOm, altAwareness, emitALTAlignments, maxScoreGapToPreferNonAltAlignment,
                                                 maxSecondaryAlignmentsPerContig, &lv, &reverseLV,
-                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore,
+                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty,
                                                 NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
@@ -84,6 +88,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
     underlyingPairedEndAligner->setAffineGap(&ag, &reverseAG);
 
     singleSecondary[0] = singleSecondary[1] = NULL;
+
 }
 
     size_t 
@@ -157,7 +162,7 @@ bool ChimericPairedEndAligner::align(
     }
 
     _int64 start = timeInNanos();
-    int pairAGScore = 0;
+    int pairAGScore = 0, sumPairScore = 0, sumPairScoreAlt = 0;
     bool compareWithSingleEndAlignment = false;
 	if (read0->getDataLength() >= minReadLength && read1->getDataLength() >= minReadLength) {
 		//
@@ -189,8 +194,15 @@ bool ChimericPairedEndAligner::align(
 		}
         
         int maxScore = __max(result->score[0], result->score[1]);
+        sumPairScore = result->score[0] + result->score[1];
+        sumPairScoreAlt = firstALTResult->score[0] + firstALTResult->score[1];
 
-        if ((result->usedAffineGapScoring[0] || result->usedAffineGapScoring[1]) && maxScore >= 3) { // FIXME: Replace 3 with parameter
+        // If we have already seen a good ALT pair, don't separate them with by running the single end aligner
+        bool seenBetterAltResult = (firstALTResult->status[0] != NotFound)
+                                   && (firstALTResult->status[1] != NotFound)
+                                   && (sumPairScoreAlt <= sumPairScore - minScoreGapRealignmentALT);
+
+        if ((result->usedAffineGapScoring[0] || result->usedAffineGapScoring[1]) && maxScore >= minScoreRealignment && !seenBetterAltResult) {
             compareWithSingleEndAlignment = true;
         }
         
@@ -201,6 +213,11 @@ bool ChimericPairedEndAligner::align(
 			return true;
 		}
 	}
+
+    int scoreLimitLeft = maxKSingleEnd;
+    if (compareWithSingleEndAlignment) {
+        scoreLimitLeft = sumPairScore - 3;
+    }
 
     //
     // If the intersecting aligner didn't find an alignment for these reads, then they may be
@@ -220,6 +237,9 @@ bool ChimericPairedEndAligner::align(
             pairAGScore += result->agScore[r];
         }
 
+        // Reset max edit distance for single end aligner
+        singleAligner->setMaxK(maxKSingleEnd);
+
         if (read[r]->getDataLength() < minReadLength) {
             result->status[r] = NotFound;
             result->mapq[r] = 0;
@@ -235,6 +255,15 @@ bool ChimericPairedEndAligner::align(
 
             firstALTResult->status[r] = NotFound;   // Don't need to fill in the rest, this suppresses writing it
         } else {
+            if (compareWithSingleEndAlignment) {
+                // Single-end alignments are not good enough to be considered
+                if (scoreLimitLeft < 0) {
+                    break;
+                }
+                int maxKForRead = __min(maxKSingleEnd, __min(result->score[r], scoreLimitLeft));
+                singleAligner->setMaxK(maxKForRead);
+            }
+
             // We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
             bool fitInSecondaryBuffer =
                 singleAligner->AlignRead(read[r], &singleResult[r], &firstSingleALTResult[r], maxEditDistanceForSecondaryResults,
@@ -251,6 +280,12 @@ bool ChimericPairedEndAligner::align(
             *(resultCount[r]) = singleEndSecondaryResultsThisTime;
 
             if (compareWithSingleEndAlignment) {
+                if (singleResult[r].score != ScoreAboveLimit) {
+                    scoreLimitLeft -= singleResult[r].score;
+                }
+                else {
+                    scoreLimitLeft = ScoreAboveLimit;
+                }
                 singleEndAGScore += singleResult[r].agScore;
                 if (result->agScore[r] >= singleResult[r].agScore) {
                     chooseSingleEndMapq = false;
@@ -269,7 +304,7 @@ bool ChimericPairedEndAligner::align(
     }
 
 
-    if (!compareWithSingleEndAlignment || (singleEndAGScore >= pairAGScore + 12)) { // FIXME: Add threshold for choosing single-end alignments
+    if (!compareWithSingleEndAlignment || (singleEndAGScore >= pairAGScore + minAGScoreImprovement)) {
         for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
             if (read[r]->getDataLength() < minReadLength) {
                 result->status[r] = NotFound;

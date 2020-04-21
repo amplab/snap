@@ -60,8 +60,7 @@ public:
         unsigned      matchReward_,
         unsigned      subPenalty_,
         unsigned      gapOpenPenalty_,
-        unsigned      gapExtendPenalty_,
-        unsigned      minAGScore_);
+        unsigned      gapExtendPenalty);
 
      void setLandauVishkin(
         LandauVishkin<1> *landauVishkin_,
@@ -161,7 +160,6 @@ private:
     int             subPenalty;
     int             gapOpenPenalty;
     int             gapExtendPenalty;
-    unsigned        minAGScore;
 
     AlignmentAdjuster   alignmentAdjuster;
 

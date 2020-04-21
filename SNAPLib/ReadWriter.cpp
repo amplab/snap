@@ -221,7 +221,7 @@ SimpleReadWriter::writeReads(
 
             unsigned nAdjustments = 0;
 
-            if (useAffineGap && results[whichResult].usedAffineGapScoring) {
+            if (useAffineGap && (results[whichResult].usedAffineGapScoring || results[whichResult].score > 0)) {
                 while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
                     results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, results[whichResult].supplementary, &addFrontClipping,
                     results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag, results[whichResult].basesClippedBefore,
@@ -461,7 +461,7 @@ SimpleReadWriter::writePairs(
                     //
                     int addFrontClipping = 0;
 
-                    if (useAffineGap && result[whichAlignmentPair].usedAffineGapScoring[whichRead]) {
+                    if (useAffineGap && (result[whichAlignmentPair].usedAffineGapScoring[whichRead] || result[whichAlignmentPair].score[whichRead] > 0)) {
                         while (!format->writeRead(context, &agc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
                             idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
                             whichAlignmentPair != 0 || !firstIsPrimary, result[whichAlignmentPair].supplementary[whichRead], &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag,
@@ -596,7 +596,7 @@ SimpleReadWriter::writePairs(
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
 
-                if (useAffineGap && singleResults[whichRead][whichAlignment].usedAffineGapScoring) {
+                if (useAffineGap && (singleResults[whichRead][whichAlignment].usedAffineGapScoring || singleResults[whichRead][whichAlignment].score > 0)) {
                     while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
                         reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
                         true, singleResults[whichRead][whichAlignment].supplementary, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag,

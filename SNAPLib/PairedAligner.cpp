@@ -232,7 +232,10 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
     quicklyDropUnpairedReads(true),
     inferSpacing(false),
-    maxSeedsSingleEnd(25)
+    maxSeedsSingleEnd(25),
+    minScoreRealignment(3),
+    minScoreGapRealignmentALT(3),
+    minAGScoreImprovement(15)
 {
 }
 
@@ -258,12 +261,21 @@ void PairedAlignerOptions::usageMessage()
         "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
         "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
         "  -N   max seeds when running in single-end mode of chimeric aligner. Default: %d\n"
+        "  -en  min edit distance for a read aligned as non-ALT by the paired-end aligner to be reconsidered\n"
+        "       for a better alignment by the single-end aligner. Default: %d\n"
+        "  -ea  min total edit distance by which a read pair aligned as ALT needs to be better than non-ALT alignments\n"
+        "       to skip single-end realignment. Default: %d\n"
+        "  -eg  min affine gap score improvement needed for single-end alignments to be considered over\n"
+        "       paired-end alignments. Default: %d\n"
         ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
         DEFAULT_MAX_CANDIDATE_POOL_SIZE,
-        25);
+        25,
+        minScoreRealignment,
+        minScoreGapRealignmentALT,
+        minAGScoreImprovement);
 }
 
 bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
@@ -315,7 +327,26 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
             n += 1;
             return true;
         }
+    } else if (strcmp(argv[n], "-en") == 0) {
+        if (n + 1 < argc) {
+            minScoreRealignment = atoi(argv[n+1]);
+            n += 1;
+            return true;
+        }
+    } else if (strcmp(argv[n], "-ea") == 0) {
+        if (n + 1 < argc) {
+            minScoreGapRealignmentALT = atoi(argv[n+1]);
+            n += 1;
+            return true;
+        }
+    } else if (strcmp(argv[n], "-eg") == 0) {
+        if (n + 1 < argc) {
+            minAGScoreImprovement = atoi(argv[n+1]);
+            n += 1;
+            return true;
+        }
     }
+
 
     return AlignerOptions::parse(argv, argc, n, done);
 } // PairedAlignerOptions::parse
@@ -340,6 +371,9 @@ bool PairedAlignerContext::initialize()
     noOrderedEvaluation = options->noOrderedEvaluation;
     inferSpacing = options2->inferSpacing;
     maxSeedsSingleEnd = options2->maxSeedsSingleEnd;
+    minScoreRealignment = options2->minScoreRealignment;
+    minScoreGapRealignmentALT = options2->minScoreGapRealignmentALT;
+    minAGScoreImprovement = options2->minAGScoreImprovement;
 
 	return true;
 }
@@ -500,7 +534,7 @@ void PairedAlignerContext::runIterationThread()
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
                                                                 useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment,
-                                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, minAGScore);
+                                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
@@ -527,7 +561,9 @@ void PairedAlignerContext::runIterationThread()
         subPenalty,
         gapOpenPenalty,
         gapExtendPenalty,
-        minAGScore,
+        minScoreRealignment,
+        minScoreGapRealignmentALT,
+        minAGScoreImprovement,
         allocator);
 
     allocator->checkCanaries();

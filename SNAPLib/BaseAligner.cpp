@@ -71,7 +71,6 @@ BaseAligner::BaseAligner(
     unsigned             i_subPenalty,
     unsigned             i_gapOpenPenalty,
     unsigned             i_gapExtendPenalty,
-    unsigned             i_minAGScore,
     AlignerStats   *i_stats,
     BigAllocator   *allocator) :
         genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
@@ -80,7 +79,7 @@ BaseAligner::BaseAligner(
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
         noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
 		useAffineGap(i_useAffineGap), matchReward(i_matchReward), subPenalty(i_subPenalty), 
-        gapOpenPenalty(i_gapOpenPenalty), gapExtendPenalty(i_gapExtendPenalty), minAGScore(i_minAGScore),
+        gapOpenPenalty(i_gapOpenPenalty), gapExtendPenalty(i_gapExtendPenalty),
         minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
         alignmentAdjuster(i_genomeIndex->getGenome()), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm),
 		altAwareness(i_altAwareness), emitALTAlignments(i_emitALTAlignments),
@@ -114,7 +113,6 @@ Arguments:
     i_subPenalty        - affine gap score for a substitution
     i_gapOpenPenalty    - affine gap cost for opening a gap (indel)
     i_gapExtendPenalty  - affine gap cost for extending a gap (indel)
-    i_minAGScore        - minimum score for alignment using affine gap score
 	i_altAwareness      - treat reads mapped to ALT contigs differently than normal ones
     i_stats             - an object into which we report out statistics
     allocator           - an allocator that's used to allocate our local memory.  This is useful for TLB optimization.  If this is supplied, the caller
@@ -271,7 +269,7 @@ Arguments:
 
 
 #ifdef  _DEBUG
-bool _DumpAlignments = false;
+bool _DumpAlignments = true;
 #endif  // _DEBUG
 
     bool
@@ -1938,8 +1936,8 @@ BaseAligner::scoreLimit(bool forALT)
     }
 
     if (forALT) {
-        return min(maxK + extraSearchDepth, min(scoresForAllAlignments.bestScore + extraSearchDepth, scoresForNonAltAlignments.bestScore - maxScoreGapToPreferNonAltAlignment));
+        return __min(maxK + extraSearchDepth, __min(scoresForAllAlignments.bestScore + extraSearchDepth, scoresForNonAltAlignments.bestScore - maxScoreGapToPreferNonAltAlignment));
     }
 
-    return min(maxK + extraSearchDepth, min(scoresForAllAlignments.bestScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments.bestScore + extraSearchDepth));
+    return __min(maxK + extraSearchDepth, __min(scoresForAllAlignments.bestScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments.bestScore + extraSearchDepth));
 } // BaseAligner::scoreLimit

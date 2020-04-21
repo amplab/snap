@@ -142,7 +142,6 @@ SingleAlignerContext::runIterationThread()
             subPenalty,
             gapOpenPenalty,
             gapExtendPenalty,
-            minAGScore,
             stats,
             allocator);
 

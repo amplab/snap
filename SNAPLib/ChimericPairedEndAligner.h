@@ -39,7 +39,7 @@ public:
         double              seedCoverage,
 	    unsigned            minWeightToCheck,
         bool                forceSpacing_,
-        unsigned            extraSearchDepth,
+        unsigned            extraSearchDepth_,
         bool                noUkkonen,
         bool                noOrderedEvaluation,
 		bool				noTruncation,
@@ -55,7 +55,9 @@ public:
         unsigned            subPenalty = 4,
         unsigned            gapOpenPenalty = 6,
         unsigned            gapExtendPenalty = 1,
-        unsigned            minAGScore = 30,
+        int                 minScoreRealignment_ = 3,
+        int                 minScoreGapRealignmentALT_ = 3,
+        int                 minAGScoreImprovement_ = 15,
         BigAllocator        *allocator = NULL);
     
     virtual ~ChimericPairedEndAligner();
@@ -111,4 +113,12 @@ private:
 	unsigned	minReadLength;
 
     bool emitALTAlignments;
+
+    unsigned maxKSingleEnd;
+
+    int extraSearchDepth;
+    int minScoreRealignment;
+    int minScoreGapRealignmentALT;
+    int minAGScoreImprovement;
+
 };

@@ -105,7 +105,6 @@ struct AlignerOptions : public AbstractOptions
     unsigned            subPenalty;
     unsigned            gapOpenPenalty;
     unsigned            gapExtendPenalty;
-    unsigned            minAGScore;
 	unsigned			minReadLength;
 	bool				mapIndex;
 	bool				prefetchIndex;

@@ -78,7 +78,6 @@ AlignerOptions::AlignerOptions(
     subPenalty(4),
     gapOpenPenalty(6),
     gapExtendPenalty(1),
-    minAGScore(30),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(false),
@@ -222,7 +221,6 @@ AlignerOptions::usage()
             "           cost for substitution -gs (default: %u)\n"
             "           cost for opening a gap -go (default: %u)\n"
             "           cost for extending a gap -ge (default: %u)\n"
-            "           minimum score threshold for read -gt (default: %u)\n"
             "  -A-  Disable ALT awareness.  The default is to try to map reads to the primary assembly and only to choose ALT alignments when they're much better,\n"
             "       and to compute MAPQ for non-ALT alignments using only non-ALT hits. This flag disables that behavior and results in ALT-oblivious behavior.\n"
             "  -ea  Emit ALT alignments.  When the aligner is ALT aware (i.e., -A- isn't specified) if it finds an ALT alignment that would have been\n"
@@ -243,7 +241,6 @@ AlignerOptions::usage()
             subPenalty,
             gapOpenPenalty,
             gapExtendPenalty,
-            minAGScore,
             maxScoreGapToPreferNonALTAlignment
         );
 
@@ -690,18 +687,6 @@ AlignerOptions::usage()
             gapExtendPenalty = atoi(argv[n]);
             if (gapExtendPenalty <= 0) {
                 WriteErrorMessage("-ge must be greater than zero");
-                return false;
-            }
-            return true;
-        } else if (strcmp(argv[n], "-gt") == 0) {
-            if (n + 1 >= argc) {
-                WriteErrorMessage("-gt requires an additional value\n");
-                return false;
-            }
-            n++;
-            minAGScore = atoi(argv[n]);
-            if (minAGScore <= 0) {
-                WriteErrorMessage("-gt must be greater than zero");
                 return false;
             }
             return true;

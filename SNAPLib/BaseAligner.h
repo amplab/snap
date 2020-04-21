@@ -67,7 +67,6 @@ public:
         unsigned        i_subPenalty = 4,
         unsigned        i_gapOpenPenalty = 6,
         unsigned        i_gapExtendPenalty = 1,
-        unsigned        i_minAGScore = 30,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);
 
@@ -151,8 +150,6 @@ private:
     int subPenalty;
     int gapOpenPenalty;
     int gapExtendPenalty;
-
-    unsigned minAGScore;
 
     ProbabilityDistance *probDistance;
 
