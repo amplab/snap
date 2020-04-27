@@ -4705,17 +4705,20 @@ namespace ASEProcessManager
                     if (case_.normal_dna_fastq_filename != "" && (!paired || case_.normal_dna_fastq_second_end != ""))
                     {
                         nDone++;
-                    } else if (case_.normal_dna_filename == "")
+                    } 
+                    else if (case_.normal_dna_filename == "")
                     {
                         nWaitingForPrerequisites++; // Really a download, but we'll just call it a prereq.
-                    } else
+                    } 
+                    else
                     {
                         var filteredBAMFilename = "/mnt/d/temp/" + case_.normal_dna_file_id + ".filtered_supplementary.bam ";
                         var sortedFilteredBAMFilename = "/mnt/d/temp/" + case_.normal_dna_file_id + ".filtered_supplementary_name_sorted.bam";
-                        var fastq1Filename = "/mnt/d/temp" + case_.normal_dna_file_id + ASETools.normalFastqExtension;
-                        var fastq2Filename = "/mnt/d/temp" + case_.normal_dna_file_id + ASETools.normalSecondEndFastqExtension;
+                        var fastq1Filename = "/mnt/d/temp/" + case_.normal_dna_file_id + ASETools.normalFastqExtension;
+                        var fastq2Filename = "/mnt/d/temp/" + case_.normal_dna_file_id + ASETools.normalSecondEndFastqExtension;
+                        var allFastqFilenames = "/mnt/d/temp/" + case_.normal_dna_file_id + ".*fastq";
                         var copiedBamDirectory = "~/" + case_.normal_dna_file_id;
-                        var copiedInputFile = copiedBamDirectory + ASETools.GetFileNameFromPathname(case_.normal_dna_filename);
+                        var copiedInputFile = copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(case_.normal_dna_filename);
 
                         linuxScript.Write("date\n");
 
@@ -4726,35 +4729,32 @@ namespace ASEProcessManager
 
                         linuxScript.Write("mkdir " + copiedBamDirectory + "\n");
                         linuxScript.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(case_.normal_dna_filename)) + " " + copiedBamDirectory + "/\n");
-                        linuxScript.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(case_.normal_dna_filename))) + "/*bai " + copiedBamDirectory + "/\n");
-                        linuxScript.Write("sudo umount " + sourceMountpoint);
+                        linuxScript.Write("sudo umount " + sourceMountpoint + "\n");
+                        linuxScript.Write("sudo rmdir " + sourceMountpoint + "\n");
 
-                        linuxScript.Write("samtools view -F 2048 -b -o " + filteredBAMFilename + " " + copiedInputFile + "\n");
+                        linuxScript.Write("samtools view -@ 16 -F 2048 -b -o " + filteredBAMFilename + " " + copiedInputFile + "\n");
                         linuxScript.Write("rm -rf " + copiedBamDirectory + "\n");
-                        linuxScript.Write("samtools sort -n -m 50G -@ 16  -o " + sortedFilteredBAMFilename + " " + filteredBAMFilename + "\n");
+                        linuxScript.Write("samtools sort -f -n -m 10G -@ 16 " + filteredBAMFilename  + " " + sortedFilteredBAMFilename + "\n");
                         if (paired)
                         {
-                            linuxScript.Write("bedtools bamToFastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + " -fq2 " + fastq2Filename + "\n");
+                            linuxScript.Write("bedtools bamtofastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + " -fq2 " + fastq2Filename + "\n");
                         }
                         else 
                         {
-                            linuxScript.Write("bedtools bamToFastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + "\n");
+                            linuxScript.Write("bedtools bamtofastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + "\n");
                         }
 
                         var destinationDownloadDirectory = stateOfTheWorld.randomFilesystemByFreeSpace.select();
                         var destinationMountpoint = "/mnt/" + ASETools.ComputerFromPathname(destinationDownloadDirectory);
-                        var destinationDirectory = destinationDownloadDirectory + @"..\derived_files\" + case_.case_id + @"\";
+                        var destinationDirectory = destinationMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(destinationDownloadDirectory)) + "../derived_files/" + case_.case_id;
                         linuxScript.Write("sudo mkdir " + destinationMountpoint + "\n");
                         linuxScript.Write("sudo chmod 777 " + destinationMountpoint + "\n");
                         linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(destinationDownloadDirectory) + "' " + destinationMountpoint + "\n");
-                        linuxScript.Write("cp " + fastq1Filename + " " + destinationMountpoint + ASETools.WindowsToLinuxPathname(ASETools.PathnameWithoutUNC(destinationDirectory)));
-                        if (paired)
-                        {
-                            linuxScript.Write("cp " + fastq2Filename + " " + destinationMountpoint + ASETools.WindowsToLinuxPathname(ASETools.PathnameWithoutUNC(destinationDirectory)));
-                            linuxScript.Write("rm " + fastq2Filename);
-                        }
-                        linuxScript.Write("rm " + filteredBAMFilename + " " + sortedFilteredBAMFilename + " " + fastq1Filename +"\n");
-                        linuxScript.Write("sudo umount " + destinationMountpoint);
+                        linuxScript.Write("mkdir " + destinationDirectory + "\n");
+                        linuxScript.Write("cp " + allFastqFilenames + " " + destinationDirectory + "/\n");
+                        linuxScript.Write("rm /mnt/d/temp/*.filtered_supplementary.bam /mnt/d/temp/*.filtered_supplementary_name_sorted.bam " + allFastqFilenames + "\n");
+                        linuxScript.Write("sudo umount " + destinationMountpoint + "\n");
+                        linuxScript.Write("sudo rmdir " + destinationMountpoint + "\n");
 
                         nAddedToScript++;
                     } // if we're doing it

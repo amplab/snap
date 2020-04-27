@@ -1861,7 +1861,7 @@ namespace ASELib
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA Statictics", c => c.bowtie_realigned_normal_dna_statictics_filename, (c, v) => c.bowtie_realigned_normal_dna_statictics_filename = v, DerivedFile.Type.BowtieNormalDNAStatictics, bowtieRealignedNormalDNAStaticticsExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_statictics_size, (c, v) => c.bowtie_realigned_normal_dna_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA Statictics", c => c.bowtie_realigned_tumor_dna_statictics_filename, (c, v) => c.bowtie_realigned_tumor_dna_statictics_filename = v, DerivedFile.Type.BowtieTumorDNAStatictics, bowtieRealignedTumorDNAStatisticsExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_statictics_size, (c, v) => c.bowtie_realigned_tumor_dna_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ", c => c.normal_dna_fastq_filename, (c, v) => c.normal_dna_fastq_filename = v, DerivedFile.Type.NormalDNAFastq, normalFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_size, (c, v) => c.normal_dna_fastq_size = v));
-                    derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ Second End", c => c.normal_dna_fastq_filename, (c, v) => c.normal_dna_fastq_second_end = v, DerivedFile.Type.NormalDNAFastqSecondEnd, normalFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_size, (c, v) => c.normal_dna_fastq_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ Second End", c => c.normal_dna_fastq_second_end, (c, v) => c.normal_dna_fastq_second_end = v, DerivedFile.Type.NormalDNAFastqSecondEnd, normalSecondEndFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_second_end_size, (c, v) => c.normal_dna_fastq_second_end_size = v));
 
                     downloadableFileTypesByName = downloadableFileTypes.GroupByToDictUnique(_ => _.name);
                     derivedFileTypesByName = derivedFileTypes.GroupByToDictUnique(_ => _.name);
@@ -4137,6 +4137,10 @@ namespace ASELib
 
             fileSystems = perDirectoryState;
             var state = new ScannedFilesystem();
+            foreach (var singleState in perDirectoryState.Select(_ => _.Value))
+            {
+                state.mergeWith(singleState);
+            }
 
             downloadedFiles = new Dictionary<string, DownloadedFile>();
             derivedFiles = new Dictionary<string, List<DerivedFile>>();
@@ -16162,6 +16166,7 @@ namespace ASELib
                     rand.NextBytes(buf);
                     ulongRand = (ulong)BitConverter.ToInt64(buf, 0);
                 } while (ulongRand > ulong.MaxValue - ((ulong.MaxValue % biasTotal) + 1) % biasTotal);
+                ulongRand = ulongRand % biasTotal;
 
                 ulong runningTotal = 0;
                 for (int i = 0; i < sortedBiasValues.Count(); i++)
