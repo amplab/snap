@@ -1889,8 +1889,8 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                     BAMAlignment* oldBest = getRead(minfo->bestReadOffset[0]);
                     BAMAlignment* newBest = getRead(minfo->bestReadOffset[2]);
                     if (oldBest != NULL && newBest != NULL) {
-                        oldBest->FLAG &= ~SAM_DUPLICATE;
-                        newBest->FLAG |= SAM_DUPLICATE;
+                        newBest->FLAG &= ~SAM_DUPLICATE;
+                        oldBest->FLAG |= SAM_DUPLICATE;
                     } else {
                         if (failedBackpatch == NULL) {
                             failedBackpatch = new VariableSizeVector<DuplicateMateInfo*>();
