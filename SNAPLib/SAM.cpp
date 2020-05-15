@@ -1449,13 +1449,17 @@ SAMFormat::writeRead(
     int internalScore,
     bool emitInternalScore,
     char *internalScoreTag,
+    int bpClippedBefore,
+    int bpClippedAfter,
     bool hasMate,
     bool firstInPair,
     Read * mate, 
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
     Direction mateDirection,
-    bool alignedAsPair
+    bool alignedAsPair,
+    int mateBpClippedBefore,
+    int mateBpClippedAfter
     ) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
@@ -1493,7 +1497,7 @@ SAMFormat::writeRead(
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection, 
-        &extraBasesClippedBefore, 0, 0, 0, 0))
+        &extraBasesClippedBefore, bpClippedBefore, bpClippedAfter, mateBpClippedBefore, mateBpClippedAfter))
     {
         return false;
     }

@@ -516,9 +516,10 @@ SimpleReadWriter::writePairs(
                         while (!format->writeRead(context, &lvc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
                             idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
                             whichAlignmentPair != 0 || !firstIsPrimary, result[whichAlignmentPair].supplementary[whichRead], &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag,
+                            result[whichAlignmentPair].basesClippedBefore[whichRead], result[whichAlignmentPair].basesClippedAfter[whichRead], 
                             true, writeOrder[firstOrSecond] == 0,
                             reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
-                            result[whichAlignmentPair].alignedAsPair)) {
+                            result[whichAlignmentPair].alignedAsPair, result[whichAlignmentPair].basesClippedBefore[1 - whichRead], result[whichAlignmentPair].basesClippedAfter[1 - whichRead])) {
 
                             _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster
 
