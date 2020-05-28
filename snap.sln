@@ -270,6 +270,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mousify", "apps\Mousify\Mou
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ValidateFASTQs", "apps\ValidateFASTQs\ValidateFASTQs.csproj", "{F4BED0D0-F60E-46F6-B834-F27F802AE239}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SummarizeBowtiePerformance", "apps\SummarizeBowtiePerformance\SummarizeBowtiePerformance.csproj", "{6A979054-5D89-4423-8CBB-D93C82806F85}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2108,6 +2110,22 @@ Global
 		{F4BED0D0-F60E-46F6-B834-F27F802AE239}.Release|Win32.Build.0 = Release|Any CPU
 		{F4BED0D0-F60E-46F6-B834-F27F802AE239}.Release|x64.ActiveCfg = Release|x64
 		{F4BED0D0-F60E-46F6-B834-F27F802AE239}.Release|x64.Build.0 = Release|x64
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Debug|Win32.Build.0 = Debug|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Debug|x64.ActiveCfg = Debug|x64
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Debug|x64.Build.0 = Debug|x64
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Release|Win32.ActiveCfg = Release|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Release|Win32.Build.0 = Release|Any CPU
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Release|x64.ActiveCfg = Release|x64
+		{6A979054-5D89-4423-8CBB-D93C82806F85}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

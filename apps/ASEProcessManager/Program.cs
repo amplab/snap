@@ -4364,7 +4364,7 @@ namespace ASEProcessManager
 						{
 							fileIdToCaseId.Add(case_.normal_methylation_file_id, case_.case_id);
 						}
-					}
+					} // foreach case (creating the fileID->caseID map)
 
                     //
                     // Check that the derived file cases are real cases.
@@ -4397,12 +4397,10 @@ namespace ASEProcessManager
                         Console.WriteLine();
                     }
 
-
                     ASETools.Case.loadAllFileLocations(configuration, cases, downloadedFiles, derivedFiles);
 
                     int nNormalDNA = 0, nTumorDNA = 0, nNormalRNA = 0, nTumorRNA = 0, nMethylation = 0, nCopyNumber = 0;
                     ulong bytesNormalDNA = 0, bytesTumorDNA = 0, bytesNormalRNA = 0, bytesTumorRNA = 0, bytesMethylation = 0, bytesCopyNumber = 0;
-
 
                     foreach (var caseEntry in cases)
                     {
@@ -4665,7 +4663,7 @@ namespace ASEProcessManager
 
                         nAddedToScript++;
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SnapTimer.exe " +
-                            ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + (tumor ? ASETools.snapRealignedTumorDNAStatisticsExtension : ASETools.snapRealignedNormalDNAStaticticsExtension) + " " +
+                            ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + (tumor ? ASETools.snapRealignedTumorDNAStatisticsExtension : ASETools.snapRealignedNormalDNAStaticticsExtension) + @" d:\temp\ " +
                             (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 60 " + getInputFilename(case_) +
                             @" -mrl 40 -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
                             fileId + (tumor ? ASETools.snapRealignedTumorDNAExtension : ASETools.snapRealignedNormalDNAExtension));
@@ -4679,7 +4677,14 @@ namespace ASEProcessManager
 
         class FASTQGenerationProcessingStage : ProcessingStage
         {
-            public string GetStageName() { return "FASTQ Generation"; }
+            public FASTQGenerationProcessingStage(bool tumor_)
+            {
+                tumor = tumor_;
+            }
+            public string GetStageName() {
+                if (tumor) return "Tumor FASTQ generation";
+                return "Normal FASTQ Generation"; 
+            }
             public bool NeedsCases() { return true; }
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
@@ -4692,49 +4697,56 @@ namespace ASEProcessManager
                 filesToDownload = null;
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
 
+                ASETools.Case.ColumnGetter inputGetter = c => tumor ? c.tumor_dna_filename : c.normal_dna_filename;
+                ASETools.Case.ColumnGetter outputGetter = c => tumor ? c.tumor_dna_fastq_filename : c.normal_dna_fastq_filename;
+                ASETools.Case.ColumnGetter secondOutputGetter = c => tumor ? c.tumor_dna_fastq_second_end_filename : c.normal_dna_fastq_second_end_filename;
+                ASETools.Case.ColumnGetter fileIDGetter = c => tumor ? c.tumor_dna_file_id : c.normal_dna_file_id;
+
                 if (stateOfTheWorld.caseMetadata == null)
                 {
                     nWaitingForPrerequisites = 1;
                     return;
                 }
 
-                foreach (var case_ in stateOfTheWorld.commonData.listOfCases)
+                foreach (var case_ in stateOfTheWorld.listOfCases)
                 {
-                    var paired = stateOfTheWorld.caseMetadata[case_.case_id].getBAMMetadata(false, true).isPaired;
+                    var paired = stateOfTheWorld.caseMetadata[case_.case_id].getBAMMetadata(tumor, true).isPaired;
 
-                    if (case_.normal_dna_fastq_filename != "" && (!paired || case_.normal_dna_fastq_second_end != ""))
+                    if (outputGetter(case_) != "" && (!paired || secondOutputGetter(case_) != ""))
                     {
                         nDone++;
                     } 
-                    else if (case_.normal_dna_filename == "")
+                    else if (inputGetter(case_) == "")
                     {
                         nWaitingForPrerequisites++; // Really a download, but we'll just call it a prereq.
                     } 
                     else
                     {
-                        var filteredBAMFilename = "/mnt/d/temp/" + case_.normal_dna_file_id + ".filtered_supplementary.bam ";
-                        var sortedFilteredBAMFilename = "/mnt/d/temp/" + case_.normal_dna_file_id + ".filtered_supplementary_name_sorted.bam";
-                        var fastq1Filename = "/mnt/d/temp/" + case_.normal_dna_file_id + ASETools.normalFastqExtension;
-                        var fastq2Filename = "/mnt/d/temp/" + case_.normal_dna_file_id + ASETools.normalSecondEndFastqExtension;
-                        var allFastqFilenames = "/mnt/d/temp/" + case_.normal_dna_file_id + ".*fastq";
-                        var copiedBamDirectory = "~/" + case_.normal_dna_file_id;
-                        var copiedInputFile = copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(case_.normal_dna_filename);
+                        var filteredBAMFilename = "/mnt/d/temp/" + fileIDGetter(case_) + ".filtered_supplementary.bam ";
+                        var sortedFilteredBAMFilename = "/mnt/d/temp/" + fileIDGetter(case_) + ".filtered_supplementary_name_sorted.bam";
+                        var fastq1Filename = "/mnt/d/temp/" + fileIDGetter(case_) + (tumor ? ASETools.tumorFastqExtension : ASETools.normalFastqExtension);
+                        var fastq2Filename = "/mnt/d/temp/" + fileIDGetter(case_) + (tumor ? ASETools.tumorSecondEndFastqExtension : ASETools.normalSecondEndFastqExtension);
+                        var allFastqFilenames = "/mnt/d/temp/" + fileIDGetter(case_) + ".*fastq";
+                        var copiedBamDirectory = "~/" + fileIDGetter(case_);
+                        var copiedInputFile = copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(inputGetter(case_));
 
                         linuxScript.Write("date\n");
 
-                        var sourceMountpoint = "/mnt/" + ASETools.ComputerFromPathname(case_.normal_dna_filename);
+                        var sourceMountpoint = "/mnt/" + ASETools.ComputerFromPathname(inputGetter(case_));
                         linuxScript.Write("sudo mkdir " + sourceMountpoint + "\n");
                         linuxScript.Write("sudo chmod 777 " + sourceMountpoint + "\n");
-                        linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(case_.normal_dna_filename) + "' " + sourceMountpoint + "\n");
+                        linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(inputGetter(case_)) + "' " + sourceMountpoint + "\n");
 
                         linuxScript.Write("mkdir " + copiedBamDirectory + "\n");
-                        linuxScript.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(case_.normal_dna_filename)) + " " + copiedBamDirectory + "/\n");
+                        linuxScript.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(inputGetter(case_))) + " " + copiedBamDirectory + "/\n");
                         linuxScript.Write("sudo umount " + sourceMountpoint + "\n");
                         linuxScript.Write("sudo rmdir " + sourceMountpoint + "\n");
 
                         linuxScript.Write("samtools view -@ 16 -F 2048 -b -o " + filteredBAMFilename + " " + copiedInputFile + "\n");
                         linuxScript.Write("rm -rf " + copiedBamDirectory + "\n");
-                        linuxScript.Write("samtools sort -f -n -m 10G -@ 16 " + filteredBAMFilename  + " " + sortedFilteredBAMFilename + "\n");
+                        var tempBamPrefix = "/mnt/d/temp/" + fileIDGetter(case_) + ".sort_temp";
+
+                        linuxScript.Write("~/bin/samtools sort -n -l 1 -m 10G -@ 16 " + filteredBAMFilename  + " -T " + tempBamPrefix + " -o " + sortedFilteredBAMFilename + "\n");
                         if (paired)
                         {
                             linuxScript.Write("bedtools bamtofastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + " -fq2 " + fastq2Filename + "\n");
@@ -4761,7 +4773,196 @@ namespace ASEProcessManager
                 } // foreach case 
             } // EvaluateStage
 
+            bool tumor;
+
         } // FASTQGenerationProcessingStage
+
+        static public string MountFilesystemLinux(StreamWriter linuxScript, string sourceFile)
+        {
+            string mountpoint = "/mnt/" + ASETools.ComputerFromPathname(sourceFile);
+
+            linuxScript.Write("sudo mkdir " + mountpoint + "\n");
+            linuxScript.Write("sudo chmod 777 " + mountpoint + "\n");
+            linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(sourceFile) + "' " + mountpoint + "\n");
+
+            return mountpoint;
+        }
+
+        static public void DontMountFilesystemLinux(StreamWriter linuxScript)
+        {
+            linuxScript.Write("# Placeholder\n");
+            linuxScript.Write("# Placeholder\n");
+            linuxScript.Write("# Placeholder\n");
+        }
+
+        static public void UnmountFilesystemLinux(StreamWriter linuxScript, string mountpoint)
+        {
+            linuxScript.Write("sudo umount " + mountpoint + "\n");
+            linuxScript.Write("sudo rmdir " + mountpoint + "\n");
+        }
+
+        static public void DontUnmountFilesystemLinux(StreamWriter linuxScript)
+        {
+            linuxScript.Write("# Placeholder\n");
+            linuxScript.Write("# Placeholder\n");
+        }
+
+        static public void CopyFileInLinux(StreamWriter linuxScript, string sourceFile, string localDestinationDirectory)
+        {
+            var sourceMountpoint = MountFilesystemLinux(linuxScript, sourceFile);
+            linuxScript.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(sourceFile)) + " " + localDestinationDirectory + "\n");
+            UnmountFilesystemLinux(linuxScript, sourceMountpoint);
+        }
+
+        static public void DontCopyFileInLinux(StreamWriter linuxScript)  // This is to make not copying a file an equal number of lines to copying it so that scripts for single and paired-end so splitting by line works
+        {
+            DontMountFilesystemLinux(linuxScript);
+            linuxScript.Write("# Placeholder\n");
+            DontUnmountFilesystemLinux(linuxScript);
+        }
+
+        static public void CopyFilesOutLinux(StreamWriter linuxScript, List<string> localSourceFiles, string remoteDestinationDirectory)    // This works with wildcards for input.
+        {
+            var destinationMountpoint = MountFilesystemLinux(linuxScript, remoteDestinationDirectory);
+
+            var linuxRemoteDestinationDirectory = destinationMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(remoteDestinationDirectory));
+            linuxScript.Write("mkdir " + linuxRemoteDestinationDirectory + "\n");
+
+            foreach (var localSourceFile in localSourceFiles)
+            {
+                linuxScript.Write("cp " + localSourceFile + " " + linuxRemoteDestinationDirectory + "/\n");
+            }
+            UnmountFilesystemLinux(linuxScript, destinationMountpoint);
+        }
+
+        static public void DontCopyFileOutLinux(StreamWriter linuxScript, List<string> localSourceFiles)
+        {
+            DontMountFilesystemLinux(linuxScript);
+            linuxScript.Write("# Placeholder\n");   // For the mkdir
+            foreach (var localSourceFile in localSourceFiles)
+            {
+                linuxScript.Write("# Placeholder\n");
+            }
+            DontUnmountFilesystemLinux(linuxScript);
+        }
+
+        class BowtieAlignmentStage : ProcessingStage
+        {
+            public BowtieAlignmentStage(bool tumor_)
+            {
+                tumor = tumor_;
+            }
+
+            bool tumor;
+
+            public string GetStageName()
+            {
+                if (tumor) return "Bowtie tumor DNA alignment";
+                return "Bowtie normal DNA alignment";
+            }
+
+            public bool NeedsCases() { return true; }
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                return true; // Add dependency on FASTQ files
+            }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+                            StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = null;
+                nDone = nAddedToScript = nWaitingForPrerequisites = 0;
+
+                ASETools.Case.ColumnGetter getOutput = c => tumor ? c.bowtie_realigned_tumor_dna_filename : c.bowtie_realigned_normal_dna_filename;
+                ASETools.Case.ColumnGetter getOutputBai = c => tumor ? c.bowtie_realigned_tumor_dna_bai_filename : c.bowtie_realigned_normal_dna_bai_filename;
+                ASETools.Case.ColumnGetter getOutputStatictics = c => tumor ? c.bowtie_realigned_tumor_dna_statictics_filename : c.bowtie_realigned_normal_dna_statictics_filename;
+                ASETools.Case.ColumnGetter getInput = c => tumor ? c.tumor_dna_fastq_filename : c.normal_dna_fastq_filename;
+                ASETools.Case.ColumnGetter getSecondInput = c => tumor ? c.tumor_dna_fastq_second_end_filename : c.normal_dna_fastq_second_end_filename;
+                ASETools.Case.ColumnGetter getFileId = c => tumor ? c.tumor_dna_file_id : c.normal_dna_file_id;
+                string outputExtension = tumor ? ASETools.bowtieRealignedTumorDNAExtension : ASETools.bowtieRealignedNormalDNAExtension;
+                string outputExtensionBai = tumor ? ASETools.bowtieRealignedTumorDNABaiExtension : ASETools.bowtieRealignedNormalDNABaiExtension;
+
+                var tempDir = "/mnt/d/temp/";
+
+                foreach (var case_ in stateOfTheWorld.listOfCases)
+                {
+                    var paired = stateOfTheWorld.caseMetadata[case_.case_id].getBAMMetadata(tumor, true).isPaired;
+
+                    string timingFilename = tempDir + getFileId(case_) + (tumor ? ASETools.bowtieRealignedTumorDNAStatisticsExtension : ASETools.bowtieRealignedNormalDNAStatisticsExtension);
+
+                    if (getOutput(case_) != "" && getOutputBai(case_) != "" && getOutputStatictics(case_) != "")
+                    {
+                        nDone++;
+                    } 
+                    else if (getInput(case_) == "" || paired && getSecondInput(case_) == "")
+                    {
+                        nWaitingForPrerequisites++;
+                    } 
+                    else
+                    {
+                        linuxScript.Write("date\n");
+                        linuxScript.Write("date > " + timingFilename + "\n"); // start
+
+                        var localInputFile = tempDir + ASETools.GetFileNameFromPathname(getInput(case_));
+                        CopyFileInLinux(linuxScript, getInput(case_), localInputFile);
+
+                        string localSecondInputFile = paired ? tempDir + ASETools.GetFileNameFromPathname(getSecondInput(case_)) : "";
+                        string samFileName = "/mnt/d/temp/" + (tumor ? case_.tumor_dna_file_id : case_.normal_dna_file_id) + ".bowtie_realigned.sam";
+
+                        if (paired)
+                        {
+                            CopyFileInLinux(linuxScript, getSecondInput(case_), localSecondInputFile);
+                        } else
+                        {
+                            DontCopyFileInLinux(linuxScript);
+                        }
+
+                        linuxScript.Write("date >> " + timingFilename + "\n"); // copy
+                        if (paired) 
+                        {
+                            linuxScript.Write("/mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/hg38-bowtie2/hg38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                        }
+                        else
+                        {
+                            linuxScript.Write("/mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/hg38-bowtie2/hg38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                        }
+                        linuxScript.Write("date >> " + timingFilename + "\n"); // bowtie
+
+                        var unsortedBamFilename = tempDir + getFileId(case_) + ".bowtie2_unsorted.bam";
+                        linuxScript.Write("~/bin/samtools view -@ 16 -S -1 -b " + samFileName + " > " + unsortedBamFilename + "\n");   // samtools auto-appends .bam to the output filename
+                        linuxScript.Write("date >> " + timingFilename + "\n"); // sam->bam
+
+                        var sortedBamFilename = tempDir + getFileId(case_) + ".bowtie2_sorted.bam";
+                        var sortIntermediatePrefix = tempDir + getFileId(case_) + ".bowtie2_sort_temp";
+                        // ~/bin/samtools sort -n -m 10G -@ 16 /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary.bam  -T /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary_name_sorted_temp -o /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary_name_sorted.bam
+                        linuxScript.Write("~/bin/samtools sort -@ 16 -m 10G -l 1 " + unsortedBamFilename + " -o " + sortedBamFilename + " -T " + sortIntermediatePrefix + "\n"); // L6 is the default compression that SNAP uses
+                        linuxScript.Write("date >> " + timingFilename + "\n"); // sort
+
+                        var outputFilename = tempDir + getFileId(case_) + outputExtension;
+                        linuxScript.Write("java -jar /mnt/d/gdc/bin/picard.jar MarkDuplicates I=" + sortedBamFilename + " O=" + outputFilename + " M=/dev/null 2>&1 >> /dev/null\n");
+                        linuxScript.Write("date >> " + timingFilename + "\n"); // mark duplicates
+
+                        var outputBaiFilename = tempDir + getFileId(case_) + outputExtensionBai;
+
+                        linuxScript.Write("~/bin/samtools index -@ 16 " + outputFilename + " " + outputBaiFilename + "\n");
+                        linuxScript.Write("date >> " + timingFilename + "\n"); // index
+                        linuxScript.Write("echo '**done**' >> " + timingFilename + "\n");
+
+                        var outputFiles = new List<string>();
+                        outputFiles.Add(outputFilename);
+                        outputFiles.Add(outputBaiFilename);
+                        outputFiles.Add(timingFilename);
+
+                        var destinationDirectory = stateOfTheWorld.randomFilesystemByFreeSpace.select() + @"..\derived_files\" + case_.case_id;
+                        CopyFilesOutLinux(linuxScript, outputFiles, destinationDirectory);
+
+                        linuxScript.Write("rm " + localInputFile + " " + localSecondInputFile + " " + samFileName + " " + timingFilename + " " + unsortedBamFilename +  " " + sortedBamFilename + " " + outputFilename + " " + outputBaiFilename + "\n");
+
+                        nAddedToScript++;
+                    } // We're adding it to the script
+                } // foreach case
+            }
+        } // BowtieAlignmentStage
 
 
         static void Main(string[] args)
@@ -4789,10 +4990,12 @@ namespace ASEProcessManager
             File.Delete(configuration.scriptOutputDirectory + scriptFilename);
             File.Delete(configuration.scriptOutputDirectory + linuxScriptFilename);
             File.Delete(configuration.scriptOutputDirectory + downloadScriptFilename);
+
             if (configuration.hpcScriptFilename != "")
             {
                 File.Delete(configuration.scriptOutputDirectory + configuration.hpcScriptFilename);
             }
+
             if (configuration.azureScriptFilename != "")
             {
                 File.Delete(configuration.scriptOutputDirectory + configuration.azureScriptFilename);
@@ -4996,10 +5199,14 @@ namespace ASEProcessManager
             processingStages.Add(new OverallVCFStatisticsProcessingStage());
             processingStages.Add(new ReadStaticticsProcessingStage());
             processingStages.Add(new miRNAProcessingStage());
-            processingStages.Add(new SNAPRealignmentProcessingStage(false)); // Only do normal for now (tumor == false)
+            processingStages.Add(new SNAPRealignmentProcessingStage(false));
+            processingStages.Add(new SNAPRealignmentProcessingStage(true));
             processingStages.Add(new SummarizeCaseMetadataProcessingStage());
             processingStages.Add(new ConsolodatedCaseMetadataProcessingStage());
-            processingStages.Add(new FASTQGenerationProcessingStage());
+            processingStages.Add(new FASTQGenerationProcessingStage(false));
+            processingStages.Add(new FASTQGenerationProcessingStage(true));
+            processingStages.Add(new BowtieAlignmentStage(false));
+            processingStages.Add(new BowtieAlignmentStage(true));
 
             if (checkDependencies)
             {

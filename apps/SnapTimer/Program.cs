@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ASELib;
 using System.IO;
 using System.Diagnostics;
+using System.Net;
 
 namespace SnapTimer
 {
@@ -13,38 +14,98 @@ namespace SnapTimer
     {
         static void Main(string[] args)
         {
-            var commonData = ASETools.CommonData.LoadCommonData(args);
-            if (commonData.configuration.commandLineArgs.Count() < 6)
+            var configuration = ASETools.Configuration.loadFromFile(args);
+            if (configuration.commandLineArgs.Count() < 7)
             {
-                Console.WriteLine("Usage: SnapTimer outputFile <snap args>");
+                Console.WriteLine("Usage: SnapTimer outputFile tempDirectory <snap args>");
+                return;
+            }
+
+            var tempDirectory = configuration.commandLineArgs[1];
+            if (!tempDirectory.EndsWith(@"\"))
+            {
+                Console.WriteLine("Temp directory must end with a backslash.");
                 return;
             }
 
             int outputArgIndex = -1;
 
-            var snapArgs = "";
-            for (int i = 1; i < commonData.configuration.commandLineArgs.Count(); i++)
-            {
-                snapArgs += commonData.configuration.commandLineArgs[i] + " ";
+            string initialOutputFile = "";
+            string tempOutputFile = "";
+            string tempOutputBAIFile = "";
 
-                if (commonData.configuration.commandLineArgs[i] == "-o")
+            var initialInputFiles = new List<string>();
+            var tempInputFiles = new List<string>();
+
+            var snapArgs = "";
+            for (int i = 2; i < configuration.commandLineArgs.Count(); i++)
+            {
+                var thisArg = configuration.commandLineArgs[i];
+                if (thisArg.EndsWith(".bam"))
+                {
+                    if (outputArgIndex != i) 
+                    {
+                        initialInputFiles.Add(thisArg);
+                        var tempFilename = tempDirectory + ASETools.GetFileNameFromPathname(thisArg);
+                        snapArgs += tempFilename + " ";
+                        tempInputFiles.Add(tempFilename);
+                        
+                    }
+                    else
+                    {
+                        tempOutputFile = tempDirectory + ASETools.GetFileNameFromPathname(thisArg);
+                        tempOutputBAIFile = tempOutputFile + ".bai";
+                        initialOutputFile = thisArg;
+                        snapArgs += tempOutputFile + " ";
+                    }
+                }
+                else
+                {
+                    snapArgs += thisArg + " ";
+                }
+
+                if (thisArg == "-o")
                 {
                     outputArgIndex = i + 1;
                 }
             }
 
-            if (outputArgIndex == -1 || outputArgIndex >= commonData.configuration.commandLineArgs.Count())
+            if (outputArgIndex == -1 || outputArgIndex >= configuration.commandLineArgs.Count())
             {
                 Console.WriteLine("Couldn't properly process the output arg for SNAP.");
+                return;
+            }
+
+            if (initialInputFiles.Count() == 0)
+            {
+                Console.WriteLine("Couldn't find snap input file.");
                 return;
             }
 
             //
             // SNAP's output directory may not exist.  Create it if needed.
             //
-            Directory.CreateDirectory(ASETools.GetDirectoryFromPathname(commonData.configuration.commandLineArgs[outputArgIndex]));
+            Directory.CreateDirectory(ASETools.GetDirectoryFromPathname(configuration.commandLineArgs[outputArgIndex]));
 
-            var startInfo = new ProcessStartInfo(commonData.configuration.binariesDirectory + "snap.exe", snapArgs);
+            //
+            // Copy in the input files.
+            //
+            Console.Write("Copying input files...");
+            var copyInTimer = new Stopwatch();
+            copyInTimer.Start();
+            foreach (var inputFile in initialInputFiles)
+            {
+                var tempFilename = tempDirectory + ASETools.GetFileNameFromPathname(inputFile);
+                File.Copy(inputFile, tempFilename, true); // true allows overwrite
+            }
+            copyInTimer.Stop();
+            Console.WriteLine(ASETools.ElapsedTimeInSeconds(copyInTimer));
+
+            //
+            // Run SNAP.
+            //
+            Console.WriteLine("Running snap " + snapArgs);
+            var startInfo = new ProcessStartInfo(configuration.binariesDirectory + "snap.exe", snapArgs);
             startInfo.RedirectStandardOutput = true;
             startInfo.UseShellExecute = false;
 
@@ -62,6 +123,7 @@ namespace SnapTimer
             {
                 Console.WriteLine("Error trying to start SNAP process ");
                 Console.WriteLine("Exception message: " + e.Message);
+                tempInputFiles.ForEach(_ => File.Delete(_));
 
                 throw e;
             }
@@ -88,6 +150,9 @@ namespace SnapTimer
                 {
                     Console.WriteLine(i + ": " + snapOutput[i]);
                 }
+                tempInputFiles.ForEach(_ => File.Delete(_));
+                File.Delete(tempOutputFile);
+                File.Delete(tempOutputBAIFile);
                 return;
             }
 
@@ -98,6 +163,9 @@ namespace SnapTimer
             {
                 Console.WriteLine("Can't parse line 0");
                 snapOutput.ForEach(_ => Console.WriteLine(_));
+                tempInputFiles.ForEach(_ => File.Delete(_));
+                File.Delete(tempOutputFile);
+                File.Delete(tempOutputBAIFile);
                 return;
             }
 
@@ -110,6 +178,9 @@ namespace SnapTimer
             {
                 Console.WriteLine("Can't parse sort line");
                 snapOutput.ForEach(_ => Console.WriteLine(_));
+                tempInputFiles.ForEach(_ => File.Delete(_));
+                File.Delete(tempOutputFile);
+                File.Delete(tempOutputBAIFile);
                 return;
             }
             var sortTimeString = snapOutput[2].Substring(snapOutput[2].IndexOf(',') + 2);
@@ -124,6 +195,9 @@ namespace SnapTimer
             {
                 Console.WriteLine("Can't parse header line");
                 snapOutput.ForEach(_ => Console.WriteLine(_));
+                tempInputFiles.ForEach(_ => File.Delete(_));
+                File.Delete(tempOutputFile);
+                File.Delete(tempOutputBAIFile);
                 return;
             }
 
@@ -142,15 +216,41 @@ namespace SnapTimer
                 pairs = ASETools.GetDoubleFromString(statsLine.Substring(headerLine.IndexOf("%Pairs")));
             }
 
-            var outputFile = ASETools.CreateStreamWriterWithRetry(commonData.configuration.commandLineArgs[0]);
+            Console.Write("Copying back output...");
+            var copyOutTimer = new Stopwatch();
+            copyOutTimer.Start();
+            File.Copy(tempOutputFile, initialOutputFile, true);
+            File.Copy(tempOutputBAIFile, initialOutputFile + ".bai", true);
+            copyOutTimer.Stop();
+            Console.Write(ASETools.ElapsedTimeInSeconds(copyOutTimer));
+
+            tempInputFiles.ForEach(_ => File.Delete(_));
+            File.Delete(tempOutputFile);
+            File.Delete(tempOutputBAIFile);
+
+            var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.commandLineArgs[0]);
             if (null == outputFile)
             {
                 return; // We already have an error message printed.
             }
 
-            outputFile.WriteLine("Overall Runtime (s)\tLoading Time (s)\tTime in Aligner (s)\tSort Time (s)\tTotal Reads\tAligned, MAPQ >= 10\tAligned, MAPQ < 10\tUnaligned\tToo Short/Too Many Ns\t%Pairs\tReads/s\tStart Time\tStop Time");
-            outputFile.WriteLine(ASETools.GetIntFromString(ASETools.ElapsedTimeInSeconds(runTimer)) + "\t" + loadingTime + "\t" + timeInAligner + "\t" + sortTime + "\t" + totalReads + "\t" + alignedHQ + "\t" + alignedLQ + "\t" + unaligned + "\t" +
-                                 tooShort + "\t" + pairs + "\t" + speed + "\t" + startTime.ToString() + "\t" + stopTime.ToString());
+            outputFile.WriteLine("Copy in Time (s)\tOverall Runtime (s)\tLoading Time (s)\tTime in Aligner (s)\tSort Time (s)\tTotal Reads\tAligned, MAPQ >= 10\tAligned, MAPQ < 10\tUnaligned\tToo Short/Too Many Ns\t%Pairs\tReads/s\tCopy out Time (s)\tStart Time\tStop Time");
+            outputFile.WriteLine(
+                ASETools.ElapsedTimeInSeconds(copyInTimer) + "\t" +
+                ASETools.GetIntFromString(ASETools.ElapsedTimeInSeconds(runTimer)) + "\t" + 
+                loadingTime + "\t" + 
+                timeInAligner + "\t" + 
+                sortTime + "\t" + 
+                totalReads + "\t" + 
+                alignedHQ + "\t" + 
+                alignedLQ + "\t" + 
+                unaligned + "\t" +
+                tooShort + "\t" + 
+                pairs + "\t" + 
+                speed + "\t" + 
+                ASETools.ElapsedTimeInSeconds(copyOutTimer) + "\t" +
+                startTime.ToString() + "\t" + 
+                stopTime.ToString());
 
             snapOutput.ForEach(_ => outputFile.WriteLine(_));
             outputFile.WriteLine("**done**");

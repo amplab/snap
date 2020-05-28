@@ -73,7 +73,7 @@ namespace ValidateFASTQs
                 return;
             }
 
-            if (case_.normal_dna_fastq_second_end == "")
+            if (case_.normal_dna_fastq_second_end_filename == "")
             {
                 HandleEnd(case_.normal_dna_fastq_filename, null);
             } else
@@ -84,7 +84,7 @@ namespace ValidateFASTQs
                 for (int i = 0; i < 2; i++)
                 {
                     queues[i] = new ASETools.ThrottledParallelQueue<string[]>(10000, 1);
-                    var filename = i == 0 ? case_.normal_dna_fastq_filename : case_.normal_dna_fastq_second_end;
+                    var filename = i == 0 ? case_.normal_dna_fastq_filename : case_.normal_dna_fastq_second_end_filename;
                     var queue = queues[i];
                     threads[i] = new Thread(() => HandleEnd(filename, queue));
                     threads[i].Start();
@@ -95,7 +95,7 @@ namespace ValidateFASTQs
                 {
                     if (!queues[1].Dequeue(out read1))
                     {
-                        FailOneCase("Premature EOF on " + case_.normal_dna_fastq_second_end, queues);
+                        FailOneCase("Premature EOF on " + case_.normal_dna_fastq_second_end_filename, queues);
                         return;
                     }
 
@@ -107,7 +107,7 @@ namespace ValidateFASTQs
 
                     if (!read1[0].EndsWith("/2"))
                     {
-                        FailOneCase(case_.normal_dna_fastq_second_end + ": Read 2 ID doesn't end with /2", queues);
+                        FailOneCase(case_.normal_dna_fastq_second_end_filename + ": Read 2 ID doesn't end with /2", queues);
                         return;
                     }
 

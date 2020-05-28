@@ -1438,9 +1438,9 @@ namespace ASELib
             public string bowtie_realigned_normal_dna_statictics_filename = "";
             public string bowtie_realigned_tumor_dna_statictics_filename = "";
             public string normal_dna_fastq_filename = "";
-            public string normal_dna_fastq_second_end = "";
-            public string tumor_dna_fastq = "";
-            public string tumor_dna_fastq_second_end = "";
+            public string normal_dna_fastq_second_end_filename = "";
+            public string tumor_dna_fastq_filename = "";
+            public string tumor_dna_fastq_second_end_filename = "";
 
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
@@ -1858,10 +1858,12 @@ namespace ASELib
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA BAI", c => c.bowtie_realigned_normal_dna_bai_filename, (c, v) => c.bowtie_realigned_normal_dna_bai_filename = v, DerivedFile.Type.BowtieRealignedNormalDNABai, bowtieRealignedNormalDNABaiExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_bai_size, (c, v) => c.bowtie_realigned_normal_dna_bai_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA", c => c.bowtie_realigned_tumor_dna_filename, (c, v) => c.bowtie_realigned_tumor_dna_filename = v, DerivedFile.Type.BowtieRealignedTumorDNA, bowtieRealignedTumorDNAExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_size, (c, v) => c.bowtie_realigned_tumor_dna_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA BAI", c => c.bowtie_realigned_tumor_dna_bai_filename, (c, v) => c.bowtie_realigned_tumor_dna_bai_filename = v, DerivedFile.Type.BowtieRealignedTumorDNABai, bowtieRealignedTumorDNABaiExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_bai_size, (c, v) => c.bowtie_realigned_tumor_dna_bai_size = v));
-                    derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA Statictics", c => c.bowtie_realigned_normal_dna_statictics_filename, (c, v) => c.bowtie_realigned_normal_dna_statictics_filename = v, DerivedFile.Type.BowtieNormalDNAStatictics, bowtieRealignedNormalDNAStaticticsExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_statictics_size, (c, v) => c.bowtie_realigned_normal_dna_statictics_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Normal DNA Statictics", c => c.bowtie_realigned_normal_dna_statictics_filename, (c, v) => c.bowtie_realigned_normal_dna_statictics_filename = v, DerivedFile.Type.BowtieNormalDNAStatictics, bowtieRealignedNormalDNAStatisticsExtension, c => c.normal_dna_file_id, c => c.bowtie_realigned_normal_dna_statictics_size, (c, v) => c.bowtie_realigned_normal_dna_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Bowtie Realigned Tumor DNA Statictics", c => c.bowtie_realigned_tumor_dna_statictics_filename, (c, v) => c.bowtie_realigned_tumor_dna_statictics_filename = v, DerivedFile.Type.BowtieTumorDNAStatictics, bowtieRealignedTumorDNAStatisticsExtension, c => c.tumor_dna_file_id, c => c.bowtie_realigned_tumor_dna_statictics_size, (c, v) => c.bowtie_realigned_tumor_dna_statictics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ", c => c.normal_dna_fastq_filename, (c, v) => c.normal_dna_fastq_filename = v, DerivedFile.Type.NormalDNAFastq, normalFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_size, (c, v) => c.normal_dna_fastq_size = v));
-                    derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ Second End", c => c.normal_dna_fastq_second_end, (c, v) => c.normal_dna_fastq_second_end = v, DerivedFile.Type.NormalDNAFastqSecondEnd, normalSecondEndFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_second_end_size, (c, v) => c.normal_dna_fastq_second_end_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ Second End", c => c.normal_dna_fastq_second_end_filename, (c, v) => c.normal_dna_fastq_second_end_filename = v, DerivedFile.Type.NormalDNAFastqSecondEnd, normalSecondEndFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_second_end_size, (c, v) => c.normal_dna_fastq_second_end_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor DNA FASTQ", c => c.tumor_dna_fastq_filename, (c, v) => c.tumor_dna_fastq_filename = v, DerivedFile.Type.TumorDNAFastq, tumorFastqExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_fastq_size, (c, v) => c.tumor_dna_fastq_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Tumor DNA FASTQ Second End", c => c.tumor_dna_fastq_second_end_filename, (c, v) => c.tumor_dna_fastq_second_end_filename = v, DerivedFile.Type.TumorDNAFastqSecondEnd, tumorSecondEndFastqExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_fastq_second_end_size, (c, v) => c.tumor_dna_fastq_second_end_size = v));
 
                     downloadableFileTypesByName = downloadableFileTypes.GroupByToDictUnique(_ => _.name);
                     derivedFileTypesByName = derivedFileTypes.GroupByToDictUnique(_ => _.name);
@@ -1982,136 +1984,6 @@ namespace ASELib
                 SizeColumnSetter sizeColumnSetter;
             } // FieldInformation 
 
-#if false
-            public static FieldInformation[] AllFields =
-            {
-                new FieldInformation("Case ID",                                             c => c.case_id.ToLower(), (c, v) => c.case_id = v),
-                new FieldInformation("Normal DNA File ID",                                  c => c.normal_dna_file_id, (c, v) => c.normal_dna_file_id = v),
-                new FieldInformation("Tumor DNA File ID",                                   c => c.tumor_dna_file_id, (c,v) => c.tumor_dna_file_id = v),
-                new FieldInformation("Normal RNA File ID",                                  c => c.normal_rna_file_id, (c,v) => c.normal_rna_file_id = v),
-                new FieldInformation("Tumor RNA File ID",                                   c => c.tumor_rna_file_id, (c,v) => c.tumor_rna_file_id = v),
-                new FieldInformation("MAF File ID",                                         c => c.maf_file_id, (c,v) => c.maf_file_id = v),
-                new FieldInformation("Tumor Methylation File ID",                           c => c.tumor_methylation_file_id, (c,v) => c.tumor_methylation_file_id = v),
-                new FieldInformation("Normal Methylation File ID",                          c => c.normal_methylation_file_id, (c,v) => c.normal_methylation_file_id = v),
-                new FieldInformation("Tumor Copy Number File ID",                           c => c.tumor_copy_number_file_id, (c,v) => c.tumor_copy_number_file_id = v),
-                new FieldInformation("Normal Copy Number File ID",                          c => c.normal_copy_number_file_id, (c,v) => c.normal_copy_number_file_id = v),
-                new FieldInformation("Tumor FPKM File ID",                                  c => c.tumor_fpkm_file_id, (c,v) => c.tumor_fpkm_file_id = v),
-                new FieldInformation("Normal FPKM File ID",                                 c => c.normal_fpkm_file_id, (c,v) => c.normal_fpkm_file_id = v),
-                new FieldInformation("Clinical Supplement File ID",                         c => c.clinical_supplement_file_id, (c, v) => c.clinical_supplement_file_id = v),
-                new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
-                new FieldInformation("Sample IDs",                                          c => c.sampleIdsInCommaSeparatedList(), (c,v) => c.sample_ids = v.Split(',').ToList()),
-                new FieldInformation("Normal miRNA-seq File ID",                            c => c.normal_miRNA_file_id, (c, v) => c.normal_miRNA_file_id = v),
-                new FieldInformation("Tumor miRNA-seq File ID",                             c => c.tumor_miRNA_file_id, (c, v) => c.tumor_miRNA_file_id = v),
-                new FieldInformation("Tumor miRNA Expression Quantification File ID",       c => c.tumor_miRNA_expression_quantification_file_id, (c, v) => c.tumor_miRNA_expression_quantification_file_id = v),
-                new FieldInformation("Normal miRNA Expression Quantification File ID",      c => c.normal_miRNA_expression_quantification_file_id, (c, v) => c.normal_miRNA_expression_quantification_file_id = v),
-                new FieldInformation("Tumor Isoform Expression Quantification File ID",     c => c.tumor_isoform_expression_quantification_file_id, (c, v) => c.tumor_isoform_expression_quantification_file_id = v),
-                new FieldInformation("Normal Isoform Expression Quantification File ID",    c => c.normal_isoform_expression_quantification_file_id, (c, v) => c.normal_isoform_expression_quantification_file_id = v),
-
-                new FieldInformation("Normal DNA Filename",                                 c => c.normal_dna_filename, (c,v) => c.normal_dna_filename = v),
-                new FieldInformation("Tumor DNA Filename",                                  c => c.tumor_dna_filename, (c,v) => c.tumor_dna_filename = v),
-                new FieldInformation("Normal RNA Filename",                                 c => c.normal_rna_filename, (c,v) => c.normal_rna_filename = v),
-                new FieldInformation("Tumor RNA Filename",                                  c => c.tumor_rna_filename, (c,v) => c.tumor_rna_filename = v),
-                new FieldInformation("Tumor Methylation Filename",                          c => c.tumor_methylation_filename, (c,v) => c.tumor_methylation_filename = v),
-                new FieldInformation("Normal Methylation Filename",                         c => c.normal_methylation_filename, (c,v) => c.normal_methylation_filename = v),
-                new FieldInformation("Tumor Copy Number Filename",                          c => c.tumor_copy_number_filename, (c,v) => c.tumor_copy_number_filename = v),
-                new FieldInformation("Normal Copy Number Filename",                         c => c.normal_copy_number_filename, (c,v) => c.normal_copy_number_filename = v),
-                new FieldInformation("Tumor FPKM Filename",                                 c => c.tumor_fpkm_filename, (c,v) => c.tumor_fpkm_filename = v),
-                new FieldInformation("Normal FPKM Filename",                                c => c.normal_fpkm_filename, (c,v) => c.normal_fpkm_filename = v),
-                new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
-                new FieldInformation("Decompressed MAF Filename",                           c => c.decompressed_maf_filename, (c,v) => c.decompressed_maf_filename = v),
-                new FieldInformation("Clinical Supplement Filename",                        c => c.clinical_supplement_filename, (c, v) => c.clinical_supplement_filename = v),
-                new FieldInformation("Normal miRNA-seq Filename",                           c => c.normal_miRNA_filename, (c,v) => c.normal_miRNA_filename = v),
-                new FieldInformation("Tumor miRNA-seq Filename",                            c => c.tumor_miRNA_filename, (c,v) => c.tumor_miRNA_filename = v),
-                new FieldInformation("Tumor miRNA Expression Quantification Filename",      c => c.tumor_miRNA_expression_quantification_filename, (c, v) => c.tumor_miRNA_expression_quantification_filename = v),
-                new FieldInformation("Normal miRNA Expression Quantification Filename",     c => c.normal_miRNA_expression_quantification_filename, (c, v) => c.normal_miRNA_expression_quantification_filename = v),
-                new FieldInformation("Tumor Isoform Expression Quantification Filename",    c => c.tumor_isoform_expression_quantification_filename, (c, v) => c.tumor_isoform_expression_quantification_filename = v),
-                new FieldInformation("Normal Isoform Expression Quantification Filename",   c => c.normal_isoform_expression_quantification_filename, (c, v) => c.normal_isoform_expression_quantification_filename = v),
-
-                new FieldInformation("Normal DNA Size",                                     c => Convert.ToString(c.normal_dna_size), (c,v) => c.normal_dna_size = LongFromString(v)),
-                new FieldInformation("Tumor DNA Size",                                      c => Convert.ToString(c.tumor_dna_size), (c,v) => c.tumor_dna_size = LongFromString(v)),
-                new FieldInformation("Normal RNA Size",                                     c => Convert.ToString(c.normal_rna_size), (c,v) => c.normal_rna_size = LongFromString(v)),
-                new FieldInformation("Tumor RNA Size",                                      c => Convert.ToString(c.tumor_rna_size), (c,v) => c.tumor_rna_size = LongFromString(v)),
-                new FieldInformation("Tumor Methylation Size",                              c => Convert.ToString(c.tumor_methylation_size), (c,v) => c.tumor_methylation_size = LongFromString(v)),
-                new FieldInformation("Normal Methylation Size",                             c => Convert.ToString(c.normal_methylation_size), (c,v) => c.normal_methylation_size = LongFromString(v)),
-                new FieldInformation("Tumor Copy Number Size",                              c => Convert.ToString(c.tumor_copy_number_size), (c,v) => c.tumor_copy_number_size = LongFromString(v)),
-                new FieldInformation("Normal Copy Number Size",                             c => Convert.ToString(c.normal_copy_number_size), (c,v) => c.normal_copy_number_size = LongFromString(v)),
-                new FieldInformation("Tumor FPKM Size",                                     c => Convert.ToString(c.tumor_fpkm_size), (c,v) => c.tumor_fpkm_size = LongFromString(v)),
-                new FieldInformation("Normal FPKM Size",                                    c => Convert.ToString(c.normal_fpkm_size), (c,v) => c.normal_fpkm_size = LongFromString(v)),
-                new FieldInformation("Clinical Supplement Size",                            c => Convert.ToString(c.clinical_supplement_size), (c, v) => c.clinical_supplement_size = LongFromString(v)),
-                new FieldInformation("Normal miRNA-seq Size",                               c => Convert.ToString(c.normal_miRNA_size), (c, v) => c.normal_miRNA_size = LongFromString(v)),
-                new FieldInformation("Tumor miRNA-seq Size",                                c => Convert.ToString(c.tumor_miRNA_size), (c, v) => c.tumor_miRNA_size = LongFromString(v)),
-                new FieldInformation("Tumor miRNA Expression Quantification Size",          c => Convert.ToString(c.tumor_miRNA_expression_quantification_size), (c, v) => c.tumor_miRNA_expression_quantification_size = LongFromString(v)),
-                new FieldInformation("Normal miRNA Expression Quantification Size",         c => Convert.ToString(c.normal_miRNA_expression_quantification_size), (c, v) => c.normal_miRNA_expression_quantification_size = LongFromString(v)),
-                new FieldInformation("Tumor Isoform Expression Quantification Size",        c => Convert.ToString(c.tumor_isoform_expression_quantification_size), (c, v) => c.tumor_isoform_expression_quantification_size = LongFromString(v)),
-                new FieldInformation("Normal Isoform Expression Quantification Size",       c => Convert.ToString(c.normal_isoform_expression_quantification_size), (c, v) => c.normal_isoform_expression_quantification_size = LongFromString(v)),
-
-                new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, "Normal DNA Allcount File Size", c => c.normal_dna_allcount_size, (c,v) => c.normal_dna_allcount_size = v),
-                new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, "Tumor DNA Allcount File Size", c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v),
-                new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id, "Normal RNA Allcount File Size", c => c.normal_rna_allcount_size, (c, v) => c.normal_rna_allcount_size = v),
-                new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id, "Tumor RNA Allcount File Size", c => c.tumor_rna_allcount_size, (c, v) => c.tumor_rna_allcount_size = v),
-                new FieldInformation("Regional Expression Filename",                        c => c.regional_expression_filename, (c,v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id, "Regional Expression File Size", c => c.regional_expression_size, (c, v) => c.regional_expression_size = v),
-                new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id, "Gene Expression File Size", c => c.gene_expression_size, (c, v) => c.gene_expression_size = v),
-                new FieldInformation("Tentative Selected Variants",                         c => c.tentative_selected_variants_filename, (c, v) => c.tentative_selected_variants_filename = v, DerivedFile.Type.TentativeSelectedVariants, tentativeSelectedVariantsExtension, c => c.normal_dna_file_id, "Tentative Selected Variants Size", c => c.tentative_selected_variants_size, (c, v) => c.tentative_selected_variants_size = v),
-                //new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id, "Selected Variants File Size", c=> c.selected_variants_size, (c, v) => c.selected_variants_size = v),
-                new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_tentative_selected_variants_filename, (c,v) => c.normal_dna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtTentativeSelectedVariantsExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants File Size", c => c.normal_dna_reads_at_selected_variants_size, (c, v) => c.normal_dna_reads_at_selected_variants_size = v),
-                new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants Index File Size", c => c.normal_dna_reads_at_selected_variants_index_size, (c, v) => c.normal_dna_reads_at_selected_variants_index_size = v),
-                new FieldInformation("Tumor DNA Reads At Selected Variants Filename",       c => c.tumor_dna_reads_at_tentative_selected_variants_filename, (c,v) => c.tumor_dna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtTentativeSelectedVariantsExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants File Size", c => c.tumor_dna_reads_at_selected_variants_size, (c, v) => c.tumor_dna_reads_at_selected_variants_size = v),
-                new FieldInformation("Tumor DNA Reads At Selected Variants Index Filename", c => c.tumor_dna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.tumor_dna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariantsIndex, tumorDNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants Index File Size", c => c.tumor_dna_reads_at_selected_variants_index_size, (c, v) => c.tumor_dna_reads_at_selected_variants_index_size = v),
-                new FieldInformation("Normal RNA Reads At Selected Variants Filename",      c => c.normal_rna_reads_at_tentative_selected_variants_filename, (c,v) => c.normal_rna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariants, normalRNAReadsAtTentativeSelectedVariantsExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants File Size", c => c.normal_rna_reads_at_selected_variants_size, (c, v) => c.normal_rna_reads_at_selected_variants_size = v),
-                new FieldInformation("Normal RNA Reads At Selected Variants Index Filename",c => c.normal_rna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.normal_rna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariantsIndex, normalRNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants Index File Size", c => c.normal_rna_reads_at_selected_variants_index_size, (c, v) => c.normal_rna_reads_at_selected_variants_index_size = v),
-                new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_tentative_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_tentative_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtTentativeSelectedVariantsExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants File Size", c => c.tumor_rna_reads_at_selected_variants_size, (c, v) => c.tumor_rna_reads_at_selected_variants_size = v),
-                new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_tentative_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_tentative_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtTentativeSelectedVariantsIndexExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants Index File Size", c => c.tumor_rna_reads_at_selected_variants_index_size, (c, v) => c.tumor_rna_reads_at_selected_variants_index_size = v),
-                new FieldInformation("Tentative Annotated Selected Variants Filename",      c => c.tentative_annotated_selected_variants_filename, (c, v) => c.tentative_annotated_selected_variants_filename = v, DerivedFile.Type.TentativeAnnotatedSelectedVariants, tentativeAnnotatedSelectedVariantsExtension, c => c.case_id, "Tentative Annotated Selected Variants", c => c.tentative_annotated_selected_variants_size, (c, v) => c.tentative_annotated_selected_variants_size = v),
-                new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id, "Annotated Selected Variants File Size", c => c.annotated_selected_variants_size, (c, v) => c.annotated_selected_variants_size = v),
-                new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id, "Normal Allele Specific Gene Expression File Size", c => c.normal_allele_specific_gene_expression_size, (c, v) => c.normal_allele_specific_gene_expression_size = v),
-                new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id, "Tumor Allele Specific Gene Expression File Size", c => c.tumor_allele_specific_gene_expression_size, (c, v) => c.tumor_allele_specific_gene_expression_size = v),
-                new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id, "Tumor DNA Gene Coverage File Size", c => c.tumor_dna_gene_coverage_size, (c, v) => c.tumor_dna_gene_coverage_size = v),
-                new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id, "VCF File Size", c => c.vcf_size, (c, v) => c.vcf_size = v),
-                new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id, "Extracted MAF Lines File Size", c => c.extracted_maf_lines_size, (c, v) => c.extracted_maf_lines_size = v),
-                new FieldInformation("All MAF Lines Filename",                              c => c.all_maf_lines_filename, (c,v) => c.all_maf_lines_filename = v, DerivedFile.Type.AllMAFLines, allMAFLinesExtension, c => c.case_id, "All MAF Lines File Size", c => c.all_maf_lines_size, (c, v) => c.all_maf_lines_size = v),
-                new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id, "Normal DNA Mapped Base Count File Size", c => c.normal_dna_mapped_base_count_size, (c, v) => c.normal_dna_mapped_base_count_size = v),
-                new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id, "Tumor DNA Mapped Base Count File Size", c => c.tumor_dna_mapped_base_count_size, (c, v) => c.tumor_dna_mapped_base_count_size = v),
-                new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id, "Normal RNA Mapped Base Count File Size", c => c.normal_rna_mapped_base_count_size, (c, v) => c.normal_rna_mapped_base_count_size = v),
-                new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id, "Tumor RNA Mapped Base Count File Size", c => c.tumor_rna_mapped_base_count_size, (c, v) => c.tumor_rna_mapped_base_count_size = v),
-                new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, "Selected Variant Counts By Gene File Size", c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v),
-                new FieldInformation("Selected Regulatory MAF Lines Filename",              c => c.selected_regulatory_maf_filename, (c, v) => c.selected_regulatory_maf_filename = v, DerivedFile.Type.SelectedRegulatoryMAFLines, selectedRegulatoryMAFLinesExtension, c => c.case_id, "Selected Regulatory MAF Lines Size", c => c.selected_regulatory_maf_lines_size, (c, v) => c.selected_regulatory_maf_lines_size = v),
-                new FieldInformation("Annotated Regulatory Regions Filename",               c => c.annotated_regulatory_regions_filename, (c, v) => c.annotated_regulatory_regions_filename = v, DerivedFile.Type.AnnotatedRegulatoryRegions, annotatedBEDLinesExtension, c => c.case_id, "Annotated Regulatory Regions Size", c => c.annotated_regulatory_regions_size, (c, v) => c.annotated_regulatory_regions_size = v),
-                new FieldInformation("Annotated GeneHancer Lines Filename",                 c => c.annotated_geneHancer_lines_filename, (c, v) => c.annotated_geneHancer_lines_filename = v, DerivedFile.Type.AnnotatedGeneHancer, annotatedGeneHancerLinesExtension, c => c.case_id, "Annotated GeneHancer Lines Size", c => c.annotated_geneHancer_lines_size, (c, v) => c.annotated_geneHancer_lines_size = v),            
-                new FieldInformation("Regulatory Mutations Near Mutations Filename",        c => c.regulatory_mutations_near_mutations_filename, (c, v) => c.regulatory_mutations_near_mutations_filename = v, DerivedFile.Type.RegulatoryMutationsNearMutations, regulatoryMutationsNearMutationsExtension, c => c.case_id, "Regulatory Mutations Near Mutations Size", c => c.regulatory_mutations_near_mutations_size, (c, v) => c.regulatory_mutations_near_mutations_size = v),
-                new FieldInformation("Expression By Gene",                                  c => c.expression_by_gene_filename, (c, v) => c.expression_by_gene_filename = v, DerivedFile.Type.ExpressionByGene, expressionByGeneExtension, c => c.case_id, "Expression By Gene Size", c => c.expression_by_gene_size, (c, v) => c.expression_by_gene_size = v),
-                new FieldInformation("Isoform Read Counts",                                 c => c.isoform_read_counts_filename, (c, v) => c.isoform_read_counts_filename = v, DerivedFile.Type.IsoformReadCounts, isoformReadCountsExtension, c => c.case_id, "Isoform Gene Counts Size", c => c.isoform_read_counts_file_size, (c, v) => c.isoform_read_counts_file_size = v),
-                new FieldInformation("Compressed VCF",                                      c => c.compressed_vcf_filename, (c, v) => c.compressed_vcf_filename = v, DerivedFile.Type.CompressedVCF, compressedVCFExtension, c => c.normal_dna_file_id, "Compressed VCF Size", c => c.compressed_vcf_file_size, (c, v) => c.compressed_vcf_file_size = v),
-                new FieldInformation("Case Metadata",                                       c => c.case_metadata_filename, (c, v) => c.case_metadata_filename = v, DerivedFile.Type.CaseMetadata, caseMetadataExtension, c => c.case_id, "Case Metadata Size", c => c.case_metadata_file_size, (c, v) => c.case_metadata_file_size = v),
-                new FieldInformation("Tentative ASVs without CNVs Filename",                c => c.tentative_asv_without_cnvs_filename, (c, v) => c.tentative_asv_without_cnvs_filename = v, DerivedFile.Type.TentativeASVsWithoutCNVs, tentativeASVsWithoutCNVsExtension, c => c.case_id, "Tentative ASVs Without CNVs Size", c => c.tentative_asv_without_cnvs_size, (c, v) => c.tentative_asv_without_cnvs_size = v),
-                new FieldInformation("Variant Phasing Filename",                            c => c.variant_phasing_filename, (c, v) => c.variant_phasing_filename = v, DerivedFile.Type.VariantPhasing, variantPhasingExtension, c => c.case_id, "Variant Phasing Size", c => c.variant_phasing_size, (c, v) => c.variant_phasing_size = v),
-                new FieldInformation("VCF Statistics Filename",                             c => c.vcf_statistics_filename, (c,v) => c.vcf_statistics_filename = v, DerivedFile.Type.VCFStatistics, vcfStatisticsExtension, c => c.normal_dna_file_id, "VCF Statistics Size", c=> c.vcf_statistics_size, (c, v) => c.vcf_statistics_size = v),
-                new FieldInformation("Read Statistics Filename",                            c => c.read_statictics_filename, (c, v) => c.read_statictics_filename = v, DerivedFile.Type.ReadStatictics, readStatisticsExtension, c => c.case_id, "Read Statictics Size", c => c.read_statictics_size, (c, v) => c.read_statictics_size = v)                        ,   
-
-                new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
-                new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
-                new FieldInformation("Tumor RNA BAM MD5",                                   c => c.tumor_rna_file_bam_md5, (c,v) => c.tumor_rna_file_bam_md5 = v),
-                new FieldInformation("Tumor RNA BAI MD5",                                   c => c.tumor_rna_file_bai_md5, (c,v) => c.tumor_rna_file_bai_md5 = v),
-                new FieldInformation("Normal DNA BAM MD5",                                  c => c.normal_dna_file_bam_md5, (c,v) => c.normal_dna_file_bam_md5 = v),
-                new FieldInformation("Normal DNA BAI MD5",                                  c => c.normal_dna_file_bai_md5, (c,v) => c.normal_dna_file_bai_md5 = v),
-                new FieldInformation("Tumor DNA BAM MD5",                                   c => c.tumor_dna_file_bam_md5, (c,v) => c.tumor_dna_file_bam_md5 = v),
-                new FieldInformation("Tumor DNA BAI MD5",                                   c => c.tumor_dna_file_bai_md5, (c,v) => c.tumor_dna_file_bai_md5 = v),
-                new FieldInformation("Tumor Methylation MD5",                               c => c.tumor_methylation_file_md5, (c,v) => c.tumor_methylation_file_md5 = v),
-                new FieldInformation("Normal Methylation MD5",                              c => c.normal_methylation_file_md5, (c,v) => c.normal_methylation_file_md5 = v),
-                new FieldInformation("Tumor Copy Number MD5",                               c => c.tumor_copy_number_file_md5, (c,v) => c.tumor_copy_number_file_md5 = v),
-                new FieldInformation("Normal Copy Number MD5",                              c => c.normal_copy_number_file_md5, (c,v) => c.normal_copy_number_file_md5 = v),
-                new FieldInformation("Tumor FPKM MD5",                                      c => c.tumor_fpkm_file_md5, (c,v) => c.tumor_fpkm_file_md5 = v),
-                new FieldInformation("Normal FPKM MD5",                                     c => c.normal_fpkm_file_md5, (c,v) => c.normal_fpkm_file_md5 = v),
-                new FieldInformation("Clinical Supplement MD5",                             c => c.clinical_supplement_md5, (c,v) => c.clinical_supplement_md5 = v),
-                new FieldInformation("Normal miRNA MD5",                                    c => c.normal_miRNA_md5, (c,v) => c.normal_miRNA_md5 = v),
-                new FieldInformation("Tumor miRNA MD5",                                     c => c.tumor_miRNA_md5, (c,v) => c.tumor_miRNA_md5 = v),
-                new FieldInformation("Tumor miRNA Expression Quantification MD5",           c => c.tumor_miRNA_expression_quantification_md5, (c, v) => c.tumor_miRNA_expression_quantification_md5 = v),
-                new FieldInformation("Normal miRNA Expression Quantification MD5",          c => c.normal_miRNA_expression_quantification_md5, (c, v) => c.normal_miRNA_expression_quantification_md5 = v),
-                new FieldInformation("Tumor Isoform Expression Quantification MD5",         c => c.tumor_isoform_expression_quantification_md5, (c, v) => c.tumor_isoform_expression_quantification_md5 = v),
-                new FieldInformation("Normal Isoform Expression Quantification MD5",        c => c.normal_isoform_expression_quantification_md5, (c, v) => c.normal_isoform_expression_quantification_md5 = v),
-
-            }; // fieldInformation
-#endif // false
-
 
             static public Case fromSaveFileLine(Dictionary<string, int> fieldMappings, string[] fields)
             {
@@ -2222,7 +2094,6 @@ namespace ASELib
             //
             public void loadFileLocations(Configuration configuration, Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
             {
-
                 addDownloadedFileLocation(downloadedFiles, normal_dna_file_id, x => normal_dna_filename = x);
 
                 addDownloadedFileLocation(downloadedFiles, tumor_dna_file_id, x => tumor_dna_filename = x);
@@ -3770,7 +3641,7 @@ namespace ASELib
         public const string bowtieRealignedNormalDNABaiExtension = ".bowtie-normal-dna.bam.bai";
         public const string bowtieRealignedTumorDNAExtension = ".bowtie-tumor-dna.bam";
         public const string bowtieRealignedTumorDNABaiExtension = ".bowtie-tumor-dna.bam.bai";
-        public const string bowtieRealignedNormalDNAStaticticsExtension = ".bowtie-normal-dna-statictics.txt";
+        public const string bowtieRealignedNormalDNAStatisticsExtension = ".bowtie-normal-dna-statictics.txt";
         public const string bowtieRealignedTumorDNAStatisticsExtension = ".bowtie-tumor-dna-statictics.txt";
         public const string normalFastqExtension = ".normal_1.fastq";
         public const string normalSecondEndFastqExtension = ".normal_2.fastq";
@@ -3796,6 +3667,8 @@ namespace ASELib
         public const string miRNAExpressionPValueHistogramFilename = "miRNAPValueHistogram.txt";
         public const string CaseMetadataSummaryFilename = "CaseMetadataSummary.txt";
         public const string ConsolodatedCaseMetadataFilename = "ConsolodatedCaseMetadata.txt";
+
+        public const string BowtieHistogramsFilename = "BowtieHistograms.txt";
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
@@ -16191,6 +16064,41 @@ namespace ASELib
             {
                 return first.Value.CompareTo(second.Value);
             }
+        }
+
+        public static readonly string[] MonthStrings = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+        // Convert the output of the Linux "date" command to a DateTime.  The format is DOY mth dd hh:mm:ss DST YYYY in local time.
+        public static DateTime LinuxDateStringToDateTime(string linuxString)
+        {
+            //
+            // Get rid of double spaces.
+            //
+            while (linuxString.Contains("  "))
+            {
+                linuxString = linuxString.Replace("  ", " ");
+            }
+
+            var fields = linuxString.Split(' ');
+            if (fields.Count() != 6)
+            {
+                throw new FormatException("ASETools.LinuxDateStringToDateTime: wrong number of fields " + fields.Count() + ": " + linuxString);
+            }
+
+            var year = Convert.ToInt32(fields[5]);
+            var month = Array.IndexOf(MonthStrings, fields[1]) + 1; // +1 because oddly January isn't month 0
+            var day = Convert.ToInt32(fields[2]);
+
+            var timeSubfields = fields[3].Split(':');
+            if (timeSubfields.Count() != 3)
+            {
+                throw new FormatException("ASETools.LinuxDateStringToDateTime: wrong number time subfields " + fields.Count() + ": " + linuxString);
+            }
+
+            var hour = Convert.ToInt32(timeSubfields[0]);
+            var minute = Convert.ToInt32(timeSubfields[1]);
+            var second = Convert.ToInt32(timeSubfields[2]);
+
+            return new DateTime(year, month, day, hour, minute, second, DateTimeKind.Local);
         }
 
     } // ASETools
