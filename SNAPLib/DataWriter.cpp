@@ -400,11 +400,15 @@ AsyncDataWriter::getBatch(
     bool
 AsyncDataWriter::nextBatch()
 {
+/*BJB*/ _int64 a = timeInMillis();
     _int64 start = timeInNanos();
     if (encoder != NULL) {
         WaitForEvent(&batches[(current + 1) % count].encoded);
     }
     acquireLock();
+    extern _int64 BJBProgramStartTimeInMillis;
+    static volatile int nOutstanding = 0;
+///*BJB*/ fprintf(stderr, "%llds: AsyncDataWriter::nextBatch() on thread ID %d, current = %d, nOutstanding = %d, used = %lld\n", (timeInMillis() - BJBProgramStartTimeInMillis)/1000, GetCurrentThreadId(), current, InterlockedIncrementAndReturnNewValue(&nOutstanding), batches[current].used);
     int written = current;
     Batch* write = &batches[written];
     write->logicalUsed = write->used;
@@ -413,6 +417,7 @@ AsyncDataWriter::nextBatch()
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
     bool newSize = filter != NULL && (filter->filterType == TransformFilter || filter->filterType == ResizeFilter);
+/*BJB*/ _int64 b = timeInMillis();
     if (newSize) {
         // advisory only
         write->fileOffset = supplier->sharedOffset;
@@ -420,8 +425,11 @@ AsyncDataWriter::nextBatch()
     } else {
         supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
     }
+/*BJB*/ _int64 c = timeInMillis();
+/*BJB*/ _int64 d = timeInMillis();
     if (filter != NULL) {
         size_t n = filter->onNextBatch(this, write->fileOffset, write->used);
+/*BJB*/ d = timeInMillis();
 	    if (newSize) {
 	        write->used = n;
             supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
@@ -440,6 +448,8 @@ AsyncDataWriter::nextBatch()
             batches[current].logicalUsed = 0;
         }
     }
+/*BJB*/ _int64 e = timeInMillis();
+/*BJB*/ _int64 f = timeInMillis();
     _int64 start2 = timeInNanos();
     releaseLock();
 
@@ -447,6 +457,7 @@ AsyncDataWriter::nextBatch()
     if (encoder == NULL) {
         //fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
         //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
+/*BJB*/ f = timeInMillis();
         if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
             WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
             soft_exit(1);
@@ -455,11 +466,18 @@ AsyncDataWriter::nextBatch()
         PreventEventWaitersFromProceeding(&write->encoded);
         encoder->inputReady();
     }
+/*BJB*/ _int64 g = timeInMillis();
     if (! batches[current].file->waitForCompletion()) {
         WriteErrorMessage("error: file write failed\n");
         soft_exit(1);
     }
     InterlockedAdd64AndReturnNewValue(&WaitTime, timeInNanos() - start2);
+/*BJB*/ _int64 h = timeInMillis();
+    ///*BJB*/ fprintf(stderr, "%llds: AsyncDataWriter::nextBatch() completed on thread ID %d, b:%lldms c:%lldms d:%lldms e:%lldms f:%lldms g:%lldms end:%lldms total:%lldms nOutstanding = %ld\n", 
+              //      (timeInMillis() - BJBProgramStartTimeInMillis) / 1000,
+              //      GetCurrentThreadId(), 
+              //      b-a, c-b, d-c, e-d, f-e, g-f, h-g, h-a,
+              //      InterlockedDecrementAndReturnNewValue(&nOutstanding));
     return true;
 }
 

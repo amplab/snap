@@ -31,7 +31,7 @@ Environment:
 #include "DataReader.h"
 #include "FileFormat.h"
 
-bool readIdsMatch(const char* id0, const char* id1);
+bool readIdsMatch(const char* id0, const char* id1, _int64 *innerLoopCount);
 
 bool readIdsMatch(Read *read0, Read *read1);
 
