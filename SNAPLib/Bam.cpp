@@ -1641,10 +1641,96 @@ BAMFilter::tryFindRead(
     return NULL;
 }
 
+struct ReadByNameHashTable {
+    ReadByNameHashTable(size_t maxEntryCount) 
+    {
+        nTableEntries = maxEntryCount;
+        tableEntries = new TableEntry[maxEntryCount];
+        nUsedTableEntries = 0;
+
+        hashTableSize = (maxEntryCount * 3) / 2;
+        hashTable = new TableEntry * [hashTableSize];
+
+        memset(hashTable, 0, sizeof(*hashTable) * hashTableSize);
+    } // ctor
+
+    ~ReadByNameHashTable()
+    {
+        delete[] tableEntries;
+        delete[] hashTable;
+    } // destructor
+
+    void add(BAMAlignment* bam)
+    {
+        _ASSERT(nUsedTableEntries < nTableEntries); // Or else the max we were promised at creation time was wrong
+        TableEntry* entry = &tableEntries[nUsedTableEntries];
+        nUsedTableEntries++;
+
+        size_t index = hash(bam) % hashTableSize;
+        entry->bam = bam;
+        entry->next = hashTable[index];
+        hashTable[index] = entry;
+    } // add
+
+    BAMAlignment* lookup(BAMAlignment *bam)
+    {
+        TableEntry* tableEntry = hashTable[hash(bam) % hashTableSize];
+
+        while (NULL != tableEntry) 
+        {
+            _int64 count;
+            if (readIdsMatch(bam->read_name(), tableEntry->bam->read_name(), &count)) 
+            {
+                return tableEntry->bam;
+            }
+
+            tableEntry = tableEntry->next;
+        }  // walking the hash table bucket list
+
+        return NULL;
+    } // lookup
+
+private:
+    struct TableEntry
+    {
+        BAMAlignment* bam;
+        TableEntry* next;
+    }; // TableEntry
+
+    TableEntry* tableEntries;
+    size_t nUsedTableEntries;
+    size_t nTableEntries;
+
+    size_t hashTableSize;
+    TableEntry** hashTable;
+
+    static size_t hash(BAMAlignment* bam) // We could probably use a better hash function, but I doubt it matters
+    {
+        size_t value = 0x123456789abcdef0;
+        char* readName = bam->read_name();
+
+        for (int i = 0; i < bam->l_read_name; i++)
+        {
+            if (readName[i] == ' ' || readName[i] == 0 || readName[i] == '/') 
+            {
+                break;
+            }
+            value = (value * 131) ^ readName[i];
+        }
+
+        return value;
+    } // hash
+}; // ReadByNameHashTable
+
+//
+// One of these per possible duplicate read (matches on location, next location, RC, next RC).
+//
 struct DuplicateReadKey
 {
     DuplicateReadKey()
-    { memset(this, 0, sizeof(DuplicateReadKey)); }
+    { 
+        memset(this, 0, sizeof(DuplicateReadKey)); 
+    }
 
     DuplicateReadKey(const BAMAlignment* bam, const Genome *genome)
     {
@@ -1665,7 +1751,7 @@ struct DuplicateReadKey
                 isRC[0] = f;
             }
         }
-    }
+    } // ctor
 
     bool operator==(const DuplicateReadKey& b) const
     {
@@ -1698,13 +1784,28 @@ struct DuplicateReadKey
     operator _uint64()
     { return ((_uint64) (GenomeLocationAsInt64(locations[1]) ^ (isRC[1] ? 1 : 0))) << 32 | (_uint64) (GenomeLocationAsInt64(locations[0]) ^ (isRC[0] ? 1 : 0)); }
 
-    GenomeLocation locations[2];
-    bool isRC[2];
+    GenomeLocation locations[NUM_READS_PER_PAIR];
+    bool isRC[NUM_READS_PER_PAIR];
+
 };
 
 struct DuplicateMateInfo
 {
-    DuplicateMateInfo() { memset(this, 0, sizeof(DuplicateMateInfo)); }
+    DuplicateMateInfo(size_t maxReads) 
+    { 
+        memset(this, 0, sizeof(DuplicateMateInfo)); 
+        byNameHashTable = new ReadByNameHashTable(maxReads);
+    }
+
+    DuplicateMateInfo()
+    {
+        memset(this, 0, sizeof(DuplicateMateInfo));
+    }
+
+    ~DuplicateMateInfo()
+    {
+        delete byNameHashTable;
+    }
 
     size_t firstRunOffset; // first read in duplicate set
     size_t firstRunEndOffset;
@@ -1714,6 +1815,8 @@ struct DuplicateMateInfo
 
     void setBestReadId(const char* id) { strncpy(bestReadId, id, sizeof(bestReadId)); }
     const char* getBestReadId() { return bestReadId; }
+
+    ReadByNameHashTable* byNameHashTable;
 };
 
 class BAMDupMarkFilter : public BAMFilter
@@ -1748,7 +1851,6 @@ protected:
 
 private:
     static int getTotalQuality(BAMAlignment* bam);
-
 
     struct Stats {
         _int64 nReads;
@@ -1829,14 +1931,16 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
     if ((lastBam->FLAG & SAM_SECONDARY) != 0) {
         return; // ignore secondary aliignments; todo: mark them as dups too?
     }
+
     _int64 startTime = timeInMillis();
     stats->nReads++;
     GenomeLocation location = lastBam->getLocation(genome);
     GenomeLocation nextLocation = lastBam->getNextLocation(genome);
-    GenomeLocation logicalLocation = location != InvalidGenomeLocation ? location : nextLocation;
-    if (logicalLocation == UINT32_MAX) {
+    GenomeLocation logicalLocation = location != UINT32_MAX ? location : nextLocation;
+    if (logicalLocation == UINT32_MAX) { // XXX UINT32_MAX
         return;
     }
+
     if (logicalLocation == runLocation) {
         runCount++;
     } else {
@@ -1879,6 +1983,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
             std::stable_sort(run.begin(), run.end());
             stats->b += timeInMillis() - b;
             bool foundRun = false;
+
             for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
                 // skip singletons
                 _int64 c = timeInMillis();
@@ -1901,21 +2006,27 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 MateMap::iterator f = mates.find(key);
                 DuplicateMateInfo* info;
                 if (f == mates.end()) {
-                    mates.put(key, DuplicateMateInfo());
+                    mates.put(key, DuplicateMateInfo(runCount));
                     info = &mates[key];
                     //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                     info->firstRunOffset = runOffset;
                     info->firstRunEndOffset = lastOffset;
+
+                    for (BAMAlignment* recordToRecord = getRead(offset); recordToRecord != NULL && recordToRecord != lastBam; recordToRecord = getNextRead(record, &offset))
+                    {
+                        info->byNameHashTable->add(recordToRecord);
+                    }
                 } else {
                     info = &f->value;
                 }
+
                 int totalQuality = getTotalQuality(record);
                 size_t mateOffset = 0;
                 BAMAlignment* mate = NULL;
                 // optimize case for half-mapped pairs with adjacent reads
                 if ((record->FLAG & SAM_MULTI_SEGMENT) != 0) {
                     stats->totalCallsToTryFindRead++;
-                    mate = tryFindRead(info->firstRunOffset, info->firstRunEndOffset, record->read_name(), &mateOffset);
+                    mate = info->byNameHashTable->lookup(record);
                     if (mate == record) {
                         mate = NULL;
                     }
