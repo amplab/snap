@@ -1791,10 +1791,10 @@ struct DuplicateReadKey
 
 struct DuplicateMateInfo
 {
-    DuplicateMateInfo(size_t maxReads) 
+    DuplicateMateInfo(ReadByNameHashTable *byNameHashTable_) 
     { 
         memset(this, 0, sizeof(DuplicateMateInfo)); 
-        byNameHashTable = new ReadByNameHashTable(maxReads);
+        byNameHashTable = byNameHashTable_;
     }
 
     DuplicateMateInfo()
@@ -1804,7 +1804,6 @@ struct DuplicateMateInfo
 
     ~DuplicateMateInfo()
     {
-        delete byNameHashTable;
     }
 
     size_t firstRunOffset; // first read in duplicate set
@@ -2006,15 +2005,16 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 MateMap::iterator f = mates.find(key);
                 DuplicateMateInfo* info;
                 if (f == mates.end()) {
-                    mates.put(key, DuplicateMateInfo(runCount));
+                    ReadByNameHashTable* byNameHashTable = new ReadByNameHashTable(lastOffset - runOffset + 1);
+                    mates.put(key, DuplicateMateInfo(byNameHashTable));
                     info = &mates[key];
                     //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                     info->firstRunOffset = runOffset;
                     info->firstRunEndOffset = lastOffset;
 
-                    for (BAMAlignment* recordToRecord = getRead(offset); recordToRecord != NULL && recordToRecord != lastBam; recordToRecord = getNextRead(record, &offset))
+                    for (int j = runOffset; j <= lastOffset; j++) 
                     {
-                        info->byNameHashTable->add(recordToRecord);
+                        byNameHashTable->add(getRead(j));
                     }
                 } else {
                     info = &f->value;
@@ -2142,6 +2142,10 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 DuplicateReadKey key(record, genome);
                 MateMap::iterator m = mates.find(key);
                 if (m != mates.end() && m->value.firstRunOffset != runOffset) {
+                    if (m->value.byNameHashTable != NULL) {
+                        delete m->value.byNameHashTable;
+                        m->value.byNameHashTable = NULL;
+                    }
                     mates.erase(key);
                     //fprintf(stderr, "erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                 }
