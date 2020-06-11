@@ -164,6 +164,13 @@ public:
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) const;
 
+    virtual bool writePairs(
+        const ReaderContext& context, LandauVishkinWithCigar * lv, AffineGapVectorizedWithCigar * ag, 
+        bool useAffineGap, char * buffer, size_t bufferSpace,
+        size_t * spaceUsed, size_t* qnameLen, Read ** reads, GenomeLocation* locations, PairedAlignmentResult* result,
+        bool isSecondary, bool emitInternalScore, char *internalScoreTag, int * writeOrder,
+        int* cumulativePositiveAddFrontClipping, bool * secondReadLocationChanged, bool * outOfSpace) const;
+
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
@@ -249,6 +256,8 @@ public:
             unsigned& clippedLength,
             unsigned& basesClippedBefore,
             unsigned& basesClippedAfter,
+            unsigned& mateBasesClippedBefore,
+            unsigned& mateBasesClippedAfter,
             // input data
             size_t& qnameLen,
             Read * read,
@@ -271,6 +280,12 @@ public:
             int mateBpClippedBefore,
             int mateBpClippedAfter);
 
+    static void
+        fillMateInfo(const Genome * genome, int& flags, Read * read, GenomeLocation genomeLocation, Direction direction, const char*& contigName,
+            int& contigIndex, GenomeDistance& positionInContig, _int64& templateLength, unsigned basesClippedBefore, bool firstInPair, bool alignedAsPair,
+            Read * mate, GenomeLocation mateLocation, Direction mateDirection, const char*& matecontigName, int& mateContigIndex, GenomeDistance& matePositionInContig,
+            unsigned mateBasesClippedBefore, int refSpanFromCigar, int mateRefSpanFromCigar);
+
     static void computeCigar(CigarFormat cigarFormat, const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
@@ -288,13 +303,13 @@ private:
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter, 
         unsigned frontHardClipped, unsigned backHardClipped,
-        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping);
+        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping, int * o_refSpan);
 
     static const char * computeCigarString(const Genome * genome, AffineGapVectorizedWithCigar * ag,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned frontHardClipped, unsigned backHardClipped,
-        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping);
+        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping, int * o_refSpan);
 
 // #ifdef _DEBUG
 	static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM);
@@ -302,6 +317,7 @@ private:
 //	inline static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM) {}
 //#endif // DEBUG
 
+    static void getRefSpanFromCigar(const char * cigarBuf, int cigarBufLen, int* refSpan);
 
     const bool useM;
 };

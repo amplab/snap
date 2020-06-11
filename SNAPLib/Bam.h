@@ -156,6 +156,10 @@ struct BAMAlignment
 
     int l_ref(); // length of reference aligned to read
 
+    GenomeLocation getUnclippedStart(GenomeLocation loc);
+
+    GenomeLocation getUnclippedEnd(GenomeLocation loc);
+
     class _init { public: _init(); };
     static _init _init_;
 
