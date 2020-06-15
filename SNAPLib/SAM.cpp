@@ -1297,10 +1297,40 @@ SAMFormat::fillMateInfo(
 
         if (contigName == matecontigName) { // pointer (not value) comparison, but that's OK.
             if (myStart < mateStart) {
-                templateLength = mateEnd - myStart;
+                if (direction == FORWARD) {
+                    if (mateDirection == RC) {
+                        templateLength = mateEnd - myStart; // FR
+                    }
+                    else {
+                        templateLength = mateStart - myStart; // FF
+                    }
+                }
+                else {
+                    if (mateDirection == FORWARD) {
+                        templateLength = mateStart - myEnd; // RF
+                    }
+                    else {
+                        templateLength = mateEnd - myEnd; // RR
+                    }
+                }
             }
             else {
-                templateLength = -(myEnd - mateStart);
+                if (direction == RC) {
+                    if (mateDirection == FORWARD) {
+                        templateLength = -(myEnd - mateStart);
+                    }
+                    else {
+                        templateLength = -(myEnd - mateEnd);
+                    }
+                }
+                else {
+                    if (mateDirection == FORWARD) {
+                        templateLength = -(myStart - mateStart);
+                    }
+                    else {
+                        templateLength = -(myStart - mateEnd);
+                    }
+                }
             }
         } // otherwise leave TLEN as zero.
     }
