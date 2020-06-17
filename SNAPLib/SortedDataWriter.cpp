@@ -257,7 +257,7 @@ private:
 
         bool isEmpty()
         {
-            return next != this;
+            return next == this;
         }
 
         QueueElement* removeFirst()
@@ -417,7 +417,7 @@ private:
     //
     struct Buffer {
         char* buffer;
-        size_t filledBufferSpace;
+        size_t usedBufferSpace;
     };
 
     int nBuffers;
@@ -466,6 +466,7 @@ DataQueue::releaseWriter()
 
 DataQueue::DataQueue(int nBuffers_, size_t bufferSize_)
 {
+    _ASSERT(bufferSize > 0);
     nBuffers = nBuffers_;
     bufferSize = bufferSize_;
     nWriters = 0;
@@ -478,7 +479,7 @@ DataQueue::DataQueue(int nBuffers_, size_t bufferSize_)
     for (int i = 0; i < nBuffers; i++)
     {
         buffers[i].buffer = (char*)BigAlloc(bufferSize);
-        buffers[i].filledBufferSpace = 0; // Though this is meaningless for free buffers anyway.
+        buffers[i].usedBufferSpace = 0; // Though this is meaningless for free buffers anyway.
 
         freeBufferQueue->enqueue(&buffers[i]);
     }
@@ -514,15 +515,16 @@ public:
     // get remaining space in current buffer for writing
     virtual bool getBuffer(char** o_buffer, size_t* o_size)
     {
-        if (currentBuffer == NULL || currentBuffer->filledBufferSpace >= queue->bufferSize) 
+        if (currentBuffer == NULL || currentBuffer->usedBufferSpace >= queue->bufferSize) 
         {
+///*BJB*/ fprintf(stderr, "DataQueueWriter::getBuffer: buffer is 0x%llx, free space %lld\n", currentBuffer, currentBuffer == NULL ? 0 : queue->bufferSize - currentBuffer->usedBufferSpace);
             *o_buffer = NULL;
             *o_size = 0;
             return false;
         }
 
-        *o_buffer = currentBuffer->buffer + currentBuffer->filledBufferSpace;
-        *o_size = currentBuffer->filledBufferSpace - currentBuffer->filledBufferSpace;
+        *o_buffer = currentBuffer->buffer + currentBuffer->usedBufferSpace;
+        *o_size = queue->bufferSize - currentBuffer->usedBufferSpace;
 
         return true;
     }
@@ -531,8 +533,8 @@ public:
     // should be called on each read, with the location
     virtual void advance(_int64 bytes, GenomeLocation location = 0)
     {
-        _ASSERT(currentBuffer != NULL && currentBuffer->filledBufferSpace + bytes <= queue->bufferSize);
-        currentBuffer->filledBufferSpace += bytes;
+        _ASSERT(currentBuffer != NULL && currentBuffer->usedBufferSpace + bytes <= queue->bufferSize);
+        currentBuffer->usedBufferSpace += bytes;
     }
 
     // get complete data buffer in batch, relative==0 is current, relative==-1 is previous, etc.
@@ -550,11 +552,14 @@ public:
     {
         if (currentBuffer != NULL) 
         {
+///*BJB*/ fprintf(stderr, "DataQueueWriter::nextBatch() enqueueing buffer at 0x%llx\n", currentBuffer);
             queue->readyBufferQueue->enqueue(currentBuffer);
             currentBuffer = NULL;
         }
 
         currentBuffer = (DataQueue::Buffer *)queue->freeBufferQueue->dequeue();
+        currentBuffer->usedBufferSpace = 0;
+///*BJB*/ fprintf(stderr, "DataQueueWriter::nextBatch() set next buffer to 0x%llx, used bytes %lld\n", currentBuffer, currentBuffer->usedBufferSpace);
 
         return true;
     }
@@ -562,7 +567,7 @@ public:
     // this thread is complete
     virtual void close()
     {
-        if (currentBuffer != NULL && currentBuffer->filledBufferSpace != 0) 
+        if (currentBuffer != NULL && currentBuffer->usedBufferSpace != 0) 
         {   
             //
             // Write out what we've got.
@@ -580,14 +585,16 @@ private:
 class DataQueueReader : public DataReader
 {
 public:
-    DataQueueReader(DataQueue* queue_) : queue(queue_), offsetInCurrentBuffer(0), currentBuffer(NULL) 
+    DataQueueReader(DataQueue* queue_) : queue(queue_), currentBuffer(NULL) 
     {
-        nextBatch();
     }
 
     ~DataQueueReader()
     {
-        queue->releaseReader();
+        if (NULL != queue)
+        {
+            queue->releaseReader();
+        }
     }
 
     bool init(const char* fileName) { return true;  }
@@ -618,8 +625,8 @@ public:
     // advance through data in current batch, reducing results from next getData call
     virtual void advance(_int64 bytes)
     {
-        _ASSERT(offsetInCurrentBuffer + bytes <= currentBuffer->filledBufferSpace);
-        offsetInCurrentBuffer += bytes;
+        _ASSERT(readOffsetInCurrentBuffer + bytes <= currentBuffer->usedBufferSpace);
+        readOffsetInCurrentBuffer += bytes;
     }
 
     // advance to next batch
@@ -684,7 +691,7 @@ private:
 
     DataQueue* queue;
     DataQueue::Buffer* currentBuffer;
-    size_t offsetInCurrentBuffer;
+    size_t readOffsetInCurrentBuffer;
 };
 
 
@@ -713,13 +720,15 @@ DataQueueReader::getData(char** o_buffer, _int64* o_validBytes, _int64* o_startB
 {
     _ASSERT(o_startBytes == NULL);  // this isn't used, so we don't fill it in
 
-    if (currentBuffer == NULL || offsetInCurrentBuffer >= currentBuffer->filledBufferSpace) 
+    if (currentBuffer == NULL || readOffsetInCurrentBuffer >= currentBuffer->usedBufferSpace) 
     {
+        *o_buffer = NULL;
+        *o_validBytes = 0;
         return false;
     }
 
-    *o_buffer = currentBuffer->buffer + offsetInCurrentBuffer;
-    *o_validBytes = currentBuffer->filledBufferSpace - offsetInCurrentBuffer;
+    *o_buffer = currentBuffer->buffer + readOffsetInCurrentBuffer;
+    *o_validBytes = currentBuffer->usedBufferSpace - readOffsetInCurrentBuffer;
 
     return true;
 } // DataQueueReader::getData
@@ -734,6 +743,11 @@ DataQueueReader::nextBatch()
         return;
     }
 
+    if (currentBuffer != NULL) 
+    {
+        queue->freeBufferQueue->enqueue(currentBuffer);
+    }
+
     currentBuffer = (DataQueue::Buffer *)queue->readyBufferQueue->dequeue();
 
     if (currentBuffer == NULL) 
@@ -742,7 +756,7 @@ DataQueueReader::nextBatch()
         queue = NULL;
     }
     
-    offsetInCurrentBuffer = 0;
+    readOffsetInCurrentBuffer = 0;
 } // DataQueueReader::nextBatch()
 
 
@@ -883,23 +897,34 @@ struct MergeSortThreadState
     bool deleteSortBlockVector;
     SortBlockVector* blocksForThisThread;
     DataWriter* writer;
+
+    EventObject *BJBEvent;
 };
+
+_int64 mergeSortStartTime;
 
     void
 SortedDataFilterSupplier::MergeSortThreadMain(void* threadParameter)
 {
     MergeSortThreadState* state = (MergeSortThreadState*)threadParameter;
+    fprintf(stderr, "%lld: MergeSortThread %d, deleteSortBlockVector %d\n", timeInMillis() - mergeSortStartTime, GetCurrentThreadId(), state->deleteSortBlockVector);
     state->filterSupplier->mergeSortThread(state->blocksForThisThread, state->writer);
+if (state->BJBEvent != NULL) AllowEventWaitersToProceed(state->BJBEvent);
     if (state->deleteSortBlockVector)
     {
         delete state->blocksForThisThread;
     }
     delete state;
 }
-
+    //
+    // Merge a set of reads coming from readers (either queue or file) into a writer (also either a queue or a file).
+    //
     void
 SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, DataWriter* writer) 
 {
+    _int64 readWaitTime = 0;
+    _int64 writeWaitTime = 0;
+
     // merge temp blocks into output
     _int64 total = 0;
     // get initial merge sort data
@@ -907,7 +932,17 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
     BlockQueue queue;
     for (SortBlockVector::iterator b = blocksForThisThread->begin(); b != blocksForThisThread->end(); b++) {
         _int64 bytes;
-        b->reader->getData(&b->data, &bytes);
+        if (!b->reader->getData(&b->data, &bytes))
+        {
+            _int64 start = timeInMillis();
+            b->reader->nextBatch();
+            if (!b->reader->getData(&b->data, &bytes))
+            {
+                WriteErrorMessage("mergeSortThread: unable to get initial data from reader\n");
+                soft_exit(1);
+            }
+            readWaitTime += timeInMillis() - start;
+        }
         format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
         queue.add((_uint32)(b - blocksForThisThread->begin()), b->location);
     }
@@ -935,7 +970,9 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
             _ASSERT(b->location >= b->minLocation && b->location <= b->maxLocation);
 #endif
             if (writeBytes < (size_t)b->length) {
+                _int64 start = timeInMillis();
                 writer->nextBatch();
+                writeWaitTime += timeInMillis() - start;
                 writer->getBuffer(&writeBuffer, &writeBytes);
                 if (writeBytes < (size_t)b->length) {
                     WriteErrorMessage("mergeSort: buffer size too small\n");
@@ -968,7 +1005,9 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
             current = b->location;
             _int64 readBytes;
             if (!b->reader->getData(&b->data, &readBytes)) {
+                _int64 start = timeInMillis();
                 b->reader->nextBatch();
+                readWaitTime += timeInMillis() - start;
                 if (!b->reader->getData(&b->data, &readBytes)) {
                     // This isn't supported in DataQueueReader, so this assert is off_ASSERT(b->reader->isEOF());
                     delete b->reader;
@@ -988,13 +1027,18 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
     InterlockedAdd64AndReturnNewValue(&totalReadsSorted, total);
 
     // close everything
+    _int64 start = timeInMillis();
     writer->close();
+    writeWaitTime += timeInMillis() - start;
     delete writer;
+
+    fprintf(stderr, "%lld: Thread %d read %lldms, write %lldms\n", timeInMillis() - mergeSortStartTime, GetCurrentThreadId(), readWaitTime, writeWaitTime);
 }
 
     bool
 SortedDataFilterSupplier::mergeSort()
 {
+    mergeSortStartTime = timeInMillis();
     // merge sort from temp file into sorted file
 #if USE_DEVTEAM_OPTIONS
     WriteStatusMessage("sorting...");
@@ -1070,7 +1114,7 @@ SortedDataFilterSupplier::mergeSort()
     // Unless there are very few input files, in which case we just run one thread.
     //
 
-    if (blocks.size() < 1 || numThreads == 1)  // BJB  this is off for testing.
+    if (blocks.size() < 1 || numThreads == 1 || true)  // BJB  this is off for testing.
     {
         //
         // The single thread case.
@@ -1079,6 +1123,7 @@ SortedDataFilterSupplier::mergeSort()
         rootThreadState->blocksForThisThread = &blocks;
         rootThreadState->writer = writer;
         rootThreadState->deleteSortBlockVector = false;
+        rootThreadState->filterSupplier = this;
 
         MergeSortThreadMain(rootThreadState);
     }
@@ -1088,32 +1133,39 @@ SortedDataFilterSupplier::mergeSort()
         // Multiple threads.
         //
 
+EventObject bjbEventObject;
+CreateEventObject(&bjbEventObject);
+PreventEventWaitersFromProceeding(&bjbEventObject);
+        
+
         int minPerThread = 2;   // BJB - low for testing.
-        int nWorkerThreads = numThreads - 1;
+        int nLeafThreads = numThreads - 1;
+///*BJB*/ nLeafThreads = 1;
         int nBlocksAssigned = 0;
 
         MergeSortThreadState* rootThreadState = new MergeSortThreadState();
-        rootThreadState->blocksForThisThread = new SortBlockVector(nWorkerThreads);
+        rootThreadState->blocksForThisThread = new SortBlockVector(nLeafThreads);
         rootThreadState->filterSupplier = this;
         rootThreadState->writer = writer;   // The writer that actually writes to the output file.
         rootThreadState->deleteSortBlockVector = false;
+rootThreadState->BJBEvent = NULL;
 
-        DataQueue** dataQueues = new DataQueue * [nWorkerThreads];
+        DataQueue** dataQueues = new DataQueue * [nLeafThreads];
 
-        for (int i = 0; i < nWorkerThreads; i++)
+        for (int i = 0; i < nLeafThreads; i++)
         {
-
-            int nBlocksThisThread = (int)(max(blocks.size() - nBlocksAssigned, min(minPerThread, (blocks.size() - nBlocksAssigned + (nWorkerThreads - i - 1)) / (nWorkerThreads - i))));
+            int nBlocksThisThread = (int)(min(blocks.size() - nBlocksAssigned, max(minPerThread, (blocks.size() - nBlocksAssigned + (nLeafThreads - i - 1)) / (nLeafThreads - i))));
             if (nBlocksThisThread == 0) 
             {
                 continue;
                 dataQueues[i] = NULL;
             }
 
-            dataQueues[i] = new DataQueue(5, 16 * 1024 * 1024); // Buffer count/size is kinda arbitrary
+            dataQueues[i] = new DataQueue(5, (size_t)16 * 1024 * 1024); // Buffer count/size is kinda arbitrary
 
             MergeSortThreadState* leafThreadState = new MergeSortThreadState();
             leafThreadState->deleteSortBlockVector = true;
+            leafThreadState->filterSupplier = this;
 
             size_t totalSize = 0;
             leafThreadState->blocksForThisThread = new SortBlockVector(nBlocksThisThread);
@@ -1131,6 +1183,7 @@ SortedDataFilterSupplier::mergeSort()
             rootThreadState->blocksForThisThread->push_back(outputBlock);
 
             nBlocksAssigned += nBlocksThisThread;
+leafThreadState->BJBEvent = &bjbEventObject;
 
             if (!StartNewThread(MergeSortThreadMain, leafThreadState)) 
             {
@@ -1142,6 +1195,7 @@ SortedDataFilterSupplier::mergeSort()
         //
         // Just run the root on this thread.
         //
+//WaitForEvent(&bjbEventObject);
         MergeSortThreadMain(rootThreadState);
     } // The multi-thread case
 
