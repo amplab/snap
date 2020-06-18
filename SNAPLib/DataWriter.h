@@ -98,7 +98,7 @@ public:
 
     // advance within current buffer, reducing available space
     // should be called on each read, with the location
-    virtual void advance(GenomeDistance bytes, GenomeLocation location = 0) = 0;
+    virtual void advance(_int64 bytes, GenomeLocation location = 0) = 0;
 
     // get complete data buffer in batch, relative==0 is current, relative==-1 is previous, etc.
     // if negative gets old data written, else waits for write to complete so you can write into it
