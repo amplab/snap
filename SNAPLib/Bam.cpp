@@ -2213,7 +2213,7 @@ BAMDupMarkFilter::onNextBatch(
     BAMAlignment* lastBam;
     for (size_t i = 0; i < offsets.size(); i = next_i) {
         lastBam = (BAMAlignment*) (currentBuffer + offsets[i]);
-        if (lastBam->pos == 39443281 || lastBam->pos == 39443475) {
+        if (lastBam->pos == 39443475 || lastBam->pos == 39443281 || lastBam->pos == 39443323) {
             fprintf(stderr, "Found!\n");
         }
         GenomeLocation location = lastBam->getLocation(genome);
@@ -2332,11 +2332,9 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         if (!foundDup) continue;
         foundRun = true;
         DuplicateReadKey key(record, genome);
-        /*
-        if (record->pos == 39443281 || record->pos == 39443475) {
+        if (record->pos == 39443475 || record->pos == 39443281 || record->pos == 39443323) {
             fprintf(stderr, "dupMark!\n");
         }
-        */
         MateMap::iterator f = mates.find(key);
         DuplicateMateInfo* info;
         if (f == mates.end()) {
@@ -2357,6 +2355,16 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             mate = tryFindRead(info->firstRunOffset, info->firstRunEndOffset, record->read_name(), &mateOffset);
             if (mate == record) {
                 mate = NULL;
+            }
+            else {
+                if (mate) {
+                    GenomeLocation mateLoc = mate->getLocation(genome);
+                    bool isMateRC = (mate->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
+                    mateLoc = (isMateRC) ? mate->getUnclippedEnd(mateLoc) : mate->getUnclippedStart(mateLoc);
+                    if (info->firstRunOffset == runOffset && mateLoc < runLocation) {
+                        mate = NULL;
+                    }
+                }
             }
         }
         bool isSecond = mate != NULL;
@@ -2571,11 +2579,9 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         DuplicateMateInfo* minfo = &m->value;
         bool pass = minfo->bestReadQuality[1] != 0; // 1 for second pass, 0 for first pass
         if (m != mates.end()) {
-            /*
-            if (record->pos == 39443281 || record->pos == 39443475) {
+            if (record->pos == 39443475 || record->pos == 39443281 || record->pos == 39443323) {
                 fprintf(stderr, "Found!\n");
             }
-            */
             if (pass) {
                 mates.erase(key);
             }
