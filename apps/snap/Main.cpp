@@ -27,7 +27,9 @@ Revision History:
 
 //The SNAP_VERSION string moved to SNAPLib\CommandProcessor.cpp
 
+_int64 BJBProgramStartTimeInMillis;
 int main(int argc, const char **argv)
 {
+    BJBProgramStartTimeInMillis = timeInMillis();
 	ProcessTopLevelCommands(argc, argv);
 }

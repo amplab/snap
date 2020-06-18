@@ -483,25 +483,49 @@ public:
     static WindowsAsyncFile* open(const char* filename, bool write);
 
     WindowsAsyncFile(HANDLE i_hFile);
+    ~WindowsAsyncFile();
 
     virtual bool close();
 
     class Writer : public AsyncFile::Writer
     {
     public:
+        Writer();   // ctor for the writeQueueHead element
+
         Writer(WindowsAsyncFile* i_file);
+
+        ~Writer();
 
         virtual bool close();
 
         virtual bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten);
 
         virtual bool waitForCompletion();
+
+        void addToQueue();
+        void removeFromQueue();
+        Writer* getFirstItemFromWriteQueue();
+        bool isQueueEmpty();    // Only call on queue head
     
     private:
         WindowsAsyncFile*   file;
         bool                writing;
+        bool                queueHead;  // Is this the queue head element and not really a Writer?
         OVERLAPPED          lap;
-    };
+
+        Writer* writeQueueNext;
+        Writer* writeQueuePrev;
+        HANDLE hWriteStartedEvent;  // This gets set once the write is moved from the queue and sent down to Windows.  Once this happens it's safe to wait on the OVERLAPPED for the Windows completion
+
+        void*               writeBuffer;
+        size_t              writeLength;
+        size_t              writeOffset;
+        size_t*             writeBytesWritten;
+
+        void launchWrite(); //Actually send the write down to Windows
+    }; // Writer
+
+
 
     virtual AsyncFile::Writer* getWriter();
     
@@ -520,13 +544,23 @@ public:
         WindowsAsyncFile*   file;
         bool                reading;
         OVERLAPPED          lap;
-    };
+    }; // Reader
 
     virtual AsyncFile::Reader* getReader();
 
 private:
     HANDLE      hFile;
-};
+
+    //
+    // Because Windows "async" cached writes aren't really all that async (they are serialized and wait for the copy-in to cache
+    // to complete), we make them more async by making a queue of them.  When a writer comes in and the queue is empty, it adds itself
+    // to the queue and issues the async write.  When the async write completes (i.e., the Write system call completes, not GetOvelappedResult()
+    // says it's done) it removes itself from the queue and starts the next item at the head of the queue.  If the queue is empty, it returns to
+    // its caller.  When a write call happens and the queue is NOT empty, then the writer just adds the write to the queue.
+    //
+    Writer writeQueueHead[1];
+    CRITICAL_SECTION writeQueueLock[1];
+}; // WindowsAsyncFile
 
     WindowsAsyncFile*
 WindowsAsyncFile::open(
@@ -551,6 +585,64 @@ WindowsAsyncFile::WindowsAsyncFile(
     HANDLE i_hFile)
     : hFile(i_hFile)
 {
+    InitializeCriticalSection(writeQueueLock);
+}
+
+WindowsAsyncFile::~WindowsAsyncFile()
+{
+    DeleteCriticalSection(writeQueueLock);
+}
+
+WindowsAsyncFile::Writer::~Writer()
+{
+    if (INVALID_HANDLE_VALUE != lap.hEvent) 
+    {
+        CloseHandle(lap.hEvent);
+        lap.hEvent = INVALID_HANDLE_VALUE;
+    }
+
+    if (INVALID_HANDLE_VALUE != hWriteStartedEvent) 
+    {
+        CloseHandle(hWriteStartedEvent);
+        hWriteStartedEvent = INVALID_HANDLE_VALUE;
+    }
+} // WindowsAsyncFile::Writer::~Writer()
+
+    void
+WindowsAsyncFile::Writer::addToQueue()
+{
+        //
+        // Caller must hold the write queue lock.
+        //
+        _ASSERT(writeQueueNext == NULL);
+        _ASSERT(writeQueuePrev == NULL);
+
+        writeQueueNext = file->writeQueueHead;
+        writeQueuePrev = file->writeQueueHead->writeQueuePrev;
+        writeQueueNext->writeQueuePrev = this;
+        writeQueuePrev->writeQueueNext = this;
+} // WindowsAsyncFile::Writer::addToQueue()
+
+    void
+WindowsAsyncFile::Writer::removeFromQueue()
+{
+        writeQueueNext->writeQueuePrev = writeQueuePrev;
+        writeQueuePrev->writeQueueNext = writeQueueNext;
+        writeQueueNext = writeQueuePrev = NULL;
+} // WindowsAsyncFile::Writer::removeFromQueue()
+
+    WindowsAsyncFile::Writer *
+WindowsAsyncFile::Writer::getFirstItemFromWriteQueue()
+{
+    _ASSERT(queueHead);
+    return writeQueueNext;
+}
+
+    bool
+WindowsAsyncFile::Writer::isQueueEmpty()
+{
+    _ASSERT(queueHead);
+    return writeQueueNext == this;
 }
 
     bool
@@ -559,16 +651,34 @@ WindowsAsyncFile::close()
     return CloseHandle(hFile) ? true : false;
 }
 
+// ctor for the queue head
+WindowsAsyncFile::Writer::Writer()
+{
+    writeQueueNext = writeQueuePrev = this;
+    writing = false;
+    file = NULL;
+    lap.hEvent = INVALID_HANDLE_VALUE;
+    queueHead = TRUE;
+    hWriteStartedEvent = INVALID_HANDLE_VALUE;
+    writeBuffer = NULL;
+    writeOffset = 0;
+    writeLength = 0;
+    writeBytesWritten = NULL;
+}
+
     AsyncFile::Writer*
 WindowsAsyncFile::getWriter()
 {
     return new Writer(this);
 }
 
+// ctor for normal (non-queue head) Writers
 WindowsAsyncFile::Writer::Writer(WindowsAsyncFile* i_file)
-    : file(i_file), writing(false)
+    : file(i_file), writing(false), queueHead(FALSE), writeBuffer(NULL), writeOffset(0), writeLength(0), writeBytesWritten(NULL)
 {
+    writeQueueNext = writeQueuePrev = NULL;
     lap.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
+    hWriteStartedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 }
 
     bool
@@ -585,30 +695,86 @@ WindowsAsyncFile::Writer::beginWrite(
     size_t offset,
     size_t *bytesWritten)
 {
+    _ASSERT(!writing);  // We should never start a write when the previous one is still outstanding.  The following waitForCompleteion() is therefore unnecessary (but I'm leaving it for now).
+
     if (! waitForCompletion()) {
         return false;
     }
-    lap.OffsetHigh = (DWORD) (offset >> (8 * sizeof(DWORD)));
-    lap.Offset = (DWORD) offset;
-    if (!WriteFile(file->hFile,buffer, (DWORD) length, (LPDWORD) bytesWritten, &lap)) {
+
+    writeBuffer = buffer;
+    writeLength = length;
+    writeOffset = offset;
+    writeBytesWritten = bytesWritten;
+
+    ResetEvent(hWriteStartedEvent);
+
+    writing = true;
+
+    EnterCriticalSection(file->writeQueueLock);
+    bool weAreWriter = file->writeQueueHead->isQueueEmpty();
+    addToQueue();
+    LeaveCriticalSection(file->writeQueueLock);
+
+    if (!weAreWriter) {
+        //
+        // Someone else owns the queue and will start out write.
+        //
+        return true;
+    }
+
+    //
+    // Launch writes to windows until the queue is empty.
+    //
+
+    EnterCriticalSection(file->writeQueueLock);
+    while (!file->writeQueueHead->isQueueEmpty()) {
+        Writer* nextToWrite = file->writeQueueHead->getFirstItemFromWriteQueue();
+        LeaveCriticalSection(file->writeQueueLock);
+
+        nextToWrite->launchWrite();
+
+        EnterCriticalSection(file->writeQueueLock);
+        _ASSERT(file->writeQueueHead->getFirstItemFromWriteQueue() == nextToWrite);
+
+        nextToWrite->removeFromQueue();
+        SetEvent(nextToWrite->hWriteStartedEvent);
+    }
+    LeaveCriticalSection(file->writeQueueLock);
+    return true;
+} // WindowsAsyncFile::Writer::beginWrite
+
+    void
+WindowsAsyncFile::Writer::launchWrite()
+{
+    LARGE_INTEGER liWriteOffset;
+    liWriteOffset.QuadPart = writeOffset;
+    lap.OffsetHigh = liWriteOffset.HighPart;
+    lap.Offset = liWriteOffset.LowPart;
+
+    if (!WriteFile(file->hFile, writeBuffer, (DWORD)writeLength, (LPDWORD)writeBytesWritten, &lap)) {
         if (ERROR_IO_PENDING != GetLastError()) {
-            WriteErrorMessage("WindowsAsyncFile: WriteFile failed, %d\n",GetLastError());
-            return false;
+            WriteErrorMessage("WindowsAsyncFile: WriteFile failed, %d\n", GetLastError());
+            soft_exit(1);
         }
     }
-    writing = true;
-    return true;
-}
+} // WindowsAsyncFile::Writer::launchWrite
 
     bool
 WindowsAsyncFile::Writer::waitForCompletion()
 {
     if (writing) {
+        if (WAIT_OBJECT_0 != WaitForSingleObject(hWriteStartedEvent, INFINITE)) {
+            WriteErrorMessage("WaitForSingleObject failed in WindowsAsnycWriter, %d\n", GetLastError());
+            soft_exit(1);
+        }       
+
         DWORD nBytesTransferred;
         if (!GetOverlappedResult(file->hFile,&lap,&nBytesTransferred,TRUE)) {
             return false;
         }
         writing = false;
+
+        ResetEvent(hWriteStartedEvent);
     }
     return true;
 }

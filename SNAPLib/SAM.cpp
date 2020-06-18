@@ -36,11 +36,13 @@ using std::max;
 using std::min;
 using util::strnchr;
 
-bool readIdsMatch(const char* id0, const char* id1)
+bool readIdsMatch(const char* id0, const char* id1, _int64 *innerLoopCount)
 {
     for (unsigned i = 0; ; i++) {
         char c0 = id0[i];
         char c1 = id1[i];
+
+        (*innerLoopCount)++;
 
         if (c0 != c1) return false;
  
@@ -196,6 +198,10 @@ SAMReader::parseHeader(
     int numSQLines = 0;
     int n_ref_slots = 4096;
     GenomeLocation *ref_locations = NULL;
+    size_t lineBufferSize = 1024;
+    char* lineBuffer = new char[lineBufferSize];
+
+
     if (NULL != o_ref_locations) {
         ref_locations = (GenomeLocation *)BigAlloc(sizeof(GenomeLocation)* n_ref_slots);
     }
@@ -205,20 +211,29 @@ SAMReader::parseHeader(
 		// Make sure we have the complete line.
 		//
 		bool foundCompleteLine = false;
+        char* endOfLine;
 
 		for (char *c = nextLineToProcess; c < endOfBuffer; c++) {
 			if (*c == '\n') {
 				foundCompleteLine = true;
-				break;
+                if ((size_t)(c - nextLineToProcess) + 1 >= lineBufferSize) {
+                    delete [] lineBuffer;
+                    lineBufferSize = max(lineBufferSize * 2, (size_t)(c - nextLineToProcess) + 2);
+                    lineBuffer = new char[lineBufferSize];
+                }
+                memcpy(lineBuffer, nextLineToProcess, c - nextLineToProcess);
+                lineBuffer[c - nextLineToProcess] = '\0';
+                endOfLine = &lineBuffer[c - nextLineToProcess + 1];
+                break;
 			}
 		}
 		if (!foundCompleteLine) {
 			*o_sawWholeHeader = false;
+            delete[] lineBuffer;
 			return true;	// Parsed OK, but incomplete
 		}
 
-
-        if (!strncmp("@SQ",nextLineToProcess,3)) {
+        if (!strncmp("@SQ",lineBuffer,3)) {
             //
             // These lines represent sequences in the reference genome, what are
             // called "contigs" in the Genome class.  (Roughly, chromosomes or major
@@ -228,24 +243,26 @@ SAMReader::parseHeader(
             //
             // Verify that they actually match what's in our reference genome.
             //
-            if (nextLineToProcess + 3 >= endOfBuffer || ' ' != nextLineToProcess[3] && '\t' != nextLineToProcess[3]) {
-                WriteErrorMessage("Malformed SAM file '%s' has @SQ without a following space or tab.\n",fileName);
+            if (lineBuffer + 3 >= endOfLine || ' ' != lineBuffer[3] && '\t' != lineBuffer[3]) {
+                WriteErrorMessage("Malformed SAM file '%s' has @SQ without a following space or tab.\n", fileName);
+                delete[] lineBuffer;
                 return false;
             }
 
-            char *snStart = nextLineToProcess + 4;
-            while (snStart < endOfBuffer && strncmp(snStart,"SN:",__min(3,endOfBuffer-snStart)) && *snStart != '\n' && *snStart != 0) {
+            char *snStart = lineBuffer + 4;
+            while (snStart < endOfLine && strncmp(snStart,"SN:",__min(3, endOfLine -snStart)) && *snStart != '\n' && *snStart != 0) {
                 snStart++;
             }
 
-            if (snStart >= endOfBuffer || *snStart == '\n' || *snStart == 0) {
+            if (snStart >= endOfLine || *snStart == '\n' || *snStart == 0) {
                 WriteErrorMessage("Malformed @SQ line doesn't have 'SN:' in file '%s'\n",fileName);
+                delete[] lineBuffer;
                 return false;
             }
 
             size_t contigNameBufferSize = 512;
             char *contigName = new char[contigNameBufferSize];
-            for (unsigned i = 0; snStart+3+i < endOfBuffer; i++) {
+            for (unsigned i = 0; snStart+3+i < endOfLine; i++) {
                 if (i >= contigNameBufferSize) {
                     //
                     // Get more buffer.
@@ -314,6 +331,7 @@ SAMReader::parseHeader(
             //
         } else {
             WriteErrorMessage("Unrecognized header line in SAM file.\n");
+            delete[] lineBuffer;
             return false;
         }
 		char * p = strnchr(nextLineToProcess,'\n',endOfBuffer-nextLineToProcess);
@@ -337,6 +355,7 @@ SAMReader::parseHeader(
         *o_ref_locations = ref_locations;
     }
 
+    delete[] lineBuffer;
     return true;
 }
 
@@ -1333,8 +1352,8 @@ SAMFormat::createSAMLine(
     clippedLength -= (bpClippedBefore + bpClippedAfter);
 
     // For debug
-    if (clippedLength > 101) {
-        WriteErrorMessage("Clipping incorrect: Read:%.*s, isRC:%d\n", fullLength, data, direction);
+    if (clippedLength > 101 && FALSE) { // BB: I turned this off, since there are reads longer than this in TCGA
+        WriteErrorMessage("Clipping incorrect: Read:%.*s, isRC:%d ReadID: %.*s\n", fullLength, data, direction, read->getIdLength(), read->getId());
         soft_exit(1);
     }
 
