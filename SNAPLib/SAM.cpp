@@ -1386,6 +1386,7 @@ SAMFormat::createSAMLine(
     int mateBpClippedAfter)
 {
     contigName = "*";
+    contigIndex = -1;
     positionInContig = 0;
     const char *cigar = "*";
     templateLength = 0;

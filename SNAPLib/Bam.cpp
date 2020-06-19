@@ -2274,6 +2274,8 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
     int numRecords = 0;
     // sort run by other coordinate & RC flags to get sub-runs
     for (BAMAlignment* record = getRead(offset); record != NULL && numRecords < runCount; record = getNextRead(record, &offset)) {
+        // secondary/supplementary alignments not marked as duplicates in coordinate sorted alignments
+        if ((record->FLAG & SAM_SECONDARY) != 0 || (record->FLAG & SAM_SUPPLEMENTARY) != 0) continue;
         GenomeLocation loc = record->getLocation(genome);
         bool isRC = (record->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
         bool isMateRC = (record->FLAG & SAM_NEXT_REVERSED) != 0;
