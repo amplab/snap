@@ -1629,8 +1629,7 @@ BAMFilter::tryFindRead(
 {
     BAMAlignment* bam = getRead(offset);
     while (bam != NULL && offset < endOffset) {
-        _int64 foo;
-        if (readIdsMatch(bam->read_name(), id, &foo)) {
+        if (readIdsMatch(bam->read_name(), id)) {
             if (o_offset != NULL) {
                 *o_offset = offset;
             }
@@ -1641,96 +1640,10 @@ BAMFilter::tryFindRead(
     return NULL;
 }
 
-struct ReadByNameHashTable {
-    ReadByNameHashTable(size_t maxEntryCount) 
-    {
-        nTableEntries = maxEntryCount;
-        tableEntries = new TableEntry[maxEntryCount];
-        nUsedTableEntries = 0;
-
-        hashTableSize = (maxEntryCount * 3) / 2;
-        hashTable = new TableEntry * [hashTableSize];
-
-        memset(hashTable, 0, sizeof(*hashTable) * hashTableSize);
-    } // ctor
-
-    ~ReadByNameHashTable()
-    {
-        delete[] tableEntries;
-        delete[] hashTable;
-    } // destructor
-
-    void add(BAMAlignment* bam)
-    {
-        _ASSERT(nUsedTableEntries < nTableEntries); // Or else the max we were promised at creation time was wrong
-        TableEntry* entry = &tableEntries[nUsedTableEntries];
-        nUsedTableEntries++;
-
-        size_t index = hash(bam) % hashTableSize;
-        entry->bam = bam;
-        entry->next = hashTable[index];
-        hashTable[index] = entry;
-    } // add
-
-    BAMAlignment* lookup(BAMAlignment *bam)
-    {
-        TableEntry* tableEntry = hashTable[hash(bam) % hashTableSize];
-
-        while (NULL != tableEntry) 
-        {
-            _int64 count;
-            if (readIdsMatch(bam->read_name(), tableEntry->bam->read_name(), &count)) 
-            {
-                return tableEntry->bam;
-            }
-
-            tableEntry = tableEntry->next;
-        }  // walking the hash table bucket list
-
-        return NULL;
-    } // lookup
-
-private:
-    struct TableEntry
-    {
-        BAMAlignment* bam;
-        TableEntry* next;
-    }; // TableEntry
-
-    TableEntry* tableEntries;
-    size_t nUsedTableEntries;
-    size_t nTableEntries;
-
-    size_t hashTableSize;
-    TableEntry** hashTable;
-
-    static size_t hash(BAMAlignment* bam) // We could probably use a better hash function, but I doubt it matters
-    {
-        size_t value = 0x123456789abcdef0;
-        char* readName = bam->read_name();
-
-        for (int i = 0; i < bam->l_read_name; i++)
-        {
-            if (readName[i] == ' ' || readName[i] == 0 || readName[i] == '/') 
-            {
-                break;
-            }
-            value = (value * 131) ^ readName[i];
-        }
-
-        return value;
-    } // hash
-}; // ReadByNameHashTable
-
-//
-// One of these per possible duplicate read (matches on location, next location, RC, next RC).
-//
 struct DuplicateReadKey
 {
     DuplicateReadKey()
-    { 
-        memset(this, 0, sizeof(DuplicateReadKey)); 
-    }
+    { memset(this, 0, sizeof(DuplicateReadKey)); }
 
     DuplicateReadKey(const BAMAlignment* bam, const Genome *genome)
     {
@@ -1751,7 +1664,7 @@ struct DuplicateReadKey
                 isRC[0] = f;
             }
         }
-    } // ctor
+    }
 
     bool operator==(const DuplicateReadKey& b) const
     {
@@ -1784,27 +1697,13 @@ struct DuplicateReadKey
     operator _uint64()
     { return ((_uint64) (GenomeLocationAsInt64(locations[1]) ^ (isRC[1] ? 1 : 0))) << 32 | (_uint64) (GenomeLocationAsInt64(locations[0]) ^ (isRC[0] ? 1 : 0)); }
 
-    GenomeLocation locations[NUM_READS_PER_PAIR];
-    bool isRC[NUM_READS_PER_PAIR];
-
+    GenomeLocation locations[2];
+    bool isRC[2];
 };
 
 struct DuplicateMateInfo
 {
-    DuplicateMateInfo(ReadByNameHashTable *byNameHashTable_) 
-    { 
-        memset(this, 0, sizeof(DuplicateMateInfo)); 
-        byNameHashTable = byNameHashTable_;
-    }
-
-    DuplicateMateInfo()
-    {
-        memset(this, 0, sizeof(DuplicateMateInfo));
-    }
-
-    ~DuplicateMateInfo()
-    {
-    }
+    DuplicateMateInfo() { memset(this, 0, sizeof(DuplicateMateInfo)); }
 
     size_t firstRunOffset; // first read in duplicate set
     size_t firstRunEndOffset;
@@ -1814,8 +1713,6 @@ struct DuplicateMateInfo
 
     void setBestReadId(const char* id) { strncpy(bestReadId, id, sizeof(bestReadId)); }
     const char* getBestReadId() { return bestReadId; }
-
-    ReadByNameHashTable* byNameHashTable;
 };
 
 class BAMDupMarkFilter : public BAMFilter
@@ -1824,10 +1721,7 @@ public:
     BAMDupMarkFilter(const Genome* i_genome) :
         BAMFilter(DataWriter::ModifyFilter),
         genome(i_genome), runOffset(0), runLocation(UINT32_MAX), runCount(0), mates()
-    {
-        stats = new Stats();
-        ///*BJB*/ StartNewThread(BAMDupMarkFilter::PrintStats, stats);
-    }
+    {}
 
     ~BAMDupMarkFilter()
     {
@@ -1851,37 +1745,6 @@ protected:
 private:
     static int getTotalQuality(BAMAlignment* bam);
 
-    struct Stats {
-        _int64 nReads;
-        _int64 nRuns;
-        _int64 nNonSingletonRuns;
-        _int64 totalRunSize;
-        _int64 totalCallsToTryFindRead;
-        _int64 mostRecentReadBatchSize;
-        _int64 maxReadBatchSize;
-        _int64 totalCallsToReadIDsMatch[4];
-        _int64 totalPassesThroughReadIDsMatchInnerLoop[4];
-        _int64 a, b, c, d, e, f, g, h, i, j, k;
-        _int64 totalTime;
-
-        char mostRecentReadId[100];
-
-        Stats() 
-        {
-            nReads = nRuns = nNonSingletonRuns = totalRunSize = totalCallsToTryFindRead = mostRecentReadBatchSize = maxReadBatchSize = 0;
-            a = b = c = d = e = f = g = h = i = j = k = 0;
-            totalTime = 0;
-            for (int i = 0; i < 4; i++) {
-                totalCallsToReadIDsMatch[i] = 0;
-                totalPassesThroughReadIDsMatchInnerLoop[i] = 0;
-            }
-            mostRecentReadId[99] = 0;
-        }
-    };
-    Stats* stats;
-
-    static void PrintStats(void* v_stats);
-
     const Genome* genome;
     size_t runOffset; // offset in file of first read in run
     GenomeLocation runLocation; // location in genome
@@ -1897,68 +1760,25 @@ private:
 };
 
     void
-BAMDupMarkFilter::PrintStats(void* v_stats) 
-{
-    Stats* stats = (Stats*)v_stats;
-    _int64 nPasses = 0;
-    fprintf(stderr, "\nMinute\tnReads\tnRuns\tnNonSingletonRuns\ttotalNonSingletonRunSize\tnTryFindRead\tmostRecentReadBatchSize\tmaxReadBatchSize\ta\tb\tc\td\te\tf\tg\th\ti\tj\tk\ttotalTime");
-    for (int i = 0; i < 4; i++) {
-        fprintf(stderr, "\ttotalCallsToReadIDsMatch(%d)\tinner loop(%d)", i, i);
-    }
-    fprintf(stderr, "\tmostRecentReadID\n");
-
-    while (true)
-    {
-        Sleep(60000);
-        fprintf(stderr, "%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld",
-            nPasses, stats->nReads, stats->nRuns, stats->nNonSingletonRuns, stats->totalRunSize, stats->totalCallsToTryFindRead, stats->mostRecentReadBatchSize, stats->maxReadBatchSize,
-            stats->a, stats->b, stats->c, stats->d, stats->e, stats->f, stats->g, stats->h, stats->i, stats->j, stats->k, stats->totalTime);
-
-        for (int i = 0; i < 4; i++) {
-            fprintf(stderr, "\t%lld \t%lld", stats->totalCallsToReadIDsMatch[i], stats->totalPassesThroughReadIDsMatchInnerLoop[i]);
-        }
-
-        fprintf(stderr, "\t%s\n", stats->mostRecentReadId);
-
-        nPasses++;
-    }
-}
-
-    void
 BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
 {
     if ((lastBam->FLAG & SAM_SECONDARY) != 0) {
         return; // ignore secondary aliignments; todo: mark them as dups too?
     }
-
-    _int64 startTime = timeInMillis();
-    stats->nReads++;
     GenomeLocation location = lastBam->getLocation(genome);
     GenomeLocation nextLocation = lastBam->getNextLocation(genome);
-    GenomeLocation logicalLocation = location != UINT32_MAX ? location : nextLocation;
-    if (logicalLocation == UINT32_MAX) { // XXX UINT32_MAX
+    GenomeLocation logicalLocation = location != InvalidGenomeLocation ? location : nextLocation;
+    if (logicalLocation == UINT32_MAX) {
         return;
     }
-
     if (logicalLocation == runLocation) {
         runCount++;
     } else {
-        stats->nRuns++;
-        stats->mostRecentReadBatchSize = runCount;
-        stats->maxReadBatchSize = __max(stats->maxReadBatchSize, runCount);
-        strncpy(stats->mostRecentReadId, lastBam->read_name(), 99);
-        stats->mostRecentReadId[99] = 0;
-        if (runCount > 20000) {
-           // printf("Here! runCount %d\n", runCount);
-        }
         // if there was more than one read with same location, then analyze the run
         if (runCount > 1) {
-            stats->totalRunSize += runCount;
-            stats->nNonSingletonRuns++;
             // partition by duplicate key, find best read in each partition
             size_t offset = runOffset;
             run.clear();
-            _int64 a = timeInMillis();
             // sort run by other coordinate & RC flags to get sub-runs
             for (BAMAlignment* record = getRead(offset); record != NULL && record != lastBam; record = getNextRead(record, &offset)) {
                 // use opposite of logical location to sort records
@@ -1973,19 +1793,14 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 _ASSERT(offset - runOffset <= RunOffset);
                 run.push_back(entry);
             }
-            _int64 b = timeInMillis();
-            stats->a += b - a;
 			if (run.size() == 0) {
 				goto done; // todo: handle runs > n buffers (but should be rare!)
 			}
             // ensure that adjacent half-mapped pairs stay together
             std::stable_sort(run.begin(), run.end());
-            stats->b += timeInMillis() - b;
             bool foundRun = false;
-
             for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
                 // skip singletons
-                _int64 c = timeInMillis();
                 if ((i == run.begin() || (*i & RunKey) != (*(i-1) & RunKey)) &&
                     (i + 1 == run.end() || (*i & RunKey) != (*(i+1) & RunKey))) {
                     continue;
@@ -1994,45 +1809,33 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 BAMAlignment* record = getRead(offset);
                 _ASSERT(record->refID >= -1 && record->refID < genome->getNumContigs()); // simple sanity check
                 // skip adjacent half-mapped pairs, they're not really runs
-                if (i + 1 < run.end() && (++stats->totalCallsToReadIDsMatch[0]) && readIdsMatch(record->read_name(), getRead(runOffset + (*(i+1) & RunOffset))->read_name(), &stats->totalPassesThroughReadIDsMatchInnerLoop[0])) {
+                if (i + 1 < run.end() && readIdsMatch(record->read_name(), getRead(runOffset + (*(i+1) & RunOffset))->read_name())) {
                     i++;
                     continue;
                 }
-                _int64 d = timeInMillis();
-                stats->c += d - c;
                 foundRun = true;
                 DuplicateReadKey key(record, genome);
                 MateMap::iterator f = mates.find(key);
                 DuplicateMateInfo* info;
                 if (f == mates.end()) {
-                    ReadByNameHashTable* byNameHashTable = new ReadByNameHashTable(lastOffset - runOffset + 1);
-                    mates.put(key, DuplicateMateInfo(byNameHashTable));
+                    mates.put(key, DuplicateMateInfo());
                     info = &mates[key];
                     //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                     info->firstRunOffset = runOffset;
                     info->firstRunEndOffset = lastOffset;
-
-                    for (int j = runOffset; j <= lastOffset; j++) 
-                    {
-                        byNameHashTable->add(getRead(j));
-                    }
                 } else {
                     info = &f->value;
                 }
-
                 int totalQuality = getTotalQuality(record);
                 size_t mateOffset = 0;
                 BAMAlignment* mate = NULL;
                 // optimize case for half-mapped pairs with adjacent reads
                 if ((record->FLAG & SAM_MULTI_SEGMENT) != 0) {
-                    stats->totalCallsToTryFindRead++;
-                    mate = info->byNameHashTable->lookup(record);
+                    mate = tryFindRead(info->firstRunOffset, info->firstRunEndOffset, record->read_name(), &mateOffset);
                     if (mate == record) {
                         mate = NULL;
                     }
                 }
-                _int64 e = timeInMillis();
-                stats->d += e - d;
                 bool isSecond = mate != NULL;
                 if (isSecond) {
                     totalQuality += getTotalQuality(mate);
@@ -2045,14 +1848,10 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                     }
                     info->setBestReadId(record->read_name());
                 }
-                _int64 F = timeInMillis();  // There's already a lower case f
-                stats->e += F - e;
-                if (isSecond && (++stats->totalCallsToReadIDsMatch[1]) && readIdsMatch(info->getBestReadId(), record->read_name(), &stats->totalPassesThroughReadIDsMatchInnerLoop[1])) {
+                if (isSecond && readIdsMatch(info->getBestReadId(), record->read_name())) {
                     info->bestReadOffset[3] = offset;
                 }
-                stats->f += timeInMillis() - F;
-            } // for run vector
-
+            }
             if (! foundRun) {
                 goto done; // avoid useless looping
             }
@@ -2065,23 +1864,17 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                     (i + 1 == run.end() || (*i & RunKey) != (*(i+1) & RunKey))) {
                     continue;
                 }
-                _int64 g = timeInMillis();
                 offset = runOffset + (*i & RunOffset);
                 BAMAlignment* record = getRead(offset);
-                if (i + 1 < run.end() && (++stats->totalCallsToReadIDsMatch[2]) && readIdsMatch(record->read_name(), getRead(runOffset + (*(i+1) & RunOffset))->read_name(), &stats->totalPassesThroughReadIDsMatchInnerLoop[2])) {
+                if (i + 1 < run.end() && readIdsMatch(record->read_name(), getRead(runOffset + (*(i+1) & RunOffset))->read_name())) {
                     i++;
-                    stats->g += timeInMillis() - g;
                     continue;
                 }
-                _int64 h = timeInMillis();
-                stats->g += h - g;
                 DuplicateReadKey key(record, genome);
                 MateMap::iterator m = mates.find(key);
                 if (m == mates.end()) {
                     continue; // one end in a run, other not
                 }
-                _int64 I = timeInMillis();
-                stats->h += I - h;
                 DuplicateMateInfo* minfo = &m->value;
                 bool pass = minfo->bestReadQuality[1] != 0; // 1 for second pass, 0 for first pass
                 bool isSecond = minfo->firstRunOffset != runOffset;
@@ -2104,13 +1897,11 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                         }
                         failedBackpatch->push_back(minfo);
                     }
-                } 
-                stats->i += timeInMillis() - I;
-            } // for run vector
+                }
+            }
 
             // fixup any that failed
             if (failedBackpatch != NULL) {
-                _int64 j = timeInMillis();
                 for (VariableSizeVector<DuplicateMateInfo*>::iterator i = failedBackpatch->begin(); i != failedBackpatch->end(); i++) {
                     // couldn't go back and patch first set to have correct best for second set
                     // so patch second set to have same best as first set even though it's not really the best
@@ -2122,10 +1913,8 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                         firstBestSecond->FLAG |= ~SAM_DUPLICATE;
                     }
                 }
-                stats->j += timeInMillis() - j;
             }
 
-            _int64 k = timeInMillis();
             // clean up
             for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
                 // skip singletons
@@ -2135,32 +1924,25 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 }
                 offset = runOffset + (*i & RunOffset);
                 BAMAlignment* record = getRead(offset);
-                if (i + 1 < run.end() && (++stats->totalCallsToReadIDsMatch[3]) && readIdsMatch(record->read_name(), getRead(runOffset + (*(i+1) & RunOffset))->read_name(), &stats->totalPassesThroughReadIDsMatchInnerLoop[3])) {
+                if (i + 1 < run.end() && readIdsMatch(record->read_name(), getRead(runOffset + (*(i+1) & RunOffset))->read_name())) {
                     i++;
                     continue;
                 }
                 DuplicateReadKey key(record, genome);
                 MateMap::iterator m = mates.find(key);
                 if (m != mates.end() && m->value.firstRunOffset != runOffset) {
-                    if (m->value.byNameHashTable != NULL) {
-                        delete m->value.byNameHashTable;
-                        m->value.byNameHashTable = NULL;
-                    }
                     mates.erase(key);
                     //fprintf(stderr, "erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                 }
-            } // run vector
-            stats->k += timeInMillis() - k;
+            }
         }
 done:
         runLocation = logicalLocation;
         runOffset = lastOffset;
         runCount = 1;
-    } // is this a completed run?
-
-    stats->totalTime += timeInMillis() - startTime;
+    }
     // todo: preserve this across batches - need to block-copy entire memory for reads
-} /// BAMDupMarkFilter::onRead
+}
 
     int
 BAMDupMarkFilter::getTotalQuality(

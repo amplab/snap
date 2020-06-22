@@ -36,13 +36,11 @@ using std::max;
 using std::min;
 using util::strnchr;
 
-bool readIdsMatch(const char* id0, const char* id1, _int64 *innerLoopCount)
+bool readIdsMatch(const char* id0, const char* id1)
 {
     for (unsigned i = 0; ; i++) {
         char c0 = id0[i];
         char c1 = id1[i];
-
-        (*innerLoopCount)++;
 
         if (c0 != c1) return false;
  

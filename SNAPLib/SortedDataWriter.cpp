@@ -1060,9 +1060,8 @@ SortedDataFilterSupplier::mergeSort()
     DataSupplier* readerSupplier = DataSupplier::Default; // autorelease
     // setup - open all files, read first block, begin read for second
     if (blocks.size() > 5000) {
-        WriteErrorMessage("warning: merging %lld blocks could be slow, try increasing sort memory with -sm option\n", blocks.size());
+        WriteErrorMessage("warning: merging %d blocks could be slow, try increasing sort memory with -sm option\n", blocks.size());
     }
-/*BJB*/ fprintf(stderr, "MergeSort: %lld blocks\n", blocks.size());
     for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
         i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0,
             min(1UL << 23, max(1UL << 17, bufferSpace / blocks.size()))); // 128kB to 8MB buffer space per block
