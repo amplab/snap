@@ -31,7 +31,9 @@ Environment:
 #include "DataReader.h"
 #include "FileFormat.h"
 
-bool readIdsMatch(const char* id0, const char* id1);
+bool readIdsMatch(const char* id0, const char* id1, size_t len);
+
+bool readIdsMatch(const char* id0, const char* id1, _int64 *innerLoopCount);
 
 bool readIdsMatch(Read *read0, Read *read1);
 
@@ -89,7 +91,8 @@ public:
         
         // result and fieldLengths must be of size nSAMFields
         static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex, bool *o_sawWholeHeader = NULL, 
-            int *o_n_ref = NULL, GenomeLocation **o_ref_locations = NULL);  // o_ref_locations is BigAlloc'ed
+            int *o_n_ref = NULL, GenomeLocation **o_ref_locations = NULL, int* o_n_rg = 0, char** o_rgLines = NULL,
+            size_t** o_rgLineOffsets = NULL);  // o_ref_locations, o_rgLines, o_rgLineOffsets are BigAlloc'ed
         
         static char* skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator = NULL);
 

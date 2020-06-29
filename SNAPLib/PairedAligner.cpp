@@ -883,6 +883,9 @@ PairedAlignerContext::typeSpecificBeginIteration()
     readerContext.headerBytes = context->headerBytes;
     readerContext.headerLength = context->headerLength;
     readerContext.headerMatchesIndex = context->headerMatchesIndex;
+    readerContext.numRGLines = context->numRGLines;
+    readerContext.rgLines = context->rgLines;
+    readerContext.rgLineOffsets = context->rgLineOffsets;
 }
     void 
 PairedAlignerContext::typeSpecificNextIteration()
@@ -892,6 +895,13 @@ PairedAlignerContext::typeSpecificNextIteration()
         readerContext.header = NULL;
         readerContext.headerLength = readerContext.headerBytes = 0;
         readerContext.headerMatchesIndex = false;
+    }
+    if (readerContext.rgLines != NULL) {
+        delete [] readerContext.rgLines;
+        delete [] readerContext.rgLineOffsets;
+        readerContext.numRGLines = 0;
+        readerContext.rgLines = NULL;
+        readerContext.rgLineOffsets = NULL;
     }
     delete pairedReadSupplierGenerator;
     pairedReadSupplierGenerator = NULL;

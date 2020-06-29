@@ -456,4 +456,8 @@ private:
         int                 n_ref; // number of reference sequences
         GenomeLocation*     refLocation; // array mapping ref sequence ID to contig genome location
         _int64              extraOffset; // offset into extra data
+
+        int                 numRGLines;
+        char*               rgLines;
+        size_t*             rgLineOffsets;
 };

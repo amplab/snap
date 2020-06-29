@@ -545,7 +545,7 @@ ReadBasedDataReader::nextBatch()
     _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead; // for validation
     //fprintf(stderr, "ReadBasedDataReader:nextBatch() finished buffer %d at %llu, starting buffer %d at %llu\n", nextBufferForConsumer, info->fileOffset, info->next, bufferInfo[info->next].fileOffset);
     //fprintf(stderr, "ReadBasedDataReader:nextBatch() skipping %u overflow bytes used in previous batch\n", overflow);
-    _ASSERT(bufferInfo[info->next].fileOffset == nextStart);
+    _ASSERT(info->next == -1 || bufferInfo[info->next].fileOffset == nextStart);
     //fprintf(stderr, "DataReader.cpp:%d nextBufferForConsumer %d -> %d\n", __LINE__, nextBufferForConsumer, info->next);
     nextBufferForConsumer = info->next;
 

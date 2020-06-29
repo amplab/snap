@@ -36,11 +36,34 @@ using std::max;
 using std::min;
 using util::strnchr;
 
-bool readIdsMatch(const char* id0, const char* id1)
+bool readIdsMatch(const char* id0, const char* id1, size_t len)
+{
+    const char* id0Base = id0;
+    const char* id0End = id0 + len;
+    while (true) {
+        _uint64 x;
+        x = *((_uint64*)id0) ^ *((_uint64*)id1);
+        if (x) {
+            unsigned long zeroes;
+            CountTrailingZeroes(x, zeroes);
+            zeroes >>= 3;
+            return ((size_t)(id0 - id0Base) + (size_t)zeroes) >= len;
+        }
+        id0 += 8;
+        if (id0 >= id0End) {
+            return true;
+        }
+        id1 += 8;
+    }
+}
+
+bool readIdsMatch(const char* id0, const char* id1, _int64* innerLoopCount)
 {
     for (unsigned i = 0; ; i++) {
         char c0 = id0[i];
         char c1 = id1[i];
+
+        (*innerLoopCount)++;
 
         if (c0 != c1) return false;
  
@@ -187,17 +210,33 @@ SAMReader::parseHeader(
     bool *o_headerMatchesIndex,
 	bool *o_sawWholeHeader,
     int *o_n_ref,
-    GenomeLocation **o_ref_locations)
+    GenomeLocation **o_ref_locations,
+    int *o_n_rg,
+    char **o_rgLines,
+    size_t **o_rgLineOffsets)
 {
     _ASSERT((NULL == o_n_ref) == (NULL == o_ref_locations));    // both or neither are NULL, not one of each
 
     char *nextLineToProcess = firstLine;
     *o_headerMatchesIndex = true;
     int numSQLines = 0;
+    int numRGLines = 0;
     int n_ref_slots = 4096;
+    size_t n_rg_slots = 128;
+    size_t rg_slot_size = 1024;
+    size_t rg_total_size = n_rg_slots * rg_slot_size;
     GenomeLocation *ref_locations = NULL;
+    char* rgLines = NULL;
+    size_t* rgLineOffsets = NULL;
+
     if (NULL != o_ref_locations) {
         ref_locations = (GenomeLocation *)BigAlloc(sizeof(GenomeLocation)* n_ref_slots);
+    }
+
+    if (NULL != o_rgLines) {
+        rgLines = new char[rg_total_size];
+        rgLineOffsets = new size_t[n_rg_slots];
+        rgLineOffsets[0] = 0;
     }
 
     while (NULL != nextLineToProcess && nextLineToProcess < endOfBuffer && '@' == *nextLineToProcess) {
@@ -309,9 +348,131 @@ SAMReader::parseHeader(
             delete[] contigName;
         } else if (!strncmp("@HD", nextLineToProcess, 3) || !strncmp("@RG", nextLineToProcess, 3) || !strncmp("@PG", nextLineToProcess, 3) ||
             !strncmp("@CO",nextLineToProcess,3)) {
-            //
-            // Ignore these lines.
-            //
+
+            if (!strncmp("@RG", nextLineToProcess, 3)) {
+                if (nextLineToProcess + 3 >= endOfBuffer || ' ' != nextLineToProcess[3] && '\t' != nextLineToProcess[3]) {
+                    WriteErrorMessage("Malformed SAM file '%s' has @RG without a following space or tab.\n", fileName);
+                    return false;
+                }
+
+                char* rgStart = nextLineToProcess + 4;
+                char* rgSlot = new char[rg_slot_size];
+                int bytesUsed = 0;
+                bool foundID = false;
+                for (int i = 0; rgStart + i < endOfBuffer; i++) {
+                    if (bytesUsed >= rg_slot_size) {
+                        //
+                        // Get more buffer.
+                        //
+                        size_t newSize = (size_t)rg_slot_size * 2;
+                        char* newBuffer = new char[newSize];
+                        memcpy(newBuffer, rgSlot, rg_slot_size);
+                        delete[] rgSlot;
+                        rgSlot = newBuffer;
+                        rg_slot_size = newSize;
+                    }
+                    if (rgStart[i] == 'I') {
+                        if (rgStart + i + 2 >= endOfBuffer) {
+                            delete[] rgSlot;
+                            return false;
+                        }
+                        if (rgStart[i + 1] == 'D' && rgStart[i + 2] == ':') {
+                            for (int j = i + 3; rgStart + j < endOfBuffer; j++) {
+                                if (bytesUsed >= rg_slot_size) {
+                                    //
+                                    // Get more buffer.
+                                    //
+                                    size_t newSize = (size_t)rg_slot_size * 2;
+                                    char* newBuffer = new char[newSize];
+                                    memcpy(newBuffer, rgSlot, rg_slot_size);
+                                    delete[] rgSlot;
+                                    rgSlot = newBuffer;
+                                    rg_slot_size = newSize;
+                                }
+                                if (rgStart[j] == '\t' || rgStart[j] == 0 || rgStart[j] == '\n' || rgStart[j] == ' ') {
+                                    foundID = true;
+                                    rgSlot[bytesUsed++] = '\t';
+                                    break;
+                                }
+                                else {
+                                    rgSlot[bytesUsed++] = rgStart[j];
+                                }
+                            }
+                        }
+                    }
+                    if (foundID) break;
+                }
+                if (foundID) {
+                    bool foundLB = false;
+                    for (int i = 0; rgStart + i < endOfBuffer; i++) {
+                        if (bytesUsed >= rg_slot_size) {
+                            //
+                            // Get more buffer.
+                            //
+                            size_t newSize = (size_t)rg_slot_size * 2;
+                            char* newBuffer = new char[newSize];
+                            memcpy(newBuffer, rgSlot, rg_slot_size);
+                            delete[] rgSlot;
+                            rgSlot = newBuffer;
+                            rg_slot_size = newSize;
+                        }
+                        if (rgStart[i] == 'L') {
+                            if (rgStart + i + 2 >= endOfBuffer) {
+                                delete[] rgSlot;
+                                return false;
+                            }
+                            if (rgStart[i + 1] == 'B' && rgStart[i + 2] == ':') {
+                                for (int j = i + 3; rgStart + j < endOfBuffer; j++) {
+                                    if (bytesUsed >= rg_slot_size) {
+                                        //
+                                        // Get more buffer.
+                                        //
+                                        size_t newSize = (size_t)rg_slot_size * 2;
+                                        char* newBuffer = new char[newSize];
+                                        memcpy(newBuffer, rgSlot, rg_slot_size);
+                                        delete[] rgSlot;
+                                        rgSlot = newBuffer;
+                                        rg_slot_size = newSize;
+                                    }
+                                    if (rgStart[j] == '\t' || rgStart[j] == 0 || rgStart[j] == '\n' || rgStart[j] == ' ') {
+                                        rgSlot[bytesUsed++] = '\t';
+                                        foundLB = true;
+                                        break;
+                                    }
+                                    else {
+                                        rgSlot[bytesUsed++] = rgStart[j];
+                                    }
+                                }
+                            }
+                        }
+                        if (foundLB) {
+                            break;
+                        }
+                    }
+                }
+
+                rgSlot[bytesUsed++] = '\0';
+
+                numRGLines++;
+
+                if (NULL != o_rgLines) {
+                    if (numRGLines + 1 >= n_rg_slots) {
+                        char* newRGLines = new char[n_rg_slots * rg_slot_size * 2];
+                        memcpy(newRGLines, rgLines, sizeof(char) * n_rg_slots * rg_slot_size);
+                        size_t* newRGLineOffsets = new size_t[n_rg_slots * 2];
+                        memcpy(newRGLineOffsets, rgLineOffsets, sizeof(size_t) * n_rg_slots);
+                        delete[] rgLines;
+                        delete[] rgLineOffsets;
+                        rgLines = newRGLines;
+                        rgLineOffsets = newRGLineOffsets;
+                        n_rg_slots *= 2;
+                    }
+                    rgLineOffsets[numRGLines] = rgLineOffsets[numRGLines - 1] + strlen(rgSlot);
+                    strcpy(rgLines + rgLineOffsets[numRGLines - 1], rgSlot);
+                }
+
+                delete[] rgSlot;
+            }
         } else {
             WriteErrorMessage("Unrecognized header line in SAM file.\n");
             return false;
@@ -335,6 +496,12 @@ SAMReader::parseHeader(
     if (NULL != o_ref_locations) {
         *o_n_ref = numSQLines;
         *o_ref_locations = ref_locations;
+    }
+
+    if (NULL != o_rgLines) {
+        *o_n_rg = numRGLines;
+        *o_rgLines = rgLines;
+        *o_rgLineOffsets = rgLineOffsets;
     }
 
     return true;
@@ -1295,44 +1462,43 @@ SAMFormat::fillMateInfo(
         GenomeLocation mateStart = mateLocation - mateBasesClippedBefore;
         GenomeLocation mateEnd = mateLocation + mateRefSpanFromCigar;
 
-        if (contigName == matecontigName) { // pointer (not value) comparison, but that's OK.
-            if (myStart < mateStart) {
-                if (direction == FORWARD) {
-                    if (mateDirection == RC) {
-                        templateLength = mateEnd - myStart; // FR
-                    }
-                    else {
-                        templateLength = mateStart - myStart; // FF
-                    }
+        if (myStart < mateStart) {
+            if (direction == FORWARD) {
+                if (mateDirection == RC) {
+                    templateLength = mateEnd - myStart; // FR
                 }
                 else {
-                    if (mateDirection == FORWARD) {
-                        templateLength = mateStart - myEnd; // RF
-                    }
-                    else {
-                        templateLength = mateEnd - myEnd; // RR
-                    }
+                    templateLength = mateStart - myStart; // FF
                 }
             }
             else {
-                if (direction == RC) {
-                    if (mateDirection == FORWARD) {
-                        templateLength = -(myEnd - mateStart);
-                    }
-                    else {
-                        templateLength = -(myEnd - mateEnd);
-                    }
+                if (mateDirection == FORWARD) {
+                    templateLength = mateStart - myEnd; // RF
                 }
                 else {
-                    if (mateDirection == FORWARD) {
-                        templateLength = -(myStart - mateStart);
-                    }
-                    else {
-                        templateLength = -(myStart - mateEnd);
-                    }
+                    templateLength = mateEnd - myEnd; // RR
                 }
             }
-        } // otherwise leave TLEN as zero.
+        }
+        else {
+            if (direction == RC) {
+                if (mateDirection == FORWARD) {
+                    templateLength = -(myEnd - mateStart);
+                }
+                else {
+                    templateLength = -(myEnd - mateEnd);
+                }
+            }
+            else {
+                if (mateDirection == FORWARD) {
+                    templateLength = -(myStart - mateStart);
+                }
+                else {
+                    templateLength = -(myStart - mateEnd);
+                }
+            }
+        }
+
     }
 
     if (contigName == matecontigName) {
@@ -2438,7 +2604,7 @@ SAMFormat::computeCigarString(
         snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s%s%s%s%s", hardClipBefore, clipBefore, cigarBuf, clipAfter, hardClipAfter);
 
 		validateCigarString(genome, cigarBufWithClipping, cigarBufWithClippingLen, 
-			data - basesClippedBefore, dataLength + (basesClippedBefore + basesClippedAfter), genomeLocation + extraBasesClippedBefore, direction, useM);
+			data - basesClippedBefore, dataLength + ((size_t)basesClippedBefore + (size_t)basesClippedAfter), genomeLocation + extraBasesClippedBefore, direction, useM);
 
         *o_refSpan = 0;
         getRefSpanFromCigar(cigarBufWithClipping, cigarBufWithClippingLen, o_refSpan);
