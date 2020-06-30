@@ -64,7 +64,7 @@ public:
         // e.g. so use getBatch(-1, ...) to get the one that was just completed
         // TransformFilters return #byte of transformed data in current buffer, so we need to advance again
         // TransformFilters should call getBatch(0) to ensure current buffer has been written before they write into it
-        virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes) = 0;
+        virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false) = 0;
     };
     
     // factory for per-thread filters
@@ -106,7 +106,7 @@ public:
     virtual bool getBatch(int relative, char** o_buffer, size_t* o_size = NULL, size_t* o_used = NULL, size_t* o_offset = NULL, size_t* o_logicalUsed = 0, size_t* o_logicalOffset = NULL) = 0;
 
     // advance to next buffer
-    virtual bool nextBatch() = 0;
+    virtual bool nextBatch(bool lastBatch = false) = 0;
 
     // this thread is complete
     virtual void close() = 0;

@@ -1510,7 +1510,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false);
     
 protected:
     virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) = 0;
@@ -1534,7 +1534,8 @@ private:
 BAMFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
-    size_t bytes)
+    size_t bytes,
+    bool lastBatch)
 {
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
     if (!ok) {

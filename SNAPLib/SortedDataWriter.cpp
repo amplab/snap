@@ -57,7 +57,8 @@ struct SortBlock
 #ifdef VALIDATE_SORT
     SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL), minLocation(0), maxLocation(0) {}
 #else
-    SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL) {}
+    SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL), dataReaderIsBuffer(false), data(NULL) {}
+    SortBlock(DataReader* bufferDataReader) : start(0), bytes(0), location(0), length(0), reader(bufferDataReader), dataReaderIsBuffer(bufferDataReader != NULL) {}
 #endif
 	SortBlock(const SortBlock& other) { *this = other; }
     void operator=(const SortBlock& other);
@@ -72,6 +73,7 @@ struct SortBlock
     GenomeLocation    location; // genome location of current read
     char*       data; // read data in read buffer
     GenomeDistance    length; // length in bytes
+    bool dataReaderIsBuffer;
 };
 
     void
@@ -97,18 +99,22 @@ class SortedDataFilter : public DataWriter::Filter
 {
 public:
     SortedDataFilter(SortedDataFilterSupplier* i_parent)
-        : Filter(DataWriter::CopyFilter), parent(i_parent), locations(10000000)
+        : Filter(DataWriter::CopyFilter), parent(i_parent), locations(10000000), seenLastBatch(false)
     {}
 
-    virtual ~SortedDataFilter() {}
+    virtual ~SortedDataFilter() 
+    {
+        _ASSERT(seenLastBatch);
+    }
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false);
 
 private:
     SortedDataFilterSupplier*   parent;
     SortVector                  locations;
+    bool                        seenLastBatch;
 };
 
 class SortedDataFilterSupplier : public DataWriter::FilterSupplier
@@ -168,7 +174,7 @@ public:
     { headerSize = bytes; }
 
 #ifndef VALIDATE_SORT
-	void addBlock(size_t start, size_t bytes);
+	void addBlock(size_t start, size_t bytes, DataReader *reader = NULL);
 #else
     void addBlock(size_t start, size_t bytes, GenomeLocation minLocation, GenomeLocation maxLocation);
 #endif
@@ -548,7 +554,7 @@ public:
     }
 
     // advance to next buffer
-    virtual bool nextBatch()
+    virtual bool nextBatch(bool lastBatch = false)
     {
         if (currentBuffer != NULL) 
         {
@@ -572,7 +578,7 @@ public:
             //
             // Write out what we've got.
             //
-            nextBatch();
+            nextBatch(true);
         }
         queue->releaseWriter();
     }
@@ -585,7 +591,7 @@ private:
 class DataQueueReader : public DataReader
 {
 public:
-    DataQueueReader(DataQueue* queue_) : queue(queue_), currentBuffer(NULL) 
+    DataQueueReader(DataQueue* queue_) : queue(queue_), currentBuffer(NULL), readOffsetInCurrentBuffer(0)
     {
     }
 
@@ -759,6 +765,133 @@ DataQueueReader::nextBatch()
     readOffsetInCurrentBuffer = 0;
 } // DataQueueReader::nextBatch()
 
+class BufferDataReader : public DataReader
+{
+public:
+    BufferDataReader(size_t dataSize_) : dataSize(dataSize_), readOffsetInBuffer(0)
+    {
+        buffer = (char*)BigAlloc(dataSize + 4096);   // Allow a little empty space at the end
+        memset(buffer, 0, dataSize + 4096);         // Write it sequentially, because random causes a lot of system work.
+        //
+        // It's up to the caller to write the data into the buffer.
+        //
+    }
+
+    char* getBuffer() 
+    {
+        return buffer;
+    }
+
+    ~BufferDataReader()
+    {
+        BigDealloc(buffer);
+    }
+
+    bool init(const char* fileName) { return true; }
+    char* readHeader(_int64* io_headerSize)
+    {
+        if (io_headerSize != NULL)
+        {
+            *io_headerSize = 0;
+        }
+
+        return NULL;
+    }
+
+    // seek to a particular range in the file
+    virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
+    {
+        WriteErrorMessage("BufferDataReader: reinit() called.\\n");
+        soft_exit(1);
+    }
+
+    // get all remaining data in current batch
+    // return false if no more data in current batch
+    // startBytes is data "owned" by this block in which reads may start
+    // validBytes may also include overflow bytes to handle records spanning batches
+    // if you advance() past startBytes, nextBatch() will start offset at that point
+    virtual bool getData(char** o_buffer, _int64* o_validBytes, _int64* o_startBytes = NULL)
+    {
+        *o_buffer = buffer + readOffsetInBuffer;
+        *o_validBytes = dataSize - readOffsetInBuffer;
+
+        return *o_validBytes > 0;
+    }
+
+    // advance through data in current batch, reducing results from next getData call
+    virtual void advance(_int64 bytes)
+    {
+        _ASSERT(readOffsetInBuffer + bytes <= dataSize);
+        readOffsetInBuffer += bytes;
+    }
+
+    // advance to next batch
+    // by default automatically releases previous batch
+    // We never have more than our initial data.
+    virtual void nextBatch()
+    {
+        readOffsetInBuffer = dataSize;
+    }
+
+    // whether current batch is last in file
+    virtual bool isEOF()
+    {
+        return readOffsetInBuffer >= dataSize;
+    }
+
+    // get current batch identifier
+    virtual DataBatch getBatch()
+    {
+        return DataBatch(); // No real identifier here
+    }
+
+    // hold buffers associated with this batch for reuse, increments refcount
+    // NOTE: this may be called from another thread,
+    // so anything it touches must be thread-safe!
+    virtual void holdBatch(DataBatch batch)
+    {
+        WriteErrorMessage("BufferDataReader: holdbatch not supported\n");
+        soft_exit(1);
+    }
+
+    // release buffers associated with this batch for reuse
+    // decrements refcount, returns true if last release
+    // NOTE: this may be called from another thread,
+    // so anything it touches must be thread-safe!
+    virtual bool releaseBatch(DataBatch batch)
+    {
+        WriteErrorMessage("BufferDataReader: releaseBatch not supported\n");
+        soft_exit(1);
+        return true;
+    }
+    // get current offset into file
+    virtual _int64 getFileOffset()
+    {
+        WriteErrorMessage("BufferDataReader: getFileOffset not supported\n");
+        soft_exit(1);
+        return -1;
+    }
+
+    // get pointer to extra data area for current batch
+    // todo: allow this to grow dynamically while keeping stable pointers to previous data
+    virtual void getExtra(char** o_extra, _int64* o_length)
+    {
+        WriteErrorMessage("BufferDataReader: getExtra not supported\n");
+        soft_exit(1);
+    }
+
+    // get filename for debugging / error printing
+    virtual const char* getFilename()
+    {
+        return "BufferDataReader";
+    }
+private:
+
+    char* buffer;
+    size_t dataSize;
+    size_t readOffsetInBuffer;
+}; // BufferDataReader
+
 
     void
 SortedDataFilter::onAdvance(
@@ -784,8 +917,12 @@ SortedDataFilter::onAdvance(
 SortedDataFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
-    size_t bytes)
+    size_t bytes,
+    bool lastBatch)
 {
+    _ASSERT(!seenLastBatch);
+    seenLastBatch |= lastBatch;
+
     // sort buffered reads by location for later merge sort
     std::stable_sort(locations.begin(), locations.end(), SortEntry::comparator);
     
@@ -794,12 +931,31 @@ SortedDataFilter::onNextBatch(
     size_t fromSize, fromUsed;
     char* toBuffer;
     size_t toSize, toUsed;
-    if (! (writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed) &&
-        writer->getBatch(0, &toBuffer, &toSize, &toUsed)))
+    BufferDataReader* reader;
+
+    if (!writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed)) 
     {
-        WriteErrorMessage( "SortedDataFilter::onNextBatch getBatch failed\n");
-        soft_exit(1);
+        WriteErrorMessage("SortedDataFilter::onNextBatch getBatch of old buffer failed\n");
     }
+
+    if (!lastBatch || offset == 0 || bytes == 0) {    // Don't do the last batch optimization at offset 0, because we have special handling for the header.
+        if (!writer->getBatch(0, &toBuffer, &toSize, &toUsed))
+        {
+            WriteErrorMessage("SortedDataFilter::onNextBatch getBatch of new buffer failed\n");
+            soft_exit(1);
+        }
+        reader = NULL;
+    } else {
+        //
+        // For the last batch, we just copy the data into memory instead of writing it to disk and use a BufferDataReader.
+        // Get the data reader here, which allocates the buffer that we'll then copy the data into in sorted order.
+        //
+        reader = new BufferDataReader(bytes);
+        toSize = fromSize;
+        toBuffer = reader->getBuffer();
+        toUsed = 0;
+    }
+
     size_t target = 0;
 	GenomeLocation previous = 0;
     for (VariableSizeVector<SortEntry>::iterator i = locations.begin(); i != locations.end(); i++) {
@@ -817,7 +973,7 @@ SortedDataFilter::onNextBatch(
     }
     
     // remember block extent for later merge sort
-    SortBlock block;
+
     // handle header specially
     size_t header = offset > 0 ? 0 : locations[0].length;
     if (header > 0) {
@@ -829,11 +985,11 @@ SortedDataFilter::onNextBatch(
     GenomeLocation maxLocation = locations.size() > first ? locations[locations.size() - 1].location : UINT32_MAX;
     parent->addBlock(offset + header, bytes - header, minLocation, maxLocation);
 #else
-    parent->addBlock(offset + header, bytes - header);
+    parent->addBlock(offset + header, bytes - header, reader);
 #endif
     locations.clear();
 
-    return target;
+    return reader == NULL ? target : MAXUINT64;
 }
     
     DataWriter::Filter*
@@ -846,7 +1002,7 @@ SortedDataFilterSupplier::getFilter()
 SortedDataFilterSupplier::onClosed(
     DataWriterSupplier* supplier)
 {
-    if (blocks.size() == 1 && sortedFilterSupplier == NULL) {
+    if (blocks.size() == 1 && sortedFilterSupplier == NULL && false /* this doens't work anymore with the keep-the-last-block-in-memory code*/) {
         // just rename/move temp file to real file, we're done
         DeleteSingleFile(sortedFileName); // if it exists
         if (! MoveSingleFile(tempFileName, sortedFileName)) {
@@ -870,6 +1026,7 @@ SortedDataFilterSupplier::addBlock(
 	, GenomeLocation minLocation
 	, GenomeLocation maxLocation
 #endif
+    , DataReader *reader
 	)
 {
     if (bytes > 0) {
@@ -879,7 +1036,7 @@ SortedDataFilterSupplier::addBlock(
 			_ASSERT(i->start + i->length <= start || start + bytes <= i->start);
 		}
 #endif
-        SortBlock block;
+        SortBlock block(reader);
         block.start = start;
         block.bytes = bytes;
 #if VALIDATE_SORT
@@ -897,8 +1054,6 @@ struct MergeSortThreadState
     bool deleteSortBlockVector;
     SortBlockVector* blocksForThisThread;
     DataWriter* writer;
-
-    EventObject *BJBEvent;
 };
 
 _int64 mergeSortStartTime;
@@ -907,9 +1062,9 @@ _int64 mergeSortStartTime;
 SortedDataFilterSupplier::MergeSortThreadMain(void* threadParameter)
 {
     MergeSortThreadState* state = (MergeSortThreadState*)threadParameter;
-    fprintf(stderr, "%lld: MergeSortThread %d, deleteSortBlockVector %d\n", timeInMillis() - mergeSortStartTime, GetCurrentThreadId(), state->deleteSortBlockVector);
+ //   fprintf(stderr, "%lld: MergeSortThread %d, deleteSortBlockVector %d\n", timeInMillis() - mergeSortStartTime, GetCurrentThreadId(), state->deleteSortBlockVector);
     state->filterSupplier->mergeSortThread(state->blocksForThisThread, state->writer);
-if (state->BJBEvent != NULL) AllowEventWaitersToProceed(state->BJBEvent);
+
     if (state->deleteSortBlockVector)
     {
         delete state->blocksForThisThread;
@@ -1032,7 +1187,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
     writeWaitTime += timeInMillis() - start;
     delete writer;
 
-    fprintf(stderr, "%lld: Thread %d read %lldms, write %lldms\n", timeInMillis() - mergeSortStartTime, GetCurrentThreadId(), readWaitTime, writeWaitTime);
+    //fprintf(stderr, "%lld: Thread %d read %lldms, write %lldms\n", timeInMillis() - mergeSortStartTime, GetCurrentThreadId(), readWaitTime, writeWaitTime);
 }
 
     bool
@@ -1063,10 +1218,13 @@ SortedDataFilterSupplier::mergeSort()
         WriteErrorMessage("warning: merging %d blocks could be slow, try increasing sort memory with -sm option\n", blocks.size());
     }
     for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
-        i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0,
-            min(1UL << 23, max(1UL << 17, bufferSpace / blocks.size()))); // 128kB to 8MB buffer space per block
-        i->reader->init(tempFileName);
-        i->reader->reinit(i->start, i->bytes);
+        if (i->reader == NULL) // Otheriwse, it's the last block that's in memory
+        {
+            i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0,
+                min(1UL << 23, max(1UL << 17, bufferSpace / blocks.size()))); // 128kB to 8MB buffer space per block
+            i->reader->init(tempFileName);
+            i->reader->reinit(i->start, i->bytes);
+        }
     }
 
     // write out header
@@ -1075,16 +1233,24 @@ SortedDataFilterSupplier::mergeSort()
         soft_exit(1);
     }
     if (headerSize > 0) {
-        blocks[0].reader->reinit(0, headerSize);
+        DataReader* headerReader;
+        if (blocks[0].dataReaderIsBuffer) 
+        {
+            headerReader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0, headerSize + 4096);
+            headerReader->init(tempFileName);
+        } else {
+            headerReader = blocks[0].reader;
+        }
+        headerReader->reinit(0, headerSize);
 		writer->inHeader(true);
         char* rbuffer;
         _int64 rbytes;
         char* wbuffer;
         size_t wbytes;
 		for (size_t left = headerSize; left > 0; ) {
-			if ((! blocks[0].reader->getData(&rbuffer, &rbytes)) || rbytes == 0) {
-				blocks[0].reader->nextBatch();
-				if (! blocks[0].reader->getData(&rbuffer, &rbytes)) {
+			if ((!headerReader->getData(&rbuffer, &rbytes)) || rbytes == 0) {
+                headerReader->nextBatch();
+				if (!headerReader->getData(&rbuffer, &rbytes)) {
 					WriteErrorMessage( "read header failed\n");
 					soft_exit(1);
 				}
@@ -1099,11 +1265,19 @@ SortedDataFilterSupplier::mergeSort()
 			size_t xfer = min(left, min((size_t) rbytes, wbytes));
 			_ASSERT(xfer > 0 && xfer <= UINT32_MAX);
 			memcpy(wbuffer, rbuffer, xfer);
-			blocks[0].reader->advance(xfer);
+            headerReader->advance(xfer);
 			writer->advance((unsigned) xfer);
 			left -= xfer;
 		}
-        blocks[0].reader->reinit(blocks[0].start, blocks[0].bytes);
+
+        if (blocks[0].dataReaderIsBuffer) 
+        {
+            delete headerReader;
+        } else {
+            blocks[0].reader->reinit(blocks[0].start, blocks[0].bytes);
+        }
+        headerReader = NULL;
+
 		writer->nextBatch();
 		writer->inHeader(false);
     }
@@ -1113,7 +1287,7 @@ SortedDataFilterSupplier::mergeSort()
     // Unless there are very few input files, in which case we just run one thread.
     //
 
-    if (blocks.size() < 1 || numThreads == 1 || true)  // BJB  this is off for testing.
+    if (blocks.size() < 1 || numThreads == 1 || true /* Multi-thread doesn't seem to help, so just stick with single thread */)  
     {
         //
         // The single thread case.
@@ -1132,14 +1306,8 @@ SortedDataFilterSupplier::mergeSort()
         // Multiple threads.
         //
 
-EventObject bjbEventObject;
-CreateEventObject(&bjbEventObject);
-PreventEventWaitersFromProceeding(&bjbEventObject);
-        
-
         int minPerThread = 2;   // BJB - low for testing.
         int nLeafThreads = numThreads - 1;
-///*BJB*/ nLeafThreads = 1;
         int nBlocksAssigned = 0;
 
         MergeSortThreadState* rootThreadState = new MergeSortThreadState();
@@ -1147,7 +1315,6 @@ PreventEventWaitersFromProceeding(&bjbEventObject);
         rootThreadState->filterSupplier = this;
         rootThreadState->writer = writer;   // The writer that actually writes to the output file.
         rootThreadState->deleteSortBlockVector = false;
-rootThreadState->BJBEvent = NULL;
 
         DataQueue** dataQueues = new DataQueue * [nLeafThreads];
 
@@ -1182,7 +1349,6 @@ rootThreadState->BJBEvent = NULL;
             rootThreadState->blocksForThisThread->push_back(outputBlock);
 
             nBlocksAssigned += nBlocksThisThread;
-leafThreadState->BJBEvent = &bjbEventObject;
 
             if (!StartNewThread(MergeSortThreadMain, leafThreadState)) 
             {
@@ -1194,7 +1360,6 @@ leafThreadState->BJBEvent = &bjbEventObject;
         //
         // Just run the root on this thread.
         //
-//WaitForEvent(&bjbEventObject);
         MergeSortThreadMain(rootThreadState);
     } // The multi-thread case
 
@@ -1206,13 +1371,13 @@ leafThreadState->BJBEvent = &bjbEventObject;
 
 #if USE_DEVTEAM_OPTIONS
     WriteStatusMessage("sorted %lld reads in %u blocks, %lld s\n"
-        "read wait align %.3f s + merge %.3f s, read release align %.3f s + merge %.3f s\n"
-        "write wait %.3f s align + %.3f s merge, write filter %.3f s align + %.3f s merge\n",
-        totalReadsSorted, blocks.size(), (timeInMillis() - start)/1000,
+        /*"read wait align %.3f s + merge %.3f s, read release align %.3f s + merge %.3f s\n"
+        "write wait %.3f s align + %.3f s merge, write filter %.3f s align + %.3f s merge\n"*/,
+        totalReadsSorted, blocks.size(), (timeInMillis() - start)/1000 /*,
         startReadWaitTime * 1e-9, (DataReader::ReadWaitTime - startReadWaitTime) * 1e-9,
         startReleaseWaitTime * 1e-9, (DataReader::ReleaseWaitTime - startReleaseWaitTime) * 1e-9,
         startWriteWaitTime * 1e-9, (DataWriter::WaitTime - startWriteWaitTime) * 1e-9,
-        startWriteFilterTime * 1e-9, (DataWriter::FilterTime - startWriteFilterTime) * 1e-9);
+        startWriteFilterTime * 1e-9, (DataWriter::FilterTime - startWriteFilterTime) * 1e-9*/);
 #endif
     return true;
 }

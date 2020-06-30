@@ -32,4 +32,5 @@ int main(int argc, const char **argv)
 {
     BJBProgramStartTimeInMillis = timeInMillis();
 	ProcessTopLevelCommands(argc, argv);
+    fprintf(stderr, "Total run time %lld\n", (timeInMillis() + 500 - BJBProgramStartTimeInMillis) / 1000);
 }

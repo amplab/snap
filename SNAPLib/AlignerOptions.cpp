@@ -80,8 +80,12 @@ AlignerOptions::AlignerOptions(
     gapExtendPenalty(1),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
-	mapIndex(false),
+	mapIndex(true),
+#if _MSC_VER
 	prefetchIndex(false),
+#else // _MSC_VER
+    prefetchIndex(true),
+#endif // _MSC__VER
     writeBufferSize(16 * 1024 * 1024),
     dropIndexBeforeSort(false),
     killIfTooSlow(false),
@@ -184,10 +188,12 @@ AlignerOptions::usage()
             "       where SNAP is run repatedly on the same index, and the index is larger than half of the memory size\n"
             "       of the machine.  On some operating systems, loading an index with -map is much slower than without if the\n"
             "       index is not in memory.  You might consider adding -pre to prefetch the index into system cache when loading\n"
-            "       with -map when you don't expect the index to be in cache.\n"
+            "       with -map when you don't expect the index to be in cache.  This is the default\n"
+            " -map- Do not map the index, read it using standard read/write calls.\n"
             "  -pre Prefetch the index into system cache.  This is only meaningful with -map, and only helps if the index is not\n"
             "       already in memory and your operating system is slow at reading mapped files (i.e., some versions of Linux,\n"
-            "       but not Windows).\n"
+            "       but not Windows).  This is the default on Linux.\n"
+            " -pre- Do not prefetch the index into system cache.  This is the default on Windows.\n"
             "  -lp  Run SNAP at low scheduling priority (Only implemented on Windows)\n"
 #ifdef LONG_READS
             "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
@@ -195,7 +201,7 @@ AlignerOptions::usage()
             "  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
             "       evaluating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
             "       it will slow down execution without improving the alignments.\n"
-            "  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
+            "  -no  No Ordering: don't order the evalutation of potential alignments so as to select more likely candidates first.  This option\n"
             "       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
             "       down execution without improving alignments.\n"
             "  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
@@ -396,8 +402,14 @@ AlignerOptions::usage()
         } else if (strcmp(argv[n], "-map") == 0) {
             mapIndex = true;
             return true;
+        } else if (strcmp(argv[n], "-map-") == 0) {
+            mapIndex = false;
+            return true;
         } else if (strcmp(argv[n], "-pre") == 0) {
             prefetchIndex = true;
+            return true;
+        } else if (strcmp(argv[n], "-pre-") == 0) {
+            prefetchIndex = false;
             return true;
         } else if (strcmp(argv[n], "-ae") == 0) {
             ignoreAlignmentAdjustmentsForOm = false;
@@ -710,7 +722,7 @@ AlignerOptions::usage()
                 // We don't require that the fields be things that are listed in the SAM spec, however, because
                 // new ones might be added.
                 //
-                bool needsRG = !(argv[n + 1][0] == '@' && argv[n + 1][1] == 'R' && argv[n + 1][2] == 'G' && argv[n + 1][3] == '\\' && argv[n + 1][4] == 't');
+                bool needsRG = strlen(argv[n+1]) < 5 || !(argv[n + 1][0] == '@' && argv[n + 1][1] == 'R' && argv[n + 1][2] == 'G' && argv[n + 1][3] == '\\' && argv[n + 1][4] == 't');
                 const unsigned buflen = (unsigned)(strlen(argv[n + 1]) + 1 + (needsRG ? 4 : 0));
                 char* buffer = new char[buflen];
                 char* copyToPtr = buffer;

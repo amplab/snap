@@ -92,7 +92,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch);
 
 private:
 
@@ -310,7 +310,8 @@ GzipWriterFilter::onAdvance(
 GzipWriterFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
-    size_t bytes)
+    size_t bytes,
+    bool lastBatch)
 {
     char* fromBuffer;
     size_t fromSize, fromUsed, physicalOffset, logicalOffset;

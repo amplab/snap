@@ -232,7 +232,7 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
     quicklyDropUnpairedReads(true),
     inferSpacing(false),
-    maxSeedsSingleEnd(25),
+    maxSeedsSingleEnd(DEFAULT_MAX_HITS_FOR_UNDERLYING_SINGLE_END_ALIGNER),
     minScoreRealignment(3),
     minScoreGapRealignmentALT(3),
     minAGScoreImprovement(15)
@@ -260,7 +260,7 @@ void PairedAlignerOptions::usageMessage()
         "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
         "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
         "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
-        "  -N   max seeds when running in single-end mode of chimeric aligner. Default: %d\n"
+        "  -N   max seeds when falling back to the single-end mode when doing paired-end. Default: %d\n"
         "  -en  min edit distance for a read aligned as non-ALT by the paired-end aligner to be reconsidered\n"
         "       for a better alignment by the single-end aligner. Default: %d\n"
         "  -ea  min total edit distance by which a read pair aligned as ALT needs to be better than non-ALT alignments\n"
@@ -272,7 +272,7 @@ void PairedAlignerOptions::usageMessage()
         DEFAULT_MAX_SPACING,
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
         DEFAULT_MAX_CANDIDATE_POOL_SIZE,
-        25,
+        DEFAULT_MAX_HITS_FOR_UNDERLYING_SINGLE_END_ALIGNER,
         minScoreRealignment,
         minScoreGapRealignmentALT,
         minAGScoreImprovement);

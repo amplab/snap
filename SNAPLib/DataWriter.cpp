@@ -112,7 +112,7 @@ public:
 
     virtual bool getBatch(int relative, char** o_buffer, size_t* o_size, size_t* o_used, size_t* o_offset, size_t* o_logicalUsed = 0, size_t* o_logicalOffset = NULL);
 
-    virtual bool nextBatch();
+    virtual bool nextBatch(bool lastBatch = false);
     
     virtual void close();
 
@@ -398,7 +398,7 @@ AsyncDataWriter::getBatch(
 }
 
     bool
-AsyncDataWriter::nextBatch()
+AsyncDataWriter::nextBatch(bool lastBatch)
 {
     _int64 start = timeInNanos();
     if (encoder != NULL) {
@@ -420,8 +420,17 @@ AsyncDataWriter::nextBatch()
     } else {
         supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
     }
+
+    bool suppressWrite = false;
+
     if (filter != NULL) {
-        size_t n = filter->onNextBatch(this, write->fileOffset, write->used);
+        size_t n = filter->onNextBatch(this, write->fileOffset, write->used, lastBatch);
+        if (n == MAXUINT64) // The filter's hacky way of telling us it's squirreled away the data and we shouldn't write it to the file.
+        {
+            _ASSERT(!newSize);
+            _ASSERT(lastBatch); // Is this really necessary?  You could imagine filters that save more than the last batch.
+            suppressWrite = true;
+        }
 	    if (newSize) {
 	        write->used = n;
             supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
@@ -447,14 +456,17 @@ AsyncDataWriter::nextBatch()
     if (encoder == NULL) {
         //fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
         //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
-        if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
-            WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
-            soft_exit(1);
+        if (!suppressWrite) {
+            if (!write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
+                WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
+                soft_exit(1);
+            }
         }
     } else {
         PreventEventWaitersFromProceeding(&write->encoded);
         encoder->inputReady();
     }
+
     if (! batches[current].file->waitForCompletion()) {
         WriteErrorMessage("error: file write failed\n");
         soft_exit(1);
@@ -466,7 +478,7 @@ AsyncDataWriter::nextBatch()
     void
 AsyncDataWriter::close()
 {
-    nextBatch(); // ensure last buffer gets written
+    nextBatch(true); // ensure last buffer gets written.  true says its the last buffer for anyone who cares
     if (encoder != NULL) {
         encoder->close();
         for (int i = 0; i < count; i++) {
@@ -573,7 +585,7 @@ public:
         b->onAdvance(writer, batchOffset, data, bytes, location);
     }
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes)
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch)
     {
         size_t sa = a->onNextBatch(writer, offset, bytes);
         size_t sb = b->onNextBatch(writer, offset, sa);
