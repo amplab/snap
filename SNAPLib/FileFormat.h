@@ -91,6 +91,13 @@ public:
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) const = 0;
 
+    virtual bool writePairs(
+        const ReaderContext& context, LandauVishkinWithCigar * lv, AffineGapVectorizedWithCigar * ag, 
+        bool useAffineGap, char * buffer, size_t bufferSpace,
+        size_t * spaceUsed, size_t* qnameLen, Read ** reads, GenomeLocation* locations, PairedAlignmentResult* result,
+        bool isSecondary, bool emitInternalScore, char *internalScoreTag, int * writeOrder, 
+        int* cumulativePositiveAddFrontClipping, bool * secondReadLocationChanged, bool * outOfSpace) const = 0;
+
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,

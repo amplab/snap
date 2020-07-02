@@ -156,6 +156,10 @@ struct BAMAlignment
 
     int l_ref(); // length of reference aligned to read
 
+    GenomeLocation getUnclippedStart(GenomeLocation loc);
+
+    GenomeLocation getUnclippedEnd(GenomeLocation loc);
+
     class _init { public: _init(); };
     static _init _init_;
 
@@ -174,11 +178,11 @@ struct BAMAlignment
     GenomeLocation getLocation(const Genome* genome) const
     {
         return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
-            ? UINT32_MAX : (genome->getContigs()[refID].beginningLocation + pos);   // XXX UINT32_MAX
+            ? InvalidGenomeLocation : (genome->getContigs()[refID].beginningLocation + pos);
     }
 
     GenomeLocation getNextLocation(const Genome* genome) const
-    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningLocation + next_pos); }// XXX UINT32_MAX
+    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? InvalidGenomeLocation : (genome->getContigs()[next_refID].beginningLocation + next_pos); }
 
     GenomeLocation getLocation(const BAMReader * bamReader) const;  // Use this version for input reads rather than for SNAP-aligned ones
 
@@ -452,4 +456,8 @@ private:
         int                 n_ref; // number of reference sequences
         GenomeLocation*     refLocation; // array mapping ref sequence ID to contig genome location
         _int64              extraOffset; // offset into extra data
+
+        int                 numRGLines;
+        char*               rgLines;
+        size_t*             rgLineOffsets;
 };

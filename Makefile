@@ -1,5 +1,6 @@
 ifndef CXXFLAGS
   CXXFLAGS = -O3 -Wno-format -std=c++98
+  #CXXFLAGS = -g -O0 -Wno-format -std=c++98
 endif
 
 CXXFLAGS += -MMD -ISNAPLib -msse
