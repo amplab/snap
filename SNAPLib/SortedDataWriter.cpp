@@ -1181,6 +1181,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
 
     InterlockedAdd64AndReturnNewValue(&totalReadsSorted, total);
 
+    writer->nextBatch();
     // close everything
     _int64 start = timeInMillis();
     writer->close();

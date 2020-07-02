@@ -2540,7 +2540,7 @@ BAMDupMarkFilter::onNextBatch(
                 //
                 // fixme: If the whole buffer is used by the run, try with a larger buffer size
                 //
-                WriteErrorMessage("\nRun is too large for MarkDuplicates buffer. Try increasing -sm\n");
+                WriteErrorMessage("\nRun with size %d is too large for MarkDuplicates buffer. Last record at byte %llu with size %llu bytes. Buffer size: %llu bytes. Try increasing -sm.\n", runCount, offsets[offsets.size() - 1], lastBam->size(), currentBufferBytes);
                 soft_exit(1);
             }
         }
