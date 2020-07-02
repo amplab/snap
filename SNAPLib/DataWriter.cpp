@@ -412,7 +412,7 @@ AsyncDataWriter::nextBatch()
     //fprintf(stderr, "nextBatch reset %d used=0\n", current);
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
-    bool newSize = filter != NULL && (filter->filterType == TransformFilter || filter->filterType == ResizeFilter);
+    bool newSize = filter != NULL && (filter->filterType == TransformFilter || filter->filterType == ResizeFilter || filter->filterType == DupMarkFilter);
     if (newSize) {
         // advisory only
         write->fileOffset = supplier->sharedOffset;
@@ -423,7 +423,17 @@ AsyncDataWriter::nextBatch()
     if (filter != NULL) {
         size_t n = filter->onNextBatch(this, write->fileOffset, write->used);
 	    if (newSize) {
-	        write->used = n;
+            if (filter->filterType == DupMarkFilter) {
+                if (n < write->used) {
+                    batches[current].used = write->used - n;
+                    batches[current].logicalUsed = batches[current].used;
+                    _ASSERT(batches[current].used <= bufferSize);
+                    memcpy(batches[current].buffer, write->buffer + n, batches[current].used);
+                    write->used = n;
+                    write->logicalUsed = n;
+                }
+            }
+            write->used = n;
             supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
 	    }
         if (newBuffer) {
@@ -535,7 +545,7 @@ AsyncDataWriterSupplier::advance(
     sharedOffset += physical;
     *o_logical = sharedLogical;
     sharedLogical += logical;
-    //fprintf(stderr, "advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
+    // fprintf(stderr, "advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
     ReleaseExclusiveLock(&lock);
 }
 

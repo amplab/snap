@@ -838,7 +838,7 @@ BAMFormat::getSortInfo(
 	if (o_location != NULL) {
 		if (bam->refID < 0 || bam->refID >= genome->getNumContigs() || bam->pos < 0) {
 			if (bam->next_refID < 0 || bam->next_refID > genome->getNumContigs() || bam->next_pos < 0) {
-				*o_location = UINT32_MAX;
+				*o_location = InvalidGenomeLocation;
 			} else {
 				*o_location = genome->getContigs()[bam->next_refID].beginningLocation + bam->next_pos;
 			}
@@ -870,15 +870,15 @@ BAMFormat::getWriterSupplier(
         char *tempFileName = DataWriterSupplier::generateSortIntermediateFilePathName(options);
         // todo: make markDuplicates optional?
         DataWriter::FilterSupplier* filters = gzipSupplier;
-        if (! options->noDuplicateMarking) {
-            filters = DataWriterSupplier::markDuplicates(genome)->compose(filters);
-        }
-        if (! options->noIndex) {
+        if (!options->noIndex) {
             size_t len = strlen(options->outputFile.fileName);
-            char* indexFileName = (char*) malloc(5 + len);
+            char* indexFileName = (char*)malloc(5 + len);
             strcpy(indexFileName, options->outputFile.fileName);
             strcpy(indexFileName + len, ".bai");
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
+        }
+        if (! options->noDuplicateMarking) {
+            filters = DataWriterSupplier::markDuplicates(genome)->compose(filters);
         }
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName,
             options->sortMemory * (1ULL << 30),
@@ -1275,13 +1275,12 @@ BAMFormat::writePairs(
             result += (q >= 15) ? (q != 255) * q : 0; // avoid branch?
         }
         BAMAlignAux* mq = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
-        mq->tag[0] = 'M'; mq->tag[1] = 'S'; mq->val_type = 'i';
+        mq->tag[0] = 'Q'; mq->tag[1] = 'S'; mq->val_type = 'i';
         *(_int32*)mq->value() = result;
         _ASSERT(mq->size() == 7);   // Known above in the bamSize += line
         auxLen += (unsigned)mq->size();
 
         // LB
-        // todo: also set library from SAM/FASTQ input
         if (read->getLibrary() != NULL) {
             if ((char*)bam->firstAux() + auxLen + 4 + read->getLibraryLength() > buffer + bufferSpace) {
                 *outOfSpace = true;
@@ -1425,6 +1424,10 @@ BAMFormat::writeRead(
         }
     }
 
+    if (read->getLibrary() != NULL) {
+        bamSize += 4 + read->getLibraryLength();
+    }
+
     //
     // Add in the size for the tags now.  We have to do this in this ugly way, because the tags are written directly into the
     // buffer, so we can only write them if there's space.  However, BamAuxAlign::size() depends on the contents of the aux field
@@ -1527,6 +1530,19 @@ BAMFormat::writeRead(
         *(_int32*)in->value() = (flags & SAM_UNMAPPED) ? -1 : internalScore;
         _ASSERT(in->size() == 7);   // Known above in the bamSize += line
         auxLen += (unsigned)in->size();
+    }
+
+    // LB
+    if (read->getLibrary() != NULL) {
+        if ((char*)bam->firstAux() + auxLen + 4 + read->getLibraryLength() > buffer + bufferSpace) {
+            return false;
+        }
+        BAMAlignAux* lb = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
+        lb->tag[0] = 'L'; lb->tag[1] = 'B'; lb->val_type = 'Z';
+        strncpy((char*)lb->value(), read->getLibrary(), read->getLibraryLength());
+        ((char*)(lb->value()))[read->getLibraryLength()] = '\0';
+        _ASSERT(lb->size() == 4 + read->getLibraryLength());
+        auxLen += (unsigned)lb->size();
     }
 
     if (NULL != spaceUsed) {
@@ -2013,6 +2029,14 @@ BAMFilter::onNextBatch(
     size_t offset,
     size_t bytes)
 {
+
+    // 
+    // Nothing to write
+    //
+    if (bytes == 0) {
+        return 0;
+    }
+
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
     if (!ok) {
         WriteErrorMessage("Error writing to output file\n");
@@ -2020,10 +2044,30 @@ BAMFilter::onNextBatch(
     }
     currentWriter = writer;
     int index = 0;
-    for (VariableSizeVector<size_t>::iterator i = offsets.begin(); i != offsets.end(); i++) {
+
+    size_t bytesToRead = min<long long>(bytes, currentBufferBytes);
+    VariableSizeVector<size_t>::iterator i;
+    for (i = offsets.begin(); i != offsets.end(); i++) {
+        if (*i >= bytesToRead) {
+            break;
+        }
         onRead((BAMAlignment*) (currentBuffer + *i), currentOffset + *i, index++);
     }
-    offsets.clear();
+    if (i != offsets.end()) {
+        VariableSizeVector<size_t> nextBatchOffsets;
+        VariableSizeVector<size_t>::iterator j;
+        for (j = i; j != offsets.end(); j++) {
+            nextBatchOffsets.push_back(*j - *i);
+        }
+        offsets.clear();
+        for (j = nextBatchOffsets.begin(); j != nextBatchOffsets.end(); j++) {
+            offsets.push_back(*j);
+        }
+        nextBatchOffsets.clear();
+    }
+    else {
+        offsets.clear();
+    }
     currentWriter = NULL;
     currentBuffer = NULL;
     currentBufferBytes = 0;
@@ -2129,7 +2173,7 @@ struct DuplicateReadKey
     DuplicateReadKey(BAMAlignment* bam, const Genome *genome, size_t _libraryHash)
     {
         if (bam == NULL) {
-            locations[0] = locations[1] = UINT32_MAX;
+            locations[0] = locations[1] = InvalidGenomeLocation;
             isRC[0] = isRC[1] = false;
             libraryHash = 0;
         } else {
@@ -2198,7 +2242,7 @@ struct DuplicateFragmentKey
     DuplicateFragmentKey(BAMAlignment* bam, const Genome* genome, size_t _libraryHash)
     {
         if (bam == NULL) {
-            location = UINT32_MAX;
+            location = InvalidGenomeLocation;
             isRC = false;
             libraryHash = 0;
         }
@@ -2268,35 +2312,45 @@ struct DuplicateMateInfo
     int tile;
     int x;
     int y;
+    _int32 pos;
 
     void setBestReadId(const char* id) { strncpy(bestReadId, id, sizeof(bestReadId)); }
     const char* getBestReadId() { return bestReadId; }
     void setBestTileXY(int tile_, int x_, int y_) { tile = tile_; x = x_; y = y_; }
     void getBestTileXY(int* tile_, int* x_, int* y_) { *tile_ = tile; *x_ = x; *y_ = y; }
+    void setBestPos(_int32 pos_) { pos = pos_; }
+    _int32 getBestPos() { return pos; }
 
-    void checkBestRecord(const char* id_, int totalQuality_, int tile_, int x_, int y_) {
+    void checkBestRecord(BAMAlignment* bam, int totalQuality_, int tile_, int x_, int y_) {
+        if ((bam->FLAG & SAM_DUPLICATE) != 0) {
+            return;
+        }
         if (totalQuality_ > bestReadQuality) {
             bestReadQuality = totalQuality_;
-            setBestReadId(id_);
+            setBestReadId(bam->read_name());
             setBestTileXY(tile_, x_, y_);
+            setBestPos(bam->pos);
         }
         else if (totalQuality_ == bestReadQuality) {
             if (tile_ < tile) {
                 bestReadQuality = totalQuality_;
-                setBestReadId(id_);
+                setBestReadId(bam->read_name());
                 setBestTileXY(tile_, x_, y_);
+                setBestPos(bam->pos);
             }
             else if (tile_ == tile) {
                 if (x_ < x) {
                     bestReadQuality = totalQuality_;
-                    setBestReadId(id_);
+                    setBestReadId(bam->read_name());
                     setBestTileXY(tile_, x_, y_);
+                    setBestPos(bam->pos);
                 }
                 else if (x_ == x) {
                     if (y_ < y) {
                         bestReadQuality = totalQuality_;
-                        setBestReadId(id_);
+                        setBestReadId(bam->read_name());
                         setBestTileXY(tile_, x_, y_);
+                        setBestPos(bam->pos);
                     }
                 }
             }
@@ -2310,8 +2364,8 @@ struct DupMarkEntry
 
     bool operator<(const DupMarkEntry& b) const {
         return (libraryNameHash < b.libraryNameHash) ||
-            ((libraryNameHash == b.libraryNameHash) && (mateInfo < b.mateInfo)) ||
-            ((libraryNameHash == b.libraryNameHash && mateInfo == b.mateInfo && info < b.info));
+            ((libraryNameHash == b.libraryNameHash) && (info < b.info)) ||
+            ((libraryNameHash == b.libraryNameHash && info == b.info && mateInfo < b.mateInfo));
     }
 
     static size_t hash(char* str) // We could probably use a better hash function, but I doubt it matters
@@ -2338,8 +2392,8 @@ class BAMDupMarkFilter : public BAMFilter
 {
 public:
     BAMDupMarkFilter(const Genome* i_genome) :
-        BAMFilter(DataWriter::ModifyFilter),
-        genome(i_genome), runOffset(0), runLocation(UINT32_MAX), runCount(0), mates(), fragments()
+        BAMFilter(DataWriter::DupMarkFilter),
+        genome(i_genome), runOffset(0), runLocation(InvalidGenomeLocation), runCount(0), mates(), fragments()
     {
     }
 
@@ -2364,8 +2418,6 @@ public:
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
     void dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset);
-
-    BAMAlignment* tryFindMate(size_t offset, size_t endOffset, BAMAlignment* bam, size_t* o_offset);
 
 protected:
     virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex);
@@ -2399,6 +2451,13 @@ BAMDupMarkFilter::onNextBatch(
     size_t offset,
     size_t bytes)
 {
+    // 
+    // Nothing to write
+    //
+    if (bytes == 0) {
+        return 0;
+    }
+
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
     if (!ok) {
         WriteErrorMessage("Error writing to output file\n");
@@ -2406,13 +2465,13 @@ BAMDupMarkFilter::onNextBatch(
     }
     currentWriter = writer;
 
-    size_t next_i = 0, last_i = 0;
+    size_t next_i = 0, unfinishedRunStart = 0;
     bool foundNextBatchStart = false;
     size_t nextBatchStart = 0;
     runCount = 0;
     runOffset = 0;
-    runLocation = UINT32_MAX;
-    BAMAlignment* lastBam;
+    runLocation = InvalidGenomeLocation;
+    BAMAlignment* lastBam = NULL;
 
     for (size_t i = 0; i < offsets.size(); i = next_i) {
         lastBam = (BAMAlignment*) (currentBuffer + offsets[i]);
@@ -2421,90 +2480,92 @@ BAMDupMarkFilter::onNextBatch(
         GenomeLocation logicalLocation = location != InvalidGenomeLocation ? location : nextLocation;
         logicalLocation = lastBam->getUnclippedStart(logicalLocation);
 
-        if (runLocation == UINT32_MAX) {
+        //
+        // Initialize run
+        //
+        if (runLocation == InvalidGenomeLocation) {
             runCount = 1;
             runLocation = logicalLocation;
             runOffset = currentOffset + offsets[i];
-            last_i = i;
+            unfinishedRunStart = i;
             next_i = i + 1;
         }
         else {
-            // track the read from which we need to start the next run
+            // 
+            // Track the read from which we need to start the next run. Next run starts at nextBatchStart
+            // 
             if (!foundNextBatchStart && logicalLocation > runLocation + MAX_READ_LENGTH + MAX_K) {
                 nextBatchStart = i;
                 foundNextBatchStart = true;
                 next_i = i + 1;
             }
+            //
+            // Add read to run
+            // 
             if (logicalLocation <= runLocation + (2 * (MAX_READ_LENGTH + MAX_K))) {
                 runCount++;
                 next_i = i + 1;
             }
             else {
-                // mark all duplicates in run
+                // 
+                // We are done with the run. Begin marking duplicates
+                // 
                 dupMarkBatch(lastBam, currentOffset + offsets[i]);
-                // fprintf(stderr, "marking duplicates for runLocation: %lld, runCount: %d lastPos: %lld, time: %lld\n", runLocation, runCount, lastBam->pos, timeInMillis() - startTime);
 
-                // start new run
+                //
+                // Reset run parameters in preparation for next run
+                // 
                 runCount = 0;
                 runOffset = 0;
-                runLocation = UINT32_MAX;
+                runLocation = InvalidGenomeLocation;
                 next_i = nextBatchStart;
                 foundNextBatchStart = false;
             }
         }
     } // end offsets
 
+    size_t bytesRead = min<long long>(bytes, currentBufferBytes);
+
+    //
+    // Run could potentially span multiple buffers
+    //
     if (runCount > 0) {
-        // fprintf(stderr, "marking duplicates for runLocation: %lld, runCount: %d lastPos: %lld\n", runLocation, runCount, lastBam->pos);
-        // mark all duplicates in spill-over
-        dupMarkBatch(lastBam, offsets[offsets.size() - 1]);
-        // fprintf(stderr, "marking duplicates for runLocation: %lld, runCount: %d lastPos: %lld, time: %lld\n", runLocation, runCount, lastBam->pos, timeInMillis() - startTime);
+        //
+        // todo: If the whole buffer is used by the run, try with a larger buffer size
+        //
+        
+        //
+        // If this is the last buffer, simply mark all duplicates in the run we currently have
+        //
+        if (offsets[unfinishedRunStart] == 0) {
+            dupMarkBatch(lastBam, currentOffset + offsets[offsets.size() - 1]);
+            offsets.clear();
+        }
+        else {
+            //
+            // Copy over read offsets for those reads that will be duplicate marked in the next batch
+            //
+            bytesRead = offsets[unfinishedRunStart];
+            VariableSizeVector<size_t> nextBatchOffsets;
+            for (size_t i = unfinishedRunStart; i < offsets.size(); i++) {
+                nextBatchOffsets.push_back(offsets[i] - offsets[unfinishedRunStart]);
+            }
+            offsets.clear();
+            for (size_t i = 0; i < nextBatchOffsets.size(); i++) {
+                offsets.push_back(nextBatchOffsets[i]);
+            }
+            nextBatchOffsets.clear();
+        }
+    } // runcount > 0
+    else {
+        offsets.clear();
     }
 
-    offsets.clear();
     currentWriter = NULL;
     currentBuffer = NULL;
     currentBufferBytes = 0;
     currentOffset = 0;
-    return bytes;
-}
-
-    BAMAlignment*
-BAMDupMarkFilter::tryFindMate(
-    size_t offset,
-    size_t endOffset,
-    BAMAlignment *recordToMatch,
-    size_t* o_offset)
-{
-
-    GenomeLocation loc = recordToMatch->getLocation(genome);
-    bool isRC = (recordToMatch->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
-    GenomeLocation unclippedLoc = isRC ? recordToMatch->getUnclippedEnd(loc) : recordToMatch->getUnclippedStart(loc);
-    GenomeLocation mateLocToFind = unclippedLoc + recordToMatch->tlen;
-    bool mateRC = (recordToMatch->FLAG & SAM_NEXT_REVERSED) != 0;
-
-    BAMAlignment* bam = getRead(offset);
-    while (bam != NULL && offset < endOffset) {
-        bool isRC = (bam->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
-        // check orientation
-        if (isRC == mateRC) {
-            GenomeLocation myLoc = bam->getLocation(genome);
-            GenomeLocation myUnclippedLoc = isRC ? bam->getUnclippedEnd(myLoc) : bam->getUnclippedStart(myLoc);
-            // check location
-            if (myUnclippedLoc == mateLocToFind) {
-                if (bam->l_read_name == recordToMatch->l_read_name) {
-                    if (readIdsMatch(bam->read_name(), recordToMatch->read_name(), bam->l_read_name - 1)) {
-                        if (o_offset != NULL) {
-                            *o_offset = offset;
-                        }
-                        return bam;
-                    }
-                }
-            }
-        }
-        bam = getNextRead(bam, &offset);
-    }
-    return NULL;
+    return bytesRead; // return bytes consumed in current batch. This may be less than 'bytes', if reads require duplicate marking in subsequent batch
 }
 
     void
@@ -2516,7 +2577,6 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
     run.clear();
     runFragment.clear();
 
-    // sort run by other coordinate & RC flags to get sub-runs
     for (BAMAlignment* record = getRead(offset); record != NULL && numRecords < runCount; record = getNextRead(record, &offset)) {
         // secondary/supplementary alignments not marked as duplicates in coordinate sorted alignments
         if ((record->FLAG & SAM_SECONDARY) != 0 || (record->FLAG & SAM_SUPPLEMENTARY) != 0) continue;
@@ -2528,10 +2588,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         // use opposite of logical location to sort records
         DupMarkEntry entry, entryFragment;
         BAMAlignAux* aux = record->firstAux();
-        entry.mateQual = entryFragment.mateQual = 0;
+        entry.mateQual = entryFragment.mateQual = -1;
         entry.libraryNameHash = entryFragment.libraryNameHash = 0;
         while (aux != NULL && aux < record->endAux()) {
-            if (aux->tag[0] == 'M' && aux->tag[1] == 'S' && aux->val_type == 'i') {
+            if (aux->tag[0] == 'Q' && aux->tag[1] == 'S' && aux->val_type == 'i') {
                 entry.mateQual = entryFragment.mateQual = *(_int32*)aux->value();
             }
             if (aux->tag[0] == 'L' && aux->tag[1] == 'B' && aux->val_type == 'Z') {
@@ -2540,11 +2600,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             aux = aux->next();
         }
         entry.mateInfo = (((_uint64) GenomeLocationAsInt64(mateLoc)) << 1) | (isMateRC ? 1 : 0);
-        entry.info = loc == UINT32_MAX
-            ? (((_uint64) UINT32_MAX) << 32) |
-                ((isRC) ? RunNextRC : 0)
-            : (((_uint64) GenomeLocationAsInt64(myLoc)) << 32) |
-                ((isRC) ? RunRC : 0);
+        entry.info = (((_uint64) GenomeLocationAsInt64(myLoc)) << 1) | (isRC ? 1 : 0);
 
         entryFragment.mateInfo = 0;
         entryFragment.info = (((_uint64)GenomeLocationAsInt64(myLoc)) << 1) | (isRC ? 1 : 0);
@@ -2552,7 +2608,12 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         entry.runOffset = entryFragment.runOffset = offset;
 
         _ASSERT(offset - runOffset <= RunOffset);
-        run.push_back(entry);
+        
+        // don't need to look at mate information in single-ended datasets
+        if ((record->FLAG & SAM_MULTI_SEGMENT) != 0) {
+            run.push_back(entry);
+        }
+
         runFragment.push_back(entryFragment);
         numRecords++;
     }
@@ -2604,7 +2665,9 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             GenomeLocation nextLoc = nextRecord[j]->getLocation(genome);
             myLoc = isRC ? record->getUnclippedEnd(myLoc) : record->getUnclippedStart(myLoc);
             nextLoc = isNextRC ? nextRecord[j]->getUnclippedEnd(nextLoc) : nextRecord[j]->getUnclippedStart(nextLoc);
-            if (myLoc == nextLoc) {
+            GenomeLocation myMateLoc = myLoc + record->tlen;
+            GenomeLocation nextMateLoc = nextLoc + nextRecord[j]->tlen;
+            if (myMateLoc == nextMateLoc) {
                 foundDup = true;
                 break;
             }
@@ -2629,7 +2692,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         }
         int tile, x, y;
         getTileXY(record->read_name(), &tile, &x, &y);
-        info->checkBestRecord(record->read_name(), totalQuality, tile, x, y);
+        info->checkBestRecord(record, totalQuality, tile, x, y);
     }
 
     // duplicate marking for read fragments
@@ -2656,12 +2719,12 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             fragments.put(key, DuplicateMateInfo());
             info = &fragments[key];
             //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
-            info->isMateMapped = (record->FLAG & SAM_NEXT_UNMAPPED) == 0;
+            info->isMateMapped = (record->FLAG & SAM_MULTI_SEGMENT) != 0 && (record->FLAG & SAM_NEXT_UNMAPPED) == 0;
         }
         else {
             info = &f->value;
         }
-        bool mateMapped = (record->FLAG & SAM_NEXT_UNMAPPED) == 0;
+        bool mateMapped = (record->FLAG & SAM_MULTI_SEGMENT) != 0 && (record->FLAG & SAM_NEXT_UNMAPPED) == 0;
         int totalQuality = getTotalQuality(record);
         int tile, x, y;
         getTileXY(record->read_name(), &tile, &x, &y);
@@ -2671,14 +2734,15 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
                 info->setBestReadId(record->read_name());
                 info->isMateMapped = true;
                 info->setBestTileXY(tile, x, y);
+                info->setBestPos(record->pos);
             }
             else {
-                info->checkBestRecord(record->read_name(), totalQuality, tile, x, y);
+                info->checkBestRecord(record, totalQuality, tile, x, y);
             }
         }
         else {
             if (!info->isMateMapped) {
-                info->checkBestRecord(record->read_name(), totalQuality, tile, x, y);
+                info->checkBestRecord(record, totalQuality, tile, x, y);
             }
         }
     }
@@ -2720,7 +2784,9 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             GenomeLocation nextLoc = nextRecord[j]->getLocation(genome);
             myLoc = isRC ? record->getUnclippedEnd(myLoc) : record->getUnclippedStart(myLoc);
             nextLoc = isNextRC ? nextRecord[j]->getUnclippedEnd(nextLoc) : nextRecord[j]->getUnclippedStart(nextLoc);
-            if (myLoc == nextLoc) {
+            GenomeLocation myMateLoc = myLoc + record->tlen;
+            GenomeLocation nextMateLoc = nextLoc + nextRecord[j]->tlen;
+            if (myMateLoc == nextMateLoc) {
                 foundDup = true;
                 break;
             }
@@ -2775,7 +2841,9 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             GenomeLocation nextLoc = nextRecord[j]->getLocation(genome);
             myLoc = isRC ? record->getUnclippedEnd(myLoc) : record->getUnclippedStart(myLoc);
             nextLoc = isNextRC ? nextRecord[j]->getUnclippedEnd(nextLoc) : nextRecord[j]->getUnclippedStart(nextLoc);
-            if (myLoc == nextLoc) {
+            GenomeLocation myMateLoc = myLoc + record->tlen;
+            GenomeLocation nextMateLoc = nextLoc + nextRecord[j]->tlen;
+            if (myMateLoc == nextMateLoc) {
                 foundDup = true;
                 break;
             }
@@ -2786,8 +2854,14 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         MateMap::iterator m = mates.find(key);
         DuplicateMateInfo* minfo = &m->value;
         if (m != mates.end()) {
-            mates.erase(key);
-            //fprintf(stderr, "erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
+            bool isRC = (record->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
+            GenomeLocation loc = record->getLocation(genome);
+            loc = (isRC) ? record->getUnclippedEnd(loc) : record->getUnclippedStart(loc);
+            // found mate
+            if (loc == key.locations[1] && isRC == key.isRC[1]) {
+                //fprintf(stderr, "erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
+                mates.erase(key);
+            }
         }
     }
 
@@ -2803,7 +2877,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             (i + 1 == runFragment.end() || (i->info) != ((i + 1)->info))) {
             continue;
         }
-        if ((record->FLAG & SAM_UNMAPPED) != 0 || (record->FLAG & SAM_NEXT_UNMAPPED) == 0) {
+        if ((record->FLAG & SAM_UNMAPPED) != 0 || ((record->FLAG & SAM_MULTI_SEGMENT) != 0 && (record->FLAG & SAM_NEXT_UNMAPPED) == 0)) {
             // skip unmapped reads and reads with mapped mates
             continue;
         }
@@ -2857,7 +2931,9 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
     void
 BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
 {
-
+    //
+    // Do nothing
+    //
 }
 
     int

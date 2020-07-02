@@ -178,11 +178,11 @@ struct BAMAlignment
     GenomeLocation getLocation(const Genome* genome) const
     {
         return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
-            ? UINT32_MAX : (genome->getContigs()[refID].beginningLocation + pos);
+            ? InvalidGenomeLocation : (genome->getContigs()[refID].beginningLocation + pos);
     }
 
     GenomeLocation getNextLocation(const Genome* genome) const
-    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningLocation + next_pos); }
+    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? InvalidGenomeLocation : (genome->getContigs()[next_refID].beginningLocation + next_pos); }
 
     GenomeLocation getLocation(const BAMReader * bamReader) const;  // Use this version for input reads rather than for SNAP-aligned ones
 

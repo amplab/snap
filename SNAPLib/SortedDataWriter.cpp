@@ -477,7 +477,7 @@ SortedDataFilterSupplier::mergeSort()
             queue.add(smallestIndex, b->location);
         }
     }
-    
+
     // close everything
     writer->close();
     delete writer;
