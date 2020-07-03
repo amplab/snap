@@ -41,7 +41,8 @@ public:
         ModifyFilter, // modifies data in place
         CopyFilter, // copies data into new buffer, same size
         TransformFilter, // copies data into new buffer, possibly different size
-        ResizeFilter, // rewrites data in same buffer, possibly different size
+        ResizeFilter, // rewrites data in same buffer, possibly different size,
+        DupMarkFilter
     };
     // single filter instance per thread
     // points to filterSupplier for common data

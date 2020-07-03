@@ -989,7 +989,7 @@ SortedDataFilter::onNextBatch(
 #endif
     locations.clear();
 
-    return reader == NULL ? target : MAXUINT64;
+    return reader == NULL ? target : UINT64_MAX;
 }
     
     DataWriter::Filter*
@@ -1181,6 +1181,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
 
     InterlockedAdd64AndReturnNewValue(&totalReadsSorted, total);
 
+    writer->nextBatch();
     // close everything
     _int64 start = timeInMillis();
     writer->close();
@@ -1320,7 +1321,7 @@ SortedDataFilterSupplier::mergeSort()
 
         for (int i = 0; i < nLeafThreads; i++)
         {
-            int nBlocksThisThread = (int)(min(blocks.size() - nBlocksAssigned, max(minPerThread, (blocks.size() - nBlocksAssigned + (nLeafThreads - i - 1)) / (nLeafThreads - i))));
+            int nBlocksThisThread = (int)(__min(blocks.size() - nBlocksAssigned, __max(minPerThread, (blocks.size() - nBlocksAssigned + (nLeafThreads - i - 1)) / (nLeafThreads - i))));
             if (nBlocksThisThread == 0) 
             {
                 continue;

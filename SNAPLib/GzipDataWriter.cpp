@@ -313,11 +313,19 @@ GzipWriterFilter::onNextBatch(
     size_t bytes,
     bool lastBatch)
 {
+    
+    // 
+    // Nothing to write
+    //
+    if (bytes == 0) {
+        return 0;
+    }
+
     char* fromBuffer;
     size_t fromSize, fromUsed, physicalOffset, logicalOffset;
     writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
     if (fromUsed == 0 || supplier->multiThreaded || supplier->closing) {
-        return fromUsed;
+        return min<long long>(fromUsed, bytes);
     }
     // do compress buffer synchronously in-place
     if (manager == NULL) {
@@ -333,7 +341,7 @@ GzipWriterFilter::onNextBatch(
     worker->step();
     manager->finishStep();
     writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
-    return fromUsed;
+    return min<long long>(fromUsed, bytes);
 }
 
     GzipWriterFilterSupplier*

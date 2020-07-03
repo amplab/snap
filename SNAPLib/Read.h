@@ -101,6 +101,9 @@ struct ReaderContext
     size_t              headerLength; // length of string
     size_t              headerBytes; // bytes used for header in file
     bool                headerMatchesIndex; // header refseq matches current index
+    char*               rgLines;
+    size_t*             rgLineOffsets;
+    int                 numRGLines;
 };
 
 class ReadReader {
@@ -228,7 +231,7 @@ public:
             localBufferAllocationOffset(0),
             clippingState(NoClipping), currentReadDirection(FORWARD),
             upcaseForwardRead(NULL), auxiliaryData(NULL), auxiliaryDataLength(0),
-            readGroup(NULL), originalAlignedLocation(-1), originalMAPQ(-1), originalSAMFlags(0),
+            readGroup(NULL), library(NULL), libraryLength(0), originalAlignedLocation(-1), originalMAPQ(-1), originalSAMFlags(0),
             originalFrontClipping(0), originalBackClipping(0), originalFrontHardClipping(0), originalBackHardClipping(0),
             originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0), additionalFrontClipping(0), additionalBackClipping(0)
         {}
@@ -340,6 +343,8 @@ public:
             clippingState = other.clippingState;
             batch = other.batch;
             readGroup = other.readGroup;
+            library = other.library;
+            libraryLength = other.libraryLength;
             auxiliaryData = other.auxiliaryData;
             auxiliaryDataLength = other.auxiliaryDataLength;
             originalAlignedLocation = other.originalAlignedLocation;
@@ -468,6 +473,10 @@ public:
         inline void setBatch(DataBatch b) { batch = b; }
         inline const char* getReadGroup() const { return readGroup; }
         inline void setReadGroup(const char* rg) { readGroup = rg; }
+        inline const char* getLibrary() const { return library; }
+        inline void setLibrary(const char* lb) { library = lb; }
+        inline int getLibraryLength() const { return libraryLength; }
+        inline void setLibraryLength(int length) { libraryLength = length;  }
         inline GenomeLocation getOriginalAlignedLocation() {return originalAlignedLocation;}
         inline unsigned getOriginalMAPQ() {return originalMAPQ;}
         inline unsigned getOriginalSAMFlags() {return originalSAMFlags;}
@@ -688,6 +697,8 @@ private:
         const char *unclippedQuality;
         const char *quality;
         const char *readGroup;
+        const char* library;
+        int libraryLength;
         unsigned idLength;
         unsigned dataLength;
         unsigned unclippedLength;
@@ -869,6 +880,9 @@ private:
 		clip(baseRead.getClippingState());
 
         setReadGroup(baseRead.getReadGroup());
+
+        setLibrary(baseRead.getLibrary());
+        setLibraryLength(baseRead.getLibraryLength());
         
         if (aux != NULL && auxLen > 0) {
             memcpy(auxBuffer, aux, auxLen);
