@@ -320,7 +320,6 @@ namespace SelectGermlineVariants
 
             foreach (var candidateVariant in  candidateVariants)
             { 
-
                 //
                 // Figure out if we've moved into another grain, in which case we save the candidates we have from previous grains
                 //
