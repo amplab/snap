@@ -1531,7 +1531,8 @@ namespace ASEProcessManager
                         continue;
                     }
 
-                    WriteFreebayesLinuxScript(linuxScript, case_.case_id, ASETools.getRealignedNormalDNAByAligner[aligner](case_), case_.normal_dna_file_id, ASETools.vcfExtensionByAligner[aligner],
+                    WriteFreebayesLinuxScript(linuxScript, case_.case_id, ASETools.getRealignedNormalDNAByAligner[aligner](case_), case_.normal_dna_file_id, 
+                        ASETools.vcfExtensionByAlignerAndVariantCaller[aligner][ASETools.VariantCaller.Freebayes],
                         "~/genomes/GRCh38.d1.vd1-100k-regions", stateOfTheWorld.configuration.derivedFilesDirectory, "~/genomes/GRCh38.d1.vd1.fa");
 
                     nAddedToScript++;
@@ -4711,35 +4712,15 @@ namespace ASEProcessManager
 
         class VCFIndexingProcessingStage : ProcessingStage
         {
-            public VCFIndexingProcessingStage(ASETools.Aligner aligner_)
+            public VCFIndexingProcessingStage(ASETools.Aligner aligner_, ASETools.VariantCaller variantCaller_)
             {
                 aligner = aligner_;
-
-                switch (aligner)
-                {
-                    case ASETools.Aligner.SNAP:
-                        vcfGetter = _ => _.snap_realigned_normal_freebayes_vcf_filename;
-                        idxGetter = _ => _.snap_realigned_normal_freebayes_vcf_idx_filename;
-                        break;
-
-                    case ASETools.Aligner.Bowtie:
-                        vcfGetter = _ => _.bowtie_realigned_normal_freebayes_vcf_filename;
-                        idxGetter = _ => _.bowtie_realigned_normal_feeebayes_vcf_idx_filename;
-                        break;
-
-                    case ASETools.Aligner.BWA:
-                        vcfGetter = _ => _.BWA_realigned_normal_feeebayes_vcf_filename;
-                        idxGetter = _ => _.BWA_realigned_normal_freebayes_vcf_idx_filename;
-                        break;
-
-                    default:
-                        throw new Exception("Unknown aligner " + aligner);
-                }
+                variantCaller = variantCaller_;
             }
 
             public string GetStageName()
             {
-                return ASETools.alignerName[aligner] + " VCF Indexing";
+                return ASETools.alignerName[aligner] + " " + ASETools.variantCallerName[variantCaller] + " VCF Indexing";
             }
 
             public bool NeedsCases() { return true; }
@@ -4757,13 +4738,14 @@ namespace ASEProcessManager
 
                 foreach (var case_ in stateOfTheWorld.listOfCases)
                 {
-                    if (idxGetter(case_) != "")
+                    if (case_.realignments[aligner][false].variantCalls[variantCaller].vcf_idx_filename != "")
                     {
                         nDone++;
                     } 
-                    else if (vcfGetter(case_) != "")
+                    else if (case_.realignments[aligner][false].variantCalls[variantCaller].vcf_filename != "")
                     {
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + @"IGV_2.8.6\igvtools.exe index" + vcfGetter(case_));
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + @"IGV_2.8.6\igvtools.exe index" + 
+                            case_.realignments[aligner][false].variantCalls[variantCaller].vcf_filename);
 
                         nAddedToScript++;
                     } 
@@ -4774,12 +4756,8 @@ namespace ASEProcessManager
                 }
             } // EvaluateStage
 
-
-            ASETools.Case.ColumnGetter vcfGetter;
-            ASETools.Case.ColumnGetter idxGetter;
-
-
             ASETools.Aligner aligner;
+            ASETools.VariantCaller variantCaller;
         } // VCFIndexingProcessingStage
 
         class SNAPRealignmentProcessingStage : ProcessingStage

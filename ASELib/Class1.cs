@@ -35,15 +35,15 @@ namespace ASELib
 
             chromosomeSizes.ToList().ForEach(x => chromosomeSizesByName.Add(x.name, x));
             chromosomeSizes.ToList().ForEach(x => chromosomeSizesByName.Add(chromosomeNameToNonChrForm(x.name), x));
-            
-            
-
-
-
+ 
             alignerName = new Dictionary<Aligner, string>();
             alignerName.Add(Aligner.SNAP, "SNAP");
             alignerName.Add(Aligner.BWA, "BWA");
             alignerName.Add(Aligner.Bowtie, "Bowtie");
+
+            variantCallerName = new Dictionary<VariantCaller, string>();
+            variantCallerName.Add(VariantCaller.Freebayes, "Freebayes");
+            variantCallerName.Add(VariantCaller.HaplotypeCaller, "HaplotypeCaller");
 
             getRealignedNormalDNAByAligner = new Dictionary<Aligner, Case.ColumnGetter>();
             getRealignedTumorDNAByAligner = new Dictionary<Aligner, Case.ColumnGetter>();
@@ -100,7 +100,10 @@ namespace ASELib
 
             vcfExtensionByAlignerAndVariantCaller[Aligner.BWA].Add(VariantCaller.Freebayes, bwaFreebayesVCFExtension);
             vcfExtensionByAlignerAndVariantCaller[Aligner.Bowtie].Add(VariantCaller.Freebayes, bowtieFreebayesVCFExtension);
-            vcfExtensionByAlignerAndVariantCaller[Aligner.SNAP].Add(VariantCaller.Freebayes, snapFreebayesVCFExtension);
+            vcfExtensionByAlignerAndVariantCaller[Aligner.SNAP].Add(VariantCaller.Freebayes, snapFreebayesVCFExtension); 
+            vcfExtensionByAlignerAndVariantCaller[Aligner.BWA].Add(VariantCaller.HaplotypeCaller, bwaHaplotypeCallerVCFExtension);
+            vcfExtensionByAlignerAndVariantCaller[Aligner.Bowtie].Add(VariantCaller.HaplotypeCaller, bowtieHaplotypeCallerVCFExtension);
+            vcfExtensionByAlignerAndVariantCaller[Aligner.SNAP].Add(VariantCaller.HaplotypeCaller, snapHaplotypeCallerVCFExtension);
 
             getRealignedDNAByTumorAndAligner = new Dictionary<bool, Dictionary<Aligner, Case.ColumnGetter>>();
             getRealignedDNAByTumorAndAligner.Add(true, getRealignedTumorDNAByAligner);
@@ -1426,7 +1429,7 @@ namespace ASELib
             public string dna_filename = "";
             public string dna_bai_filename = "";
             public string dna_statictics_filename = "";
-            Dictionary<VariantCaller, VariantCallFiles> variantCalls = new Dictionary<VariantCaller, VariantCallFiles>();
+            public Dictionary<VariantCaller, VariantCallFiles> variantCalls = new Dictionary<VariantCaller, VariantCallFiles>();
 
             public RealignmentFiles()
             {
@@ -1879,6 +1882,38 @@ namespace ASELib
 
             class TypeAndFieldInformationInitializer
             {
+                //
+                // These have to be in their own functions so that the lambdas that get generated have the right parameters.  If you do them
+                // inline with the loop, then they'll wind up referring to the value at the end of the loop rather than the value at the
+                // time the lambda is created.  By having the parameters to the lambda also be parameters to the function that creates the
+                // lambda (which themselves aren't changed but rather instantiated again on the next iteration of the loop) the correct
+                // values will be presevred at lambda execution time.
+                //
+                void AddRealigner(ASETools.Aligner aligner, bool tumor)
+                {
+                    derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " DNA", c => c.realignments[aligner][tumor].dna_filename, (c, v) => c.realignments[aligner][tumor].dna_filename = v,
+                                         alignerAndTumorToDerivedFileType[aligner][tumor], alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna.bam",
+                                         c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_file_size, (c, v) => c.realignments[aligner][tumor].dna_file_size = v));
+
+                    derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " DNA BAI", c => c.realignments[aligner][tumor].dna_bai_filename, (c, v) => c.realignments[aligner][tumor].dna_bai_filename = v,
+                                                             alignerAndTumorToBaiDerivedFileType[aligner][tumor], alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna.bam.bai",
+                                                             c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_bai_file_size, (c, v) => c.realignments[aligner][tumor].dna_bai_file_size = v));
+
+                    derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " DNA Statistics", c => c.realignments[aligner][tumor].dna_statictics_filename, (c, v) => c.realignments[aligner][tumor].dna_statictics_filename = v,
+                                                             alignerAndTumorToStatisticsDerivedFileType[aligner][tumor], alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna-statistics.txt",
+                                                             c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_statictics_file_size, (c, v) => c.realignments[aligner][tumor].dna_statictics_file_size = v));
+
+                } // AddRealigner
+
+                void AddVariantCaller(ASETools.Aligner aligner, bool tumor, ASETools.VariantCaller variantCaller)
+                {
+                    derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " " + variantCallerName[variantCaller] + " VCF", c => c.realignments[aligner][tumor].variantCalls[variantCaller].vcf_filename,
+                                         (c, v) => c.realignments[aligner][tumor].variantCalls[variantCaller].vcf_filename = v,
+                                         alignerToVCFDerivedFileType[aligner], vcfExtensionByAlignerAndVariantCaller[aligner][variantCaller],
+                                         c => c.normal_dna_file_id, c => c.realignments[aligner][tumor].variantCalls[variantCaller].vcf_file_size,
+                                         (c, v) => c.realignments[aligner][tumor].variantCalls[variantCaller].vcf_file_size = v));
+                } // AddVariantCaller
+
                 public TypeAndFieldInformationInitializer()
                 {
                     downloadableFileTypes = new List<DownloadableFileType>();
@@ -2072,17 +2107,7 @@ namespace ASELib
                     {
                         foreach (var tumor in BothBools)
                         {
-                            derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " DNA", c => c.realignments[aligner][tumor].dna_filename, (c, v) => c.realignments[aligner][tumor].dna_filename = v,
-                                                                     alignerAndTumorToDerivedFileType[aligner][tumor], alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna.bam",
-                                                                     c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_file_size, (c, v) => c.realignments[aligner][tumor].dna_file_size = v));
-
-                            derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " DNA BAI", c => c.realignments[aligner][tumor].dna_bai_filename, (c, v) => c.realignments[aligner][tumor].dna_bai_filename = v,
-                                                                     alignerAndTumorToBaiDerivedFileType[aligner][tumor], alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna.bam.bai",
-                                                                     c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_bai_file_size, (c, v) => c.realignments[aligner][tumor].dna_bai_file_size = v));
-
-                            derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " DNA Statistics", c => c.realignments[aligner][tumor].dna_statictics_filename, (c, v) => c.realignments[aligner][tumor].dna_statictics_filename = v,
-                                                                     alignerAndTumorToStatisticsDerivedFileType[aligner][tumor], alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna-statistics.txt",
-                                                                     c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_statictics_file_size, (c, v) => c.realignments[aligner][tumor].dna_statictics_file_size = v));
+                            AddRealigner(aligner, tumor);
                         }
 
                         //
@@ -2090,8 +2115,7 @@ namespace ASELib
                         //
                         foreach (var variantCaller in EnumUtil.GetValues<VariantCaller>()) 
                         {
-                            derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned Normal VCF", c => c.realignments[aligner][false].dna_statictics_filename, (c, v) => c.realignments[aligner][false].dna_statictics_filename = v,
-                                                                     alignerToVCFDerivedFileType[aligner], vcfExtensionByAligner[aligner]
+                            AddVariantCaller(aligner, false, variantCaller);
                         }
                     }
 
@@ -3941,6 +3965,7 @@ namespace ASELib
 
         public static Dictionary<Aligner, Dictionary<VariantCaller, string>> vcfExtensionByAlignerAndVariantCaller = null;
         public static Dictionary<Aligner, string> alignerName = null;
+        public static Dictionary<VariantCaller, string> variantCallerName = null;
 
         public static Dictionary<Aligner, ASETools.Case.ColumnGetter> getRealignedNormalDNAByAligner;
         public static Dictionary<Aligner, ASETools.Case.ColumnGetter> getRealignedTumorDNAByAligner;
