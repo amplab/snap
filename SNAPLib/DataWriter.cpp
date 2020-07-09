@@ -597,8 +597,8 @@ public:
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch)
     {
-        size_t sa = a->onNextBatch(writer, offset, bytes);
-        size_t sb = b->onNextBatch(writer, offset, sa);
+        size_t sa = a->onNextBatch(writer, offset, bytes, lastBatch);
+        size_t sb = b->onNextBatch(writer, offset, sa, lastBatch);
         return sb;
     }
 

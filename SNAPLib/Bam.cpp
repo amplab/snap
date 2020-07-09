@@ -2035,7 +2035,7 @@ BAMFilter::onNextBatch(
     // Nothing to write
     //
     if (bytes == 0) {
-        return 0;
+        return bytes;
     }
 
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
@@ -2393,7 +2393,7 @@ class BAMDupMarkFilter : public BAMFilter
 public:
     BAMDupMarkFilter(const Genome* i_genome) :
         BAMFilter(DataWriter::DupMarkFilter),
-        genome(i_genome), runOffset(0), runLocation(InvalidGenomeLocation), runCount(0), mates(), fragments()
+        genome(i_genome), runOffset(0), runLocation(InvalidGenomeLocation), prevRunLocation(InvalidGenomeLocation), runCount(0), mates(), fragments()
     {
     }
 
@@ -2430,6 +2430,7 @@ private:
     const Genome* genome;
     size_t runOffset; // offset in file of first read in run
     GenomeLocation runLocation; // location in genome
+    GenomeLocation prevRunLocation; // location in genome
     int runCount; // number of aligned reads
 
     typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,70,0,-2> MateMap;
@@ -2453,7 +2454,7 @@ BAMDupMarkFilter::onNextBatch(
     // Nothing to write
     //
     if (bytes == 0) {
-        return 0;
+        return bytes;
     }
 
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
@@ -2470,6 +2471,7 @@ BAMDupMarkFilter::onNextBatch(
     runOffset = 0;
     runLocation = InvalidGenomeLocation;
     BAMAlignment* lastBam = NULL;
+    BAMAlignment* firstBam = NULL;
 
     for (size_t i = 0; i < offsets.size(); i = next_i) {
         lastBam = (BAMAlignment*) (currentBuffer + offsets[i]);
@@ -2487,6 +2489,7 @@ BAMDupMarkFilter::onNextBatch(
             runOffset = currentOffset + offsets[i];
             unfinishedRunStart = i;
             next_i = i + 1;
+            firstBam = (BAMAlignment*)(currentBuffer + offsets[i]);
         }
         else {
             // 
@@ -2527,21 +2530,24 @@ BAMDupMarkFilter::onNextBatch(
     //
     // Run could potentially span multiple buffers
     //
-    if (runCount > 0) {
+    if (runCount > 1) { // runs of size <= 1 cannot have duplicates
         if (offsets[unfinishedRunStart] == 0) { // we did not yet mark duplicates for this run
             //
-            // If this is the last buffer, simply mark all duplicates in the run we currently have
+            // If this is the last buffer or we have a different run from what we have seen before, 
+            // simply mark all duplicates in the run we currently have
             //
-            if (lastBatch) {
+            if (lastBatch || (runLocation != prevRunLocation)) {
                 dupMarkBatch(lastBam, currentOffset + offsets[offsets.size() - 1]);
                 offsets.clear();
             }
             else {
                 //
-                // fixme: If the whole buffer is used by the run, try with a larger buffer size
+                // fixme: If the whole buffer is used and we still haven't finished marking the current run, try with a larger buffer size
                 //
-                WriteErrorMessage("\nRun with size %d is too large for MarkDuplicates buffer. Last record at byte %llu with size %llu bytes. Buffer size: %llu bytes. Try increasing -sm.\n", runCount, offsets[offsets.size() - 1], lastBam->size(), currentBufferBytes);
-                soft_exit(1);
+                dupMarkBatch(lastBam, currentOffset + offsets[offsets.size() - 1]);
+                WriteErrorMessage("\nWarning: Run with size %d is too large for MarkDuplicates buffer. Some duplicates may be missed. Try increasing -sm. First record position %d. Buffer size: %llu bytes. Last record at byte %llu with position %d and size %llu bytes\n", runCount, firstBam->pos, currentBufferBytes, offsets[offsets.size() - 1], lastBam->pos, lastBam->size());
+                offsets.clear();
+                // soft_exit(1);
             }
         }
         else {
@@ -2559,11 +2565,12 @@ BAMDupMarkFilter::onNextBatch(
             }
             nextBatchOffsets.clear();
         }
-    } // runcount > 0
+    } // runcount > 1
     else {
         offsets.clear();
     }
 
+    prevRunLocation = runLocation;
     currentWriter = NULL;
     currentBuffer = NULL;
     currentBufferBytes = 0;
@@ -2595,6 +2602,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         BAMAlignAux* aux = record->firstAux();
         entry.mateQual = entryFragment.mateQual = -1;
         entry.libraryNameHash = entryFragment.libraryNameHash = 0;
+        bool foundLibraryTag = false;
         
         //
         // Extract QS (mate quality score) and LB fields from BAM aux tags
@@ -2603,7 +2611,8 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             if (aux->tag[0] == 'Q' && aux->tag[1] == 'S' && aux->val_type == 'i') {
                 entry.mateQual = entryFragment.mateQual = *(_int32*)aux->value();
             }
-            if (aux->tag[0] == 'L' && aux->tag[1] == 'B' && aux->val_type == 'Z') {
+            if (!foundLibraryTag && aux->tag[0] == 'L' && aux->tag[1] == 'B' && aux->val_type == 'Z') {
+                foundLibraryTag = true;
                 entry.libraryNameHash = entryFragment.libraryNameHash = DupMarkEntry::hash((char*)aux->value());
             }
             aux = aux->next();
@@ -2639,8 +2648,8 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         BAMAlignment* record = getRead(offset);
         _ASSERT(record->refID >= -1 && record->refID < genome->getNumContigs()); // simple sanity check
         
-        // skip unmapped reads
-        if ((record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
+        // skip unmapped reads and reads with unmapped mates
+        if (((record->FLAG & SAM_UNMAPPED) != 0) || (record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
 
         // adjacent entries with different library names
         if ((i == run.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
@@ -2770,7 +2779,6 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
 
     // go back and adjust flags
     for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
-        
         if ((i == run.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
             (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
             continue;
@@ -2782,7 +2790,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
 
         offset = i->runOffset;
         BAMAlignment* record = getRead(offset);
-        if ((record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
+
+        // skip unmapped reads and reads with unmapped mates
+        if (((record->FLAG & SAM_UNMAPPED) != 0) || (record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
+
         BAMAlignment* nextRecord[2] = {NULL, NULL};
         if (i != run.begin() && ((i->mateInfo) == ((i - 1)->mateInfo))) {
             nextRecord[0] = getRead((i - 1)->runOffset);
@@ -2816,10 +2827,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         }
         DuplicateMateInfo* minfo = &m->value;
         if (!readIdsMatch(minfo->getBestReadId(), record->read_name(), record->l_read_name - 1)) {
-            // Picard markDuplicates will not mark unmapped reads
-            if ((record->FLAG & SAM_UNMAPPED) == 0) {
-                record->FLAG |= SAM_DUPLICATE;
-            }        
+            record->FLAG |= SAM_DUPLICATE;
         }
     }
 
@@ -2838,7 +2846,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
 
         offset = i->runOffset;
         BAMAlignment* record = getRead(offset);
-        if ((record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
+
+        // skip unmapped reads and reads with unmapped mates
+        if (((record->FLAG & SAM_UNMAPPED) != 0) || (record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
+
         BAMAlignment* nextRecord[2] = {NULL, NULL};
         if (i != run.begin() && ((i->mateInfo) == ((i - 1)->mateInfo))) {
             nextRecord[0] = getRead((i - 1)->runOffset);
@@ -2913,10 +2924,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         }
         DuplicateMateInfo* info = &f->value;
         if (!readIdsMatch(info->getBestReadId(), record->read_name(), record->l_read_name - 1)) {
-            // Picard markDuplicates will not mark unmapped reads
-            if ((record->FLAG & SAM_UNMAPPED) == 0) {
-                record->FLAG |= SAM_DUPLICATE;
-            }
+            record->FLAG |= SAM_DUPLICATE;
         }
     }
 
@@ -2935,8 +2943,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             continue;
         }
 
-        if ((record->FLAG & SAM_UNMAPPED) != 0 || (record->FLAG & SAM_NEXT_UNMAPPED) == 0) {
-            // skip unmapped reads and reads with mapped mates
+        //
+        // Skip unmapped reads and reads with mapped mates
+        //
+        if ((record->FLAG & SAM_UNMAPPED) != 0 || ((record->FLAG & SAM_MULTI_SEGMENT) != 0 && (record->FLAG & SAM_NEXT_UNMAPPED) == 0)) {
             continue;
         }
 
