@@ -1520,13 +1520,13 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    if (stateOfTheWorld.containsDerivedFile(case_.case_id, case_.normal_dna_file_id, ASETools.alignerToVCFDerivedFileType[aligner]))
+                    if (case_.realignments[aligner][false].variantCalls[ASETools.VariantCaller.Freebayes].vcf_filename != "")
                     {
                         nDone++;
                         continue;
                     }
 
-                    if (!stateOfTheWorld.containsDerivedFile(case_.case_id, case_.normal_dna_file_id, ASETools.alignerToRealignedNormalDerivedFileType[aligner]))
+                    if (case_.realignments[aligner][false].dna_filename == "" || case_.realignments[aligner][false].dna_bai_filename == "")
                     {
                         nWaitingForPrerequisites++;
                         continue;
@@ -5220,7 +5220,7 @@ namespace ASEProcessManager
                         linuxScript.Write("bcftools -o " + localOutputFile + " " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".*.g." + ASETools.alignerName[aligner] + ".vcf.gz\n");
 
                         CopyFilesOutLinux(linuxScript, localOutputFile, ASETools.GetDirectoryFromPathname(sourceDNAFilename));
-                        linuxScript.Write("rm -rf " + tempDirectory);
+                        linuxScript.Write("rm -rf " + tempDirectory + "\n");
                     } // If we're running this one
                 } // for each case
             } // EvaluateStage
