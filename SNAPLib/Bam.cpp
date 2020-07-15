@@ -2603,16 +2603,17 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         entry.mateQual = entryFragment.mateQual = -1;
         entry.libraryNameHash = entryFragment.libraryNameHash = 0;
         bool foundLibraryTag = false;
-        
+
         //
         // Extract QS (mate quality score) and LB fields from BAM aux tags
         //
-        while (aux != NULL && aux < record->endAux()) {
+        while (aux != NULL && aux->val_type != NULL && aux < record->endAux()) {
             if (aux->tag[0] == 'Q' && aux->tag[1] == 'S' && aux->val_type == 'i') {
                 entry.mateQual = entryFragment.mateQual = *(_int32*)aux->value();
             }
             if (!foundLibraryTag && aux->tag[0] == 'L' && aux->tag[1] == 'B' && aux->val_type == 'Z') {
                 foundLibraryTag = true;
+                // fixme: conflicts from hashing library names to the same value
                 entry.libraryNameHash = entryFragment.libraryNameHash = DupMarkEntry::hash((char*)aux->value());
             }
             aux = aux->next();
