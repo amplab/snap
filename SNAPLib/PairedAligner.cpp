@@ -264,7 +264,7 @@ void PairedAlignerOptions::usageMessage()
         "  -N   max seeds when falling back to the single-end mode when doing paired-end. Default: %d\n"
         "  -en  min edit distance for a read aligned as non-ALT by the paired-end aligner to be reconsidered\n"
         "       for a better alignment by the single-end aligner. Default: %d\n"
-        "  -ea  min total edit distance by which a read pair aligned as ALT needs to be better than non-ALT alignments\n"
+        "  -es  min total edit distance by which a read pair aligned as ALT needs to be better than non-ALT alignments\n"
         "       to skip single-end realignment. Default: %d\n"
         "  -eg  min affine gap score improvement needed for single-end alignments to be considered over\n"
         "       paired-end alignments. Default: %d\n"
@@ -334,7 +334,7 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
             n += 1;
             return true;
         }
-    } else if (strcmp(argv[n], "-ea") == 0) {
+    } else if (strcmp(argv[n], "-es") == 0) {
         if (n + 1 < argc) {
             minScoreGapRealignmentALT = atoi(argv[n+1]);
             n += 1;
