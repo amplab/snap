@@ -41,6 +41,17 @@ namespace ASELib
             alignerName.Add(Aligner.BWA, "BWA");
             alignerName.Add(Aligner.Bowtie, "Bowtie");
 
+            foreach (var alignerA in EnumUtil.GetValues<Aligner>())
+            {
+                foreach (var alignerB in EnumUtil.GetValues<Aligner>())
+                {
+                    if (alignerA < alignerB)
+                    {
+                        alignerPairs.Add(new AlignerPair(alignerA, alignerB));
+                    }
+                }
+            }
+
             variantCallerName = new Dictionary<VariantCaller, string>();
             variantCallerName.Add(VariantCaller.Freebayes, "Freebayes");
             variantCallerName.Add(VariantCaller.HaplotypeCaller, "HaplotypeCaller");
@@ -55,12 +66,10 @@ namespace ASELib
             setRealignedTumorBaiByAligner = new Dictionary<Aligner, Case.ColumnSetter>();
             alignerAndTumorToBamDerivedFileType = new Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>>();
             alignerAndTumorToBaiDerivedFileType = new Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>>();
-            alignerAndTumorToBamNoRGDerivedFileType = new Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>>();
-            alignerAndTumorToBaiNoRGDerivedFileType = new Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>>();
 
             alignerAndTumorToStatisticsDerivedFileType = new Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>>();
-            vcfExtensionByAlignerAndVariantCaller = new Dictionary<Aligner, Dictionary<VariantCaller, string>>();
-            alignerAndVariantCallerToVCFDerivedFileType = new Dictionary<Aligner, Dictionary<VariantCaller, DerivedFile.Type>>();
+            vcfExtensionByAlignerTumorAndVariantCaller = new Dictionary<Aligner, Dictionary<bool, Dictionary<VariantCaller, string>>>();
+            alignerTumorAndVariantCallerToVCFDerivedFileType = new Dictionary<Aligner, Dictionary<bool, Dictionary<VariantCaller, DerivedFile.Type>>>();
 
             foreach (var aligner_ in EnumUtil.GetValues<Aligner>())
             {
@@ -79,11 +88,18 @@ namespace ASELib
                 alignerAndTumorToBamDerivedFileType.Add(aligner, new Dictionary<bool, DerivedFile.Type>());
                 alignerAndTumorToBaiDerivedFileType.Add(aligner, new Dictionary<bool, DerivedFile.Type>());
                 alignerAndTumorToStatisticsDerivedFileType.Add(aligner, new Dictionary<bool, DerivedFile.Type>());
-                alignerAndTumorToBamNoRGDerivedFileType.Add(aligner, new Dictionary<bool, DerivedFile.Type>());
-                alignerAndTumorToBaiNoRGDerivedFileType.Add(aligner, new Dictionary<bool, DerivedFile.Type>());
 
-                vcfExtensionByAlignerAndVariantCaller.Add(aligner, new Dictionary<VariantCaller, string>());
-                alignerAndVariantCallerToVCFDerivedFileType.Add(aligner, new Dictionary<VariantCaller, DerivedFile.Type>());
+                alignerTumorAndVariantCallerToVCFDerivedFileType.Add(aligner, new Dictionary<bool, Dictionary<VariantCaller, DerivedFile.Type>>());
+                vcfExtensionByAlignerTumorAndVariantCaller.Add(aligner, new Dictionary<bool, Dictionary<VariantCaller, string>>());
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    vcfExtensionByAlignerTumorAndVariantCaller[aligner].Add(tumor, new Dictionary<VariantCaller, string>());
+                    alignerTumorAndVariantCallerToVCFDerivedFileType[aligner].Add(tumor, new Dictionary<VariantCaller, DerivedFile.Type>());
+                    foreach (var variantCaller in EnumUtil.GetValues<VariantCaller>())
+                    {
+                        vcfExtensionByAlignerTumorAndVariantCaller[aligner][tumor].Add(variantCaller, "." + alignerName[aligner] + "." + tumorToString[tumor] + "." + variantCallerName[variantCaller] + ".vcf");
+                    }
+                }
             }
 
             alignerAndTumorToBamDerivedFileType[Aligner.SNAP].Add(false, DerivedFile.Type.SnapRealignedNormalDNA);
@@ -107,23 +123,6 @@ namespace ASELib
             alignerAndTumorToStatisticsDerivedFileType[Aligner.Bowtie].Add(false, DerivedFile.Type.BowtieRealignedNormalDNAStatictics);
             alignerAndTumorToStatisticsDerivedFileType[Aligner.Bowtie].Add(true, DerivedFile.Type.BowtieRealignedTumorDNAStatictics);
 
-            alignerAndTumorToBamNoRGDerivedFileType[Aligner.BWA].Add(false, DerivedFile.Type.BWARealignedNormalDNABamNoRG);
-            alignerAndTumorToBamNoRGDerivedFileType[Aligner.BWA].Add(true, DerivedFile.Type.BWARealignedTumorDNABamNoRG);
-            alignerAndTumorToBamNoRGDerivedFileType[Aligner.Bowtie].Add(false, DerivedFile.Type.BowtieRealignedNormalDNABamNoRG);
-            alignerAndTumorToBamNoRGDerivedFileType[Aligner.Bowtie].Add(true, DerivedFile.Type.BowtieRealignedTumorDNABamNoRG);
-
-            alignerAndTumorToBaiNoRGDerivedFileType[Aligner.BWA].Add(false, DerivedFile.Type.BWARealignedNormalDNABaiNoRG);
-            alignerAndTumorToBaiNoRGDerivedFileType[Aligner.BWA].Add(true, DerivedFile.Type.BWARealignedTumorDNABaiNoRG);
-            alignerAndTumorToBaiNoRGDerivedFileType[Aligner.Bowtie].Add(false, DerivedFile.Type.BowtieRealignedNormalDNABaiNoRG);
-            alignerAndTumorToBaiNoRGDerivedFileType[Aligner.Bowtie].Add(true, DerivedFile.Type.BowtieRealignedTumorDNABaiNoRG);
-
-            vcfExtensionByAlignerAndVariantCaller[Aligner.BWA].Add(VariantCaller.Freebayes, bwaFreebayesVCFExtension);
-            vcfExtensionByAlignerAndVariantCaller[Aligner.Bowtie].Add(VariantCaller.Freebayes, bowtieFreebayesVCFExtension);
-            vcfExtensionByAlignerAndVariantCaller[Aligner.SNAP].Add(VariantCaller.Freebayes, snapFreebayesVCFExtension); 
-            vcfExtensionByAlignerAndVariantCaller[Aligner.BWA].Add(VariantCaller.HaplotypeCaller, bwaHaplotypeCallerVCFExtension);
-            vcfExtensionByAlignerAndVariantCaller[Aligner.Bowtie].Add(VariantCaller.HaplotypeCaller, bowtieHaplotypeCallerVCFExtension);
-            vcfExtensionByAlignerAndVariantCaller[Aligner.SNAP].Add(VariantCaller.HaplotypeCaller, snapHaplotypeCallerVCFExtension);
-
             getRealignedDNAByTumorAndAligner = new Dictionary<bool, Dictionary<Aligner, Case.ColumnGetter>>();
             getRealignedDNAByTumorAndAligner.Add(true, getRealignedTumorDNAByAligner);
             getRealignedDNAByTumorAndAligner.Add(false, getRealignedNormalDNAByAligner);
@@ -140,12 +139,19 @@ namespace ASELib
             setRealignedBaiByTumorAndAligner.Add(true, setRealignedTumorBaiByAligner);
             setRealignedBaiByTumorAndAligner.Add(false, setRealignedNormalBaiByAligner);
 
-            alignerAndVariantCallerToVCFDerivedFileType[Aligner.Bowtie].Add(VariantCaller.Freebayes, DerivedFile.Type.BowtieFreebayesVCF);
-            alignerAndVariantCallerToVCFDerivedFileType[Aligner.BWA].Add(VariantCaller.Freebayes, DerivedFile.Type.BWAFreebayesVCF);
-            alignerAndVariantCallerToVCFDerivedFileType[Aligner.SNAP].Add(VariantCaller.Freebayes, DerivedFile.Type.SNAPFreebayesVCF);
-            alignerAndVariantCallerToVCFDerivedFileType[Aligner.Bowtie].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.BowtieHaplotypeCallerVCF);
-            alignerAndVariantCallerToVCFDerivedFileType[Aligner.BWA].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.BWAHaplotypeCallerVCF);
-            alignerAndVariantCallerToVCFDerivedFileType[Aligner.SNAP].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.SNAPHaplotypeCallerVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.Bowtie][false].Add(VariantCaller.Freebayes, DerivedFile.Type.BowtieNormalFreebayesVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.BWA][false].Add(VariantCaller.Freebayes, DerivedFile.Type.BWANormalFreebayesVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.SNAP][false].Add(VariantCaller.Freebayes, DerivedFile.Type.SNAPNormalFreebayesVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.Bowtie][false].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.BowtieNormalHaplotypeCallerVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.BWA][false].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.BWANormalHaplotypeCallerVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.SNAP][false].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.SNAPNormalHaplotypeCallerVCF); 
+            
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.Bowtie][true].Add(VariantCaller.Freebayes, DerivedFile.Type.BowtieTumorFreebayesVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.BWA][true].Add(VariantCaller.Freebayes, DerivedFile.Type.BWATumorFreebayesVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.SNAP][true].Add(VariantCaller.Freebayes, DerivedFile.Type.SNAPTumorFreebayesVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.Bowtie][true].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.BowtieTumorHaplotypeCallerVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.BWA][true].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.BWATumorHaplotypeCallerVCF);
+            alignerTumorAndVariantCallerToVCFDerivedFileType[Aligner.SNAP][true].Add(VariantCaller.HaplotypeCaller, DerivedFile.Type.SNAPTumorHaplotypeCallerVCF);
 
             alignerToRealignedNormalDerivedFileType = new Dictionary<Aligner, DerivedFile.Type>();
             alignerToRealignedNormalDerivedFileType.Add(Aligner.SNAP, DerivedFile.Type.SnapRealignedNormalDNA);
@@ -156,6 +162,33 @@ namespace ASELib
             getDNAFileIdByTumor = new Dictionary<bool, Case.ColumnGetter>();
             getDNAFileIdByTumor.Add(true, _ => _.tumor_dna_file_id);
             getDNAFileIdByTumor.Add(false, _ => _.normal_dna_file_id);
+
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller = new Dictionary<AlignerPair, Dictionary<bool, Dictionary<VariantCaller, DerivedFile.Type>>>();
+            foreach (var alignerPair in alignerPairs)
+            {
+                concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller.Add(alignerPair, new Dictionary<bool, Dictionary<VariantCaller, DerivedFile.Type>>());
+
+                foreach (var tumor in BothBools)
+                {
+                    concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[alignerPair].Add(tumor, new Dictionary<VariantCaller, DerivedFile.Type>());
+                }
+            }
+
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.SNAP, Aligner.BWA)][true][VariantCaller.HaplotypeCaller] = DerivedFile.Type.SnapBWATumorHaplotypeCallerConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.SNAP, Aligner.BWA)][true][VariantCaller.Freebayes] = DerivedFile.Type.SnapBWATumorFreebayesConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.SNAP, Aligner.BWA)][false][VariantCaller.HaplotypeCaller] = DerivedFile.Type.SnapBWANormalHaplotypeCallerConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.SNAP, Aligner.BWA)][false][VariantCaller.Freebayes] = DerivedFile.Type.SnapBWANormalFreebayesConcordanceTarball;
+
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.SNAP, Aligner.Bowtie)][true][VariantCaller.HaplotypeCaller] = DerivedFile.Type.SnapBowtieTumorHaplotypeCallerConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.SNAP, Aligner.Bowtie)][true][VariantCaller.Freebayes] = DerivedFile.Type.SnapBowtieTumorFreebayesConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.SNAP, Aligner.Bowtie)][false][VariantCaller.HaplotypeCaller] = DerivedFile.Type.SnapBowtieNormalHaplotypeCallerConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.SNAP, Aligner.Bowtie)][false][VariantCaller.Freebayes] = DerivedFile.Type.SnapBowtieNormalFreebayesConcordanceTarball;
+            
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.BWA, Aligner.Bowtie)][true][VariantCaller.HaplotypeCaller] = DerivedFile.Type.BWABowtieTumorHaplotypeCallerConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.BWA, Aligner.Bowtie)][true][VariantCaller.Freebayes] = DerivedFile.Type.BWABowtieTumorFreebayesConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.BWA, Aligner.Bowtie)][false][VariantCaller.HaplotypeCaller] = DerivedFile.Type.BWABowtieNormalHaplotypeCallerConcordanceTarball;
+            concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[new AlignerPair(Aligner.BWA, Aligner.Bowtie)][false][VariantCaller.Freebayes] = DerivedFile.Type.BWABowtieNormalFreebayesConcordanceTarball;
+
         }
 
         public const string urlPrefix = @"https://api.gdc.cancer.gov/";
@@ -1449,8 +1482,6 @@ namespace ASELib
         {
             public string dna_filename = "";
             public string dna_bai_filename = "";
-            public string dna_no_rg_filename = "";
-            public string dna_bai_no_rg_filename = "";
             public string dna_statistics_filename = "";
             public Dictionary<VariantCaller, VariantCallFiles> variantCalls = new Dictionary<VariantCaller, VariantCallFiles>();
 
@@ -1464,9 +1495,14 @@ namespace ASELib
 
             public long dna_file_size = 0;
             public long dna_bai_file_size = 0;
-            public long dna_no_rg_file_size = 0;
-            public long dna_bai_no_rg_file_size = 0;
             public long dna_statistics_file_size = 0;
+        }
+
+        public class ConcordanceFiles
+        {
+            public string concordance_tarball_filename = "";
+
+            public long concordance_tarball_size = 0;
         }
 
         //
@@ -1483,6 +1519,20 @@ namespace ASELib
                     foreach (var tumor in BothBools)
                     {
                         realignments[aligner].Add(tumor, new RealignmentFiles());
+                    }
+                }
+
+                foreach (var alignerPair in alignerPairs)
+                {
+                    concordance.Add(alignerPair, new Dictionary<VariantCaller, Dictionary<bool, ConcordanceFiles>>());
+                    foreach (var variantCaller in EnumUtil.GetValues<VariantCaller>())
+                    {
+                        concordance[alignerPair].Add(variantCaller, new Dictionary<bool, ConcordanceFiles>());
+
+                        foreach (var tumor in BothBools)
+                        {
+                            concordance[alignerPair][variantCaller].Add(tumor, new ConcordanceFiles());
+                        }
                     }
                 }
             } // ctor
@@ -1611,6 +1661,7 @@ namespace ASELib
             public string read_statictics_filename = "";
 
             public Dictionary<Aligner, Dictionary<bool, RealignmentFiles>> realignments = new Dictionary<Aligner, Dictionary<bool, RealignmentFiles>>();    // aligner->tumor->file set
+            public Dictionary<AlignerPair, Dictionary<VariantCaller, Dictionary<bool, ConcordanceFiles>>> concordance = new Dictionary<AlignerPair, Dictionary<VariantCaller, Dictionary<bool, ConcordanceFiles>>>();
 #if false
             public string snap_realigned_normal_dna_filename = "";
             public string snap_realigned_normal_dna_bai_filename = "";
@@ -1928,24 +1979,13 @@ namespace ASELib
                                                              alignerAndTumorToStatisticsDerivedFileType[aligner][tumor], "." + alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna-statistics.txt",
                                                              c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_statistics_file_size, (c, v) => c.realignments[aligner][tumor].dna_statistics_file_size = v));
 
-                    if (aligner != Aligner.SNAP)
-                    {
-                        derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " DNA No RG", c => c.realignments[aligner][tumor].dna_no_rg_filename, (c, v) => c.realignments[aligner][tumor].dna_no_rg_filename = v,
-                                         alignerAndTumorToBamNoRGDerivedFileType[aligner][tumor], "." + alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna.bam.no-rg",
-                                         c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_no_rg_file_size, (c, v) => c.realignments[aligner][tumor].dna_no_rg_file_size = v));
-
-                        derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " DNA BAI No RG", c => c.realignments[aligner][tumor].dna_bai_no_rg_filename, (c, v) => c.realignments[aligner][tumor].dna_bai_no_rg_filename = v,
-                                         alignerAndTumorToBaiNoRGDerivedFileType[aligner][tumor], "." + alignerName[aligner].ToLower() + "-" + tumorToString[tumor].ToLower() + "-dna.bam.bai.no-rg",
-                                         c => c.getDNAFileIdByTumor(tumor), c => c.realignments[aligner][tumor].dna_bai_no_rg_file_size, (c, v) => c.realignments[aligner][tumor].dna_bai_no_rg_file_size = v));
-                    }
-
                 } // AddRealigner
 
                 void AddVariantCaller(ASETools.Aligner aligner, bool tumor, ASETools.VariantCaller variantCaller)
                 {
                     derivedFileTypes.Add(new DerivedFileType(alignerName[aligner] + " Realigned " + tumorToString[tumor] + " " + variantCallerName[variantCaller] + " VCF", c => c.realignments[aligner][tumor].variantCalls[variantCaller].vcf_filename,
                                          (c, v) => c.realignments[aligner][tumor].variantCalls[variantCaller].vcf_filename = v,
-                                         alignerAndVariantCallerToVCFDerivedFileType[aligner][variantCaller], vcfExtensionByAlignerAndVariantCaller[aligner][variantCaller],
+                                         alignerTumorAndVariantCallerToVCFDerivedFileType[aligner][tumor][variantCaller], vcfExtensionByAlignerTumorAndVariantCaller[aligner][tumor][variantCaller],
                                          c => c.normal_dna_file_id, c => c.realignments[aligner][tumor].variantCalls[variantCaller].vcf_file_size,
                                          (c, v) => c.realignments[aligner][tumor].variantCalls[variantCaller].vcf_file_size = v));
                 } // AddVariantCaller
@@ -2144,16 +2184,34 @@ namespace ASELib
                         foreach (var tumor in BothBools)
                         {
                             AddRealigner(aligner, tumor);
-                        }
 
-                        //
-                        // We don't do tumor VCFs for now.
-                        //
-                        foreach (var variantCaller in EnumUtil.GetValues<VariantCaller>()) 
-                        {
-                            AddVariantCaller(aligner, false, variantCaller);
+                            foreach (var variantCaller in EnumUtil.GetValues<VariantCaller>())
+                            {
+                                AddVariantCaller(aligner, tumor, variantCaller);
+                            }
                         }
                     }
+
+                    foreach (var alignerPair in alignerPairs)
+                    {
+                        foreach (var tumor in BothBools)
+                        {
+                            foreach (var variantCaller in EnumUtil.GetValues<VariantCaller>())
+                            {
+                                //
+                                // We need to copy the loop indices to locals so that they do the right thing in lambdas.
+                                //
+                                var alignerPair_ = alignerPair;
+                                var tumor_ = tumor;
+                                var variantCaller_ = variantCaller;
+
+                                derivedFileTypes.Add(new DerivedFileType(alignerPair.ToString() + " " + variantCallerName[variantCaller] + " " + tumorToString[tumor] + " Concordance Tarball", c => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_filename,
+                                    (c,v) => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_filename = v, concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller[alignerPair][tumor][variantCaller],
+                                    "." + alignerPair + "-" + tumorToString[tumor] + "-" + variantCallerName[variantCaller] + ".tar", c => c.getDNAFileIdByTumor(tumor_),
+                                    c => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_size, (c, v) => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_size = v));
+                            } // variant caller
+                        } // tumor
+                    } // aligner pair
 
                     downloadableFileTypesByName = downloadableFileTypes.GroupByToDictUnique(_ => _.name);
                     derivedFileTypesByName = derivedFileTypes.GroupByToDictUnique(_ => _.name);
@@ -3857,18 +3915,6 @@ namespace ASELib
         public const string tumorDNAReadsAtTentativeSelectedVariantsExtension = ".tumor-dna-reads-at-tentative-selected-variants.txt";
         public const string tumorDNAReadsAtTentativeSelectedVariantsIndexExtension = ".tumor-dna-reads-at-tentative-selected-variants.txt.index";
         public const string vcfExtension = ".standard.vcf";
-        public const string snapFreebayesVCFExtension = ".SNAP.vcf";
-        public const string snapFreebayesVCFIdxExtension = ".SNAP.vcf.idx";
-        public const string bwaFreebayesVCFExtension = ".bwa.vcf";
-        public const string bwaFreebayesVCFIdxExtension = ".bwa.vcf.idx";
-        public const string bowtieFreebayesVCFExtension = ".bowtie.vcf";
-        public const string bowtieFreebayesVCFIdxExtension = ".bowtie.vcf.idx"; 
-        public const string snapHaplotypeCallerVCFExtension = ".SNAP.HaplotypeCaller.vcf";
-        public const string snapHaplotypeCallerVCFIdxExtension = ".SNAP.HaplotypeCaller.vcf.idx";
-        public const string bwaHaplotypeCallerVCFExtension = ".bwa.HaplotypeCaller.vcf";
-        public const string bwaHaplotypeCallerVCFIdxExtension = ".bwa.HaplotypeCaller.vcf.idx";
-        public const string bowtieHaplotypeCallerVCFExtension = ".bowtie.HaplotypeCaller.vcf";
-        public const string bowtieHaplotypeCallerVCFIdxExtension = ".bowtie.HaplotypeCaller.vcf.idx";
         public const string extractedMAFLinesExtension = ".extracted_maf_lines.txt";
         public const string allMAFLinesExtension = ".all_maf_lines";
         public const string tumorDNAGeneCoverageExtension = ".tumor_dna_gene_coverage.txt";
@@ -3994,12 +4040,36 @@ namespace ASELib
             SNAP, BWA, Bowtie
         };
 
+        public struct AlignerPair
+        {
+            public AlignerPair(Aligner firstAligner_, Aligner secondAligner_)
+            {
+                firstAligner = firstAligner_;
+                secondAligner = secondAligner_;
+
+                if (firstAligner >= secondAligner)
+                {
+                    throw new Exception("ASETools.AlignerPair: first aligner must be less than second aligner: " + firstAligner + ", " + secondAligner);
+                }
+            }
+
+            public override string ToString()
+            {
+                return alignerName[firstAligner] + "-" + alignerName[secondAligner];
+            }
+
+            public readonly Aligner firstAligner;
+            public readonly Aligner secondAligner;
+        } // AlignerPair
+
+        public static List<AlignerPair> alignerPairs = new List<AlignerPair>();
+
         public enum VariantCaller
         {
             Freebayes, HaplotypeCaller
         };
 
-        public static Dictionary<Aligner, Dictionary<VariantCaller, string>> vcfExtensionByAlignerAndVariantCaller = null;
+        public static Dictionary<Aligner, Dictionary<bool, Dictionary<VariantCaller, string>>> vcfExtensionByAlignerTumorAndVariantCaller = null;
         public static Dictionary<Aligner, string> alignerName = null;
         public static Dictionary<VariantCaller, string> variantCallerName = null;
 
@@ -4019,13 +4089,14 @@ namespace ASELib
         public static Dictionary<Aligner, ASETools.Case.ColumnSetter> setRealignedTumorBaiByAligner;
         public static Dictionary<bool, Dictionary<Aligner, ASETools.Case.ColumnSetter>> setRealignedBaiByTumorAndAligner;
 
-        public static Dictionary<Aligner, Dictionary<VariantCaller, DerivedFile.Type>> alignerAndVariantCallerToVCFDerivedFileType;
+        public static Dictionary<Aligner, Dictionary<bool, Dictionary<VariantCaller, DerivedFile.Type>>> alignerTumorAndVariantCallerToVCFDerivedFileType;
         public static Dictionary<Aligner, DerivedFile.Type> alignerToRealignedNormalDerivedFileType;
         public static Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>> alignerAndTumorToBamDerivedFileType;
         public static Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>> alignerAndTumorToBaiDerivedFileType;
         public static Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>> alignerAndTumorToStatisticsDerivedFileType;
-        public static Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>> alignerAndTumorToBamNoRGDerivedFileType;
-        public static Dictionary<Aligner, Dictionary<bool, DerivedFile.Type>> alignerAndTumorToBaiNoRGDerivedFileType;
+
+        public static Dictionary<AlignerPair, Dictionary<bool, Dictionary<VariantCaller, DerivedFile.Type>>> concordanceTarballDerivedFileTypeByAlignerPairTumorAndVariantCaller;
+
 
         public static Dictionary<Aligner, DerivedFile.Type> alignerToNormalRealignmentStaticticsFileType;
         public static Dictionary<Aligner, DerivedFile.Type> alignerToTumorRealignmentStaticticsFileType;
@@ -4078,12 +4149,16 @@ namespace ASELib
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, SelectedRegulatoryMAFLines, AnnotatedRegulatoryRegions, RegulatoryMutationsNearMutations,
                 AnnotatedGeneHancer, ExpressionByGene, TentativeAnnotatedSelectedVariants, IsoformReadCounts, CompressedVCF, CaseMetadata, TentativeASVsWithoutCNVs, VariantPhasing, VCFStatistics, ReadStatictics,
-                SnapRealignedNormalDNA, SnapRealignedNormalDNABai, SnapRealignedTumorDNA, SnapRealignedTumorDNABai, SnapRealignedNormalDNAStatictics, SnapRealignedTumorDNAStatictics, SNAPFreebayesVCF, SNAPFeeebayesVCFIdx, SNAPHaplotypeCallerVCF, SNAPHaplotypeCallerVCFIdx,
-                BowtieRealignedNormalDNA, BowtieRealignedNormalDNABai, BowtieRealignedTumorDNA, BowtieRealignedTumorDNABai, BowtieRealignedNormalDNAStatictics, BowtieRealignedTumorDNAStatictics, BowtieFreebayesVCF, BowtieFreebayesVCFIdx, BowtieHaplotypeCallerVCF, BowtieHaplotypeCallerVCFIdx,
-                    BowtieRealignedNormalDNABamNoRG, BowtieRealignedNormalDNABaiNoRG, BowtieRealignedTumorDNABamNoRG, BowtieRealignedTumorDNABaiNoRG,
-                BWARealignedNormalDNA, BWARealignedNormalDNABai, BWARealignedTumorDNA, BWARealignedTumorDNABai, BWARealignedNormalDNAStatictics, BWARealignedTumorDNAStatictics, BWAFreebayesVCF, BWAFreebayesVCFIdx, BWAHaplotypeCallerVCF, BWAHaplotypeCallerVCFIdx,
-                    BWARealignedNormalDNABamNoRG, BWARealignedNormalDNABaiNoRG, BWARealignedTumorDNABamNoRG, BWARealignedTumorDNABaiNoRG,
-                NormalDNAFastq, NormalDNAFastqSecondEnd, TumorDNAFastq, TumorDNAFastqSecondEnd,                
+                SnapRealignedNormalDNA, SnapRealignedNormalDNABai, SnapRealignedTumorDNA, SnapRealignedTumorDNABai, SnapRealignedNormalDNAStatictics, SnapRealignedTumorDNAStatictics, 
+                SNAPNormalFreebayesVCF, SNAPNormalFeeebayesVCFIdx, SNAPNormalHaplotypeCallerVCF, SNAPNormalHaplotypeCallerVCFIdx, SNAPTumorFreebayesVCF, SNAPTumorFeeebayesVCFIdx, SNAPTumorHaplotypeCallerVCF, SNAPTumorHaplotypeCallerVCFIdx,
+                BowtieRealignedNormalDNA, BowtieRealignedNormalDNABai, BowtieRealignedTumorDNA, BowtieRealignedTumorDNABai, BowtieRealignedNormalDNAStatictics, BowtieRealignedTumorDNAStatictics, 
+                BowtieNormalFreebayesVCF, BowtieNormalFreebayesVCFIdx, BowtieNormalHaplotypeCallerVCF, BowtieNormalHaplotypeCallerVCFIdx, BowtieTumorFreebayesVCF, BowtieTumorFreebayesVCFIdx, BowtieTumorHaplotypeCallerVCF, BowtieTumorHaplotypeCallerVCFIdx,
+                BWARealignedNormalDNA, BWARealignedNormalDNABai, BWARealignedTumorDNA, BWARealignedTumorDNABai, BWARealignedNormalDNAStatictics, BWARealignedTumorDNAStatictics, 
+                BWANormalFreebayesVCF, BWANormalFreebayesVCFIdx, BWANormalHaplotypeCallerVCF, BWANormalHaplotypeCallerVCFIdx, BWATumorFreebayesVCF, BWATumorFreebayesVCFIdx, BWATumorHaplotypeCallerVCF, BWATumorHaplotypeCallerVCFIdx,
+                NormalDNAFastq, NormalDNAFastqSecondEnd, TumorDNAFastq, TumorDNAFastqSecondEnd,
+                SnapBWATumorHaplotypeCallerConcordanceTarball, SnapBWATumorFreebayesConcordanceTarball, SnapBWANormalHaplotypeCallerConcordanceTarball, SnapBWANormalFreebayesConcordanceTarball,
+                SnapBowtieTumorHaplotypeCallerConcordanceTarball, SnapBowtieTumorFreebayesConcordanceTarball, SnapBowtieNormalHaplotypeCallerConcordanceTarball, SnapBowtieNormalFreebayesConcordanceTarball,
+                BWABowtieTumorHaplotypeCallerConcordanceTarball, BWABowtieTumorFreebayesConcordanceTarball, BWABowtieNormalHaplotypeCallerConcordanceTarball, BWABowtieNormalFreebayesConcordanceTarball,
             };
         } // DerivedFile
 

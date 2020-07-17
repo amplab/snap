@@ -9,6 +9,8 @@ using System.Diagnostics;
 using System.Runtime.Remoting.Messaging;
 using System.Linq.Expressions;
 using System.ComponentModel.Design;
+using System.Globalization;
+using System.Runtime.Remoting;
 
 namespace ASEProcessManager
 {
@@ -1533,7 +1535,7 @@ namespace ASEProcessManager
                     }
 
                     WriteFreebayesLinuxScript(linuxScript, case_.case_id, ASETools.getRealignedNormalDNAByAligner[aligner](case_), case_.normal_dna_file_id, 
-                        ASETools.vcfExtensionByAlignerAndVariantCaller[aligner][ASETools.VariantCaller.Freebayes],
+                        ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.Freebayes],  // Only normal for now
                         "~/genomes/GRCh38.d1.vd1-100k-regions", stateOfTheWorld.configuration.derivedFilesDirectory, "~/genomes/GRCh38.d1.vd1.fa");
 
                     nAddedToScript++;
@@ -4792,7 +4794,9 @@ namespace ASEProcessManager
                     return;
                 }
 
-                ASETools.Case.ColumnGetter getInputFilename = c => (tumor ? c.tumor_dna_filename : c.normal_dna_filename);
+                ASETools.Case.ColumnGetter getInputFilename = c => (tumor ? c.tumor_dna_fastq_filename : c.normal_dna_fastq_filename);
+                ASETools.Case.ColumnGetter getInputFilename2 = c => (tumor ? c.tumor_dna_fastq_second_end_filename : c.normal_dna_fastq_second_end_filename);
+                ASETools.Case.ColumnGetter getInputBAMFilename = c => (tumor ? c.tumor_dna_filename : c.normal_dna_filename);
                 ASETools.Case.ColumnGetter getFinishedFilename = c => c.realignments[ASETools.Aligner.SNAP][tumor].dna_filename;
                 ASETools.Case.ColumnGetter getBaiFilename = c => c.realignments[ASETools.Aligner.SNAP][tumor].dna_bai_filename;
                 ASETools.Case.ColumnGetter getRealignmentStatsFilename = c => c.realignments[ASETools.Aligner.SNAP][tumor].dna_statistics_filename;
@@ -4800,8 +4804,9 @@ namespace ASEProcessManager
                 foreach (var case_ in stateOfTheWorld.listOfCases)
                 {
                     var fileId = tumor ? case_.tumor_dna_file_id : case_.normal_dna_file_id;
+                    var bamMetadata = stateOfTheWorld.caseMetadata[case_.case_id].getBAMMetadata(tumor, true);
 
-                    if (getInputFilename(case_) == "" || case_.case_metadata_filename == "")
+                    if (getInputFilename(case_) == "" || case_.case_metadata_filename == "" || bamMetadata.isPaired && getInputFilename2(case_) == "")
                     {
                         nWaitingForPrerequisites++;
                     } 
@@ -4811,13 +4816,13 @@ namespace ASEProcessManager
                     } 
                     else
                     {
-                        var bamMetadata = stateOfTheWorld.caseMetadata[case_.case_id].getBAMMetadata(tumor, true);
 
                         nAddedToScript++;
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SnapTimer.exe " +
                             ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna-statistics.txt" + @" d:\temp\ " +
-                            (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 " + getInputFilename(case_) +
-                            @" -mrl 40 -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
+                            (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 -C-- " + getInputFilename(case_) +
+                            (bamMetadata.isPaired ? " " + getInputFilename2(case_) : "") +
+                            @" -mrl 40 -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputBAMFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
                             fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna.bam");
                     } // We thought we had everything
                 }// for each case 
@@ -5087,11 +5092,11 @@ namespace ASEProcessManager
                             case ASETools.Aligner.BWA:
                                 if (paired)
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/bwa-mem2 mem -Y -K 100000000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' -t 16 /mnt/d/sequence/indices/hg38-bwa-mem2/hg38.fa " + localInputFile + " " + localSecondInputFile + " -o " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScript.Write(@"/mnt/d/gdc/bin/bwa-mem2 mem -Y -K 100000000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' -t 16 /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bwa/Homo_Sapiens_assembly38.fasta " + localInputFile + " " + localSecondInputFile + " -o " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 else
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/bwa-mem2 mem -Y -K 100000000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' -t 16 /mnt/d/sequence/indices/hg38-bwa-mem2/hg38.fa " + localInputFile + " -o " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScript.Write(@"/mnt/d/gdc/bin/bwa-mem2 mem -Y -K 100000000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' -t 16 /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bwa/Homo_Sapiens_assembly38.fasta " + localInputFile + " -o " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
 
@@ -5099,11 +5104,11 @@ namespace ASEProcessManager
                         
                                 if (paired)
                                 {
-                                    linuxScript.Write("Add read group /mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/hg38-bowtie2/hg38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScript.Write("Add read group /mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bowtie2/Homo_Sapiens_assembly38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 else
                                 {
-                                    linuxScript.Write("Add read group /mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/hg38-bowtie2/hg38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScript.Write("Add read group /mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bowtie2/Homo_Sapiens_assembly38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
 
@@ -5111,7 +5116,7 @@ namespace ASEProcessManager
                                 throw new Exception("LinuxAlignerAlignmentStage: unrecognized aligner " + aligner);
                         
                         } // switch
-                        linuxScript.Write("date >> " + timingFilename + "\n"); // bowtie
+                        linuxScript.Write("date >> " + timingFilename + "\n"); // alignment
 
                         var unsortedSuffix = "." + ASETools.alignerName[aligner] + "_unsorted.bam";
                         var sortedSuffix = "." + ASETools.alignerName[aligner] + "_sorted.bam";
@@ -5201,23 +5206,24 @@ namespace ASEProcessManager
                     {
                         nAddedToScript++;
 
-                        string tempDirectory = @"/mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor) + "/";
+                        string tempDirectory = @"/mnt/d/temp/HaplotypeCallerTemp/" + case_.getDNAFileIdByTumor(tumor) + "/";
 
                         string localDNAFilename = tempDirectory + ASETools.GetFileNameFromPathname(sourceDNAFilename);
                         string localBAIFilename = tempDirectory + ASETools.GetFileNameFromPathname(sourceBAIFilename);
 
                         linuxScript.Write("mkdir " + tempDirectory + "\n");
-                        linuxScript.Write("rm " + tempDirectory + "/*\n");
+                        linuxScript.Write("rm " + tempDirectory + "*\n");
 
                         CopyFileInLinux(linuxScript, sourceDNAFilename, localDNAFilename);
                         CopyFileInLinux(linuxScript, sourceBAIFilename, localBAIFilename);
 
                         linuxScript.Write("cd ~/gatk\n");
-                        linuxScript.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j `ncores` ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/hg38.fa -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
-                            ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE\n");
+                        linuxScript.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j `nproc` ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
+                            ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE --dont-use-soft-clipped-bases true\n");
 
-                        string localOutputFile = @"/mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor) + ASETools.vcfExtensionByAlignerAndVariantCaller[aligner][ASETools.VariantCaller.HaplotypeCaller];
-                        linuxScript.Write("bcftools -o " + localOutputFile + " " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".*.g." + ASETools.alignerName[aligner] + ".vcf.gz\n");
+                        string localOutputFile = tempDirectory + case_.getDNAFileIdByTumor(tumor) + ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.HaplotypeCaller];  // Only normal for now
+
+                        linuxScript.Write("bcftools concat -o " + localOutputFile + " " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".*.g." + ASETools.alignerName[aligner] + ".vcf.gz\n");
 
                         CopyFilesOutLinux(linuxScript, localOutputFile, ASETools.GetDirectoryFromPathname(sourceDNAFilename));
                         linuxScript.Write("rm -rf " + tempDirectory + "\n");
@@ -5226,6 +5232,95 @@ namespace ASEProcessManager
             } // EvaluateStage
 
         } // HaplotypeCallerProcessingStage
+
+        class HappyProcessingStage : ProcessingStage
+        {
+            public HappyProcessingStage(ASETools.AlignerPair alignerPair_, ASETools.VariantCaller variantCaller_, bool tumor_)
+            {
+                alignerPair = alignerPair_;
+                variantCaller = variantCaller_;
+                tumor = tumor_;
+                firstAlignerName = ASETools.alignerName[alignerPair.firstAligner];
+                secondAlignerName = ASETools.alignerName[alignerPair.secondAligner];
+            }
+
+            public string GetStageName()
+            {
+                return alignerPair.ToString() + " " + ASETools.tumorToString[tumor] + " " + ASETools.variantCallerName[variantCaller] + " Concordance";
+            }
+
+            public bool NeedsCases()
+            {
+                return true;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                return true;
+            }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+                StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = null;
+                nDone = nAddedToScript = nWaitingForPrerequisites = 0;
+
+                foreach (var case_ in stateOfTheWorld.listOfCases)
+                {
+                    if (case_.concordance[alignerPair][variantCaller][tumor].concordance_tarball_filename != "")
+                    {
+                        nDone++;
+                    } else if (case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename == "" || case_.realignments[alignerPair.secondAligner][tumor].variantCalls[variantCaller].vcf_filename == "")
+                    {
+                        nWaitingForPrerequisites++;
+                    } else
+                    {
+                        nAddedToScript++;
+
+                        linuxScript.Write("date\n");
+                        string tempBase = @"/mnt/d/temp/HappyIntermediates/";
+
+                        linuxScript.Write("cd ~\n");
+                        linuxScript.Write("rm -rf " + tempBase + "*\n");
+                        linuxScript.Write("mkdir " + tempBase + "output\n");
+
+                        string alignersFile = tempBase + "aligners";
+
+                        linuxScript.Write("echo " + firstAlignerName + " > " + alignersFile + "\n");
+                        linuxScript.Write("echo " + secondAlignerName + " >> " + alignersFile + "\n");
+
+                        string firstVcfLocal = tempBase + firstAlignerName + ".vcf";
+                        string secondVcfLocal = tempBase + secondAlignerName + ".vcf";
+
+                        CopyFileInLinux(linuxScript, case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename, firstVcfLocal);
+                        CopyFileInLinux(linuxScript, case_.realignments[alignerPair.secondAligner][tumor].variantCalls[variantCaller].vcf_filename, secondVcfLocal);
+
+                        linuxScript.Write("cat " + alignersFile + " | parallel -j 2 bcftools annotate -x FORMAT/AD -O z -o " + tempBase + "{}.NoAd.vcf.gz " + tempBase + "{}.vcf\n");
+                        linuxScript.Write("cat " + alignersFile + " | parallel -j 2 bcftools view -c 1 -O z -o " + tempBase + "{}.NoAd.NoHomRef.vcf.gz " + tempBase + "{}.NoAd.vcf.gz\n");
+                        linuxScript.Write("cd ~/hap.py\n");
+                        linuxScript.Write("python hap.py-install/bin/hap.py " + tempBase + firstAlignerName + ".NoAd.NoHomRef.vcf.gz " + tempBase + secondAlignerName + ".NoAd.NoHomRef.vcf.gz -r /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -o " +
+                            tempBase + "output/" + case_.getDNAFileIdByTumor(tumor) + "." + alignerPair + ".concordance --engine=vcfeval\n");
+                        linuxScript.Write("cd " + tempBase + "output/\n");
+
+                        var tarballName = case_.getDNAFileIdByTumor(tumor) + "." + alignerPair + "-" + ASETools.tumorToString[tumor] + "-" + ASETools.variantCallerName[variantCaller] + ".tar";
+                        linuxScript.Write("tar cvf " + tempBase + tarballName + "\n");
+                        linuxScript.Write("cd ~\n");
+
+                        CopyFilesOutLinux(linuxScript, tempBase + tarballName, ASETools.GetDirectoryFromPathname(case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename));
+
+                        linuxScript.Write("rm -rf " + tempBase + "*\n");
+                    } // If we add it to the script.
+                } // foreach case
+
+            } // EvaluateStage
+
+            ASETools.AlignerPair alignerPair;
+            ASETools.VariantCaller variantCaller;
+            bool tumor;
+            string firstAlignerName;
+            string secondAlignerName;
+
+        } // HappyProcessingStage
 
 
         static void Main(string[] args)
@@ -5463,16 +5558,35 @@ namespace ASEProcessManager
             processingStages.Add(new ReadStaticticsProcessingStage());
             processingStages.Add(new miRNAProcessingStage());
             processingStages.Add(new SNAPRealignmentProcessingStage(false));
-            processingStages.Add(new SNAPRealignmentProcessingStage(true));
+            //processingStages.Add(new SNAPRealignmentProcessingStage(true));
             processingStages.Add(new SummarizeCaseMetadataProcessingStage());
             processingStages.Add(new ConsolodatedCaseMetadataProcessingStage());
             processingStages.Add(new FASTQGenerationProcessingStage(false));
             processingStages.Add(new FASTQGenerationProcessingStage(true));
-            processingStages.Add(new LinuxAlignerAlignmentStage(false, ASETools.Aligner.Bowtie));
-            processingStages.Add(new LinuxAlignerAlignmentStage(true, ASETools.Aligner.Bowtie));
-            processingStages.Add(new LinuxAlignerAlignmentStage(false, ASETools.Aligner.BWA));
+            foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
+            {
+                if (aligner == ASETools.Aligner.SNAP)
+                {
+                    // We run SNAP on Windows
+                    continue;
+                }
+
+                if (aligner != ASETools.Aligner.BWA) continue;  // For now
+
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    if (tumor)
+                    {
+                        continue;   // Not now
+                    }
+
+                    processingStages.Add(new LinuxAlignerAlignmentStage(tumor, aligner));
+                }
+            }
+
+
             // off until we have a final version of snap processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligners.SNAP));
-            processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligner.BWA));
+            //processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligner.BWA));
             //processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligner.Bowtie));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.SNAP));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.BWA));
@@ -5480,7 +5594,28 @@ namespace ASEProcessManager
 
             foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
             {
+                if (aligner == ASETools.Aligner.SNAP)
+                {
+                    //continue;   // Not yet
+                }
                 processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
+                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to majke this take a tumor parameter if we ever get there
+            }
+
+            foreach (var alignerPair in ASETools.alignerPairs)
+            {
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    if (tumor)
+                    {
+                        continue;   // Not now
+                    }
+
+                    foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
+                    {
+                        processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
+                    }
+                }
             }
 
             if (checkDependencies)

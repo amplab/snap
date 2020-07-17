@@ -41,15 +41,14 @@ namespace SnapTimer
             for (int i = 2; i < configuration.commandLineArgs.Count(); i++)
             {
                 var thisArg = configuration.commandLineArgs[i];
-                if (thisArg.EndsWith(".bam"))
+                if (thisArg.EndsWith(".bam") || thisArg.EndsWith(".fastq"))
                 {
                     if (outputArgIndex != i) 
                     {
                         initialInputFiles.Add(thisArg);
                         var tempFilename = tempDirectory + ASETools.GetFileNameFromPathname(thisArg);
                         snapArgs += tempFilename + " ";
-                        tempInputFiles.Add(tempFilename);
-                        
+                        tempInputFiles.Add(tempFilename);                        
                     }
                     else
                     {
@@ -142,7 +141,7 @@ namespace SnapTimer
 
             var stopTime = DateTime.Now;
 
-            if (snapOutput.Count() < 7)
+            if (snapOutput.Count() < 5)
             {
                 Console.WriteLine("Too few lines of output from snap.");
                 Console.WriteLine("Output: ");
@@ -188,7 +187,7 @@ namespace SnapTimer
 
             var sortTime = Convert.ToInt32(sortTimeString);
 
-            var headerLine = snapOutput[5];
+            var headerLine = snapOutput[3];
             if (!headerLine.Contains("Time in Aligner (s)") || !headerLine.Contains("Total Reads") || !headerLine.Contains("Reads/s") || 
                 !headerLine.Contains("Aligned, MAPQ >= 10") || !headerLine.Contains("Aligned, MAPQ < 10") || !headerLine.Contains("Unaligned") ||
                 !headerLine.Contains("Too Short/Too Many Ns"))
@@ -201,7 +200,7 @@ namespace SnapTimer
                 return;
             }
 
-            var statsLine = snapOutput[6];
+            var statsLine = snapOutput[4];
             int totalReads = ASETools.GetIntFromString(statsLine);
             int alignedHQ = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Aligned, MAPQ >= 10")));
             int alignedLQ = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Aligned, MAPQ < 10")));
