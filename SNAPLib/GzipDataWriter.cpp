@@ -318,7 +318,7 @@ GzipWriterFilter::onNextBatch(
     // Nothing to write
     //
     if (bytes == 0) {
-        return 0;
+        return bytes;
     }
 
     char* fromBuffer;

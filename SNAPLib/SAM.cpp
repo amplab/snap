@@ -169,7 +169,7 @@ SAMReader::readHeader(const char *fileName)
 		}
 		oldHeaderSize = headerSize;
 
-		if (!parseHeader(fileName, buffer, buffer + headerSize, context.genome, &headerSize, &context.headerMatchesIndex, &sawWholeHeader)) {
+		if (!parseHeader(fileName, buffer, buffer + headerSize, context.genome, &headerSize, &context.headerMatchesIndex, &sawWholeHeader, NULL, NULL, &numRGLines, &rgLines, &rgLineOffsets)) {
 			WriteErrorMessage("SAMReader: failed to parse header on '%s'\n", fileName);
 			soft_exit(1);
 		}
@@ -180,12 +180,15 @@ SAMReader::readHeader(const char *fileName)
     p[headerSize] = 0;
     context.header = p;
     context.headerBytes = context.headerLength = headerSize;
+    context.numRGLines = numRGLines;
+    context.rgLines = rgLines;
+    context.rgLineOffsets = rgLineOffsets;
 }
 
 SAMReader::SAMReader(
     DataReader* i_data,
     const ReaderContext& i_context)
-    : ReadReader(i_context), data(i_data), headerSize(-1), clipping(i_context.clipping)
+    : ReadReader(i_context), data(i_data), headerSize(-1), clipping(i_context.clipping), numRGLines(0), rgLines(NULL), rgLineOffsets(NULL)
 {
 }
 
@@ -582,7 +585,10 @@ SAMReader::getReadFromLine(
     size_t              *lineLength,
     unsigned *           flag,
     const char **        cigar,
-    ReadClippingType     clipping
+    ReadClippingType     clipping,
+    char                *rgLines,
+    int                  numRGLines,
+    size_t              *rgLineOffsets
     )
 {
     char *field[nSAMFields];
@@ -670,10 +676,30 @@ SAMReader::getReadFromLine(
                 n--;
             }
             read->setAuxiliaryData(field[OPT], n);
+            char* rgFromAux = NULL;
+            int rgFromAuxLen = 0;
             for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextFieldSeparator(p, field[OPT] + fieldLength[OPT])) {
                 if (strncmp(p, "RG:Z:", 5) == 0) {
+                    rgFromAux = p + 5;
+                    rgFromAuxLen = fieldLength[OPT - 5];
                     read->setReadGroup(READ_GROUP_FROM_AUX);
                     break;
+                }
+            }
+            // LB
+            if (rgLines != NULL) {
+                // get library for read group
+                for (int i = 0; i < numRGLines; i++) {
+                    char* rgStart = rgLines + rgLineOffsets[i];
+                    char* rgEnd = strchr(rgStart, '\t');
+                    int rgLen = (int)(rgEnd - rgStart);
+                    if (rgFromAuxLen != rgLen) continue;
+                    if (!strncmp(rgFromAux, rgStart, rgLen)) {
+                        char* lbStart = rgEnd + 1;
+                        char* lbEnd = strchr(lbStart, '\t');
+                        read->setLibrary(lbStart);
+                        read->setLibraryLength((int)(lbEnd - lbStart));
+                    }
                 }
             }
         }
@@ -865,7 +891,8 @@ SAMReader::getNextRead(
 
         size_t lineLength;
         read->setReadGroup(context.defaultReadGroup);
-        getReadFromLine(context.genome, buffer,buffer + bytes, read, alignmentResult, genomeLocation, direction, mapQ, &lineLength, flag, cigar, clipping);
+        getReadFromLine(context.genome, buffer,buffer + bytes, read, alignmentResult, genomeLocation, direction, mapQ, &lineLength, flag, cigar, clipping,
+            context.rgLines, context.numRGLines, context.rgLineOffsets);
         read->setBatch(data->getBatch());
         data->advance((newLine + 1) - buffer);
     } while ((context.ignoreSecondaryAlignments && ((*flag) & SAM_SECONDARY)) ||

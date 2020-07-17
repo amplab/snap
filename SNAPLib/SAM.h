@@ -132,7 +132,8 @@ protected:
 
         static void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
                         GenomeLocation *genomeLocation, Direction *direction, unsigned *mapQ, 
-                        size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
+                        size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping,
+                        char* rgLines = NULL, int numRGLines = 0, size_t* rgLineOffsets = NULL);
 
 
 private:
@@ -147,6 +148,10 @@ private:
         ReadClippingType    clipping;
 
         bool                didInitialSkip;   // Have we skipped to the beginning of the first SAM line?  We may start in the middle of one.
+
+        int                 numRGLines;
+        char*               rgLines;
+        size_t*             rgLineOffsets;
 
         friend class SAMFormat;
 };

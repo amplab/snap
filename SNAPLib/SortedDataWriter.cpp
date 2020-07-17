@@ -85,6 +85,7 @@ SortBlock::operator=(
     location = other.location;
     length = other.length;
     reader = other.reader;
+    dataReaderIsBuffer = other.dataReaderIsBuffer;
 #ifdef VALIDATE_SORT
 	minLocation = other.minLocation;
 	maxLocation = other.maxLocation;
@@ -1181,7 +1182,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
 
     InterlockedAdd64AndReturnNewValue(&totalReadsSorted, total);
 
-    writer->nextBatch();
+    // writer->nextBatch();
     // close everything
     _int64 start = timeInMillis();
     writer->close();
