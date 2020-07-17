@@ -390,12 +390,14 @@ private:
         GenomeLocation  locationForReadWithMoreHits;
         GenomeLocation  locationForReadWithFewerHits;
         int             pairScore;
+        int             pairAGScore;
 
-        void init(GenomeLocation locationForReadWithMoreHits_, GenomeLocation locationForReadWithFewerHits_, double matchProbability_, int pairScore_) {
+        void init(GenomeLocation locationForReadWithMoreHits_, GenomeLocation locationForReadWithFewerHits_, double matchProbability_, int pairScore_, int pairAGScore_) {
             locationForReadWithMoreHits = locationForReadWithMoreHits_;
             locationForReadWithFewerHits = locationForReadWithFewerHits_;
             matchProbability = matchProbability_;
             pairScore = pairScore_;
+            pairAGScore = pairAGScore_;
         }
 
         //
@@ -413,7 +415,7 @@ private:
         // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
         //
         bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, 
-                        double *oldMatchProbability); 
+                        int newAPairGScore, double *oldMatchProbability); 
     }; // MergeAnchor
 
     //
@@ -545,10 +547,11 @@ private:
             probabilityOfBestPair = 0;
             probabilityOfAllPairs = 0;
             bestPairScore = TooBigScoreValue;
+            bestPairAGScore = 0;
         } // init()
 
         void updateProbabilityOfAllPairs(double oldPairProbability);
-        bool updateBestHitIfNeeded(int pairScore, double pairProbability, int fewerEndScore, int readWithMoreHits, GenomeDistance fewerEndGenomeLocationOffset, ScoringCandidate* candidate, ScoringMateCandidate* mate); // returns true iff it updated the best hit
+        bool updateBestHitIfNeeded(int pairScore, int pairAGScore, double pairProbability, int fewerEndScore, int readWithMoreHits, GenomeDistance fewerEndGenomeLocationOffset, ScoringCandidate* candidate, ScoringMateCandidate* mate); // returns true iff it updated the best hit
         void fillInResult(PairedAlignmentResult* result, unsigned *popularSeedsSkipped);
 
         GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
@@ -562,6 +565,7 @@ private:
         double probabilityOfBestPair;
         double probabilityOfAllPairs;
         int bestPairScore;
+        int bestPairAGScore;
 
         Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {RC, FORWARD} };
     }; // ScoreSet
