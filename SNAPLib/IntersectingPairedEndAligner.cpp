@@ -645,13 +645,13 @@ IntersectingPairedEndAligner::align(
 
 #ifdef _DEBUG
         if (_DumpAlignments) {
-            printf("Scored fewer end candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d\n", 
+            printf("Scored fewer end candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d, matchProb %e\n", 
                 (int)(candidate - scoringCandidatePool),
                 candidate->whichSetPair, readWithFewerHits, 
                 genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation)->name, 
                 candidate->readWithFewerHitsGenomeLocation - genome->getContigAtLocation(candidate->readWithFewerHitsGenomeLocation)->beginningLocation,
                 candidate->seedOffset,
-                scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset, candidate->agScore);
+                scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset, candidate->agScore, fewerEndMatchProbability);
         }
 #endif // DEBUG
 
@@ -680,11 +680,11 @@ IntersectingPairedEndAligner::align(
                             &mate->genomeOffset, &mate->usedAffineGapScoring, &mate->basesClippedBefore, &mate->basesClippedAfter, &mate->agScore);
 #ifdef _DEBUG
                         if (_DumpAlignments) {
-                            printf("Scored mate candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d\n",
+                            printf("Scored mate candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d, matchProb %e\n",
                                 (int)(mate - scoringMateCandidates[candidate->whichSetPair]), candidate->whichSetPair, readWithMoreHits, 
                                 genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation)->name,
                                 mate->readWithMoreHitsGenomeLocation - genome->getContigAtLocation(mate->readWithMoreHitsGenomeLocation)->beginningLocation,
-                                mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset, mate->agScore);
+                                mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset, mate->agScore, mate->matchProbability);
                         }
 #endif // _DEBUG
 
@@ -696,6 +696,7 @@ IntersectingPairedEndAligner::align(
                     if (mate->score != ScoreAboveLimit && fewerEndScore + mate->score <= scoreLimit) { // We need to check to see that we're below scoreLimit because we may have scored this earlier when scoreLimit was higher.
                         double pairProbability = mate->matchProbability * fewerEndMatchProbability;
                         int pairScore = mate->score + fewerEndScore;
+                        int pairAGScore = mate->agScore + candidate->agScore;
                         //
                         // See if this should be ignored as a merge, or if we need to back out a previously scored location
                         // because it's a worse version of this location.
@@ -748,14 +749,14 @@ IntersectingPairedEndAligner::align(
                             firstFreeMergeAnchor++;
 
                             mergeAnchor->init(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
-                                pairProbability, pairScore);
+                                pairProbability, pairScore, pairAGScore);
 
                             eliminatedByMerge = false;
                             oldPairProbability = 0;
                             candidate->mergeAnchor = mergeAnchor;
                         } else {
                             eliminatedByMerge = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
-                                pairProbability, pairScore, &oldPairProbability);
+                                pairProbability, pairScore, pairAGScore, &oldPairProbability);
                         }
 
                         if (!eliminatedByMerge) {
@@ -801,10 +802,10 @@ IntersectingPairedEndAligner::align(
                             } // If we're saving the old best score as a secondary result
 
                             if (nonALTAlignment) {
-                                scoresForNonAltAlignments.updateBestHitIfNeeded(pairScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
+                                scoresForNonAltAlignments.updateBestHitIfNeeded(pairScore, pairAGScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
                             }
 
-                            bool updatedBestScore = scoresForAllAlignments.updateBestHitIfNeeded(pairScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
+                            bool updatedBestScore = scoresForAllAlignments.updateBestHitIfNeeded(pairScore, pairAGScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
 
                             scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
                             
@@ -1580,7 +1581,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *g
 
             bool
 IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore,
-                        double *oldMatchProbability)
+                        int newPairAGScore, double *oldMatchProbability)
 {
     if (locationForReadWithMoreHits == InvalidGenomeLocation || !doesRangeMatch(newMoreHitLocation, newFewerHitLocation)) {
         //
@@ -1590,14 +1591,14 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
         locationForReadWithFewerHits = newFewerHitLocation;
         matchProbability = newMatchProbability;
         pairScore = newPairScore;
+        pairAGScore = newPairAGScore;
         *oldMatchProbability = 0.0;
         return false;
     }  else {
         //
         // Within merge distance.  Keep the better score (or if they're tied the better match probability).
         //
-        // if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
-		if (newMatchProbability > matchProbability) {
+        if (newPairAGScore > pairAGScore || newPairAGScore == pairAGScore && newMatchProbability > matchProbability) {
 #ifdef _DEBUG
             if (_DumpAlignments) {
                 printf("Merge replacement at anchor (%llu, %llu), loc (%llu, %llu), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",
@@ -1606,9 +1607,10 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
             }
 #endif // DEBUG
 
-            *oldMatchProbability = matchProbability;
+            * oldMatchProbability = matchProbability;
             matchProbability = newMatchProbability;
             pairScore = newPairScore;
+            pairAGScore = newPairAGScore;
             return false;
         } else {
             //
@@ -1633,13 +1635,14 @@ void IntersectingPairedEndAligner::ScoreSet::updateProbabilityOfAllPairs(double 
     probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
 }
 
-bool IntersectingPairedEndAligner::ScoreSet::updateBestHitIfNeeded(int pairScore, double pairProbability, int fewerEndScore, int readWithMoreHits, GenomeDistance fewerEndGenomeLocationOffset, ScoringCandidate* candidate, ScoringMateCandidate* mate)
+bool IntersectingPairedEndAligner::ScoreSet::updateBestHitIfNeeded(int pairScore, int pairAGScore, double pairProbability, int fewerEndScore, int readWithMoreHits, GenomeDistance fewerEndGenomeLocationOffset, ScoringCandidate* candidate, ScoringMateCandidate* mate)
 {
     probabilityOfAllPairs += pairProbability;
     int readWithFewerHits = 1 - readWithMoreHits;
 
-    if (pairProbability > probabilityOfBestPair) {
+    if (pairAGScore > bestPairAGScore || (pairAGScore == bestPairAGScore && pairProbability > probabilityOfBestPair)) {
         bestPairScore = pairScore;
+        bestPairAGScore = pairAGScore;
         probabilityOfBestPair = pairProbability;
         bestResultGenomeLocation[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
         bestResultGenomeLocation[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
