@@ -5303,7 +5303,7 @@ namespace ASEProcessManager
                         linuxScript.Write("cd " + tempBase + "output/\n");
 
                         var tarballName = case_.getDNAFileIdByTumor(tumor) + "." + alignerPair + "-" + ASETools.tumorToString[tumor] + "-" + ASETools.variantCallerName[variantCaller] + ".tar";
-                        linuxScript.Write("tar cvf " + tempBase + tarballName + "\n");
+                        linuxScript.Write("tar cvf " + tempBase + tarballName + " . \n");
                         linuxScript.Write("cd ~\n");
 
                         CopyFilesOutLinux(linuxScript, tempBase + tarballName, ASETools.GetDirectoryFromPathname(case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename));
