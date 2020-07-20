@@ -30,7 +30,7 @@ Revision History:
 #include "FixedSizeMap.h"
 #include "AlignmentAdjuster.h"
 
-const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 2000;
+const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 4000;
 const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;
 
 class IntersectingPairedEndAligner : public PairedEndAligner

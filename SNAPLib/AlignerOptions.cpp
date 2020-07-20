@@ -95,7 +95,7 @@ AlignerOptions::AlignerOptions(
     emitInternalScore(false),
 	altAwareness(true),
     emitALTAlignments(false),
-    maxScoreGapToPreferNonALTAlignment(2)
+    maxScoreGapToPreferNonALTAlignment(16)
 {
     if (forPairedEnd) {
         maxDist                 = 32;
