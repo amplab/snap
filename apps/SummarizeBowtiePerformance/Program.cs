@@ -9,7 +9,7 @@ using ASELib;
 using System.Diagnostics;
 using System.Data;
 
-namespace SummarizeBowtiePerformance // This is a misnomer: it does Bowtie and BWA both.  They have an identical format.
+namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligners.  They have identical formats.
 {
     class Program
     {
@@ -48,11 +48,7 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it does Bowtie and B
 
         static Dictionary<bool, PerThreadState> globalState = new Dictionary<bool, PerThreadState>(); // tumor -> state
         static string[] daysOfTheWeek = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };   // This is the beginning of the date output.
-        static bool bwa = false;
-        static ASETools.Case.ColumnGetter normalStatisticsFilenameGetter;
-        static ASETools.Case.ColumnGetter tumorStatisticsFilenameGetter;
-        static ASETools.Case.ColumnGetter normalBAMFilenameGetter;
-        static ASETools.Case.ColumnGetter tumorBAMFilenameGetter;
+        static ASETools.Aligner aligner;
 
 
         static void HandleOneCase(ASETools.Case case_, Dictionary<bool, PerThreadState> state)
@@ -66,8 +62,8 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it does Bowtie and B
                     state.Add(tumor, new PerThreadState());
                 }
 
-                var inputFilename = tumor ? tumorStatisticsFilenameGetter(case_) : normalStatisticsFilenameGetter(case_);
-                var bamFilename = tumor ? tumorBAMFilenameGetter(case_) : normalBAMFilenameGetter(case_);
+                var inputFilename = case_.realignments[aligner][tumor].dna_statistics_filename;
+                var bamFilename = case_.realignments[aligner][tumor].dna_filename;
                 if (inputFilename == "" || bamFilename == "")
                 {
                     continue;
@@ -147,17 +143,20 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it does Bowtie and B
                 return;
             }
 
-            if (configuration.commandLineArgs.Count() > 1 || configuration.commandLineArgs.Count() == 1 && !(configuration.commandLineArgs[0].ToLower() == "bwa" || configuration.commandLineArgs[0].ToLower() == "bowtie"))
-            {
-                Console.WriteLine("usage: SummarizeBowtiePerformance {bowtie|bwa}");
+            if (configuration.commandLineArgs.Count() != 1 || !ASETools.isStringAnAlignerName(configuration.commandLineArgs[0]))
+            { 
+                Console.WriteLine("usage: SummarizeBowtiePerformance linuxAligner");
                 return;
             }
 
-            bwa = configuration.commandLineArgs.Count() == 1 && configuration.commandLineArgs[0].ToLower() == "bwa";
-            normalStatisticsFilenameGetter = _ => bwa ? _.BWA_realigned_normal_dna_statictics_filename : _.bowtie_realigned_normal_dna_statictics_filename;
-            tumorStatisticsFilenameGetter = _ => bwa ? _.BWA_realigned_tumor_dna_statictics_filename : _.bowtie_realigned_tumor_dna_statictics_filename;
-            normalBAMFilenameGetter = _ => bwa ? _.BWA_realigned_normal_dna_filename : _.bowtie_realigned_normal_dna_filename;
-            tumorBAMFilenameGetter = _ => bwa ? _.BWA_realigned_tumor_dna_filename : _.bowtie_realigned_tumor_dna_filename;
+            aligner = ASETools.AlignerNameToAligner(configuration.commandLineArgs[0]);
+
+            if (aligner == ASETools.Aligner.SNAP)
+            {
+                Console.WriteLine("Sorry, SNAP is not a Linux Aligner (at as we run it).");
+                return;
+            }
+ 
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
             if (cases == null)
@@ -174,7 +173,7 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it does Bowtie and B
                 globalState.Add(tumor, new PerThreadState());
             }
 
-            if (listOfCases.Any(_ => normalStatisticsFilenameGetter(_) == "" || tumorStatisticsFilenameGetter(_) == "" || _.read_statictics_filename == "")) {
+            if (listOfCases.Any(_ => _.realignments[aligner][false].dna_statistics_filename == "" || _.realignments[aligner][true].dna_statistics_filename == "" || _.read_statictics_filename == "")) {
                 Console.WriteLine("Some realignment statistics or read statistics files are missing.  Try again once you've run all the realignments.");
                 //return;
             }
@@ -184,7 +183,7 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it does Bowtie and B
             var threading = new ASETools.WorkerThreadHelper<ASETools.Case, Dictionary<bool, PerThreadState>>(listOfCases, HandleOneCase, FinishUp, null, nPerDot);
             threading.run();
 
-            var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + (bwa ? ASETools.BWAHistogramsFilename : ASETools.BowtieHistogramsFilename));
+            var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.alignerName[aligner] + "Histograms.txt");
             if (outputFile == null)
             {
                 return;
@@ -209,13 +208,13 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it does Bowtie and B
                 }
                 var histogramsToWrite = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
                 histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("Copy In", globalState[tumor].copyTimeHistogram));
-                histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>(bwa ? "BWA" : "Bowtie", globalState[tumor].alignerTimeHistogram));
+                histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>(ASETools.alignerName[aligner], globalState[tumor].alignerTimeHistogram));
                 histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("sam->bam", globalState[tumor].samToBamTimeHistogram));
                 histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("sort", globalState[tumor].sortTimeHistogram));
                 histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("Mark Duplicates", globalState[tumor].duplicateMarkHistogram));
                 histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("index", globalState[tumor].indexHistogram));
                 histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("total time", globalState[tumor].totalTimeHistogram));
-                histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>(bwa ? "BWA->finished" : "Bowtie->finished", globalState[tumor].copiedToFinalBamTimeHistogram));
+                histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>(ASETools.alignerName[aligner] + "->finished", globalState[tumor].copiedToFinalBamTimeHistogram));
 
                 histogramsToWrite.ForEach(_ => outputFile.WriteLine(_.Key + " mean " + _.Value.mean()));
                 outputFile.WriteLine();
@@ -226,7 +225,7 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it does Bowtie and B
                 ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(outputFile, histogramsToWrite);
 
                 histogramsToWrite = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
-                histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("Reads per second in " + (bwa ? "BWA" : "Bowtie"), globalState[tumor].readsPerSecondReportedHistogram));
+                histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("Reads per second in " + ASETools.alignerName[aligner], globalState[tumor].readsPerSecondReportedHistogram));
                 histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("Reads per second to final BAM", globalState[tumor].readsPerSecondAllTimeHistogram));
 
                 outputFile.WriteLine();

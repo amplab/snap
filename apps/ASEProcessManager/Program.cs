@@ -5104,11 +5104,23 @@ namespace ASEProcessManager
                         
                                 if (paired)
                                 {
-                                    linuxScript.Write("Add read group /mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bowtie2/Homo_Sapiens_assembly38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -t -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 else
                                 {
-                                    linuxScript.Write("Add read group /mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bowtie2/Homo_Sapiens_assembly38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1  2>&1 | tee -a " + timingFilename + "\n");
+                                }
+                                break;
+
+                            case ASETools.Aligner.GEM:
+
+                                if (paired)
+                                {
+                                    linuxScript.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -1 " + localInputFile + " -2 " + localSecondInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
+                                }
+                                else
+                                {
+                                    linuxScript.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -i " + localInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
 
@@ -5227,6 +5239,14 @@ namespace ASEProcessManager
 
                         CopyFilesOutLinux(linuxScript, localOutputFile, ASETools.GetDirectoryFromPathname(sourceDNAFilename));
                         linuxScript.Write("rm -rf " + tempDirectory + "\n");
+
+                        //
+                        // These make the script the same length as running an aliger, so splitIntoPieces will do the right thing.
+                        //
+                        for (int i = 0; i < 11; i++)
+                        {
+                            linuxScript.Write("# Placeholder\n");
+                        }
                     } // If we're running this one
                 } // for each case
             } // EvaluateStage
@@ -5309,6 +5329,11 @@ namespace ASEProcessManager
                         CopyFilesOutLinux(linuxScript, tempBase + tarballName, ASETools.GetDirectoryFromPathname(case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename));
 
                         linuxScript.Write("rm -rf " + tempBase + "*\n");
+
+                        for (int i = 0; i < 3; i++)
+                        {
+                            linuxScript.Write("# Placeholder\n");
+                        }
                     } // If we add it to the script.
                 } // foreach case
 
@@ -5571,7 +5596,13 @@ namespace ASEProcessManager
                     continue;
                 }
 
-                if (aligner != ASETools.Aligner.BWA) continue;  // For now
+                if (aligner == ASETools.Aligner.GEM)
+                {
+                    //
+                    // GEM crashes too much.
+                    //
+                    continue;
+                }
 
                 foreach (var tumor in ASETools.BothBools)
                 {
@@ -5599,7 +5630,7 @@ namespace ASEProcessManager
                     //continue;   // Not yet
                 }
                 processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
-                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to majke this take a tumor parameter if we ever get there
+                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
             }
 
             foreach (var alignerPair in ASETools.alignerPairs)
