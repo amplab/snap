@@ -1936,7 +1936,7 @@ SAMFormat::writePairs(
         }
 
         if (NULL != spaceUsed) {
-            spaceUsed[firstOrSecond] = firstOrSecond;
+            spaceUsed[firstOrSecond] = charsInString;
         }
 
         buffer += spaceUsed[firstOrSecond];
