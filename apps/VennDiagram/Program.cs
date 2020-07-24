@@ -86,7 +86,8 @@ namespace VennDiagram
 
                     int nPerDot;
                     ASETools.PrintMessageAndNumberBar("Processing", "cases (" + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor] + ")", casesToProcess.Count(), out nPerDot);
-                    var threading = new ASETools.WorkerThreadHelper<ASETools.Case, ConcordanceResults>(listOfCases, (c,v) => HandleOneCase(variantCaller, tumor, c, v), FinishUp, null, nPerDot);
+                    var threading = new ASETools.WorkerThreadHelper<ASETools.Case, ConcordanceResults>(casesToProcess, (c,v) => HandleOneCase(variantCaller, tumor, c, v), FinishUp, null, nPerDot);
+                    threading.run();
                     Console.WriteLine(ASETools.ElapsedTimeInSeconds(oneRunTimer));
                 } // tumor/normal
             } // variant caller
@@ -112,6 +113,11 @@ namespace VennDiagram
                 contig = contig_;
                 pos = pos_;
             }
+
+            public override int GetHashCode()
+            {
+                return contig.GetHashCode() ^ pos;
+            }
         }
         class Variant
         {
@@ -127,11 +133,6 @@ namespace VennDiagram
                 altAllele = altAllele_;
                 fp = fp_;
                 fn = fn_;
-
-                if (fp && fn)
-                {
-                    throw new Exception("Variant is both false positive and false negative");
-                }
             }
 
             public static Variant FromVCFLine(string vcfLine)
@@ -151,7 +152,7 @@ namespace VennDiagram
             } // FromVCFLine
         }
 
-        static Dictionary<Locus, List<Variant>> LoadVariantsForOneVCF(ASETools.VariantCaller variantCaller, bool tumor, ASETools.Case case_, ASETools.AlignerPair alignerPair)
+        static Dictionary<Locus, List<Variant>> LoadVariantsForOneVCF(ASETools.VariantCaller variantCaller, bool tumor, ASETools.Case case_, ASETools.AlignerPair alignerPair) 
         {
             var retVal = new Dictionary<Locus, List<Variant>>();
 
@@ -160,20 +161,20 @@ namespace VennDiagram
                 return retVal;  // This is just here for debugging when we run without all the data
             }
             string tempDir = @"d:\temp\" + case_.case_id + @"_VennDiagram\";
+            ASETools.TryToRecursivelyDeleteDirectory(tempDir);
+
             Directory.CreateDirectory(tempDir);
 
             string VCFName = case_.getDNAFileIdByTumor(tumor) + "." + alignerPair + ".concordance.vcf";
             string gzippedVCFName = VCFName + ".gz";
 
             ASETools.ExtractFileFromTarball(case_.concordance[alignerPair][variantCaller][tumor].concordance_tarball_filename, "./" + gzippedVCFName, tempDir);
-            ASETools.RunAndWaitForProcess("gzip.exe", "-d " + gzippedVCFName);
-
 
             string inputLine;
-            var inputFile = ASETools.CreateStreamReaderWithRetry(tempDir + VCFName);
+            var inputFile = ASETools.CreateCompressedStreamReaderWithRetry(tempDir + gzippedVCFName);
             if (inputFile == null)
             {
-                throw new Exception("Unable to open VCF file " + tempDir + VCFName);
+                throw new Exception("Unable to open VCF file " + tempDir + gzippedVCFName);
             }
             while (null != (inputLine = inputFile.ReadLine()))
             {
@@ -187,12 +188,13 @@ namespace VennDiagram
                 {
                     retVal.Add(variant.locus, new List<Variant>());
                 }
+
                 retVal[variant.locus].Add(variant);
 
             }
 
             inputFile.Close();
-            Directory.Delete(tempDir, true);    // True recursively removes the directory and any contents
+            ASETools.TryToRecursivelyDeleteDirectory(tempDir);
 
             return retVal;
         }
@@ -206,11 +208,11 @@ namespace VennDiagram
             {
                 variants.Add(alignerPair, LoadVariantsForOneVCF(variantCaller, tumor, case_, alignerPair));
 
-                foreach (var locus in variants[alignerPair].Select(_ => _.Key).ToList())
+                foreach (var locus in variants[alignerPair].Select(_ => _.Key))
                 {
                     allLociWithVariants.Add(locus);
                 }
-            }
+            } // aligner pair
 
             foreach (var alignerPair in ASETools.alignerPairs)
             {

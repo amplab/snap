@@ -15514,9 +15514,14 @@ namespace ASELib
             }
         }// CaseMetadata
 
-        public static void RunAndWaitForProcess(string binaryName, string commandLine)
+        public static void RunAndWaitForProcess(string binaryName, string commandLine, string workingDirectory = null)
         {
             var startInfo = new ProcessStartInfo(binaryName, commandLine);
+
+            if (workingDirectory != null)
+            {
+                startInfo.WorkingDirectory = workingDirectory;
+            }
 
             startInfo.UseShellExecute = false;
 
@@ -15535,11 +15540,16 @@ namespace ASELib
 
             process.WaitForExit();
         } // RunAndWaitForProcess
-        public static List<string> RunProcessAndGetOutput(string binaryName, string commandLine)
+        public static List<string> RunProcessAndGetOutput(string binaryName, string commandLine, string workingDirectory = null)
         {
             var output = new List<string>();
 
             var startInfo = new ProcessStartInfo(binaryName, commandLine);
+
+            if (workingDirectory != null)
+            {
+                startInfo.WorkingDirectory = workingDirectory;
+            }
 
             startInfo.UseShellExecute = false;
             startInfo.RedirectStandardOutput = true;
@@ -16819,7 +16829,7 @@ namespace ASELib
 
 
             Directory.CreateDirectory(tempDirectory);
-            RunAndWaitForProcess("cmd.exe", "/c cd " + tempDirectory + " && tar xvf - .");
+            RunAndWaitForProcess("tar.exe", "xvf " + tarballName + " " + filename, tempDirectory);
 
             if (!File.Exists(tempDirectory + filename))
             {
@@ -16847,6 +16857,21 @@ namespace ASELib
         static public bool isStringAnAlignerName(string queryAlignerName)
         {
             return alignerName.Any(_ => _.Value.ToLower() == queryAlignerName.ToLower());
+        }
+
+        public static void TryToRecursivelyDeleteDirectory(string dir)
+        {
+            if (Directory.Exists(dir))
+            {
+                try
+                {
+                    Directory.Delete(dir, true);    // bool means -rf
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Exception deleting dir: " + e.Message);
+                }
+            }
         }
 
     } // ASETools
