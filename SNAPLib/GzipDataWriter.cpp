@@ -60,6 +60,7 @@ private:
     GzipWriterFilterSupplier* filterSupplier;
     char* input;
     size_t inputSize;
+    size_t bufferSize;
     size_t inputUsed;
     char* buffer;
     VariableSizeVector< pair<_uint64,_uint64> > translation;
@@ -92,7 +93,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
 
 private:
 
@@ -137,6 +138,21 @@ GzipCompressWorkerManager::beginStep()
 
     if (buffer == NULL) {
         buffer = (char*) BigAlloc(inputSize);
+        if (buffer == NULL) {
+            WriteErrorMessage("Unable to allocate %lld bytes for gzip compression buffer\n", inputSize);
+            soft_exit(1);
+        }
+        bufferSize = inputSize;
+    }
+    else if (inputSize > bufferSize) {
+        //fprintf(stderr, "CompressManager::beginStep() prevInputSize: %lld inputSize: %lld\n", bufferSize, inputSize);
+        BigDealloc(buffer);
+        buffer = (char*)BigAlloc(inputSize);
+        if (buffer == NULL) {
+            WriteErrorMessage("Unable to allocate %lld bytes for gzip compression buffer\n", inputSize);
+            soft_exit(1);
+        }
+        bufferSize = inputSize;
     }
 }
 
@@ -174,7 +190,7 @@ GzipCompressWorker::step()
         zstream.zfree = zfree;
         zstream.opaque = heap;
     }
-    //fprintf(stderr, "zip task thread %d begin\n", GetCurrentThreadId());
+    //fprintf(stderr, "zip task thread %d begin. nChunks %d\n", GetCurrentThreadId(), supplier->nChunks);
     _int64 start = timeInMillis();
     int begin = (getThreadNum() * supplier->nChunks) / getNumThreads();
     int end = ((1 + getThreadNum()) * supplier->nChunks) / getNumThreads();
@@ -311,14 +327,15 @@ GzipWriterFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
     size_t bytes,
-    bool lastBatch)
+    bool lastBatch,
+    bool* needMoreBuffer)
 {
     
     // 
     // Nothing to write
     //
-    if (bytes == 0) {
-        return bytes;
+    if (bytes == 0 || *needMoreBuffer) {
+        return 0;
     }
 
     char* fromBuffer;

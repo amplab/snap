@@ -1997,7 +1997,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
     
 protected:
     virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) = 0;
@@ -2023,14 +2023,15 @@ BAMFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
     size_t bytes,
-    bool lastBatch)
+    bool lastBatch,
+    bool* needMoreBuffer)
 {
 
     // 
     // Nothing to write
     //
-    if (bytes == 0) {
-        return bytes;
+    if (bytes == 0 || *needMoreBuffer) {
+        return 0;
     }
 
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
@@ -2411,7 +2412,7 @@ public:
     { return a->pos == b->pos && a->refID == b->refID &&
         ((a->FLAG ^ b->FLAG) & (SAM_REVERSE_COMPLEMENT | SAM_NEXT_REVERSED)) == 0; }
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
 
     void dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset);
 
@@ -2444,13 +2445,14 @@ BAMDupMarkFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
     size_t bytes,
-    bool lastBatch)
+    bool lastBatch,
+    bool* needMoreBuffer)
 {
     // 
     // Nothing to write
     //
-    if (bytes == 0) {
-        return bytes;
+    if (bytes == 0 || *needMoreBuffer) {
+        return 0;
     }
 
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
@@ -2537,13 +2539,8 @@ BAMDupMarkFilter::onNextBatch(
                 offsets.clear();
             }
             else {
-                //
-                // fixme: If the whole buffer is used and we still haven't finished marking the current run, try with a larger buffer size
-                //
-                dupMarkBatch(lastBam, currentOffset + offsets[offsets.size() - 1]);
-                WriteErrorMessage("\nWarning: Run with size %d is too large for MarkDuplicates buffer. Some duplicates may be missed. Try increasing -sm. First record position %d. Buffer size: %llu bytes. Last record at byte %llu with position %d and size %llu bytes\n", runCount, firstBam->pos, currentBufferBytes, offsets[offsets.size() - 1], lastBam->pos, lastBam->size());
-                offsets.clear();
-                // soft_exit(1);
+                *needMoreBuffer = true;
+                return 0;
             }
         }
         else {

@@ -110,7 +110,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
 
 private:
     SortedDataFilterSupplier*   parent;
@@ -919,7 +919,8 @@ SortedDataFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
     size_t bytes,
-    bool lastBatch)
+    bool lastBatch,
+    bool* needMoreBuffer)
 {
     _ASSERT(!seenLastBatch);
     seenLastBatch |= lastBatch;
@@ -939,7 +940,7 @@ SortedDataFilter::onNextBatch(
         WriteErrorMessage("SortedDataFilter::onNextBatch getBatch of old buffer failed\n");
     }
 
-    if (!lastBatch || offset == 0 || bytes == 0) {    // Don't do the last batch optimization at offset 0, because we have special handling for the header.
+    if (!lastBatch || offset == 0 || bytes == 0 || *needMoreBuffer) {    // Don't do the last batch optimization at offset 0, because we have special handling for the header.
         if (!writer->getBatch(0, &toBuffer, &toSize, &toUsed))
         {
             WriteErrorMessage("SortedDataFilter::onNextBatch getBatch of new buffer failed\n");
