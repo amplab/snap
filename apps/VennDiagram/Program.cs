@@ -29,6 +29,12 @@ namespace VennDiagram
                 AButNotB += peer.AButNotB;
                 BButNotA += peer.BButNotA;
             }
+
+            public string Describe(ASETools.AlignerPair alignerPair)
+            {
+                return both + " in both " + neither + " in neither " + AButNotB + " in " + ASETools.alignerName[alignerPair.firstAligner] + " but not " + ASETools.alignerName[alignerPair.secondAligner] + " and " + BButNotA + " vice versa.";
+
+            }
         } // ConcordancePair
 
         class ConcordanceResults
@@ -86,12 +92,19 @@ namespace VennDiagram
 
                     int nPerDot;
                     ASETools.PrintMessageAndNumberBar("Processing", "cases (" + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor] + ")", casesToProcess.Count(), out nPerDot);
-                    var threading = new ASETools.WorkerThreadHelper<ASETools.Case, ConcordanceResults>(casesToProcess, (c,v) => HandleOneCase(variantCaller, tumor, c, v), FinishUp, null, nPerDot);
+                    var threading = new ASETools.WorkerThreadHelper<ASETools.Case, ConcordanceResults>(casesToProcess, (c, v) => HandleOneCase(variantCaller, tumor, c, v), FinishUp, null, nPerDot);
                     threading.run();
                     Console.WriteLine(ASETools.ElapsedTimeInSeconds(oneRunTimer));
+
+                    Console.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.variantCallerName[variantCaller]);
+                    foreach (var alignerPair in ASETools.alignerPairs)
+                    {
+                        Console.WriteLine(globalResults.pairs[alignerPair].Describe(alignerPair));
+                    }
+                    Console.WriteLine();
                 } // tumor/normal
             } // variant caller
-            
+
         } // Main
 
         static void FinishUp(ConcordanceResults state)
@@ -152,7 +165,7 @@ namespace VennDiagram
             } // FromVCFLine
         }
 
-        static Dictionary<Locus, List<Variant>> LoadVariantsForOneVCF(ASETools.VariantCaller variantCaller, bool tumor, ASETools.Case case_, ASETools.AlignerPair alignerPair) 
+        static Dictionary<Locus, List<Variant>> LoadVariantsForOneVCF(ASETools.VariantCaller variantCaller, bool tumor, ASETools.Case case_, ASETools.AlignerPair alignerPair)
         {
             var retVal = new Dictionary<Locus, List<Variant>>();
 
@@ -224,17 +237,23 @@ namespace VennDiagram
                         // Neither one has it.
                         //
                         state.pairs[alignerPair].neither++;
-                    } 
-                    else if (variants[alignerPair][locus].All(_ => _.fp))
-                    {
-                        state.pairs[alignerPair].BButNotA++;
                     }
-                    else if (variants[alignerPair][locus].All(_ => _.fn))
+                    else
                     {
-                        state.pairs[alignerPair].AButNotB++;
-                    } else
-                    {
-                        state.pairs[alignerPair].both++;
+                        if (variants[alignerPair][locus].All(_ => _.fp))
+                        {
+                            state.pairs[alignerPair].BButNotA++;
+                        }
+
+                        if (variants[alignerPair][locus].All(_ => _.fn))
+                        {
+                            state.pairs[alignerPair].AButNotB++;
+                        }
+
+                        if (variants[alignerPair][locus].All(_ => !_.fp && !_.fn))
+                        {
+                            state.pairs[alignerPair].both++;
+                        }
                     }
                 } // foreach locus
             } // foreach aligner pair
