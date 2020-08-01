@@ -973,16 +973,16 @@ BAMFormat::writePairs(
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ;
     _uint32 cigarBuf[2][cigarBufSize];
-    int cigarOps[2] = {};
+    int cigarOps[2] = {0, 0};
 
-    int flags[2] = {};
-    const char *contigName[2] = {"*"};
-    int contigIndex[2] = {-1};
-    GenomeDistance positionInContig[2] = {};
-    const char *mateContigName[2] = {"*"};
-    int mateContigIndex[2] = {-1};
-    GenomeDistance matePositionInContig[2] = {};
-    _int64 templateLength[2] = {};
+    int flags[2] = {0, 0};
+    const char *contigName[2] = {"*", "*"};
+    int contigIndex[2] = {-1, -1};
+    GenomeDistance positionInContig[2] = {0, 0};
+    const char *mateContigName[2] = {"*", "*"};
+    int mateContigIndex[2] = {-1, -1};
+    GenomeDistance matePositionInContig[2] = {0, 0};
+    _int64 templateLength[2] = {0, 0};
 
     char data[2][MAX_READ];
     char quality[2][MAX_READ];
@@ -993,8 +993,8 @@ BAMFormat::writePairs(
     unsigned basesClippedBefore[2];
     unsigned basesClippedAfter[2];
     GenomeDistance extraBasesClippedBefore[2];   // Clipping added if we align before the beginning of a chromosome
-    int editDistance[2] = {-1};
-    int refSpanFromCigar[2] = {};
+    int editDistance[2] = {-1, -1};
+    int refSpanFromCigar[2] = {0, 0};
 
     // Create SAM entry and compute CIGAR
     for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {
