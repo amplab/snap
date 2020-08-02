@@ -1142,7 +1142,7 @@ BAMFormat::writePairs(
                 auxLen = 0;
             }
         }
-        size_t bamSize = BAMAlignment::size((unsigned)qnameLen[whichRead] + 1, cigarOps[whichRead], fullLength[whichRead], auxLen);
+        size_t bamSize = BAMAlignment::size((unsigned)qnameLen[whichRead] + 1, cigarOps[whichRead], fullLength[whichRead], !translateReadGroupFromSAM ? auxLen : auxLen - 1);
         if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
             if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
                 bamSize += 4 + strlen(read->getReadGroup());

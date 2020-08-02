@@ -681,7 +681,8 @@ SAMReader::getReadFromLine(
             for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextFieldSeparator(p, field[OPT] + fieldLength[OPT])) {
                 if (strncmp(p, "RG:Z:", 5) == 0) {
                     rgFromAux = p + 5;
-                    rgFromAuxLen = fieldLength[OPT - 5];
+                    p = SAMReader::skipToBeyondNextFieldSeparator(p, field[OPT] + fieldLength[OPT]);
+                    rgFromAuxLen = (p != NULL) ? p - 1 - rgFromAux : field[OPT] + fieldLength[OPT] - rgFromAux;
                     read->setReadGroup(READ_GROUP_FROM_AUX);
                     break;
                 }
