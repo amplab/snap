@@ -973,16 +973,16 @@ BAMFormat::writePairs(
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ;
     _uint32 cigarBuf[2][cigarBufSize];
-    int cigarOps[2] = {};
+    int cigarOps[2] = {0, 0};
 
-    int flags[2] = {};
-    const char *contigName[2] = {"*"};
-    int contigIndex[2] = {-1};
-    GenomeDistance positionInContig[2] = {};
-    const char *mateContigName[2] = {"*"};
-    int mateContigIndex[2] = {-1};
-    GenomeDistance matePositionInContig[2] = {};
-    _int64 templateLength[2] = {};
+    int flags[2] = {0, 0};
+    const char *contigName[2] = {"*", "*"};
+    int contigIndex[2] = {-1, -1};
+    GenomeDistance positionInContig[2] = {0, 0};
+    const char *mateContigName[2] = {"*", "*"};
+    int mateContigIndex[2] = {-1, -1};
+    GenomeDistance matePositionInContig[2] = {0, 0};
+    _int64 templateLength[2] = {0, 0};
 
     char data[2][MAX_READ];
     char quality[2][MAX_READ];
@@ -993,8 +993,8 @@ BAMFormat::writePairs(
     unsigned basesClippedBefore[2];
     unsigned basesClippedAfter[2];
     GenomeDistance extraBasesClippedBefore[2];   // Clipping added if we align before the beginning of a chromosome
-    int editDistance[2] = {-1};
-    int refSpanFromCigar[2] = {};
+    int editDistance[2] = {-1, -1};
+    int refSpanFromCigar[2] = {0, 0};
 
     // Create SAM entry and compute CIGAR
     for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {
@@ -1142,7 +1142,7 @@ BAMFormat::writePairs(
                 auxLen = 0;
             }
         }
-        size_t bamSize = BAMAlignment::size((unsigned)qnameLen[whichRead] + 1, cigarOps[whichRead], fullLength[whichRead], auxLen);
+        size_t bamSize = BAMAlignment::size((unsigned)qnameLen[whichRead] + 1, cigarOps[whichRead], fullLength[whichRead], !translateReadGroupFromSAM ? auxLen : auxLen - 1);
         if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
             if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
                 bamSize += 4 + strlen(read->getReadGroup());
@@ -1941,11 +1941,6 @@ BAMFormat::computeCigarOps(
         basesClippedAfter += backClippingMissedByLV;
         dataLength -= backClippingMissedByLV;
 
-        // if (dataLength > 101) {
-        //     WriteErrorMessage("computeCigarString: Data length negative for read:%.*s, isRC:%d\n", 101, data - basesClippedBefore, isRC);
-        //     soft_exit(1);
-        // }
-
         //
         // If we have hard clipping, add in the cigar string for it.
         //
@@ -2002,7 +1997,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
     
 protected:
     virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) = 0;
@@ -2028,14 +2023,15 @@ BAMFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
     size_t bytes,
-    bool lastBatch)
+    bool lastBatch,
+    bool* needMoreBuffer)
 {
 
     // 
     // Nothing to write
     //
-    if (bytes == 0) {
-        return bytes;
+    if (bytes == 0 || *needMoreBuffer) {
+        return 0;
     }
 
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
@@ -2326,6 +2322,7 @@ struct DuplicateMateInfo
     void getBestTileXY(int* tile_, int* x_, int* y_) { *tile_ = tile; *x_ = x; *y_ = y; }
 
     void checkBestRecord(BAMAlignment* bam, int totalQuality_, int tile_, int x_, int y_) {
+
         if ((bam->FLAG & SAM_DUPLICATE) != 0) {
             return;
         }
@@ -2415,7 +2412,7 @@ public:
     { return a->pos == b->pos && a->refID == b->refID &&
         ((a->FLAG ^ b->FLAG) & (SAM_REVERSE_COMPLEMENT | SAM_NEXT_REVERSED)) == 0; }
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
 
     void dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset);
 
@@ -2448,13 +2445,14 @@ BAMDupMarkFilter::onNextBatch(
     DataWriter* writer,
     size_t offset,
     size_t bytes,
-    bool lastBatch)
+    bool lastBatch,
+    bool* needMoreBuffer)
 {
     // 
     // Nothing to write
     //
-    if (bytes == 0) {
-        return bytes;
+    if (bytes == 0 || *needMoreBuffer) {
+        return 0;
     }
 
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
@@ -2541,13 +2539,8 @@ BAMDupMarkFilter::onNextBatch(
                 offsets.clear();
             }
             else {
-                //
-                // fixme: If the whole buffer is used and we still haven't finished marking the current run, try with a larger buffer size
-                //
-                dupMarkBatch(lastBam, currentOffset + offsets[offsets.size() - 1]);
-                WriteErrorMessage("\nWarning: Run with size %d is too large for MarkDuplicates buffer. Some duplicates may be missed. Try increasing -sm. First record position %d. Buffer size: %llu bytes. Last record at byte %llu with position %d and size %llu bytes\n", runCount, firstBam->pos, currentBufferBytes, offsets[offsets.size() - 1], lastBam->pos, lastBam->size());
-                offsets.clear();
-                // soft_exit(1);
+                *needMoreBuffer = true;
+                return 0;
             }
         }
         else {
@@ -2658,43 +2651,17 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             continue;
         }
 
-        // adjacent entries with different mate location/orientation
+        // adjacent entries with different location/orientation
+        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
+
+        // check if mate location/orientation matches adjacent entry
         if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
             (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
             continue;
         }
-
-        // check if my location/orientation matches adjacent entry
-        BAMAlignment* nextRecord[2] = {NULL, NULL};
-        if (i != run.begin() && ((i->mateInfo) == ((i - 1)->mateInfo))) {
-            nextRecord[0] = getRead((i - 1)->runOffset);
-        }
-        if (i + 1 != run.end() && ((i->mateInfo) == ((i + 1)->mateInfo))) {
-            nextRecord[1] = getRead((i + 1)->runOffset);
-        }
-        if (!nextRecord[0] && !nextRecord[1]) continue;
-
-        bool foundDup = false;
-        for (int j = 0; j < 2; ++j) {
-            if (!nextRecord[j]) continue;
-            bool isRC = (record->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
-            bool isNextRC = (nextRecord[j]->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
-            GenomeLocation myLoc = record->getLocation(genome);
-            GenomeLocation nextLoc = nextRecord[j]->getLocation(genome);
-            myLoc = isRC ? record->getUnclippedEnd(myLoc) : record->getUnclippedStart(myLoc);
-            nextLoc = isNextRC ? nextRecord[j]->getUnclippedEnd(nextLoc) : nextRecord[j]->getUnclippedStart(nextLoc);
-            GenomeLocation myMateLoc = myLoc + record->tlen;
-            GenomeLocation nextMateLoc = nextLoc + nextRecord[j]->tlen;
-            if (myMateLoc == nextMateLoc) {
-                //
-                // both location and mate location match
-                //
-                foundDup = true;
-                break;
-            }
-        }
-        if (!foundDup) continue;
-
         foundRun = true;
         DuplicateReadKey key(record, genome, i->libraryNameHash);
         MateMap::iterator f = mates.find(key);
@@ -2784,6 +2751,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
             continue;
         }
+        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
         if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
             (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
             continue;
@@ -2794,32 +2765,6 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
 
         // skip unmapped reads and reads with unmapped mates
         if (((record->FLAG & SAM_UNMAPPED) != 0) || (record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
-
-        BAMAlignment* nextRecord[2] = {NULL, NULL};
-        if (i != run.begin() && ((i->mateInfo) == ((i - 1)->mateInfo))) {
-            nextRecord[0] = getRead((i - 1)->runOffset);
-        }
-        if (i + 1 != run.end() && ((i->mateInfo) == ((i + 1)->mateInfo))) {
-            nextRecord[1] = getRead((i + 1)->runOffset);
-        }
-        if (!nextRecord[0] && !nextRecord[1]) continue;
-        bool foundDup = false;
-        for (int j = 0; j < 2; ++j) {
-            if (!nextRecord[j]) continue;
-            bool isRC = (record->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
-            bool isNextRC = (nextRecord[j]->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
-            GenomeLocation myLoc = record->getLocation(genome);
-            GenomeLocation nextLoc = nextRecord[j]->getLocation(genome);
-            myLoc = isRC ? record->getUnclippedEnd(myLoc) : record->getUnclippedStart(myLoc);
-            nextLoc = isNextRC ? nextRecord[j]->getUnclippedEnd(nextLoc) : nextRecord[j]->getUnclippedStart(nextLoc);
-            GenomeLocation myMateLoc = myLoc + record->tlen;
-            GenomeLocation nextMateLoc = nextLoc + nextRecord[j]->tlen;
-            if (myMateLoc == nextMateLoc) {
-                foundDup = true;
-                break;
-            }
-        }
-        if (!foundDup) continue;
 
         DuplicateReadKey key(record, genome, i->libraryNameHash);
         MateMap::iterator m = mates.find(key);
@@ -2840,6 +2785,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
             continue;
         }
+        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
         if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
             (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
             continue;
@@ -2850,32 +2799,6 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
 
         // skip unmapped reads and reads with unmapped mates
         if (((record->FLAG & SAM_UNMAPPED) != 0) || (record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
-
-        BAMAlignment* nextRecord[2] = {NULL, NULL};
-        if (i != run.begin() && ((i->mateInfo) == ((i - 1)->mateInfo))) {
-            nextRecord[0] = getRead((i - 1)->runOffset);
-        }
-        if (i + 1 != run.end() && ((i->mateInfo) == ((i + 1)->mateInfo))) {
-            nextRecord[1] = getRead((i + 1)->runOffset);
-        }
-        if (!nextRecord[0] && !nextRecord[1]) continue;
-        bool foundDup = false;
-        for (int j = 0; j < 2; ++j) {
-            if (!nextRecord[j]) continue;
-            bool isRC = (record->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
-            bool isNextRC = (nextRecord[j]->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
-            GenomeLocation myLoc = record->getLocation(genome);
-            GenomeLocation nextLoc = nextRecord[j]->getLocation(genome);
-            myLoc = isRC ? record->getUnclippedEnd(myLoc) : record->getUnclippedStart(myLoc);
-            nextLoc = isNextRC ? nextRecord[j]->getUnclippedEnd(nextLoc) : nextRecord[j]->getUnclippedStart(nextLoc);
-            GenomeLocation myMateLoc = myLoc + record->tlen;
-            GenomeLocation nextMateLoc = nextLoc + nextRecord[j]->tlen;
-            if (myMateLoc == nextMateLoc) {
-                foundDup = true;
-                break;
-            }
-        }
-        if (!foundDup) continue;
 
         DuplicateReadKey key(record, genome, i->libraryNameHash);
         MateMap::iterator m = mates.find(key);

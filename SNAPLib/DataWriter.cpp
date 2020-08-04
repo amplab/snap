@@ -97,8 +97,8 @@ public:
     {
         for (int i = 0; i < count; i++) {
             delete batches[i].file;
+            BigDealloc(batches[i].buffer);
         }
-        BigDealloc(batches[0].buffer); // all in one big block
         delete [] batches;
         if (encoder != NULL) {
             delete encoder;
@@ -128,6 +128,7 @@ private:
     {
         char* buffer;
         AsyncFile::Writer* file;
+        size_t bufferSize;
         size_t used;
         size_t fileOffset;
         size_t logicalUsed;
@@ -136,7 +137,6 @@ private:
     };
     Batch* batches;
     const int count;
-    const size_t bufferSize;
     AsyncDataWriterSupplier* supplier;
     int current;
     FileEncoder* encoder;
@@ -233,10 +233,16 @@ FileEncoder::checkForInput()
         }
         encoderBatch = nextBatch;
         AsyncDataWriter::Batch* encode = &writer->batches[encoderBatch];
+        // fprintf(stderr, "Encoding batch %d, used %lld\n", encoderBatch, encode->used);
         if (encode->used > 0) {
             encoderRunning = true;
             coworker->step();
             break;
+        }
+        else {
+            AcquireExclusiveLock(lock);
+            AllowEventWaitersToProceed(&encode->encoded);
+            ReleaseExclusiveLock(lock);
         }
     }
 }
@@ -256,9 +262,9 @@ FileEncoder::getEncodeBatch(
 {
     AsyncDataWriter::Batch* batch = &writer->batches[encoderBatch];
     *o_batch = batch->buffer;
-    *o_batchSize = writer->bufferSize;
+    *o_batchSize = batch->bufferSize;
     *o_batchUsed = batch->used;
-    //fprintf(stderr, "getEncodeBatch #%d: %lld/%lld\n", encoderBatch, batch->used, writer->bufferSize);
+    //fprintf(stderr, "getEncodeBatch #%d: %lld/%lld\n", encoderBatch, batch->used, batch->bufferSize);
 }
 
     void
@@ -277,7 +283,7 @@ FileEncoder::setEncodedBatchSize(
     size_t newSize)
 {
     size_t old = writer->batches[encoderBatch].used;
-//fprintf(stderr, "setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
+    //fprintf(stderr, "setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
     if (newSize != old) {
         AcquireExclusiveLock(lock);
         AsyncDataWriter::Batch* batch = &writer->batches[encoderBatch];
@@ -299,18 +305,17 @@ AsyncDataWriter::AsyncDataWriter(
     encoder(i_encoder),
     supplier(i_supplier),
     count(i_count),
-    bufferSize(i_bufferSize),
     current(0)
 {
     _ASSERT(count >= 2);
-    char* block = (char*) BigAlloc(count * bufferSize);
-    if (block == NULL) {
-        WriteErrorMessage("Unable to allocate %lld bytes for write buffers\n", count * bufferSize);
-        soft_exit(1);
-    }
     batches = new Batch[count];
     for (int i = 0; i < count; i++) {
-        batches[i].buffer = block + i * bufferSize;
+        batches[i].buffer = (char*)BigAlloc(i_bufferSize);
+        if (batches[i].buffer == NULL) {
+            WriteErrorMessage("Unable to allocate %lld bytes for write buffer\n", i_bufferSize);
+            soft_exit(1);
+        }
+        batches[i].bufferSize = i_bufferSize;
         batches[i].file = i_file->getWriter();
         batches[i].used = 0;
         batches[i].fileOffset = 0;
@@ -334,7 +339,7 @@ AsyncDataWriter::getBuffer(
     size_t* o_size)
 {
     *o_buffer = batches[current].buffer + batches[current].used;
-    *o_size = bufferSize - batches[current].used;
+    *o_size = batches[current].bufferSize - batches[current].used;
     return true;
 }
 
@@ -343,10 +348,10 @@ AsyncDataWriter::advance(
     GenomeDistance bytes,
     GenomeLocation location)
 {
-    _ASSERT((size_t)bytes <= bufferSize - batches[current].used);
+    _ASSERT((size_t)bytes <= batches[current].bufferSize - batches[current].used);
     char* data = batches[current].buffer + batches[current].used;
     size_t batchOffset = batches[current].used;
-    batches[current].used = min<long long>(bufferSize, batchOffset + bytes);
+    batches[current].used = min<long long>(batches[current].bufferSize, batchOffset + bytes);
     if (filter != NULL) {
         //_int64 start = timeInNanos();
         filter->onAdvance(this, batchOffset, data, bytes, location);
@@ -374,7 +379,7 @@ AsyncDataWriter::getBatch(
     Batch* batch = &batches[index];
     *o_buffer = batch->buffer;
     if (o_size != NULL) {
-        *o_size = bufferSize;
+        *o_size = batch->bufferSize;
     }
     if (o_used != NULL) {
         *o_used = relative <= 0 ? batch->used : 0;
@@ -409,7 +414,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
     Batch* write = &batches[written];
     write->logicalUsed = write->used;
     current = (current + 1) % count;
-    //fprintf(stderr, "nextBatch reset %d used=0\n", current);
+    // fprintf(stderr, "nextBatch reset %d used=0 count %d\n", current, count);
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
     bool newSize = filter != NULL && (filter->filterType == TransformFilter || filter->filterType == ResizeFilter || filter->filterType == DupMarkFilter);
@@ -424,7 +429,8 @@ AsyncDataWriter::nextBatch(bool lastBatch)
     bool suppressWrite = false;
 
     if (filter != NULL) {
-        size_t n = filter->onNextBatch(this, write->fileOffset, write->used, lastBatch);
+        bool needMoreBuffer = false; // Does MarkDup require a larger buffer to store all duplicate candidates
+        size_t n = filter->onNextBatch(this, write->fileOffset, write->used, lastBatch, &needMoreBuffer);
         if (n == UINT64_MAX) // The filter's hacky way of telling us it's squirreled away the data and we shouldn't write it to the file.
         {
             _ASSERT(!newSize);
@@ -433,16 +439,47 @@ AsyncDataWriter::nextBatch(bool lastBatch)
         }
 	    if (newSize) {
             if (filter->filterType == DupMarkFilter) {
-                if (n < write->used) {
+                if (needMoreBuffer) {
+                    size_t newBufferSize = write->bufferSize * 2;
+                    char* newBuffer = (char*)BigAlloc(newBufferSize);
+                    if (newBuffer == NULL) {
+                        WriteErrorMessage("Unable to allocate %lld bytes for write buffer\n", newBufferSize);
+                        soft_exit(1);
+                    }
+                    memcpy(newBuffer, write->buffer, write->used);
+                    BigDealloc(batches[current].buffer);
+                    batches[current].used = write->used;
+                    batches[current].logicalUsed = batches[current].used;
+                    batches[current].bufferSize = newBufferSize;
+                    batches[current].buffer = newBuffer;
+                    // fprintf(stderr, "Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
+                    write->used = 0;
+                    write->logicalUsed = 0;
+                }
+                else if (n < write->used) {
                     batches[current].used = write->used - n;
                     batches[current].logicalUsed = batches[current].used;
-                    _ASSERT(batches[current].used <= bufferSize);
-                    memcpy(batches[current].buffer, write->buffer + n, batches[current].used);
+                    if (batches[current].used > batches[current].bufferSize) {
+                        size_t newBufferSize = write->bufferSize * 2;
+                        char* newBuffer = (char*)BigAlloc(newBufferSize);
+                        if (newBuffer == NULL) {
+                            WriteErrorMessage("Unable to allocate %lld bytes for write buffer\n", newBufferSize);
+                            soft_exit(1);
+                        }
+                        memcpy(newBuffer, write->buffer + n, batches[current].used);
+                        BigDealloc(batches[current].buffer);
+                        batches[current].bufferSize = newBufferSize;
+                        batches[current].buffer = newBuffer;
+                    }
+                    else {
+                        memcpy(batches[current].buffer, write->buffer + n, batches[current].used);
+                    }
                     write->used = n;
                     write->logicalUsed = n;
                 }
             }
             write->used = n;
+            // fprintf(stderr, "batch:%d, used:%lld, logicalUsed:%lld, filterType:%d\n", written, write->used, write->logicalUsed, filter->filterType);
             supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
 	    }
         if (newBuffer) {
@@ -464,7 +501,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
 
     InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
     if (encoder == NULL) {
-        //fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
+        // fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
         //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
         if (!suppressWrite) {
             if (!write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
@@ -595,10 +632,10 @@ public:
         b->onAdvance(writer, batchOffset, data, bytes, location);
     }
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch)
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch, bool* needMoreBuffer)
     {
-        size_t sa = a->onNextBatch(writer, offset, bytes, lastBatch);
-        size_t sb = b->onNextBatch(writer, offset, sa, lastBatch);
+        size_t sa = a->onNextBatch(writer, offset, bytes, lastBatch, needMoreBuffer);
+        size_t sb = b->onNextBatch(writer, offset, sa, lastBatch, needMoreBuffer);
         return sb;
     }
 
