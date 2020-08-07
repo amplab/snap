@@ -4,18 +4,21 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ASELib;
-using System.IO;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
-using System.Diagnostics.Contracts;
+using System.Runtime.CompilerServices;
+using System.CodeDom;
 
-namespace VennDiagram
+namespace Venn
 {
     class Program
     {
         static ASETools.Configuration configuration;
         static Dictionary<string, ASETools.Case> cases;
         static List<ASETools.Case> listOfCases;
+
+        enum VariantType { SNV, Indel };
 
         class ConcordancePair
         {
@@ -43,19 +46,25 @@ namespace VennDiagram
         {
             public ConcordanceResults()
             {
-                foreach (var alignerPair in ASETools.alignerPairs)
+                foreach (var alignerSet in ASETools.allAlignerSets)
                 {
-                    pairs.Add(alignerPair, new ConcordancePair());
+                    count.Add(alignerSet, new Dictionary<VariantType, int>());
+                    foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
+                    {
+                        count[alignerSet].Add(variantType, 0);
+                    }
                 }
-            }
+            } // ctor
 
-            public readonly Dictionary<ASETools.AlignerPair, ConcordancePair> pairs = new Dictionary<ASETools.AlignerPair, ConcordancePair>();
-
+            public readonly Dictionary<ASETools.AlignerSet, Dictionary<VariantType, int>> count = new Dictionary<ASETools.AlignerSet, Dictionary<VariantType, int>>();
             public void merge(ConcordanceResults peer)
             {
-                foreach (var alignerPair in ASETools.alignerPairs)
+                foreach (var alignerSet in ASETools.allAlignerSets)
                 {
-                    pairs[alignerPair].merge(peer.pairs[alignerPair]);
+                    foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
+                    {
+                        count[alignerSet][variantType] += peer.count[alignerSet][variantType];
+                    }
                 }
             }
         } // ConcordanceResults
@@ -95,13 +104,32 @@ namespace VennDiagram
                     int nPerDot;
                     ASETools.PrintMessageAndNumberBar("Processing", "cases (" + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor] + ")", casesToProcess.Count(), out nPerDot);
                     var threading = new ASETools.WorkerThreadHelper<ASETools.Case, ConcordanceResults>(casesToProcess, (c, v) => HandleOneCase(variantCaller, tumor, c, v), FinishUp, null, nPerDot);
-                    threading.run();
+                    threading.run(1 /*BJB*/);
                     Console.WriteLine(ASETools.ElapsedTimeInSeconds(oneRunTimer));
 
-                    Console.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.variantCallerName[variantCaller]);
-                    foreach (var alignerPair in ASETools.alignerPairs)
-                    {
-                        Console.WriteLine(globalResults.pairs[alignerPair].Describe(alignerPair));
+                    foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>()) {
+                        int nVariants = globalResults.count.Sum(_ => _.Value[variantType]);
+
+                         if (nVariants == 0) 
+                        { 
+                            continue; 
+                        }
+
+                        Console.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.variantCallerName[variantCaller] + " " +(variantType == VariantType.SNV ? "SNVs" : "Indels"));
+                        foreach (var alignerSet in ASETools.allAlignerSets)
+                        {
+                            Console.WriteLine(alignerSet + "\t" + globalResults.count[alignerSet][variantType] + "\t" + (double)globalResults.count[alignerSet][variantType] / nVariants);
+                        }
+
+                        Console.WriteLine();
+                        Console.WriteLine("Total area");
+                        foreach (var alignerSet in ASETools.allAlignerSets)
+                        {
+                            var n = globalResults.count.Where(_ => alignerSet.isSubsetOf(_.Key)).Sum(_ => _.Value[variantType]);
+                            Console.WriteLine(alignerSet + " = " + n);
+                        }
+
+                        Console.WriteLine();
                     }
                     Console.WriteLine();
                 } // tumor/normal
@@ -133,6 +161,21 @@ namespace VennDiagram
             {
                 return contig.GetHashCode() ^ pos;
             }
+
+            static public bool operator==(Locus us, Locus them)
+            {
+                return us.pos == them.pos && us.contig == them.contig;
+            }
+
+            static public bool operator!=(Locus us, Locus them)
+            {
+                return !(us == them);
+            }
+
+            public override bool Equals(object o)
+            {
+                return this == (Locus)o;
+            }
         }
         class Variant
         {
@@ -140,17 +183,29 @@ namespace VennDiagram
             public readonly string refAllele;
             public readonly string altAllele;
             public readonly bool fp, fn;
+            public readonly ASETools.AlignerPair alignerPair;
 
-            Variant(Locus locus_, string refAllele_, string altAllele_, bool fp_, bool fn_)
+            Variant(Locus locus_, string refAllele_, string altAllele_, bool fp_, bool fn_, ASETools.AlignerPair alignerPair_)
             {
                 locus = locus_;
                 refAllele = refAllele_;
                 altAllele = altAllele_;
                 fp = fp_;
                 fn = fn_;
+                alignerPair = alignerPair_;
             }
 
-            public static Variant FromVCFLine(string vcfLine)
+            public bool isIndel()
+            {
+                return refAllele.Length != 1 || altAllele.Length != 1;
+            }
+
+            public VariantType getVariantType()
+            {
+                return isIndel() ? VariantType.Indel : VariantType.SNV;
+            }
+
+            public static Variant FromVCFLine(string vcfLine, ASETools.AlignerPair alignerPair)
             {
                 var fields = vcfLine.Split('\t');
                 if (fields.Count() < 11)
@@ -163,9 +218,28 @@ namespace VennDiagram
                     throw new Exception("Variant with FP or FN on wrong allele: " + vcfLine);
                 }
 
-                return new Variant(new Locus(fields[0], Convert.ToInt32(fields[1])), fields[3], fields[4], fields[9].ToLower().Contains("fn"), fields[10].ToLower().Contains("fp"));
+                return new Variant(new Locus(fields[0], Convert.ToInt32(fields[1])), fields[3], fields[4], fields[9].ToLower().Contains("fn"), fields[10].ToLower().Contains("fp"), alignerPair);
             } // FromVCFLine
-        }
+
+            public bool presentInAligner(ASETools.Aligner aligner)
+            {
+                if (alignerPair.firstAligner == aligner)
+                {
+                    return !fn;
+                } else if (alignerPair.secondAligner == aligner)
+                {
+                    return !fp;
+                } else
+                {
+                    return false;
+                }
+            } // presentInAligner
+
+            public bool equivalentTo(Variant peer)
+            {
+                return locus == peer.locus && refAllele == peer.refAllele && altAllele == peer.altAllele;
+            }
+        } // Variant
 
         static Dictionary<Locus, List<Variant>> LoadVariantsForOneVCF(ASETools.VariantCaller variantCaller, bool tumor, ASETools.Case case_, ASETools.AlignerPair alignerPair)
         {
@@ -185,12 +259,14 @@ namespace VennDiagram
 
             ASETools.ExtractFileFromTarball(case_.concordance[alignerPair][variantCaller][tumor].concordance_tarball_filename, "./" + gzippedVCFName, tempDir);
 
-            string inputLine;
-            var inputFile = ASETools.CreateCompressedStreamReaderWithRetry(tempDir + gzippedVCFName);
+            ASETools.RunAndWaitForProcess(@"c:\bolosky\bin\gzip.exe", "-d " + tempDir + gzippedVCFName);
+
+            var inputFile = ASETools.CreateStreamReaderWithRetry(tempDir + VCFName);
             if (inputFile == null)
             {
-                throw new Exception("Unable to open VCF file " + tempDir + gzippedVCFName);
+                throw new Exception("Couldn't open unzipped input file " + tempDir + VCFName);
             }
+            string inputLine;
             while (null != (inputLine = inputFile.ReadLine()))
             {
                 if (inputLine.StartsWith("#") || inputLine == "")
@@ -198,7 +274,7 @@ namespace VennDiagram
                     continue;
                 }
 
-                var variant = Variant.FromVCFLine(inputLine);
+                var variant = Variant.FromVCFLine(inputLine, alignerPair);
                 if (!retVal.ContainsKey(variant.locus))
                 {
                     retVal.Add(variant.locus, new List<Variant>());
@@ -208,7 +284,6 @@ namespace VennDiagram
 
             }
 
-            inputFile.Close();
             ASETools.TryToRecursivelyDeleteDirectory(tempDir);
 
             return retVal;
@@ -216,49 +291,45 @@ namespace VennDiagram
 
         static void HandleOneCase(ASETools.VariantCaller variantCaller, bool tumor, ASETools.Case case_, ConcordanceResults state)
         {
-            var variants = new Dictionary<ASETools.AlignerPair, Dictionary<Locus, List<Variant>>>();
-            var allLociWithVariants = new HashSet<Locus>();
+            var variantsByLocus = new Dictionary<Locus, List<Variant>>();
 
-            foreach (var alignerPair in ASETools.alignerPairs)
+            foreach (var alignerPair in ASETools.allAlignerPairs)
             {
-                variants.Add(alignerPair, LoadVariantsForOneVCF(variantCaller, tumor, case_, alignerPair));
+                var variantsForThisPair = LoadVariantsForOneVCF(variantCaller, tumor, case_, alignerPair);
 
-                foreach (var locus in variants[alignerPair].Select(_ => _.Key))
+                foreach (var locus in variantsForThisPair.Select(_ => _.Key))
                 {
-                    allLociWithVariants.Add(locus);
-                }
+                    if (!variantsByLocus.ContainsKey(locus))
+                    {
+                        variantsByLocus.Add(locus, new List<Variant>());
+                    } else { }
+
+                    variantsByLocus[locus].AddRange(variantsForThisPair[locus]);
+                } // locus
             } // aligner pair
 
-            foreach (var alignerPair in ASETools.alignerPairs)
+            foreach (var locus in variantsByLocus.Select(_ => _.Key))
             {
-                foreach (var locus in allLociWithVariants)
+                var variantsToProcess = variantsByLocus[locus].Where(_ => true).ToList();    // just a funky to copy the list
+
+                while (variantsToProcess.Count() > 0)
                 {
-                    if (!variants[alignerPair].ContainsKey(locus))
-                    {
-                        //
-                        // Neither one has it.
-                        //
-                        state.pairs[alignerPair].neither++;
-                    }
-                    else
-                    {
-                        if (variants[alignerPair][locus].All(_ => _.fp))
-                        {
-                            state.pairs[alignerPair].BButNotA++;
-                        }
+                    var equivalentVariants = variantsToProcess.Where(_ => _.equivalentTo(variantsToProcess[0])).ToList();
 
-                        if (variants[alignerPair][locus].All(_ => _.fn))
-                        {
-                            state.pairs[alignerPair].AButNotB++;
-                        }
+                    var presentInAligners = new ASETools.AlignerSet(ASETools.EnumUtil.GetValues<ASETools.Aligner>().Where(aligner => equivalentVariants.Any(variant => variant.presentInAligner(aligner))).ToList());
 
-                        if (variants[alignerPair][locus].All(_ => !_.fp && !_.fn))
-                        {
-                            state.pairs[alignerPair].both++;
-                        }
+                    var variantType = equivalentVariants[0].getVariantType();
+
+                    state.count[presentInAligners][variantType]++;
+
+                    if (equivalentVariants.Count() >= variantsToProcess.Count())
+                    {
+                        break;
                     }
-                } // foreach locus
-            } // foreach aligner pair
-        }
+                    equivalentVariants.ForEach(_ => variantsToProcess.Remove(_));
+                }
+            }
+        } // HandleOneCase
     } // Program
-} // namespace VennDiagram
+
+}

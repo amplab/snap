@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Remoting;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,7 +14,9 @@ namespace SummarizeSNAPPerformance
     class Program
     {
 
-        class PerThreadState
+        static Dictionary<string, ASETools.CaseMetadata> metadataByCase;
+
+        class Histograms
         {
             public ASETools.PreBucketedHistogram alignTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
             public ASETools.PreBucketedHistogram indexLoadTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
@@ -29,7 +32,7 @@ namespace SummarizeSNAPPerformance
             public int timeForSlowestRun = 0;
             public string caseIdForSlowestRun = "";
 
-            public void merge(PerThreadState peer)
+            public void merge(Histograms peer)
             {
                 alignTimeHistogram.merge(peer.alignTimeHistogram);
                 indexLoadTimeHistogram.merge(peer.indexLoadTimeHistogram);
@@ -48,55 +51,76 @@ namespace SummarizeSNAPPerformance
                     caseIdForSlowestRun = peer.caseIdForSlowestRun;
                 }
             }
-        }
+        } // Histograms
 
-        static Dictionary<bool, PerThreadState> globalState = new Dictionary<bool, PerThreadState>();   // tumor->state
+        class PerThreadState
+        {
+            public Dictionary<bool, Dictionary<bool, Histograms>> histograms = new Dictionary<bool, Dictionary<bool, Histograms>>();    // tumor -> paired -> histograms
 
-        static void ProcessOneCase(ASETools.Case case_, Dictionary<bool, PerThreadState> state)
+            public PerThreadState()
+            {
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    histograms.Add(tumor, new Dictionary<bool, Histograms>());
+                    foreach (var paired in ASETools.BothBools)
+                    {
+                        histograms[tumor].Add(paired, new Histograms());
+                    }
+                }
+            } // ctor
+
+            public void merge(PerThreadState peer)
+            {
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    foreach (var paired in ASETools.BothBools)
+                    {
+                        histograms[tumor][paired].merge(peer.histograms[tumor][paired]);
+                    }
+                }
+            }
+        } // PerThreadState
+
+        static PerThreadState globalState = new PerThreadState();
+        static void ProcessOneCase(ASETools.Case case_, PerThreadState state)
         {
             foreach (var tumor in ASETools.BothBools)
             {
-                if (!state.ContainsKey(tumor))
-                {
-                    state.Add(tumor, new PerThreadState());
-                }
-
-                var inputFilename = tumor ? case_.snap_realigned_tumor_dna_statictics_filename : case_.snap_realigned_normal_dna_statictics_filename;
-
+                var inputFilename = case_.realignments[ASETools.Aligner.SNAP][tumor].dna_statistics_filename;
+ 
                 if (inputFilename == "")
                 {
                     continue;
                 }
 
+                var paired = metadataByCase[case_.case_id].getBAMMetadata(tumor, true).isPaired;
+
                 var stats = ASETools.SNAPRunTiming.LoadFromFile(inputFilename);
 
-                state[tumor].alignTimeHistogram.addValue(stats.alignTime);
-                state[tumor].indexLoadTimeHistogram.addValue(stats.loadingTime);
-                state[tumor].loadAndAlignTimeHistogram.addValue(stats.alignTime + stats.loadingTime);
-                state[tumor].sortTimeHistogram.addValue(stats.sortTime);
-                state[tumor].totalSNAPTimeHistogram.addValue(stats.overallRuntime);
-                state[tumor].copyInTimeHistogram.addValue(stats.copyInTime);
-                state[tumor].copyOutTimeHistogram.addValue(stats.copyOutTime);
-                state[tumor].endToEndTimeHistogram.addValue(stats.overallRuntime + stats.copyInTime + stats.copyOutTime);
-                state[tumor].readsPerSecondReportedHistogram.addValue(stats.readsPerSecond);
-                state[tumor].readsPerSecondAllSnapHistogram.addValue(stats.totalReads / stats.overallRuntime);
+                state.histograms[tumor][paired].alignTimeHistogram.addValue(stats.alignTime);
+                state.histograms[tumor][paired].indexLoadTimeHistogram.addValue(stats.loadingTime);
+                state.histograms[tumor][paired].loadAndAlignTimeHistogram.addValue(stats.alignTime + stats.loadingTime);
+                state.histograms[tumor][paired].sortTimeHistogram.addValue(stats.sortTime);
+                state.histograms[tumor][paired].totalSNAPTimeHistogram.addValue(stats.overallRuntime);
+                state.histograms[tumor][paired].copyInTimeHistogram.addValue(stats.copyInTime);
+                state.histograms[tumor][paired].copyOutTimeHistogram.addValue(stats.copyOutTime);
+                state.histograms[tumor][paired].endToEndTimeHistogram.addValue(stats.overallRuntime + stats.copyInTime + stats.copyOutTime);
+                state.histograms[tumor][paired].readsPerSecondReportedHistogram.addValue(stats.readsPerSecond);
+                state.histograms[tumor][paired].readsPerSecondAllSnapHistogram.addValue(stats.totalReads / stats.overallRuntime);
 
-                if (stats.overallRuntime > state[tumor].timeForSlowestRun)
+                if (stats.overallRuntime > state.histograms[tumor][paired].timeForSlowestRun)
                 {
-                    state[tumor].timeForSlowestRun = stats.overallRuntime;
-                    state[tumor].caseIdForSlowestRun = case_.case_id;
+                    state.histograms[tumor][paired].timeForSlowestRun = stats.overallRuntime;
+                    state.histograms[tumor][paired].caseIdForSlowestRun = case_.case_id;
                 }
             } // tumor/normal
         } // ProcessOneCase
 
-        static void FinishUp(Dictionary<bool, PerThreadState> state)
+        static void FinishUp(PerThreadState state)
         {
             lock (globalState)
             {
-                foreach (var tumor in ASETools.BothBools)
-                {
-                    globalState[tumor].merge(state[tumor]);
-                }
+                globalState.merge(state);
             } // lock(globalState)
         } // FinishUp
 
@@ -120,23 +144,20 @@ namespace SummarizeSNAPPerformance
 
             var listOfCases = cases.Select(_ => _.Value).ToList();
 
-            foreach (var tumor in ASETools.BothBools)
-            {
-                globalState.Add(tumor, new PerThreadState());
-            }
-
-            if (listOfCases.Any(_ => _.snap_realigned_normal_dna_statictics_filename == "" || _.snap_realigned_tumor_dna_statictics_filename == ""))
+            if (listOfCases.Any(case_ => case_.case_metadata_filename == "" || case_.realignments[ASETools.Aligner.SNAP].Any(_ => _.Value.dna_statistics_filename == "")))
             {
                 Console.WriteLine("Some cases are missing data.");
                 //BJB return;
             }
 
-            var casesToRun = listOfCases.Where(_ => _.snap_realigned_normal_dna_statictics_filename != "" || _.snap_realigned_tumor_dna_statictics_filename != "").ToList();
+            var casesToRun = listOfCases.Where(case_ => case_.case_metadata_filename != "" && case_.realignments[ASETools.Aligner.SNAP].Any(_ => _.Value.dna_statistics_filename != "")).ToList();
+
+            metadataByCase = ASETools.CaseMetadata.ReadConsolodatedCaseMetadata(configuration.finalResultsDirectory + ASETools.ConsolodatedCaseMetadataFilename);
 
             int nPerDot;
             ASETools.PrintMessageAndNumberBar("Processing", "cases", casesToRun.Count(), out nPerDot);
 
-            var threading = new ASETools.WorkerThreadHelper<ASETools.Case, Dictionary<bool, PerThreadState>>(casesToRun, ProcessOneCase, FinishUp, null, nPerDot);
+            var threading = new ASETools.WorkerThreadHelper<ASETools.Case, PerThreadState>(casesToRun, ProcessOneCase, FinishUp, null, nPerDot);
             threading.run();
 
             var outputFilename = configuration.finalResultsDirectory + ASETools.SNAPSummaryFilename;
@@ -147,37 +168,40 @@ namespace SummarizeSNAPPerformance
                 return;
             }
 
-            foreach (var tumor in ASETools.BothBools)
+            foreach (var paired in ASETools.BothBools)
             {
-                var timeHistograms = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
-                timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("align time", globalState[tumor].alignTimeHistogram));
-                timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("index load", globalState[tumor].indexLoadTimeHistogram));
-                timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("load and align", globalState[tumor].loadAndAlignTimeHistogram));
-                timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("sort time", globalState[tumor].sortTimeHistogram));
-                timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("total SNAP time", globalState[tumor].totalSNAPTimeHistogram));
-                timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("copy in time", globalState[tumor].copyInTimeHistogram));
-                timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("copy out time", globalState[tumor].copyOutTimeHistogram));
-                timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("end-to-end time", globalState[tumor].endToEndTimeHistogram));
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    var timeHistograms = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
+                    timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("align time", globalState.histograms[tumor][paired].alignTimeHistogram));
+                    timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("index load", globalState.histograms[tumor][paired].indexLoadTimeHistogram));
+                    timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("load and align", globalState.histograms[tumor][paired].loadAndAlignTimeHistogram));
+                    timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("sort time", globalState.histograms[tumor][paired].sortTimeHistogram));
+                    timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("total SNAP time", globalState.histograms[tumor][paired].totalSNAPTimeHistogram));
+                    timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("copy in time", globalState.histograms[tumor][paired].copyInTimeHistogram));
+                    timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("copy out time", globalState.histograms[tumor][paired].copyOutTimeHistogram));
+                    timeHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("end-to-end time", globalState.histograms[tumor][paired].endToEndTimeHistogram));
 
-                var rateHistograms = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
-                rateHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("reads per second reported", globalState[tumor].readsPerSecondReportedHistogram));
-                rateHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("reads per second in SNAP", globalState[tumor].readsPerSecondAllSnapHistogram));
+                    var rateHistograms = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
+                    rateHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("reads per second reported", globalState.histograms[tumor][paired].readsPerSecondReportedHistogram));
+                    rateHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("reads per second in SNAP", globalState.histograms[tumor][paired].readsPerSecondAllSnapHistogram));
 
-                outputFile.WriteLine("Data for " + (tumor ? "tumor" : "normal"));
-                outputFile.WriteLine("Slowest run " + globalState[tumor].timeForSlowestRun + " for " + globalState[tumor].caseIdForSlowestRun);
-                timeHistograms.ForEach(_ => outputFile.WriteLine(_.Key + " mean " + _.Value.mean()));
-                rateHistograms.ForEach(_ => outputFile.WriteLine(_.Key + " mean " + _.Value.mean()));
+                    outputFile.WriteLine("Data for " + (tumor ? "tumor" : "normal") + " " + (paired ? "paired-end" : "single-end"));
+                    outputFile.WriteLine("Slowest run " + globalState.histograms[tumor][paired].timeForSlowestRun + " for " + globalState.histograms[tumor][paired].caseIdForSlowestRun);
+                    timeHistograms.ForEach(_ => outputFile.WriteLine(_.Key + " mean " + _.Value.mean()));
+                    rateHistograms.ForEach(_ => outputFile.WriteLine(_.Key + " mean " + _.Value.mean()));
 
-                outputFile.WriteLine();
-                timeHistograms.ForEach(_ => outputFile.WriteLine(_.Key + " max " + _.Value.max()));
-                rateHistograms.ForEach(_ => outputFile.WriteLine(_.Key + " max " + _.Value.max()));
+                    outputFile.WriteLine();
+                    timeHistograms.ForEach(_ => outputFile.WriteLine(_.Key + " max " + _.Value.max()));
+                    rateHistograms.ForEach(_ => outputFile.WriteLine(_.Key + " max " + _.Value.max()));
 
-                outputFile.WriteLine();
-                ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(outputFile, timeHistograms);
-                ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(outputFile, rateHistograms);
+                    outputFile.WriteLine();
+                    ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(outputFile, timeHistograms);
+                    ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(outputFile, rateHistograms);
 
-                outputFile.WriteLine();
-            } // tumor/normal
+                    outputFile.WriteLine();
+                } // tumor/normal
+            } // paired
 
             outputFile.WriteLine("**done**");
             outputFile.Close();

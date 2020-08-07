@@ -29,6 +29,8 @@ namespace ASEProcessManager
         const string linuxScriptFilename = "ASENextStepsLinux";
         const string downloadScriptFilename = "ASEDownload.cmd";
 
+        const bool useGEM = ASETools.useGEM;
+
         static string jobAddString = "";
 
         //
@@ -5077,6 +5079,8 @@ namespace ASEProcessManager
 
                         string localSecondInputFile = paired ? tempDir + ASETools.GetFileNameFromPathname(getSecondInput(case_)) : "";
                         string samFileName = "/mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor) + "." + ASETools.alignerName[aligner] + "_realigned.sam";
+                        var unsortedSuffix = "." + ASETools.alignerName[aligner] + "_unsorted.bam";
+                        var unsortedBamFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + unsortedSuffix;
 
                         if (paired)
                         {
@@ -5111,6 +5115,7 @@ namespace ASEProcessManager
                                     linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1  2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
+#if useGEM
 
                             case ASETools.Aligner.GEM:
 
@@ -5123,6 +5128,18 @@ namespace ASEProcessManager
                                     linuxScript.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -i " + localInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
+#endif // useGEM
+
+                            case ASETools.Aligner.Novoalign:
+                                if (paired)
+                                {
+                                    linuxScript.Write(@"/mnt/d/gdc/novocraft/novoalign -d /mnt/d/sequence/indices/Homo_sapiens_assembly38.nix -f " + localInputFile + " " + localSecondInputFile + " --alt on -o BAM 0 \"@RG\\tID:4\\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1" + "\" > " + unsortedBamFilename + "\n");
+                                }
+                                else
+                                {
+                                    linuxScript.Write(@"/mnt/d/gdc/novocraft/novoalign -d /mnt/d/sequence/indices/Homo_sapiens_assembly38.nix -f " + localInputFile + " --alt on -o BAM 0 \"@RG\\tID:4\\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1" + "\" > " + unsortedBamFilename + "\n");
+                                }
+                                break;
 
                             default:
                                 throw new Exception("LinuxAlignerAlignmentStage: unrecognized aligner " + aligner);
@@ -5130,22 +5147,42 @@ namespace ASEProcessManager
                         } // switch
                         linuxScript.Write("date >> " + timingFilename + "\n"); // alignment
 
-                        var unsortedSuffix = "." + ASETools.alignerName[aligner] + "_unsorted.bam";
                         var sortedSuffix = "." + ASETools.alignerName[aligner] + "_sorted.bam";
                         var sortTempSuffix = "." + ASETools.alignerName[aligner] + "_sort.temp";
 
-                        var unsortedBamFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + unsortedSuffix;
-                        linuxScript.Write("~/bin/samtools view -@ 16 -S -1 -b " + samFileName + " > " + unsortedBamFilename + "\n");   // samtools auto-appends .bam to the output filename
+                        if (aligner != ASETools.Aligner.Novoalign)
+                        {
+                            linuxScript.Write("~/bin/samtools view -@ 16 -S -1 -b " + samFileName + " > " + unsortedBamFilename + "\n");   // samtools auto-appends .bam to the output filename
+                        } else
+                        {
+                            // Novoalign makes an unsorted BAM directly
+                            linuxScript.Write("# Placeholder\n");
+                        }
                         linuxScript.Write("date >> " + timingFilename + "\n"); // sam->bam
 
                         var sortedBamFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + sortedSuffix;
                         var sortIntermediatePrefix = tempDir + case_.getDNAFileIdByTumor(tumor) + sortTempSuffix;
-                        // ~/bin/samtools sort -n -m 10G -@ 16 /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary.bam  -T /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary_name_sorted_temp -o /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary_name_sorted.bam
-                        linuxScript.Write("~/bin/samtools sort -@ 16 -m 10G -l 1 " + unsortedBamFilename + " -o " + sortedBamFilename + " -T " + sortIntermediatePrefix + "\n"); // L6 is the default compression that SNAP uses
+                        var outputFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + outputExtension;
+
+                        if (aligner == ASETools.Aligner.Novoalign)
+                        {
+                            linuxScript.Write(@"/mnt/d/gdc/novocraft/novosort --md " + unsortedBamFilename + " > " + outputFilename + "\n");
+                        }
+                        else
+                        {
+                            linuxScript.Write("~/bin/samtools sort -@ 16 -m 10G -l 1 " + unsortedBamFilename + " -o " + sortedBamFilename + " -T " + sortIntermediatePrefix + "\n"); // L6 is the default compression that SNAP uses
+                        }
                         linuxScript.Write("date >> " + timingFilename + "\n"); // sort
 
-                        var outputFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + outputExtension;
-                        linuxScript.Write("java -jar /mnt/d/gdc/bin/picard.jar MarkDuplicates I=" + sortedBamFilename + " O=" + outputFilename + " M=/dev/null 2>&1 >> /dev/null\n");
+                        if (aligner == ASETools.Aligner.Novoalign)
+                        {
+                            // Novosort does sort & mark duplicate together
+                            linuxScript.Write("# Placeholder\n");
+                        }
+                        else
+                        {
+                            linuxScript.Write("java -jar /mnt/d/gdc/bin/picard.jar MarkDuplicates I=" + sortedBamFilename + " O=" + outputFilename + " M=/dev/null 2>&1 >> /dev/null\n");
+                        }
                         linuxScript.Write("date >> " + timingFilename + "\n"); // mark duplicates
 
                         var outputBaiFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + outputExtensionBai;
@@ -5230,8 +5267,8 @@ namespace ASEProcessManager
                         CopyFileInLinux(linuxScript, sourceBAIFilename, localBAIFilename);
 
                         linuxScript.Write("cd ~/gatk\n");
-                        linuxScript.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j `nproc` ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
-                            ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE --dont-use-soft-clipped-bases true\n");
+                        linuxScript.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j 12 ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
+                            ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE --dont-use-soft-clipped-bases true\n"); // Using less parallelism than cores speeds things up, becuase chr1 starts first and ends last, so giving it more resources helps
 
                         string localOutputFile = tempDirectory + case_.getDNAFileIdByTumor(tumor) + ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.HaplotypeCaller];  // Only normal for now
 
@@ -5596,13 +5633,6 @@ namespace ASEProcessManager
                     continue;
                 }
 
-                if (aligner == ASETools.Aligner.GEM)
-                {
-                    //
-                    // GEM crashes too much.
-                    //
-                    continue;
-                }
 
                 foreach (var tumor in ASETools.BothBools)
                 {
@@ -5616,9 +5646,6 @@ namespace ASEProcessManager
             }
 
 
-            // off until we have a final version of snap processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligners.SNAP));
-            //processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligner.BWA));
-            //processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligner.Bowtie));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.SNAP));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.BWA));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.Bowtie));
@@ -5633,7 +5660,7 @@ namespace ASEProcessManager
                 //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
             }
 
-            foreach (var alignerPair in ASETools.alignerPairs)
+            foreach (var alignerPair in ASETools.allAlignerPairs)
             {
                 foreach (var tumor in ASETools.BothBools)
                 {
