@@ -1909,7 +1909,7 @@ SAMFormat::writePairs(
             internalScoreBuffer[0] = '\0';
         }
 
-        int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
+        int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%d\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
             (unsigned)qnameLen[whichRead], read->getId(),
             flags[whichRead],
             contigName[whichRead],
@@ -1918,7 +1918,7 @@ SAMFormat::writePairs(
             cigar[whichRead],
             mateContigName[whichRead],
             matePositionInContig[whichRead],
-            templateLength[whichRead],
+            (_int32) templateLength[whichRead],
             fullLength[whichRead], data[whichRead],
             fullLength[whichRead], quality[whichRead],
             aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "",

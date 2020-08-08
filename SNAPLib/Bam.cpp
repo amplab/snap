@@ -2529,12 +2529,19 @@ BAMDupMarkFilter::onNextBatch(
     // Run could potentially span multiple buffers
     //
     if (runCount > 1) { // runs of size <= 1 cannot have duplicates
-        if (offsets[unfinishedRunStart] == 0) { // we did not yet mark duplicates for this run
+        if (lastBatch) {
             //
-            // If this is the last buffer or we have a different run from what we have seen before, 
+            // We have reached the lastBatch. Mark all duplicates
+            //
+            dupMarkBatch(lastBam, currentOffset + offsets[offsets.size() - 1]);
+            offsets.clear();
+        }
+        else if (offsets[unfinishedRunStart] == 0) { // we did not yet mark duplicates for this run
+            //
+            // If we have a different run from what we have seen before, 
             // simply mark all duplicates in the run we currently have
             //
-            if (lastBatch || (runLocation != prevRunLocation)) {
+            if (runLocation != prevRunLocation) {
                 dupMarkBatch(lastBam, currentOffset + offsets[offsets.size() - 1]);
                 offsets.clear();
             }
