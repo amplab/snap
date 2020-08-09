@@ -345,7 +345,11 @@ SAMReader::parseHeader(
                 }
             }
 
-            if (InvalidGenomeLocation == contigBase) {
+            //
+            // If we have not seen the contig before we cannot copy over header.
+            // Also if we are running with ALT contigs, don't copy over header even if the contig name matches, since the contig's ALT status may have changed from the previous run
+            //
+            if (InvalidGenomeLocation == contigBase || (genome->isGenomeLocationALT(contigBase))) {
                 *o_headerMatchesIndex = false;
             }
 
