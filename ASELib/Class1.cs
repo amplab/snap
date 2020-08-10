@@ -17086,7 +17086,7 @@ namespace ASELib
             string tempDirectory = @"d:\temp\tarballExtraction\" + GetFileNameFromPathname(tarballName) + @"_files\";
 
             Directory.CreateDirectory(tempDirectory);
-            RunAndWaitForProcess("tar.exe", "xvf " + tarballName + " " + filename, tempDirectory);
+            RunAndWaitForProcess("tar.exe", "xf " + tarballName + " " + filename, tempDirectory);
 
             if (!File.Exists(tempDirectory + filename))
             {

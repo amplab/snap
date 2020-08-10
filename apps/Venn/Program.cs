@@ -20,50 +20,29 @@ namespace Venn
 
         enum VariantType { SNV, Indel };
 
-        class ConcordancePair
-        {
-            public int both = 0;
-            public int neither = 0;
-            public int AButNotB = 0;
-            public int BButNotA = 0;
-
-            public void merge(ConcordancePair peer)
-            {
-                both += peer.both;
-                neither += peer.neither;
-                AButNotB += peer.AButNotB;
-                BButNotA += peer.BButNotA;
-            }
-
-            public string Describe(ASETools.AlignerPair alignerPair)
-            {
-                return both + " in both " + neither + " in neither " + AButNotB + " in " + ASETools.alignerName[alignerPair.firstAligner] + " but not " + ASETools.alignerName[alignerPair.secondAligner] + " and " + BButNotA + " vice versa.";
-
-            }
-        } // ConcordancePair
-
         class ConcordanceResults
         {
             public ConcordanceResults()
             {
                 foreach (var alignerSet in ASETools.allAlignerSets)
                 {
-                    count.Add(alignerSet, new Dictionary<VariantType, int>());
+                    count.Add(alignerSet, new Dictionary<VariantType, ASETools.RunningMeanAndStdDev>());
                     foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
                     {
-                        count[alignerSet].Add(variantType, 0);
+                        count[alignerSet].Add(variantType, new ASETools.RunningMeanAndStdDev());
                     }
                 }
             } // ctor
 
-            public readonly Dictionary<ASETools.AlignerSet, Dictionary<VariantType, int>> count = new Dictionary<ASETools.AlignerSet, Dictionary<VariantType, int>>();
+            public readonly Dictionary<ASETools.AlignerSet, Dictionary<VariantType, ASETools.RunningMeanAndStdDev>> count = 
+                new Dictionary<ASETools.AlignerSet, Dictionary<VariantType, ASETools.RunningMeanAndStdDev>>();
             public void merge(ConcordanceResults peer)
             {
                 foreach (var alignerSet in ASETools.allAlignerSets)
                 {
                     foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
                     {
-                        count[alignerSet][variantType] += peer.count[alignerSet][variantType];
+                        count[alignerSet][variantType].merge(peer.count[alignerSet][variantType]);
                     }
                 }
             }
@@ -97,6 +76,7 @@ namespace Venn
                 {
                     if (tumor) continue;  // For now, just ignore the tumor case.
                     var casesToProcess = listOfCases.Where(c => c.concordance.All(_ => _.Value[variantCaller][tumor].concordance_tarball_filename != "")).ToList();
+                    int nCases = casesToProcess.Count();
 
                     Stopwatch oneRunTimer = new Stopwatch();
                     oneRunTimer.Start();
@@ -107,25 +87,20 @@ namespace Venn
                     threading.run(1 /*BJB*/);
                     Console.WriteLine(ASETools.ElapsedTimeInSeconds(oneRunTimer));
 
+
                     foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>()) {
-                        int nVariants = globalResults.count.Sum(_ => _.Value[variantType]);
-
-                         if (nVariants == 0) 
-                        { 
-                            continue; 
-                        }
-
                         Console.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.variantCallerName[variantCaller] + " " +(variantType == VariantType.SNV ? "SNVs" : "Indels"));
                         foreach (var alignerSet in ASETools.allAlignerSets)
                         {
-                            Console.WriteLine(alignerSet + "\t" + globalResults.count[alignerSet][variantType] + "\t" + (double)globalResults.count[alignerSet][variantType] / nVariants);
+                            var meanAndStdDev = globalResults.count[alignerSet][variantType].getMeanAndStdDev();
+                            Console.WriteLine(alignerSet + "\t" + meanAndStdDev.mean  + "\t" + meanAndStdDev.stddev);
                         }
 
                         Console.WriteLine();
                         Console.WriteLine("Total area");
                         foreach (var alignerSet in ASETools.allAlignerSets)
                         {
-                            var n = globalResults.count.Where(_ => alignerSet.isSubsetOf(_.Key)).Sum(_ => _.Value[variantType]);
+                            var n = globalResults.count.Where(_ => alignerSet.isSubsetOf(_.Key)).Sum(_ => _.Value[variantType].getMeanAndStdDev().mean);
                             Console.WriteLine(alignerSet + " = " + n);
                         }
 
@@ -136,14 +111,6 @@ namespace Venn
             } // variant caller
 
         } // Main
-
-        static void FinishUp(ConcordanceResults state)
-        {
-            lock (globalResults)
-            {
-                globalResults.merge(state);
-            } // lock (globalResults)
-        } // FinishUp
 
 
         struct Locus
@@ -284,6 +251,8 @@ namespace Venn
 
             }
 
+            inputFile.Close();
+
             ASETools.TryToRecursivelyDeleteDirectory(tempDir);
 
             return retVal;
@@ -308,6 +277,16 @@ namespace Venn
                 } // locus
             } // aligner pair
 
+            var variantCountByAlignerSetAndType = new Dictionary<ASETools.AlignerSet, Dictionary<VariantType, int>>();
+            foreach (var alignerSet in ASETools.allAlignerSets)
+            {
+                variantCountByAlignerSetAndType.Add(alignerSet, new Dictionary<VariantType, int>());
+                foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
+                {
+                    variantCountByAlignerSetAndType[alignerSet].Add(variantType, 0);
+                }
+            }
+
             foreach (var locus in variantsByLocus.Select(_ => _.Key))
             {
                 var variantsToProcess = variantsByLocus[locus].Where(_ => true).ToList();    // just a funky to copy the list
@@ -320,7 +299,7 @@ namespace Venn
 
                     var variantType = equivalentVariants[0].getVariantType();
 
-                    state.count[presentInAligners][variantType]++;
+                    variantCountByAlignerSetAndType[presentInAligners][variantType]++;
 
                     if (equivalentVariants.Count() >= variantsToProcess.Count())
                     {
@@ -328,8 +307,26 @@ namespace Venn
                     }
                     equivalentVariants.ForEach(_ => variantsToProcess.Remove(_));
                 }
-            }
+            } // for each locus with variants
+
+            foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
+            {
+                int nVariants = variantCountByAlignerSetAndType.Sum(_ => _.Value[variantType]);
+
+                foreach (var alignerSet in ASETools.allAlignerSets)
+                {
+                    state.count[alignerSet][variantType] += ((double)variantCountByAlignerSetAndType[alignerSet][variantType]) / nVariants;
+                } // alignerSet
+            } // variantType
         } // HandleOneCase
+        static void FinishUp(ConcordanceResults state)
+        {
+            lock (globalResults)
+            {
+                globalResults.merge(state);
+            } // lock (globalResults)
+        } // FinishUp
+
     } // Program
 
 }
