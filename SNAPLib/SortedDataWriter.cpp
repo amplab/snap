@@ -110,7 +110,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL);
 
 private:
     SortedDataFilterSupplier*   parent;
@@ -920,7 +920,8 @@ SortedDataFilter::onNextBatch(
     size_t offset,
     size_t bytes,
     bool lastBatch,
-    bool* needMoreBuffer)
+    bool* needMoreBuffer,
+    size_t* fromBufferUsed)
 {
     _ASSERT(!seenLastBatch);
     seenLastBatch |= lastBatch;

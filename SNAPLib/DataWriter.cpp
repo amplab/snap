@@ -430,7 +430,8 @@ AsyncDataWriter::nextBatch(bool lastBatch)
 
     if (filter != NULL) {
         bool needMoreBuffer = false; // Does MarkDup require a larger buffer to store all duplicate candidates
-        size_t n = filter->onNextBatch(this, write->fileOffset, write->used, lastBatch, &needMoreBuffer);
+        size_t bytesRead = 0;
+        size_t n = filter->onNextBatch(this, write->fileOffset, write->used, lastBatch, &needMoreBuffer, &bytesRead);
         if (n == UINT64_MAX) // The filter's hacky way of telling us it's squirreled away the data and we shouldn't write it to the file.
         {
             _ASSERT(!newSize);
@@ -456,8 +457,8 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                     write->used = 0;
                     write->logicalUsed = 0;
                 }
-                else if (n < write->used) {
-                    batches[current].used = write->used - n;
+                else if (bytesRead < write->used) {
+                    batches[current].used = write->used - bytesRead;
                     batches[current].logicalUsed = batches[current].used;
                     if (batches[current].used > batches[current].bufferSize) {
                         size_t newBufferSize = write->bufferSize * 2;
@@ -466,13 +467,13 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                             WriteErrorMessage("Unable to allocate %lld bytes for write buffer\n", newBufferSize);
                             soft_exit(1);
                         }
-                        memcpy(newBuffer, write->buffer + n, batches[current].used);
+                        memcpy(newBuffer, write->buffer + bytesRead, batches[current].used);
                         BigDealloc(batches[current].buffer);
                         batches[current].bufferSize = newBufferSize;
                         batches[current].buffer = newBuffer;
                     }
                     else {
-                        memcpy(batches[current].buffer, write->buffer + n, batches[current].used);
+                        memcpy(batches[current].buffer, write->buffer + bytesRead, batches[current].used);
                     }
                     write->used = n;
                     write->logicalUsed = n;
@@ -632,10 +633,10 @@ public:
         b->onAdvance(writer, batchOffset, data, bytes, location);
     }
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch, bool* needMoreBuffer)
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch, bool* needMoreBuffer, size_t* fromBufferUsed)
     {
-        size_t sa = a->onNextBatch(writer, offset, bytes, lastBatch, needMoreBuffer);
-        size_t sb = b->onNextBatch(writer, offset, sa, lastBatch, needMoreBuffer);
+        size_t sa = a->onNextBatch(writer, offset, bytes, lastBatch, needMoreBuffer, fromBufferUsed);
+        size_t sb = b->onNextBatch(writer, offset, sa, lastBatch, needMoreBuffer, fromBufferUsed);
         return sb;
     }
 

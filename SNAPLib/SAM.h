@@ -154,6 +154,7 @@ private:
         size_t*             rgLineOffsets;
 
         friend class SAMFormat;
+        friend class SAMFilter;
 };
 
 class SAMFormat : public FileFormat
@@ -328,4 +329,104 @@ private:
     static void getRefSpanFromCigar(const char * cigarBuf, int cigarBufLen, int* refSpan);
 
     const bool useM;
+};
+
+struct SAMAlignment {
+    int flag;
+    int qual;
+    int mateQual;
+    _int64 tlen;
+    size_t libraryNameHash;
+    GenomeLocation location;
+    GenomeLocation unclippedStartLocation;
+    GenomeLocation unclippedEndLocation;
+    char* qName; // query name
+    size_t qNameLength;
+    char* flagOffset; // offset of flag field in the original buffer. This is helpful for duplicate marking
+
+    SAMAlignment() : flag(0), qual(0), mateQual(0), tlen(0), libraryNameHash(0), location(InvalidGenomeLocation),
+        unclippedStartLocation(InvalidGenomeLocation), unclippedEndLocation(InvalidGenomeLocation), qName(NULL), flagOffset(NULL) {}
+
+    void setReadName(char* qName_, size_t qNameLength_) {
+        qName = qName_;
+        qNameLength = qNameLength_;
+    }
+
+    char* getReadName() {
+        return qName;
+    }
+
+    GenomeLocation getUnclippedStart(GenomeLocation location, char* cigar, int cigarLen) {
+        if (flag & SAM_UNMAPPED) {
+            return location;
+        }
+        if (cigarLen == 0) {
+            return location;
+        }
+        const int cigarBufSize = MAX_READ_LENGTH * 2 + 32;
+        char cigarBuf[cigarBufSize];
+        if (cigarLen >= cigarBufSize) {
+            WriteErrorMessage("CIGAR string too long\n");
+            soft_exit(1);
+        }
+        memcpy(cigarBuf, cigar, cigarLen);
+        cigarBuf[cigarLen] = '\0';
+        int len;
+        char op;
+        int clipAmount = 0;
+        int fieldsScanned = sscanf(cigarBuf, "%d%c", &len, &op);
+        if (op == 'S' || op == 'H') {
+            clipAmount += len;
+        }
+        return location - clipAmount;
+    }
+
+    GenomeLocation getUnclippedEnd(GenomeLocation location, char* cigar, int cigarLen) {
+        if (flag & SAM_UNMAPPED) {
+            return location;
+        }
+        if (cigarLen == 0) {
+            return location;
+        }
+        const int cigarBufSize = MAX_READ_LENGTH * 2 + 32;
+        char cigarBuf[cigarBufSize];
+        if (cigarLen >= cigarBufSize) {
+            WriteErrorMessage("CIGAR string too long\n");
+            soft_exit(1);
+        }
+        memcpy(cigarBuf, cigar, cigarLen);
+        cigarBuf[cigarLen] = '\0';
+        const char* nextChunkOfCigar = cigarBuf;
+        unsigned len;
+        char op;
+        int refSpan = 0;
+        int fieldsScanned = sscanf(nextChunkOfCigar, "%d%c", &len, &op);
+        if (op != 'S' && op != 'H') {
+            refSpan += len;
+        }
+        //
+        // Now scan over the current op.
+        //
+        while ('0' <= *nextChunkOfCigar && '9' >= *nextChunkOfCigar) {
+            nextChunkOfCigar++;
+        }
+        nextChunkOfCigar++;
+        while ('\t' != *nextChunkOfCigar && '\n' != *nextChunkOfCigar && '\0' != *nextChunkOfCigar) {
+            fieldsScanned += sscanf(nextChunkOfCigar, "%d%c", &len, &op);
+            if (op != 'I') {
+                refSpan += len;
+            }
+            //
+            // Now scan over the current op.
+            //
+            while ('0' <= *nextChunkOfCigar && '9' >= *nextChunkOfCigar) {
+                nextChunkOfCigar++;
+            }
+            nextChunkOfCigar++;
+        }
+        return location + refSpan;
+    }
+
+    ~SAMAlignment() {
+    }
 };

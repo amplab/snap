@@ -878,7 +878,7 @@ BAMFormat::getWriterSupplier(
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
         }
         if (! options->noDuplicateMarking) {
-            filters = DataWriterSupplier::markDuplicates(genome)->compose(filters);
+            filters = DataWriterSupplier::bamMarkDuplicates(genome)->compose(filters);
         }
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName,
             options->sortMemory * (1ULL << 30),
@@ -1266,7 +1266,7 @@ BAMFormat::writePairs(
             auxLen += (unsigned)in->size();
         }
 
-        // MS
+        // QS
         int result = 0;
         _uint8* p = (_uint8*)quality[1 - whichRead];
         for (int i = 0; i < fullLength[1 - whichRead]; i++) {
@@ -1997,7 +1997,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL);
     
 protected:
     virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) = 0;
@@ -2024,7 +2024,8 @@ BAMFilter::onNextBatch(
     size_t offset,
     size_t bytes,
     bool lastBatch,
-    bool* needMoreBuffer)
+    bool* needMoreBuffer,
+    size_t* fromBufferUsed)
 {
 
     // 
@@ -2069,6 +2070,9 @@ BAMFilter::onNextBatch(
     currentBuffer = NULL;
     currentBufferBytes = 0;
     currentOffset = 0;
+    if (fromBufferUsed != NULL) {
+        *fromBufferUsed = bytes;
+    }
     return bytes;
 }
 
@@ -2355,11 +2359,11 @@ struct DuplicateMateInfo
     }
 };
 
-struct DupMarkEntry 
+struct BamDupMarkEntry
 {
-    DupMarkEntry() : libraryNameHash(0), runOffset(0), mateQual(0), mateInfo(0), info(0) {}
+    BamDupMarkEntry() : libraryNameHash(0), runOffset(0), mateQual(0), mateInfo(0), info(0) {}
 
-    bool operator<(const DupMarkEntry& b) const {
+    bool operator<(const BamDupMarkEntry& b) const {
         return (libraryNameHash < b.libraryNameHash) ||
             ((libraryNameHash == b.libraryNameHash) && (info < b.info)) ||
             ((libraryNameHash == b.libraryNameHash && info == b.info && mateInfo < b.mateInfo));
@@ -2412,7 +2416,7 @@ public:
     { return a->pos == b->pos && a->refID == b->refID &&
         ((a->FLAG ^ b->FLAG) & (SAM_REVERSE_COMPLEMENT | SAM_NEXT_REVERSED)) == 0; }
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL);
 
     void dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset);
 
@@ -2432,7 +2436,7 @@ private:
 
     typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,70,0,-2> MateMap;
     typedef VariableSizeMap<DuplicateFragmentKey, DuplicateMateInfo, 150, MapNumericHash<DuplicateFragmentKey>, 70, 0, -2> FragmentMap;
-    typedef VariableSizeVector<DupMarkEntry> RunVector;
+    typedef VariableSizeVector<BamDupMarkEntry> RunVector;
 
     RunVector run; // used for paired-end duplicate marking
     RunVector runFragment; // used for single-end duplicate marking 
@@ -2446,7 +2450,8 @@ BAMDupMarkFilter::onNextBatch(
     size_t offset,
     size_t bytes,
     bool lastBatch,
-    bool* needMoreBuffer)
+    bool* needMoreBuffer,
+    size_t* fromBufferUsed)
 {
     // 
     // Nothing to write
@@ -2547,6 +2552,9 @@ BAMDupMarkFilter::onNextBatch(
             }
             else {
                 *needMoreBuffer = true;
+                if (fromBufferUsed != NULL) {
+                    *fromBufferUsed = 0;
+                }
                 return 0;
             }
         }
@@ -2575,6 +2583,11 @@ BAMDupMarkFilter::onNextBatch(
     currentBuffer = NULL;
     currentBufferBytes = 0;
     currentOffset = 0;
+
+    if (fromBufferUsed != NULL) {
+        *fromBufferUsed = bytesRead;
+    }
+
     return bytesRead; // return bytes consumed in current batch. This may be less than 'bytes', if reads require duplicate marking in subsequent batch
 }
 
@@ -2598,7 +2611,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         GenomeLocation myLoc = isRC ? record->getUnclippedEnd(loc) : record->getUnclippedStart(loc);
         GenomeLocation mateLoc = myLoc + record->tlen;
 
-        DupMarkEntry entry, entryFragment;
+        BamDupMarkEntry entry, entryFragment;
         BAMAlignAux* aux = record->firstAux();
         entry.mateQual = entryFragment.mateQual = -1;
         entry.libraryNameHash = entryFragment.libraryNameHash = 0;
@@ -2614,7 +2627,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             if (!foundLibraryTag && aux->tag[0] == 'L' && aux->tag[1] == 'B' && aux->val_type == 'Z') {
                 foundLibraryTag = true;
                 // fixme: conflicts from hashing library names to the same value
-                entry.libraryNameHash = entryFragment.libraryNameHash = DupMarkEntry::hash((char*)aux->value());
+                entry.libraryNameHash = entryFragment.libraryNameHash = BamDupMarkEntry::hash((char*)aux->value());
             }
             aux = aux->next();
         }
@@ -2973,7 +2986,7 @@ private:
 };
 
     DataWriter::FilterSupplier*
-DataWriterSupplier::markDuplicates(const Genome* genome)
+DataWriterSupplier::bamMarkDuplicates(const Genome* genome)
 {
     return new BAMDupMarkSupplier(genome);
 }

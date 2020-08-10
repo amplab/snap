@@ -65,7 +65,7 @@ public:
         // e.g. so use getBatch(-1, ...) to get the one that was just completed
         // TransformFilters return #byte of transformed data in current buffer, so we need to advance again
         // TransformFilters should call getBatch(0) to ensure current buffer has been written before they write into it
-        virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL) = 0;
+        virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL) = 0;
     };
     
     // factory for per-thread filters
@@ -160,10 +160,12 @@ public:
 
     static char *generateSortIntermediateFilePathName(AlignerOptions *options);
 
+    static DataWriter::FilterSupplier* samMarkDuplicates(const Genome* genome);
+
     // defaults follow BAM output spec
     static GzipWriterFilterSupplier* gzip(bool bamFormat, size_t chunkSize, int numThreads, bool bindToProcessors, bool multiThreaded);
 
-    static DataWriter::FilterSupplier* markDuplicates(const Genome* genome);
+    static DataWriter::FilterSupplier* bamMarkDuplicates(const Genome* genome);
 
     static DataWriter::FilterSupplier* bamIndex(const char* indexFileName, const Genome* genome, GzipWriterFilterSupplier* gzipSupplier);
 };
