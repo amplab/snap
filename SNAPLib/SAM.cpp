@@ -345,7 +345,11 @@ SAMReader::parseHeader(
                 }
             }
 
-            if (InvalidGenomeLocation == contigBase) {
+            //
+            // If we have not seen the contig before we cannot copy over header.
+            // Also if we are running with ALT contigs, don't copy over header even if the contig name matches, since the contig's ALT status may have changed from the previous run
+            //
+            if (InvalidGenomeLocation == contigBase || (genome->isGenomeLocationALT(contigBase))) {
                 *o_headerMatchesIndex = false;
             }
 
@@ -531,6 +535,7 @@ SAMReader::parseLine(char *line, char *endOfBuffer, char *result[], size_t *line
 {
     *linelength = 0;
 
+    char* prev = line;
     char *next = line;
     char *endOfLine = strnchr(line,'\n',endOfBuffer-line);
     if (NULL == endOfLine) {
@@ -1143,8 +1148,12 @@ SAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     if (options->sortOutput) {
+        DataWriter::FilterSupplier* filters = NULL;
+        if (!options->noDuplicateMarking) {
+            filters = DataWriterSupplier::samMarkDuplicates(genome);
+        }
         dataSupplier = DataWriterSupplier::sorted(this, genome, DataWriterSupplier::generateSortIntermediateFilePathName(options), options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFile.fileName, NULL, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag);
+            options->numThreads, options->outputFile.fileName, filters, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag);
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag);
     }
@@ -1909,7 +1918,36 @@ SAMFormat::writePairs(
             internalScoreBuffer[0] = '\0';
         }
 
-        int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
+        // QS
+        int mqs = 0;
+        _uint8* p = (_uint8*)quality[1 - whichRead];
+        for (int i = 0; i < fullLength[1 - whichRead]; i++) {
+            int q = *p++;
+            q -= '!';
+            // Picard MarkDup uses a score threshold of 15 (default)
+            mqs += (q >= 15) ? (q != 255) * q : 0; // avoid branch?
+        }
+        const int mqsStringSize = 30;// Big enough that it won't buffer overflow regardless of the value of mateQualityScore
+        char mqsString[nmStringSize];
+        snprintf(mqsString, mqsStringSize, "\tQS:i:%d", mqs);
+
+        // LB
+        const size_t libraryStringSize = 512;
+        char libraryString[libraryStringSize];
+        const char* library = read->getLibrary();
+        if (library != NULL) {
+            size_t libraryLength = read->getLibraryLength();
+            if (libraryLength >= libraryStringSize) {
+                WriteErrorMessage("LB field too long\n");
+                soft_exit(1);
+            }
+            snprintf(libraryString, libraryStringSize, "\tLB:Z:%.*s", libraryLength, library);
+        }
+        else {
+            libraryString[0] = '\0';
+        }
+
+        int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%d\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s%s\n",
             (unsigned)qnameLen[whichRead], read->getId(),
             flags[whichRead],
             contigName[whichRead],
@@ -1918,13 +1956,15 @@ SAMFormat::writePairs(
             cigar[whichRead],
             mateContigName[whichRead],
             matePositionInContig[whichRead],
-            templateLength[whichRead],
+            (_int32) templateLength[whichRead],
             fullLength[whichRead], data[whichRead],
             fullLength[whichRead], quality[whichRead],
             aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "",
             readGroupSeparator, readGroupString,
             nmString, rglineAuxLen, rglineAux,
-            internalScoreBuffer);
+            internalScoreBuffer,
+            mqsString,
+            libraryString);
 
         if (charsInString > bufferSpace) {
             //
@@ -3028,5 +3068,1155 @@ SAMFormat::validateCigarString(
 
 // #endif // _DEBUG
 
+struct OffsetInfo {
+    size_t offset;
+    bool isDuplicate;
 
+    OffsetInfo() : offset(0), isDuplicate(false) {}
+    OffsetInfo(size_t offset_, bool isDuplicate_) {
+        offset = offset_;
+        isDuplicate = isDuplicate_;
+    }
+    ~OffsetInfo() {}
+};
+
+class SAMFilter : public DataWriter::Filter
+{
+public:
+    SAMFilter(DataWriter::FilterType i_type) : Filter(i_type), offsets(1000), header(false) {}
+
+    virtual ~SAMFilter() {
+        offsets.clear();
+    }
+
+    virtual void inHeader(bool flag)
+    {
+        header = flag;
+    }
+
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
+
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL) = 0;
+
+protected:
+
+    void getAlignmentInfo(const Genome* genome, char* buffer, _int64 bytes, SAMAlignment* sam);
+
+    void updateSAMLine(char* toBuffer, size_t* toUsed, char* fromBuffer, size_t bytes);
+
+    static int getTotalQuality(char* qual, int l_seq);
+
+    static void getTileXY(const char* id, int* o_tile, int* o_x, int* o_y);
+
+    VariableSizeVector<OffsetInfo> offsets;
+    DataWriter* currentWriter;
+    char* currentBuffer;
+    size_t currentBufferBytes; // # of valid bytes
+    size_t currentOffset; // logical file offset of beginning of current buffer
+
+private:
+    bool header;
+};
+
+struct SAMDupMarkEntry
+{
+    SAMDupMarkEntry() : libraryNameHash(0), runOffset(0), flag(0), qual(0), mateQual(0), mateInfo(0), info(0), tlen(0), qName(NULL), qNameLength(0) {}
+
+    SAMDupMarkEntry(size_t libraryNameHash_, size_t runOffset_, int flag_, _int32 qual_, _int32 mateQual_, _uint64 mateInfo_, _uint64 info_, _int64 tlen_, char* qName_, size_t qNameLength_) 
+        : libraryNameHash(libraryNameHash_),
+          runOffset(runOffset_),
+          flag(flag_),
+          qual(qual_),
+          mateQual(mateQual_),
+          mateInfo(mateInfo_),
+          info(info_),
+          tlen(tlen_),
+          qName(qName_),
+          qNameLength(qNameLength_)
+    {
+    }
+
+    bool operator<(const SAMDupMarkEntry& b) const {
+        return (libraryNameHash < b.libraryNameHash) ||
+            ((libraryNameHash == b.libraryNameHash) && (info < b.info)) ||
+            ((libraryNameHash == b.libraryNameHash && info == b.info && mateInfo < b.mateInfo));
+    }
+
+    static size_t hash(char* str) // We could probably use a better hash function, but I doubt it matters
+    {
+        size_t value = 0x123456789abcdef0;
+        char* libraryName = str;
+
+        for (int i = 0; i < strlen(str); i++)
+        {
+            value = (value * 131) ^ libraryName[i];
+        }
+
+        return value;
+    } // hash
+
+    size_t libraryNameHash; // hash value of library name string LB:Z:xxxx
+    size_t runOffset; // read offset in run
+    int flag; // SAM flag
+    _int32 qual; // read quality score
+    _int32 mateQual; // mate quality score (only considering bases with phred score >= 15)
+    _uint64 mateInfo; // mate information has: matelocation and matedirection
+    _uint64 info; // read information has: location and direction
+    _int64 tlen;
+    char* qName;
+    size_t qNameLength;
+};
+
+    void
+SAMFilter::getAlignmentInfo(
+    const Genome* genome, 
+    char* buffer, 
+    _int64 bytes,
+    SAMAlignment* sam)
+{
+    char* fields[SAMReader::nSAMFields];
+    size_t lengths[SAMReader::nSAMFields];
+    size_t lineLength;
+    if (!SAMReader::parseLine(buffer, buffer + bytes, fields, &lineLength, lengths)) {
+        WriteErrorMessage("Failed to parse SAM line:\n%.*s\n", lineLength, buffer);
+        soft_exit(1);
+    }
+    _ASSERT(lineLength < UINT32_MAX);
+
+    //
+    // We have to copy the contig name (RNAME) into its own buffer because the code in Genome expects
+    // it to be a null-terminated string, while all we've got is one that's space delimited.
+    //
+    const size_t contigNameBufferSize = 512;
+    char contigNameBuffer[contigNameBufferSize];
+    char *contigName = contigNameBuffer;
+    size_t neededSize;
+    GenomeLocation locationOfContig;
+    if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, NULL, fields, lengths))) {
+        contigName = new char[neededSize];
+        if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, NULL, fields, lengths)) {
+            WriteErrorMessage("SAMFilter::getAlignmentInfo: reallocated contigName was still too small\n");
+            soft_exit(1);
+        }
+    }
+
+    GenomeLocation genomeLocation;
     
+    if (InvalidGenomeLocation != locationOfContig) {
+        genomeLocation = SAMReader::parseLocation(locationOfContig, fields, lengths);
+    } else {
+        genomeLocation = InvalidGenomeLocation;
+    }
+
+    // FLAG
+    int _flag;
+    const size_t flagBufferSize = 20;   // More than enough
+    char flagBuffer[flagBufferSize];
+    if (lengths[SAMReader::FLAG] >= flagBufferSize) {
+        WriteErrorMessage("SAMFilter::getAlignmentInfo flag field is too long. %.*s\n", lengths[SAMReader::FLAG], fields[SAMReader::FLAG]);
+        soft_exit(1);
+    }
+    memcpy(flagBuffer, fields[SAMReader::FLAG], lengths[SAMReader::FLAG]);
+    flagBuffer[lengths[SAMReader::FLAG]] = '\0';
+    if (1 != sscanf(flagBuffer, "%d", &_flag)) {
+        WriteErrorMessage("SAMFilter::getAlignmentInfo couldn't parse FLAG field.\n");
+        soft_exit(1);
+    }
+
+    // TLEN
+    _int64 tlen = atoll(fields[SAMReader::TLEN]);
+
+    int mateQual = 0;
+    size_t libraryNameHash = 0;
+    if (fields[SAMReader::OPT] != NULL) {
+        unsigned n = (unsigned)lengths[SAMReader::OPT];
+        while (n > 0 && (fields[SAMReader::OPT][n - 1] == '\n' || fields[SAMReader::OPT][n - 1] == '\r')) {
+            n--;
+        }
+        for (char* p = fields[SAMReader::OPT]; p != NULL && p < fields[SAMReader::OPT] + lengths[SAMReader::OPT]; p = SAMReader::skipToBeyondNextFieldSeparator(p, fields[SAMReader::OPT] + lengths[SAMReader::OPT])) {
+            if (strncmp(p, "QS:i:", 5) == 0) {
+                const size_t mateQualBufferSize = 20; // should be more than enough
+                char mateQualBuffer[mateQualBufferSize];
+                char* mateQualValueStart = p + 5;
+                p = SAMReader::skipToBeyondNextFieldSeparator(p, fields[SAMReader::OPT] + lengths[SAMReader::OPT]);
+                size_t mateQualValueLen = (p != NULL) ? (p - 1 - mateQualValueStart) : (fields[SAMReader::OPT] + lengths[SAMReader::OPT] - mateQualValueStart); // fields separator at p - 1
+                if (mateQualValueLen >= mateQualBufferSize) {
+                    WriteErrorMessage("SAMFilter::getAlignmentInfo QS field is too long.\n");
+                    soft_exit(1);
+                }
+                memcpy(mateQualBuffer, mateQualValueStart, mateQualValueLen);
+                mateQualBuffer[mateQualValueLen] = '\0';
+                if (1 != sscanf(mateQualBuffer, "%d", &mateQual)) {
+                    WriteErrorMessage("SAMFilter::getAlignmentInfo couldn't parse QS field.\n");
+                    soft_exit(1);
+                }
+            }
+            if (p != NULL && p < fields[SAMReader::OPT] + lengths[SAMReader::OPT]) {
+                if (strncmp(p, "LB:Z:", 5) == 0) {
+                    const size_t libraryNameBufferSize = 512; // should be more than enough
+                    char libraryNameBuffer[libraryNameBufferSize];
+                    char* libraryNameStart = p + 5;
+                    p = SAMReader::skipToBeyondNextFieldSeparator(p, fields[SAMReader::OPT] + lengths[SAMReader::OPT]);
+                    size_t libraryNameLen = (p != NULL) ? (p - 1 - libraryNameStart) : (fields[SAMReader::OPT] + lengths[SAMReader::OPT] - libraryNameStart); // fields separator at p - 1
+                    if (libraryNameLen >= libraryNameBufferSize) {
+                        WriteErrorMessage("SAMFilter::getAlignmentInfo LB field is too long.\n");
+                        soft_exit(1);
+                    }
+                    memcpy(libraryNameBuffer, libraryNameStart, libraryNameLen);
+                    libraryNameBuffer[libraryNameLen] = '\0';
+                    libraryNameHash = SAMDupMarkEntry::hash(libraryNameBuffer);
+                }
+            }
+        }
+    }
+
+    if (sam != NULL) {
+        sam->flag = _flag;
+        sam->tlen = tlen;
+        sam->location = genomeLocation;
+        sam->unclippedStartLocation = sam->getUnclippedStart(genomeLocation, fields[SAMReader::CIGAR], lengths[SAMReader::CIGAR]);
+        sam->unclippedEndLocation = sam->getUnclippedEnd(genomeLocation, fields[SAMReader::CIGAR], lengths[SAMReader::CIGAR]);
+        sam->setReadName(fields[SAMReader::QNAME], lengths[SAMReader::QNAME]);
+        sam->qual = getTotalQuality(fields[SAMReader::QUAL], lengths[SAMReader::QUAL]);
+        sam->mateQual = mateQual;
+        sam->libraryNameHash = libraryNameHash;
+        sam->flagOffset = fields[SAMReader::FLAG];
+    }
+
+    if (contigName != contigNameBuffer) {
+        delete[] contigName;
+    }
+}
+
+    void 
+SAMFilter::updateSAMLine(
+    char* toBuffer,
+    size_t* toUsed,
+    char* fromBuffer,
+    size_t bytes)
+{
+    char* fields[SAMReader::nSAMFields];
+    size_t lengths[SAMReader::nSAMFields];
+    size_t lineLength;
+
+    if (!SAMReader::parseLine(fromBuffer, fromBuffer + bytes, fields, &lineLength, lengths)) {
+        WriteErrorMessage("Failed to parse SAM line:\n%.*s\n", lineLength, fromBuffer);
+        soft_exit(1);
+    }
+    _ASSERT(lineLength < UINT32_MAX);
+    
+    int flag;
+    const size_t flagBufferSize = 20;   // More than enough
+    char flagBuffer[flagBufferSize];
+    if (lengths[SAMReader::FLAG] >= flagBufferSize) {
+        WriteErrorMessage("SAMFilter::updateSAMLine flag field is too long.\n");
+        soft_exit(1);
+    }
+    memcpy(flagBuffer, fields[SAMReader::FLAG], lengths[SAMReader::FLAG]);
+    flagBuffer[lengths[SAMReader::FLAG]] = '\0';
+    if (1 != sscanf(flagBuffer, "%d", &flag)) {
+        WriteErrorMessage("SAMFilter::updateSAMLine couldn't parse FLAG field.\n");
+        soft_exit(1);
+    }
+
+    flag |= SAM_DUPLICATE;
+
+    char* prev = fields[SAMReader::OPT];
+    //
+    // We remove either the QS: or LB: fields at the end of the SAM record to make space for the new flag. Otherwise we will run out of space in buffer.
+    //
+    size_t lengthOPTExcludingLastField = 0;
+    for (char* p = fields[SAMReader::OPT]; p != NULL && p < fields[SAMReader::OPT] + lengths[SAMReader::OPT]; p = SAMReader::skipToBeyondNextFieldSeparator(p, fields[SAMReader::OPT] + lengths[SAMReader::OPT])) {
+        lengthOPTExcludingLastField += (p - prev);
+        prev = p;
+    }
+    lengths[SAMReader::OPT] = lengthOPTExcludingLastField;
+
+    // FIXME: needs to be changed if more mandatory SAM fields are added
+    int charsInString = snprintf(toBuffer + *toUsed, lineLength, "%.*s\t%d\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\tPG:Z:SNAP\t%.*s\n",
+        lengths[SAMReader::QNAME], fields[SAMReader::QNAME],
+        flag,
+        lengths[SAMReader::RNAME], fields[SAMReader::RNAME],
+        lengths[SAMReader::POS], fields[SAMReader::POS],
+        lengths[SAMReader::MAPQ], fields[SAMReader::MAPQ],
+        lengths[SAMReader::CIGAR], fields[SAMReader::CIGAR],
+        lengths[SAMReader::RNEXT], fields[SAMReader::RNEXT],
+        lengths[SAMReader::PNEXT], fields[SAMReader::PNEXT],
+        lengths[SAMReader::TLEN], fields[SAMReader::TLEN],
+        lengths[SAMReader::SEQ], fields[SAMReader::SEQ],
+        lengths[SAMReader::QUAL], fields[SAMReader::QUAL],
+        lengths[SAMReader::OPT], fields[SAMReader::OPT]);
+
+    *toUsed += charsInString;
+
+    if (charsInString > bytes || charsInString > lineLength) {
+        WriteErrorMessage("charsInString %d is larger than bytes %lld, linelength %lld\n", charsInString, bytes, lineLength);
+        soft_exit(1);
+    }
+}
+
+
+    void
+SAMFilter::onAdvance(
+    DataWriter* writer,
+    size_t batchOffset,
+    char* data,
+    GenomeDistance bytes,
+    GenomeLocation location)
+{
+    if (! header) {
+        OffsetInfo oinfo(batchOffset, false);
+        offsets.push_back(oinfo);
+    }
+}
+
+    int
+SAMFilter::getTotalQuality(
+    char* qual,
+    int l_seq)
+{
+    int result = 0;
+    _uint8* p = (_uint8*) qual;
+    for (int i = 0; i < l_seq; i++) {
+        int q = *p++;
+        q -= '!';
+        // Picard MarkDup uses a score threshold of 15 (default)
+        result += (q >= 15) ? (q != 255) * q : 0; // avoid branch?
+    }
+    return result;
+}
+
+    void
+SAMFilter::getTileXY(
+    const char* id,
+    int* o_tile,
+    int* o_x,
+    int* o_y)
+{
+    // In the 5-element format read names: tile, x and y values are 3rd, 4th and 5th elements
+    // In the 7-element format (CASAVA 1.8) read names: tile, x and y values are 5th, 6th and 7th elements
+    int i = 0, numColonsSeen = 0, tile = 0, x = 0, y = 0;
+    char readId[120];
+    strncpy(readId, id, sizeof(readId));
+    readId[119] = '\0';
+    int fiveElementFormatStartIndex = 0, sevenElementFormatStartIndex;
+    for (i = 0; ; i++) {
+        char c = readId[i];
+        if (c == ':') {
+            numColonsSeen++;
+            if (numColonsSeen == 2) {
+                fiveElementFormatStartIndex = i;
+            }
+            else if (numColonsSeen == 4) {
+                sevenElementFormatStartIndex = i;
+            }
+        }
+        if (c == 0 || c == ' ' || c == '/') {
+            break;
+        }
+    }
+    int fieldScanned;
+    if (numColonsSeen == 4) {
+        fieldScanned = sscanf(&readId[fiveElementFormatStartIndex], ":%d:%d:%d", &tile, &x, &y);
+    }
+    else if (numColonsSeen == 6) {
+        fieldScanned = sscanf(&readId[sevenElementFormatStartIndex], ":%d:%d:%d", &tile, &x, &y);
+    }
+    // fprintf(stderr, "tile:%d, x:%d, y:%d\n", tile, x, y);
+    *o_tile = tile;
+    *o_x = x;
+    *o_y = y;
+}
+
+//
+// One of these per possible duplicate read (matches on location, next location, RC, next RC).
+//
+struct DuplicateReadKey
+{
+    DuplicateReadKey()
+    { memset(this, 0, sizeof(DuplicateReadKey)); }
+
+    DuplicateReadKey(SAMDupMarkEntry* sam, const Genome *genome, size_t _libraryHash)
+    {
+        if (sam == NULL) {
+            locations[0] = locations[1] = InvalidGenomeLocation;
+            isRC[0] = isRC[1] = false;
+            libraryHash = 0;
+        } else {
+            isRC[0] = (sam->flag & SAM_REVERSE_COMPLEMENT) != 0;
+            isRC[1] = (sam->flag & SAM_NEXT_REVERSED) != 0;
+            locations[0] = sam->info >> 1;
+            locations[1] = locations[0] + sam->tlen;
+            libraryHash = _libraryHash;
+            if (((((_uint64) GenomeLocationAsInt64(locations[0])) << 1) | (isRC[0] ? 1 : 0)) > ((((_uint64) GenomeLocationAsInt64(locations[1])) << 1) | (isRC[1] ? 1 : 0))) {
+                const GenomeLocation t = locations[1];
+                locations[1] = locations[0];
+                locations[0] = t;
+                const bool f = isRC[1];
+                isRC[1] = isRC[0];
+                isRC[0] = f;
+            }
+        }
+    }
+
+    bool operator==(const DuplicateReadKey& b) const
+    {
+        return libraryHash == b.libraryHash && locations[0] == b.locations[0] && locations[1] == b.locations[1] &&
+            isRC[0] == b.isRC[0] && isRC[1] == b.isRC[1];
+    }
+
+    bool operator!=(const DuplicateReadKey& b) const
+    {
+        return ! ((*this) == b);
+    }
+
+    bool operator<(const DuplicateReadKey& b) const
+    {
+        return libraryHash < b.libraryHash ||
+            (libraryHash == b.libraryHash && locations[0] < b.locations[0]) ||
+            (locations[0] == b.locations[0] &&
+                (locations[1] < b.locations[1] ||
+                    (locations[1] == b.locations[1] &&
+                        isRC[0] * 2 + isRC[1] <  b.isRC[0] *2 + b.isRC[1])));
+    }
+
+
+    // required for use as a key in VariableSizeMap template
+    DuplicateReadKey(int x)
+    { locations[0] = locations[1] = x; isRC[0] = isRC[1] = false; }
+    bool operator==(int x) const
+    { return locations[0] == (_uint32) x && locations[1] == (_uint32) x; }
+    bool operator!=(int x) const
+    { return locations[0] != (_uint32) x || locations[1] != (_uint32) x; }
+    operator _uint64()
+    { return ((_uint64) (GenomeLocationAsInt64(locations[1]) ^ (isRC[1] ? 1 : 0))) << 32 | (_uint64) (GenomeLocationAsInt64(locations[0]) ^ (isRC[0] ? 1 : 0)); }
+
+    GenomeLocation locations[NUM_READS_PER_PAIR];
+    bool isRC[NUM_READS_PER_PAIR];
+    size_t libraryHash; // hash value of library name string LB:Z:xxxx
+};
+
+//
+// Fragments duplicate marking does not require mate information
+//
+struct DuplicateFragmentKey
+{
+    DuplicateFragmentKey()
+    {
+        memset(this, 0, sizeof(DuplicateFragmentKey));
+    }
+
+    DuplicateFragmentKey(SAMDupMarkEntry* sam, const Genome* genome, size_t _libraryHash)
+    {
+        if (sam == NULL) {
+            location = InvalidGenomeLocation;
+            isRC = false;
+            libraryHash = 0;
+        }
+        else {
+            isRC = (sam->flag & SAM_REVERSE_COMPLEMENT) != 0;
+            location = sam->info >> 1;
+            libraryHash = _libraryHash;
+        }
+    }
+
+    bool operator==(const DuplicateFragmentKey& b) const
+    {
+        return libraryHash == b.libraryHash && location == b.location && isRC == b.isRC;
+    }
+
+    bool operator!=(const DuplicateFragmentKey& b) const
+    {
+        return !((*this) == b);
+    }
+
+    bool operator<(const DuplicateFragmentKey& b) const
+    {
+        return libraryHash < b.libraryHash ||
+            (libraryHash == b.libraryHash && location < b.location) ||
+            (location == b.location && isRC < b.isRC);
+    }
+
+    // required for use as a key in VariableSizeMap template
+    DuplicateFragmentKey(int x)
+    {
+        location = x; isRC = false;
+    }
+    bool operator==(int x) const
+    {
+        return location == (_uint32)x;
+    }
+    bool operator!=(int x) const
+    {
+        return location != (_uint32)x;
+    }
+    operator _uint64()
+    {
+        return (_uint64)(GenomeLocationAsInt64(location) ^ (isRC ? 1 : 0));
+    }
+
+    GenomeLocation location;
+    bool isRC;
+    size_t libraryHash;
+};
+
+struct DuplicateMateInfo
+{
+    DuplicateMateInfo()
+    {
+        memset(this, 0, sizeof(DuplicateMateInfo));
+    }
+
+    ~DuplicateMateInfo()
+    {
+    }
+
+    bool isMateMapped;
+    int bestReadQuality; // total quality of first/both best reads
+    char bestReadId[120];
+    
+    //
+    // The below are useful for marking optical duplicates. Helps break ties in Illumina reads
+    //
+    int tile;
+    int x;
+    int y;
+
+    void setBestReadId(const char* id) { strncpy(bestReadId, id, sizeof(bestReadId)); }
+    const char* getBestReadId() { return bestReadId; }
+    void setBestTileXY(int tile_, int x_, int y_) { tile = tile_; x = x_; y = y_; }
+    void getBestTileXY(int* tile_, int* x_, int* y_) { *tile_ = tile; *x_ = x; *y_ = y; }
+
+    void checkBestRecord(SAMDupMarkEntry* sam, int totalQuality_, int tile_, int x_, int y_, bool isDuplicate) {
+
+        if (isDuplicate) {
+            return;
+        }
+        if (totalQuality_ > bestReadQuality) {
+            bestReadQuality = totalQuality_;
+            setBestReadId(sam->qName);
+            setBestTileXY(tile_, x_, y_);
+        }
+        else if (totalQuality_ == bestReadQuality) {
+            if (tile_ < tile) {
+                bestReadQuality = totalQuality_;
+                setBestReadId(sam->qName);
+                setBestTileXY(tile_, x_, y_);
+            }
+            else if (tile_ == tile) {
+                if (x_ < x) {
+                    bestReadQuality = totalQuality_;
+                    setBestReadId(sam->qName);
+                    setBestTileXY(tile_, x_, y_);
+                }
+                else if (x_ == x) {
+                    if (y_ < y) {
+                        bestReadQuality = totalQuality_;
+                        setBestReadId(sam->qName);
+                        setBestTileXY(tile_, x_, y_);
+                    }
+                }
+            }
+        }
+    }
+};
+
+class SAMDupMarkFilter : public SAMFilter
+{
+public:
+    SAMDupMarkFilter(const Genome* i_genome) :
+        SAMFilter(DataWriter::DupMarkFilter),
+        genome(i_genome), runOffset(0), runLocation(InvalidGenomeLocation), prevRunLocation(InvalidGenomeLocation), runCount(0), mates(), fragments(), buffer(NULL), bufferSize(0), bufferUsed(0)
+    {
+    }
+
+    ~SAMDupMarkFilter()
+    {
+        if (buffer != NULL) {
+            BigDealloc(buffer);
+        }
+
+#ifdef USE_DEVTEAM_OPTIONS
+        if (mates.size() > 0) {
+            WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", mates.size());
+            for (MateMap::iterator i = mates.begin(); i != mates.end(); i = mates.next(i)) {
+	            WriteErrorMessage("%u%s/%u%s\n", GenomeLocationAsInt64(i->key.locations[0]), i->key.isRC[0] ? "rc" : "", GenomeLocationAsInt64(i->key.locations[1]), i->key.isRC[1] ? "rc" : "");
+            }
+        }
+#endif
+        run.clear();
+        runFragment.clear();
+    }
+
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL);
+
+    void dupMarkBatch(size_t runStartIndex);
+
+    void updateBuffer(size_t lastByte);
+
+private:
+
+    const Genome* genome;
+    size_t runOffset; // offset in file of first read in run
+    GenomeLocation runLocation; // location in genome
+    GenomeLocation prevRunLocation; // location in genome
+    int runCount; // number of aligned reads
+
+    typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,70,0,-2> MateMap;
+    typedef VariableSizeMap<DuplicateFragmentKey, DuplicateMateInfo, 150, MapNumericHash<DuplicateFragmentKey>, 70, 0, -2> FragmentMap;
+    typedef VariableSizeVector<SAMDupMarkEntry> RunVector;
+
+    RunVector run; // used for paired-end duplicate marking
+    RunVector runFragment; // used for single-end duplicate marking 
+    MateMap mates;
+    FragmentMap fragments;
+    char* buffer; // store results after duplicate marking here
+    size_t bufferSize;
+    size_t bufferUsed;
+
+};
+
+    void
+SAMDupMarkFilter::updateBuffer(size_t lastByte)
+{
+    // fprintf(stderr, "Buffer used: %lld, Buffer size: %lld\n", bufferUsed, bufferSize);
+    //
+    // Update flags for duplicate records
+    //
+    size_t nRecords = offsets.size();
+    for (size_t i = 0; i < nRecords; i++) {
+        if (offsets[i].offset >= lastByte) {
+            break;
+        }
+        size_t recordSize = (i != nRecords - 1) ? offsets[i + 1].offset - offsets[i].offset : currentBufferBytes - offsets[i].offset;
+        if (!offsets[i].isDuplicate) {
+            memcpy(buffer + bufferUsed, currentBuffer + offsets[i].offset, recordSize);
+            bufferUsed += recordSize;
+        }
+        else {
+            updateSAMLine(buffer, &bufferUsed, currentBuffer + offsets[i].offset, recordSize);
+        }
+    }
+}
+
+    size_t
+SAMDupMarkFilter::onNextBatch(
+    DataWriter* writer,
+    size_t offset,
+    size_t bytes,
+    bool lastBatch,
+    bool* needMoreBuffer,
+    size_t* fromBytesUsed)
+{
+    // 
+    // Nothing to write
+    //
+    if (bytes == 0 || *needMoreBuffer) {
+        return 0;
+    }
+
+    size_t currentBufferSize;
+    bool ok = writer->getBatch(-1, &currentBuffer, &currentBufferSize, NULL, NULL, &currentBufferBytes, &currentOffset);
+    if (!ok) {
+        WriteErrorMessage("Error writing to output file\n");
+        soft_exit(1);
+    }
+    currentWriter = writer;
+
+    if (buffer == NULL) {
+        buffer = (char*)BigAlloc(currentBufferSize);
+        if (buffer == NULL) {
+            WriteErrorMessage("Unable to allocate %lld bytes for gzip compression buffer\n", currentBufferSize);
+            soft_exit(1);
+        }
+        bufferSize = currentBufferSize;
+    }
+    else if (currentBufferSize > bufferSize) {
+        BigDealloc(buffer);
+        buffer = (char*)BigAlloc(currentBufferSize);
+        if (buffer == NULL) {
+            WriteErrorMessage("Unable to allocate %lld bytes for gzip compression buffer\n", currentBufferSize);
+            soft_exit(1);
+        }
+        bufferSize = currentBufferSize;
+    }
+    bufferUsed = 0;
+
+    size_t next_i = 0, unfinishedRunStart = 0;
+    bool foundNextBatchStart = false;
+    size_t nextBatchStart = 0;
+    runCount = 0;
+    runOffset = 0;
+    runLocation = InvalidGenomeLocation;
+    run.clear();
+    runFragment.clear();
+
+    SAMAlignment firstSam, lastSam;
+    size_t nRecords = offsets.size();
+
+    for (size_t i = 0; i < nRecords; i = next_i) {
+        size_t recordSize = (i != nRecords - 1) ? offsets[i + 1].offset - offsets[i].offset : currentBufferBytes - offsets[i].offset;
+        getAlignmentInfo(genome, currentBuffer + offsets[i].offset, recordSize, &lastSam);
+        GenomeLocation logicalLocation = lastSam.unclippedStartLocation;
+
+        //
+        // Initialize run
+        //
+        if (runLocation == InvalidGenomeLocation) {
+            runCount = 1;
+            runLocation = logicalLocation;
+            runOffset = currentOffset + offsets[i].offset;
+            unfinishedRunStart = i;
+            next_i = i + 1;
+
+            if ((lastSam.flag & SAM_SECONDARY) == 0 && (lastSam.flag & SAM_SUPPLEMENTARY) == 0) {
+                bool isRC = (lastSam.flag & SAM_REVERSE_COMPLEMENT) != 0;
+                bool isMateRC = (lastSam.flag & SAM_NEXT_REVERSED) != 0;
+                GenomeLocation myLoc = isRC ? lastSam.unclippedEndLocation : lastSam.unclippedStartLocation;
+                GenomeLocation mateLoc = myLoc + lastSam.tlen;
+
+                SAMDupMarkEntry entry(lastSam.libraryNameHash, i, lastSam.flag, lastSam.qual, lastSam.mateQual, 
+                    (((_uint64)GenomeLocationAsInt64(mateLoc)) << 1) | (isMateRC ? 1 : 0),
+                    (((_uint64)GenomeLocationAsInt64(myLoc)) << 1) | (isRC ? 1 : 0), lastSam.tlen, lastSam.qName, lastSam.qNameLength);
+
+                SAMDupMarkEntry entryFragment(lastSam.libraryNameHash, i, lastSam.flag, lastSam.qual, 0, 0,
+                    (((_uint64)GenomeLocationAsInt64(myLoc)) << 1) | (isRC ? 1 : 0), 0, lastSam.qName, lastSam.qNameLength);
+
+                // don't need to look at mate information in single-ended datasets
+                if ((lastSam.flag & SAM_MULTI_SEGMENT) != 0) {
+                    run.push_back(entry);
+                }
+
+                runFragment.push_back(entryFragment);
+            }
+        }
+        else {
+            // 
+            // Track the read from which we need to start the next run. Next run starts at nextBatchStart
+            // 
+            if (!foundNextBatchStart && logicalLocation > runLocation + MAX_READ_LENGTH + MAX_K) {
+                nextBatchStart = i;
+                foundNextBatchStart = true;
+                next_i = i + 1;
+            }
+            //
+            // Add read to run
+            // 
+            if (logicalLocation <= runLocation + (2 * (MAX_READ_LENGTH + MAX_K))) {
+                runCount++;
+                next_i = i + 1;
+
+                if ((lastSam.flag & SAM_SECONDARY) == 0 && (lastSam.flag & SAM_SUPPLEMENTARY) == 0) {
+                    bool isRC = (lastSam.flag & SAM_REVERSE_COMPLEMENT) != 0;
+                    bool isMateRC = (lastSam.flag & SAM_NEXT_REVERSED) != 0;
+                    GenomeLocation myLoc = isRC ? lastSam.unclippedEndLocation : lastSam.unclippedStartLocation;
+                    GenomeLocation mateLoc = myLoc + lastSam.tlen;
+
+                    SAMDupMarkEntry entry(lastSam.libraryNameHash, i, lastSam.flag, lastSam.qual, lastSam.mateQual,
+                        (((_uint64)GenomeLocationAsInt64(mateLoc)) << 1) | (isMateRC ? 1 : 0),
+                        (((_uint64)GenomeLocationAsInt64(myLoc)) << 1) | (isRC ? 1 : 0), lastSam.tlen, lastSam.qName, lastSam.qNameLength);
+
+                    SAMDupMarkEntry entryFragment(lastSam.libraryNameHash, i, lastSam.flag, lastSam.qual, 0, 0,
+                        (((_uint64)GenomeLocationAsInt64(myLoc)) << 1) | (isRC ? 1 : 0), 0, lastSam.qName, lastSam.qNameLength);
+
+                    // don't need to look at mate information in single-ended datasets
+                    if ((lastSam.flag & SAM_MULTI_SEGMENT) != 0) {
+                        run.push_back(entry);
+                    }
+
+                    runFragment.push_back(entryFragment);
+                }
+
+            }
+            else {
+                // 
+                // We are done with the run. Begin marking duplicates
+                // 
+                dupMarkBatch(unfinishedRunStart);
+
+                //
+                // Reset run parameters in preparation for next run
+                // 
+                runCount = 0;
+                runOffset = 0;
+                runLocation = InvalidGenomeLocation;
+                run.clear();
+                runFragment.clear();
+                next_i = nextBatchStart;
+                foundNextBatchStart = false;
+            }
+        }
+    } // end offsets
+
+    size_t bytesRead = min<long long>(bytes, currentBufferBytes);
+
+    //
+    // Run could potentially span multiple buffers
+    //
+    if (runCount > 1) { // runs of size <= 1 cannot have duplicates
+        if (lastBatch) {
+            dupMarkBatch(unfinishedRunStart);
+
+            updateBuffer(bytesRead);
+
+            // Copy over updated buffer
+            memcpy(currentBuffer + offsets[0].offset, buffer, bufferUsed);
+
+            offsets.clear();
+
+        }
+        else if (offsets[unfinishedRunStart].offset == 0) { // we did not yet mark duplicates for this run
+            //
+            // If we have a different run from what we have seen before, 
+            // simply mark all duplicates in the run we currently have
+            //
+            if (runLocation != prevRunLocation) {
+                dupMarkBatch(unfinishedRunStart);
+
+                updateBuffer(bytesRead);
+
+                // Copy over updated buffer
+                memcpy(currentBuffer + offsets[0].offset, buffer, bufferUsed);
+
+                offsets.clear();
+            }
+            else {
+                *needMoreBuffer = true;
+                return 0;
+            }
+        }
+        else {
+            bytesRead = offsets[unfinishedRunStart].offset;
+            updateBuffer(bytesRead);
+
+            // Copy over updated buffer
+            memcpy(currentBuffer + offsets[0].offset, buffer, bufferUsed);
+
+            //
+            // Copy over read offsets for those reads that will be duplicate marked in the next batch
+            //
+            VariableSizeVector<OffsetInfo> nextBatchOffsets;
+            for (size_t i = unfinishedRunStart; i < offsets.size(); i++) {
+                OffsetInfo oinfo(offsets[i].offset - offsets[unfinishedRunStart].offset, offsets[i].isDuplicate);
+                nextBatchOffsets.push_back(oinfo);
+            }
+            offsets.clear();
+            for (size_t i = 0; i < nextBatchOffsets.size(); i++) {
+                offsets.push_back(nextBatchOffsets[i]);
+            }
+            nextBatchOffsets.clear();
+
+        }
+    } // runcount > 1
+    else {
+        if (runCount > 0) {
+            //
+            // Commit any duplicate marking updates
+            //
+            updateBuffer(bytesRead);
+            // Copy over updated buffer
+            memcpy(currentBuffer + offsets[0].offset, buffer, bufferUsed);
+        }
+        offsets.clear();
+    }
+
+    prevRunLocation = runLocation;
+    currentWriter = NULL;
+    currentBuffer = NULL;
+    currentBufferBytes = 0;
+    currentOffset = 0;
+    *fromBytesUsed = bytesRead;
+
+    return (runCount > 0) ? bufferUsed : bytesRead; // return bytes written in current batch.
+}
+
+    void
+SAMDupMarkFilter::dupMarkBatch(size_t runStartIndex) {
+
+    size_t nRecords = offsets.size();
+
+    if (run.size() == 0 && runFragment.size() == 0) {
+        return;
+    }
+    // ensure that duplicates reads are adjacent
+    std::stable_sort(run.begin(), run.end());
+    std::stable_sort(runFragment.begin(), runFragment.end());
+
+    bool foundRun = false;
+    size_t offsetIndex = 0;
+    for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
+      
+        // adjacent entries with different library names
+        if ((i == run.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
+            (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
+            continue;
+        }
+
+        // adjacent entries with different location/orientation
+        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
+
+        // check if mate location/orientation matches adjacent entry
+        if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
+            (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
+            continue;
+        }
+
+        size_t offsetIndex = i->runOffset;
+
+        // skip unmapped reads and reads with unmapped mates
+        if (((i->flag & SAM_UNMAPPED) != 0) || (i->flag & SAM_NEXT_UNMAPPED) != 0) continue;
+
+        foundRun = true;
+        DuplicateReadKey key(i, genome, i->libraryNameHash);
+        MateMap::iterator f = mates.find(key);
+        DuplicateMateInfo* info;
+        if (f == mates.end()) {
+            mates.put(key, DuplicateMateInfo());
+            info = &mates[key];
+            //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
+            info->isMateMapped = true;
+        } else {
+            info = &f->value;
+        }
+        int totalQuality = i->qual;
+        if ((i->flag & SAM_MULTI_SEGMENT) != 0) {
+            totalQuality += i->mateQual;
+        }
+        int tile, x, y;
+        getTileXY(i->qName, &tile, &x, &y); // parse read name and extract metadata for optical duplicate marking
+        info->checkBestRecord(i, totalQuality, tile, x, y, offsets[offsetIndex].isDuplicate); // update best record if needed
+    }
+
+    // duplicate marking for read fragments
+    for (RunVector::iterator i = runFragment.begin(); i != runFragment.end(); i++) {
+
+        if ((i == runFragment.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
+            (i + 1 == runFragment.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
+            continue;
+        }
+
+        if ((i == runFragment.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == runFragment.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
+
+        //
+        // Skip unmapped reads
+        //
+        if ((i->flag & SAM_UNMAPPED) != 0) {
+            continue;
+        }
+
+        size_t offsetIndex = i->runOffset;
+        
+        // location and library matches
+        foundRun = true;
+        DuplicateFragmentKey key(i, genome, i->libraryNameHash);
+        FragmentMap::iterator f = fragments.find(key);
+        DuplicateMateInfo* info;
+        if (f == fragments.end()) {
+            fragments.put(key, DuplicateMateInfo());
+            info = &fragments[key];
+            //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
+            info->isMateMapped = (i->flag & SAM_MULTI_SEGMENT) != 0 && (i->flag & SAM_NEXT_UNMAPPED) == 0;
+        }
+        else {
+            info = &f->value;
+        }
+        bool mateMapped = (i->flag & SAM_MULTI_SEGMENT) != 0 && (i->flag & SAM_NEXT_UNMAPPED) == 0;
+        int totalQuality = i->qual;
+        int tile, x, y;
+        getTileXY(i->qName, &tile, &x, &y);
+        
+        //
+        // Prefer mapped read pairs over fragments in duplicate marking
+        //
+        if (mateMapped) {
+            if (!info->isMateMapped) {
+                info->bestReadQuality = totalQuality;
+                info->setBestReadId(i->qName);
+                info->isMateMapped = true;
+                info->setBestTileXY(tile, x, y);
+            }
+            else {
+                info->checkBestRecord(i, totalQuality, tile, x, y, offsets[offsetIndex].isDuplicate);
+            }
+        }
+        else {
+            //
+            // No best read pair found so far.
+            //
+            if (!info->isMateMapped) {
+                info->checkBestRecord(i, totalQuality, tile, x, y, offsets[offsetIndex].isDuplicate);
+            }
+        }
+    }
+
+    if (!foundRun) {
+        return; // avoid useless looping
+    }
+
+    // go back and adjust flags
+    for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
+        if ((i == run.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
+            (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
+            continue;
+        }
+        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
+        if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
+            (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
+            continue;
+        }
+
+        size_t offsetIndex = i->runOffset;
+
+        // skip unmapped reads and reads with unmapped mates
+        if (((i->flag & SAM_UNMAPPED) != 0) || (i->flag & SAM_NEXT_UNMAPPED) != 0) continue;
+
+        DuplicateReadKey key(i, genome, i->libraryNameHash);
+        MateMap::iterator m = mates.find(key);
+        if (m == mates.end()) {
+            continue;
+        }
+        DuplicateMateInfo* minfo = &m->value;
+        if (!readIdsMatch(minfo->getBestReadId(), i->qName, i->qNameLength)) {
+            i->flag |= SAM_DUPLICATE;
+            offsets[offsetIndex].isDuplicate |= true;
+        }
+    }
+
+    // clean up
+    for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
+
+        // skip singletons
+        if ((i == run.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
+            (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
+            continue;
+        }
+        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
+        if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
+            (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
+            continue;
+        }
+
+        size_t offsetIndex = i->runOffset;
+
+        // skip unmapped reads and reads with unmapped mates
+        if (((i->flag & SAM_UNMAPPED) != 0) || (i->flag & SAM_NEXT_UNMAPPED) != 0) continue;
+
+        DuplicateReadKey key(i, genome, i->libraryNameHash);
+        MateMap::iterator m = mates.find(key);
+        DuplicateMateInfo* minfo = &m->value;
+        if (m != mates.end()) {
+            bool isRC = (i->flag & SAM_REVERSE_COMPLEMENT) != 0;
+            GenomeLocation loc = i->info >> 1;
+            // 
+            // Keep duplicate entry around till we find the mate. This allows us to match indexInFile tie breaking used in Picard MarkDup
+            //
+            if (loc == key.locations[1] && isRC == key.isRC[1]) {
+                //fprintf(stderr, "erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
+                mates.erase(key);
+            }
+        }
+    }
+
+    // handle fragments
+    for (RunVector::iterator i = runFragment.begin(); i != runFragment.end(); i++) {
+
+        if ((i == runFragment.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
+            (i + 1 == runFragment.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
+            continue;
+        }
+
+        if ((i == runFragment.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == runFragment.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
+
+        size_t offsetIndex = i->runOffset;
+
+        //
+        // Skip unmapped reads and reads with mapped mates
+        //
+        if ((i->flag & SAM_UNMAPPED) != 0 || ((i->flag & SAM_MULTI_SEGMENT) != 0 && (i->flag & SAM_NEXT_UNMAPPED) == 0)) {
+            continue;
+        }
+
+        // location and library matches
+        DuplicateFragmentKey key(i, genome, i->libraryNameHash);
+        FragmentMap::iterator f = fragments.find(key);
+
+        if (f == fragments.end()) {
+            continue;
+        }
+        DuplicateMateInfo* info = &f->value;
+        if (!readIdsMatch(info->getBestReadId(), i->qName, i->qNameLength)) {
+            i->flag |= SAM_DUPLICATE;
+            offsets[offsetIndex].isDuplicate |= true;
+        }
+    }
+
+    // clean up
+    for (RunVector::iterator i = runFragment.begin(); i != runFragment.end(); i++) {
+
+        if ((i == runFragment.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
+            (i + 1 == runFragment.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
+            continue;
+        }
+
+        if ((i == runFragment.begin() || (i->info) != ((i - 1)->info)) &&
+            (i + 1 == runFragment.end() || (i->info) != ((i + 1)->info))) {
+            continue;
+        }
+
+        size_t offsetIndex = i->runOffset;
+
+        //
+        // Skip unmapped reads and reads with mapped mates
+        //
+        if ((i->flag & SAM_UNMAPPED) != 0 || ((i->flag & SAM_MULTI_SEGMENT) != 0 && (i->flag & SAM_NEXT_UNMAPPED) == 0)) {
+            continue;
+        }
+
+        // location and library matches
+        DuplicateFragmentKey key(i, genome, i->libraryNameHash);
+        FragmentMap::iterator f = fragments.find(key);
+
+        if (f != fragments.end()) {
+            fragments.erase(key);
+        }
+    }
+}
+
+class SAMDupMarkSupplier : public DataWriter::FilterSupplier
+{
+public:
+    SAMDupMarkSupplier(const Genome* i_genome) :
+        FilterSupplier(DataWriter::ReadFilter), genome(i_genome) {}
+
+    virtual DataWriter::Filter* getFilter()
+    {
+        return new SAMDupMarkFilter(genome);
+    }
+
+    virtual void onClosing(DataWriterSupplier* supplier) {}
+    virtual void onClosed(DataWriterSupplier* supplier) {}
+
+private:
+    const Genome* genome;
+};
+
+    DataWriter::FilterSupplier*
+DataWriterSupplier::samMarkDuplicates(const Genome* genome)
+{
+    return new SAMDupMarkSupplier(genome);
+}

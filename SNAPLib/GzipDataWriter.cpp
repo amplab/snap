@@ -93,7 +93,7 @@ public:
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL);
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL);
 
 private:
 
@@ -328,7 +328,8 @@ GzipWriterFilter::onNextBatch(
     size_t offset,
     size_t bytes,
     bool lastBatch,
-    bool* needMoreBuffer)
+    bool* needMoreBuffer,
+    size_t* fromBufferUsed)
 {
     
     // 
@@ -342,6 +343,9 @@ GzipWriterFilter::onNextBatch(
     size_t fromSize, fromUsed, physicalOffset, logicalOffset;
     writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
     if (fromUsed == 0 || supplier->multiThreaded || supplier->closing) {
+        if (fromBufferUsed != NULL) {
+            *fromBufferUsed = min<long long>(fromUsed, bytes);
+        }
         return min<long long>(fromUsed, bytes);
     }
     // do compress buffer synchronously in-place
@@ -358,6 +362,9 @@ GzipWriterFilter::onNextBatch(
     worker->step();
     manager->finishStep();
     writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
+    if (fromBufferUsed != NULL) {
+        *fromBufferUsed = min<long long>(fromUsed, bytes);
+    }
     return min<long long>(fromUsed, bytes);
 }
 
