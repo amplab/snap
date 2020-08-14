@@ -18,39 +18,11 @@ namespace Venn
         static Dictionary<string, ASETools.Case> cases;
         static List<ASETools.Case> listOfCases;
 
-        enum VariantType { SNV, Indel };
+        static ASETools.VariantCaller variantCaller;
+        static bool tumor;
 
-        class ConcordanceResults
-        {
-            public ConcordanceResults()
-            {
-                foreach (var alignerSet in ASETools.allAlignerSets)
-                {
-                    count.Add(alignerSet, new Dictionary<VariantType, ASETools.RunningMeanAndStdDev>());
-                    foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
-                    {
-                        count[alignerSet].Add(variantType, new ASETools.RunningMeanAndStdDev());
-                    }
-                }
-            } // ctor
 
-            public readonly Dictionary<ASETools.AlignerSet, Dictionary<VariantType, ASETools.RunningMeanAndStdDev>> count = 
-                new Dictionary<ASETools.AlignerSet, Dictionary<VariantType, ASETools.RunningMeanAndStdDev>>();
-            public void merge(ConcordanceResults peer)
-            {
-                foreach (var alignerSet in ASETools.allAlignerSets)
-                {
-                    foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
-                    {
-                        count[alignerSet][variantType].merge(peer.count[alignerSet][variantType]);
-                    }
-                }
-            }
-        } // ConcordanceResults
-
-        static ConcordanceResults globalResults = new ConcordanceResults();
-
-        static void Main(string[] args)
+         static void Main(string[] args)
         {
             Stopwatch timer = new Stopwatch();
             timer.Start();
@@ -61,6 +33,29 @@ namespace Venn
                 return;
             }
 
+            if (configuration.commandLineArgs.Count() < 3)
+            {
+                Console.WriteLine("usage: Venn variantCaller tumorOrNormal {caseID}");
+                return;
+            }
+
+            if (!ASETools.tumorToString.ContainsValue(configuration.commandLineArgs[1]))
+            {
+                Console.WriteLine("Second parameter must be either " + ASETools.tumorToString[true] + " or " + ASETools.tumorToString[false]);
+                return;
+            }
+
+            if (!ASETools.variantCallerName.ContainsValue(configuration.commandLineArgs[0]))
+            {
+                Console.Write("First parameter must be a variant caller name, one of:");
+                ASETools.alignerName.Select(_ => _.Value).ToList().ForEach(_ => Console.Write(" " + _));
+                Console.WriteLine();
+                return;
+            }
+
+            tumor = configuration.commandLineArgs[1] == ASETools.tumorToString[true];
+            variantCaller = ASETools.variantCallerName.Where(_ => _.Value == configuration.commandLineArgs[0]).ToList()[0].Key;
+
             cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
             if (null == cases)
             {
@@ -68,48 +63,48 @@ namespace Venn
                 return;
             }
 
+            for (int i = 2; i < configuration.commandLineArgs.Count(); i++)
+            {
+                if (!cases.ContainsKey(configuration.commandLineArgs[i]))
+                {
+                    Console.WriteLine(configuration.commandLineArgs[i] + " isn't a case ID");
+                    return;
+                }
+            }
+
             listOfCases = cases.Select(_ => _.Value).ToList();
 
-            foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
+            var casesToRun = listOfCases.Where(_ => configuration.commandLineArgs.ToList().Contains(_.case_id)).ToList();
+
+            if (casesToRun.Any(case_ => case_.concordance.Any(alignerPair => case_.concordance[alignerPair.Key][variantCaller][tumor].concordance_tarball_filename == ""))) 
             {
-                foreach (var tumor in ASETools.BothBools)
+                Console.WriteLine("One or more cases is missing a concordance tarball for this variant caller and tumor/normal pair.  Skipping them.");
+                casesToRun = casesToRun.Where(case_ => case_.concordance.All(alignerPair => case_.concordance[alignerPair.Key][variantCaller][tumor].concordance_tarball_filename != "")).ToList();
+            }
+
+            if (casesToRun.Any(case_ => case_.concordance.Any(alignerPair => case_.concordance[alignerPair.Key][variantCaller][tumor].concordance_tarball_size < 512 * 1024)))
+            {
+                Console.Write("The following concordance tarballs are suspiciously small and will not be processed:");
+                foreach (var caseWithSmallTarball in casesToRun.Where(case_ => case_.concordance.Any(alignerPair => case_.concordance[alignerPair.Key][variantCaller][tumor].concordance_tarball_size < 512 * 1024)))
                 {
-                    if (tumor) continue;  // For now, just ignore the tumor case.
-                    var casesToProcess = listOfCases.Where(c => c.concordance.All(_ => _.Value[variantCaller][tumor].concordance_tarball_filename != "")).ToList();
-                    int nCases = casesToProcess.Count();
-
-                    Stopwatch oneRunTimer = new Stopwatch();
-                    oneRunTimer.Start();
-
-                    int nPerDot;
-                    ASETools.PrintMessageAndNumberBar("Processing", "cases (" + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor] + ")", casesToProcess.Count(), out nPerDot);
-                    var threading = new ASETools.WorkerThreadHelper<ASETools.Case, ConcordanceResults>(casesToProcess, (c, v) => HandleOneCase(variantCaller, tumor, c, v), FinishUp, null, nPerDot);
-                    threading.run(1 /*BJB*/);
-                    Console.WriteLine(ASETools.ElapsedTimeInSeconds(oneRunTimer));
-
-
-                    foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>()) {
-                        Console.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.variantCallerName[variantCaller] + " " +(variantType == VariantType.SNV ? "SNVs" : "Indels"));
-                        foreach (var alignerSet in ASETools.allAlignerSets)
+                    foreach (var alignerPair in ASETools.EnumUtil.GetValues<ASETools.AlignerPair>())
+                    {
+                        if (caseWithSmallTarball.concordance[alignerPair][variantCaller][tumor].concordance_tarball_size < 512 * 1024) 
                         {
-                            var meanAndStdDev = globalResults.count[alignerSet][variantType].getMeanAndStdDev();
-                            Console.WriteLine(alignerSet + "\t" + meanAndStdDev.mean  + "\t" + meanAndStdDev.stddev);
-                        }
+                            Console.Write(" " + caseWithSmallTarball.concordance[alignerPair][variantCaller][tumor].concordance_tarball_filename + " (" + caseWithSmallTarball.concordance[alignerPair][variantCaller][tumor].concordance_tarball_size + ")");
+                        } // bad tarball
+                    } // aligner pair
+                } // bad case
 
-                        Console.WriteLine();
-                        Console.WriteLine("Total area");
-                        foreach (var alignerSet in ASETools.allAlignerSets)
-                        {
-                            var n = globalResults.count.Where(_ => alignerSet.isSubsetOf(_.Key)).Sum(_ => _.Value[variantType].getMeanAndStdDev().mean);
-                            Console.WriteLine(alignerSet + " = " + n);
-                        }
+                Console.WriteLine();
+                casesToRun = casesToRun.Where(case_ => case_.concordance.All(alignerPair => case_.concordance[alignerPair.Key][variantCaller][tumor].concordance_tarball_size >= 512 * 1024)).ToList();
+            } // if any tarballs are too small
 
-                        Console.WriteLine();
-                    }
-                    Console.WriteLine();
-                } // tumor/normal
-            } // variant caller
-
+            int nPerDot;
+            ASETools.PrintMessageAndNumberBar("Processing", "cases", casesToRun.Count(), out nPerDot);
+            var threading = new ASETools.WorkerThreadHelper<ASETools.Case, int>(casesToRun, HandleOneCase, null, null, nPerDot);
+            threading.run();
+            Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
         } // Main
 
 
@@ -167,9 +162,9 @@ namespace Venn
                 return refAllele.Length != 1 || altAllele.Length != 1;
             }
 
-            public VariantType getVariantType()
+            public ASETools.VariantType getVariantType()
             {
-                return isIndel() ? VariantType.Indel : VariantType.SNV;
+                return isIndel() ? ASETools.VariantType.Indel : ASETools.VariantType.SNV;
             }
 
             public static Variant FromVCFLine(string vcfLine, ASETools.AlignerPair alignerPair)
@@ -180,12 +175,15 @@ namespace Venn
                     throw new Exception("VCF line with too few fields: " + vcfLine);
                 }
 
-                if (fields[9].ToLower().Contains("fp") || fields[10].ToLower().Contains("fn"))
+#if false // too slow
+                if (fields[9].Contains("FP") || fields[10].Contains("FN"))
                 {
                     throw new Exception("Variant with FP or FN on wrong allele: " + vcfLine);
                 }
+#endif
 
-                return new Variant(new Locus(fields[0], Convert.ToInt32(fields[1])), fields[3], fields[4], fields[9].ToLower().Contains("fn"), fields[10].ToLower().Contains("fp"), alignerPair);
+
+                return new Variant(new Locus(fields[0], Convert.ToInt32(fields[1])), fields[3], fields[4], fields[9].Contains("FN"), fields[10].Contains("FP"), alignerPair);
             } // FromVCFLine
 
             public bool presentInAligner(ASETools.Aligner aligner)
@@ -258,7 +256,7 @@ namespace Venn
             return retVal;
         }
 
-        static void HandleOneCase(ASETools.VariantCaller variantCaller, bool tumor, ASETools.Case case_, ConcordanceResults state)
+        static void HandleOneCase(ASETools.Case case_, int state)
         {
             var variantsByLocus = new Dictionary<Locus, List<Variant>>();
 
@@ -277,11 +275,11 @@ namespace Venn
                 } // locus
             } // aligner pair
 
-            var variantCountByAlignerSetAndType = new Dictionary<ASETools.AlignerSet, Dictionary<VariantType, int>>();
+            var variantCountByAlignerSetAndType = new Dictionary<ASETools.AlignerSet, Dictionary<ASETools.VariantType, int>>();
             foreach (var alignerSet in ASETools.allAlignerSets)
             {
-                variantCountByAlignerSetAndType.Add(alignerSet, new Dictionary<VariantType, int>());
-                foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
+                variantCountByAlignerSetAndType.Add(alignerSet, new Dictionary<ASETools.VariantType, int>());
+                foreach (var variantType in ASETools.EnumUtil.GetValues<ASETools.VariantType>())
                 {
                     variantCountByAlignerSetAndType[alignerSet].Add(variantType, 0);
                 }
@@ -289,7 +287,7 @@ namespace Venn
 
             foreach (var locus in variantsByLocus.Select(_ => _.Key))
             {
-                var variantsToProcess = variantsByLocus[locus].Where(_ => true).ToList();    // just a funky to copy the list
+                var variantsToProcess = variantsByLocus[locus].Where(_ => true).ToList();    // just a funky way to copy the list
 
                 while (variantsToProcess.Count() > 0)
                 {
@@ -309,23 +307,62 @@ namespace Venn
                 }
             } // for each locus with variants
 
-            foreach (var variantType in ASETools.EnumUtil.GetValues<VariantType>())
+            var outputFilename = ASETools.GetDirectoryFromPathname(case_.concordance[ASETools.allAlignerPairs[0]][variantCaller][tumor].concordance_tarball_filename) + @"\" +
+                case_.getDNAFileIdByTumor(tumor) + "." + ASETools.tumorToString[tumor] + "-" + ASETools.variantCallerName[variantCaller] + "-Venn.txt";
+            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+
+            if (outputFile == null)
             {
-                int nVariants = variantCountByAlignerSetAndType.Sum(_ => _.Value[variantType]);
+                Console.WriteLine("Unable to open output file " + outputFilename);
+                return;
+            }
+
+            bool anyFieldsWritten = false;
+            foreach (var variantType in ASETools.EnumUtil.GetValues<ASETools.VariantType>())
+            {
+                if (anyFieldsWritten)
+                {
+                    outputFile.Write("\t");
+                } else
+                {
+                    anyFieldsWritten = true;
+                }
+
+                outputFile.Write(" nVariants" + " " + ASETools.variantTypeToName[variantType]);
 
                 foreach (var alignerSet in ASETools.allAlignerSets)
                 {
-                    state.count[alignerSet][variantType] += ((double)variantCountByAlignerSetAndType[alignerSet][variantType]) / nVariants;
-                } // alignerSet
-            } // variantType
-        } // HandleOneCase
-        static void FinishUp(ConcordanceResults state)
-        {
-            lock (globalResults)
+                    outputFile.Write("\t" + alignerSet.ToString() + " " + ASETools.variantTypeToName[variantType]);
+                }
+            }
+
+            outputFile.WriteLine();
+
+            anyFieldsWritten = false;
+            foreach (var variantType in ASETools.EnumUtil.GetValues<ASETools.VariantType>())
             {
-                globalResults.merge(state);
-            } // lock (globalResults)
-        } // FinishUp
+                if (anyFieldsWritten)
+                {
+                    outputFile.Write("\t");
+                }
+                else
+                {
+                    anyFieldsWritten = true;
+                }
+
+                outputFile.Write(variantCountByAlignerSetAndType.Sum(_ => _.Value[variantType]));
+
+                foreach (var alignerSet in ASETools.allAlignerSets)
+                {
+                    outputFile.Write("\t" + variantCountByAlignerSetAndType[alignerSet][variantType]);
+                }
+            }
+
+            outputFile.WriteLine();
+            outputFile.WriteLine("**done**");
+            outputFile.Close();
+        } // HandleOneCase
+
 
     } // Program
 
