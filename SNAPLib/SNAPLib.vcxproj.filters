@@ -350,5 +350,8 @@
     <ClCompile Include="AffineGap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="AffineGapVectorized.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

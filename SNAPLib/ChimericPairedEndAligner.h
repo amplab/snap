@@ -28,8 +28,6 @@ Revision History:
 #include "BaseAligner.h"
 #include "BigAlloc.h"
 
-const unsigned DEFAULT_MAX_HITS_FOR_UNDERLYING_SINGLE_END_ALIGNER = 25;
-
 class ChimericPairedEndAligner : public PairedEndAligner {
 public:
     ChimericPairedEndAligner(

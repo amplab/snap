@@ -59,7 +59,8 @@ IsContigALT(
 		} // match
 	} // opt in
 
-    if (autoALT && strlen(contigName) > 4 && !_stricmp(contigName + strlen(contigName) - 4, "_alt")) {
+    if (autoALT && ((strlen(contigName) > 4 && !_stricmp(contigName + strlen(contigName) - 4, "_alt")) || 
+                    (strlen(contigName) > 3 && (contigName[0] == 'H' || contigName[0] == 'h') && (contigName[1] == 'L' || contigName[1] == 'l') && (contigName[2] == 'A' || contigName[2] == 'a') && contigName[3] == '-')))  {
         return true;
     }
 

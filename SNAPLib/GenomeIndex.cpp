@@ -44,8 +44,6 @@ using namespace std;
 static const int DEFAULT_SEED_SIZE = 20;
 static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
-static const unsigned DEFAULT_KEY_BYTES = 4;
-static const unsigned DEFAULT_LOCATION_SIZE = 4;
 
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
@@ -72,31 +70,32 @@ static void usage()
         " -H                Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
         "                   Specify the histogram file name directly after -H without leaving a space.\n"
         " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
-        " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
+        " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.\n"
+        "                   By default it's autoselected based on the seed size.\n"
         " -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
         "                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
         " -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
         "                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
-        "                   human genome, it will fit with four byte locations if the seed size is 19 or larger, but needs 5 (or more) for smaller\n"
+        "                   human genome, it will fit with four byte locations if the seed size is 20 or larger, but needs 5 (or more) for smaller\n"
         "                   seeds.  Making the location size bigger than necessary will just waste (lots of) space, so unless you're doing something\n"
-        "                   quite unusual, the right answer is 4 or 5.  Default is %d\n"
+        "                   quite unusual, the right answer is 4 or 5.  Default is based on seed size: 4 if it's 20 or greater, 5 otherwise.\n"
         " -sm               Use a temp file to work better in smaller memory.  This only helps a little, but can be the difference if you're close.\n"
         "                   In particular, this will generally use less memory than the index will use once it's built, so if this doesn't work you\n"
         "                   won't be able to use the index anyway. However, if you've got sufficient memory to begin with, this option will just\n"
         "                   slow down the index build by doing extra, useless IO.\n"
-        " -AutoAlt-         Don't automatically mark ALT contigs.  Otherwise, any contig thats name ends in '_alt' (regardless of captialization) will be marked ALT.  Others will not.\n"
+        " -AutoAlt-         Don't automatically mark ALT contigs.  Otherwise, any contig thats name ends in '_alt' (regardless of captialization) or starts\n"
+        "                   with HLA- will be marked ALT.  Others will not.\n"
 		" -maxAltContigSize Specify a size at or below which all contigs are automatically marked ALT, unless overriden by name using the args below\n"
 		" -altContigName    Specify the (case independent) name of an alt to mark a contig.  You can supply this parameter as often as you'd like\n"
 		" -altContigFile    Specify the name of a file with a list of alt contig names, one per line.  You may specify this as often as you'd like\n"
 		" -nonAltContigName Specify the name of a contig that's not an alt, regardless of its size\n"
 		" -nonAltContigFile Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
-			,
-            BINARY_NAME,
-            DEFAULT_SEED_SIZE,
-            DEFAULT_SLACK,
-            DEFAULT_PADDING,
-            DEFAULT_KEY_BYTES,
-            DEFAULT_LOCATION_SIZE);
+		,
+        BINARY_NAME,
+        DEFAULT_SEED_SIZE,
+        DEFAULT_SLACK,
+        DEFAULT_PADDING);
+
     soft_exit_no_print(1);    // Don't use soft-exit, it's confusing people to get an error message after the usage
 }
 
@@ -139,9 +138,9 @@ GenomeIndex::runIndexer(
     const char *histogramFileName = NULL;
     unsigned chromosomePadding = DEFAULT_PADDING;
     bool forceExact = false;
-    unsigned keySizeInBytes = DEFAULT_KEY_BYTES;
+    unsigned keySizeInBytes = 0;    // If it's not set by the user, it gets set based on the seed size later
 	bool large = false;
-    unsigned locationSize = DEFAULT_LOCATION_SIZE;
+    unsigned locationSize = 0; // If it's not set by the user, it gets set based on the seed size later
 	bool smallMemory = false;
 	GenomeDistance maxSizeForAutomaticALT = -1;
 	int nAltOptIn = 0;
@@ -305,6 +304,23 @@ GenomeIndex::runIndexer(
         soft_exit(1);
     }
 
+    if (keySizeInBytes == 0) {
+        //
+        // Auto set they key size.  This computation should result in between 16 & 1024 hash tables.
+        //
+        keySizeInBytes = __max(2,(seedLen + 2) / 4 - 1);
+        WriteStatusMessage("Auto-set key size to %d\n", keySizeInBytes);
+    }
+
+    if (locationSize == 0) {    // Numbers that work for the human genome
+        if (seedLen >= 20) {
+            locationSize = 4;
+        } else {
+            locationSize = 5;
+        }
+        WriteStatusMessage("Auto-set locationSize to %d\n", locationSize);
+    }
+
 	if ((unsigned)seedLen * 2 < keySizeInBytes * 8) {
 		WriteErrorMessage("You must specify a smaller keysize or a larger seed size.  The seed must be big enough to fill the key\n"
 			"and takes two bits per base of seed.\n");
@@ -316,7 +332,6 @@ GenomeIndex::runIndexer(
 			"and needs 4^{excess seed len} hash tables, where excess seed len is the seed size minus the four times the key size.\n");
 		soft_exit(1);
 	}
-
 
     WriteStatusMessage("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
 
