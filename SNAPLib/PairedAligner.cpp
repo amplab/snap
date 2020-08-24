@@ -512,6 +512,7 @@ void PairedAlignerContext::runIterationThread()
 
     _int64 maxPairedSecondaryHits;
     _int64 maxSingleSecondaryHits;
+    _int64 maxPairedLVHitsForAffineGap;
 
     if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
         maxPairedSecondaryHits = 0;
@@ -524,10 +525,18 @@ void PairedAlignerContext::runIterationThread()
         maxSingleSecondaryHits = 32;
     }
 
+    if (useAffineGap) {
+        maxPairedLVHitsForAffineGap = 4096;
+    }
+    else {
+        maxPairedLVHitsForAffineGap = 0;
+    }
+
     bool reallocatedSingleSecondaryBuffer = false;
     bool reallocatedPairedSecondaryBuffer = false;
+    bool reallocatedPairedLVHitsForAffineGapBuffer = false;
 
-    memoryPoolSize += (1 + maxPairedSecondaryHits) * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
+    memoryPoolSize += (1 + maxPairedSecondaryHits + maxPairedLVHitsForAffineGap) * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
 
     BigAllocator *allocator = new BigAllocator(memoryPoolSize, 16); // FIXME: Used larger allocation granularity for __m128i that needs to be aligned at 16 byte boundaries
     
@@ -570,6 +579,7 @@ void PairedAlignerContext::runIterationThread()
     allocator->checkCanaries();
 
     PairedAlignmentResult *results = (PairedAlignmentResult *)allocator->allocate((1 + maxPairedSecondaryHits) * sizeof(*results)); // 1 + is for the primary result
+    PairedAlignmentResult *lvCandidatesForAffineGap = (PairedAlignmentResult *)allocator->allocate(maxPairedLVHitsForAffineGap * sizeof(*lvCandidatesForAffineGap));
     SingleAlignmentResult *singleSecondaryResults = (SingleAlignmentResult *)allocator->allocate(maxSingleSecondaryHits * sizeof(*singleSecondaryResults));
 
     ReadWriter *readWriter = this->readWriter;
@@ -653,13 +663,14 @@ void PairedAlignerContext::runIterationThread()
 #endif // TIME_HISTOGRAM
 
         _int64 nSecondaryResults;
+		_int64 nLVCandidatesForAffineGap;
         _int64 nSingleSecondaryResults[2];
         PairedAlignmentResult firstALTResult;
 
         while (!aligner->align(reads[0], reads[1], results, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
-            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults)) {
+            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults, maxPairedLVHitsForAffineGap, &nLVCandidatesForAffineGap, lvCandidatesForAffineGap)) {
 
-            _ASSERT(nSecondaryResults > maxPairedSecondaryHits || nSingleSecondaryResults[0] > maxSingleSecondaryHits);
+            _ASSERT(nSecondaryResults > maxPairedSecondaryHits || nSingleSecondaryResults[0] > maxSingleSecondaryHits || nLVCandidatesForAffineGap > maxPairedLVHitsForAffineGap);
 
             if (nSecondaryResults > maxPairedSecondaryHits) {
                 if (reallocatedPairedSecondaryBuffer) {
@@ -681,6 +692,17 @@ void PairedAlignerContext::runIterationThread()
                 maxSingleSecondaryHits *= 2;
                 singleSecondaryResults = (SingleAlignmentResult *)BigAlloc(maxSingleSecondaryHits * sizeof(SingleAlignmentResult));
                 reallocatedSingleSecondaryBuffer = true;
+            }
+
+            if (nLVCandidatesForAffineGap > maxPairedLVHitsForAffineGap) {
+                if (reallocatedPairedLVHitsForAffineGapBuffer) {
+                    BigDealloc(lvCandidatesForAffineGap);
+                    lvCandidatesForAffineGap = NULL;
+                }
+
+                maxPairedLVHitsForAffineGap *= 2;
+                lvCandidatesForAffineGap = (PairedAlignmentResult *)BigAlloc((maxPairedLVHitsForAffineGap) * sizeof(PairedAlignmentResult));
+                reallocatedPairedLVHitsForAffineGapBuffer = true;
             }
         }
 
@@ -807,6 +829,11 @@ void PairedAlignerContext::runIterationThread()
     if (reallocatedSingleSecondaryBuffer) {
         BigDealloc(singleSecondaryResults);
         singleSecondaryResults = NULL;
+    }
+
+    if (reallocatedPairedLVHitsForAffineGapBuffer) {
+        BigDealloc(lvCandidatesForAffineGap);
+        lvCandidatesForAffineGap = NULL;
     }
 
     aligner->~ChimericPairedEndAligner();

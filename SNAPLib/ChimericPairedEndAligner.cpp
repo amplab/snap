@@ -131,8 +131,11 @@ bool ChimericPairedEndAligner::align(
         _int64                 maxSecondaryAlignmentsToReturn,
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly        
-        )
+        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64				  maxLVCandidatesForAffineGapBufferSize,
+        _int64				  *nLVCandidatesForAffineGap,
+        PairedAlignmentResult *lvCandidatesForAffineGap
+	)
 {
 	result->status[0] = result->status[1] = NotFound;
     *nSecondaryResults = 0;
@@ -145,6 +148,8 @@ bool ChimericPairedEndAligner::align(
     result->agScore[0] = result->agScore[1] = 0;
 
     firstALTResult->status[0] = firstALTResult->status[1] = NotFound;
+
+    *nLVCandidatesForAffineGap = 0;
 
 	if (read0->getDataLength() < minReadLength && read1->getDataLength() < minReadLength) {
         TRACE("Reads are both too short -- returning");
@@ -171,10 +176,17 @@ bool ChimericPairedEndAligner::align(
         bool fitInSecondaryBuffer = 
 		underlyingPairedEndAligner->align(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
             singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, 
-            singleEndSecondaryResults);
+            singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap);
+
+        if (*nLVCandidatesForAffineGap > maxLVCandidatesForAffineGapBufferSize) {
+            *nSecondaryResults = *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
+            *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1; // So the caller knows it's the paired LV candidate buffer that overflowed
+            return false;
+        }
 
         if (!fitInSecondaryBuffer) {
             *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
+            *nLVCandidatesForAffineGap = 0;
             *nSecondaryResults = secondaryResultBufferSize + 1; // So the caller knows it's the paired secondary buffer that overflowed
             return false;
         }

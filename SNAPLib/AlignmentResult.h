@@ -77,21 +77,22 @@ inline bool isOneLocation(AlignmentResult result) {
 const int NUM_READS_PER_PAIR = 2;    // This is just to make it clear what the array subscripts are, it doesn't ever make sense to change
 
 struct PairedAlignmentResult {
-	AlignmentResult status[NUM_READS_PER_PAIR]; // SingleHit or CertainHit if aligned, MultipleHit if matches DB
-	// but not confidently aligned, or NotFound.
+    AlignmentResult status[NUM_READS_PER_PAIR]; // SingleHit or CertainHit if aligned, MultipleHit if matches DB
+    // but not confidently aligned, or NotFound.
 
-	GenomeLocation location[NUM_READS_PER_PAIR];// Genome location of each read.
+    GenomeLocation location[NUM_READS_PER_PAIR];// Genome location of each read.
+    GenomeLocation origLocation[NUM_READS_PER_PAIR]; // Genome location of each read prior to Landau-Vishkin adjustment
 
-	Direction direction[NUM_READS_PER_PAIR];    // Did we match the reverse complement? In general the two reads should have
-	// opposite orientations because they're part of the same original fragment,
-	// but it seems possible for a piece of the genome to get cut cleanly and flip
-	// in a translocation event, which would cause both ends of a fragment aligning
-	// there to be in the same orientation w.r.t. the reference genome.
+    Direction direction[NUM_READS_PER_PAIR];    // Did we match the reverse complement? In general the two reads should have
+    // opposite orientations because they're part of the same original fragment,
+    // but it seems possible for a piece of the genome to get cut cleanly and flip
+    // in a translocation event, which would cause both ends of a fragment aligning
+    // there to be in the same orientation w.r.t. the reference genome.
 
-	int score[NUM_READS_PER_PAIR];              // score of each end if matched
+    int score[NUM_READS_PER_PAIR];              // score of each end if matched
     int scorePriorToClipping[NUM_READS_PER_PAIR]; // Score prior to soft clipping generated when a read aligns off the end of a contig
 
-	int mapq[NUM_READS_PER_PAIR];               // mapping quality of each end, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
+    int mapq[NUM_READS_PER_PAIR];               // mapping quality of each end, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
 
     int clippingForReadAdjustment[NUM_READS_PER_PAIR];
 
@@ -100,11 +101,16 @@ struct PairedAlignmentResult {
     int basesClippedAfter[NUM_READS_PER_PAIR];
     int agScore[NUM_READS_PER_PAIR];
     bool supplementary[NUM_READS_PER_PAIR];
+    int seedOffset[NUM_READS_PER_PAIR];
+    int lvIndels[NUM_READS_PER_PAIR];
+    double matchProbability[NUM_READS_PER_PAIR];
+    double probabilityAllPairs;
+    unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
 
-	bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
-	_int64 nanosInAlignTogether;
-	unsigned nLVCalls;
-	unsigned nSmallHits;
+    bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
+    _int64 nanosInAlignTogether;
+    unsigned nLVCalls;
+    unsigned nSmallHits;
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine

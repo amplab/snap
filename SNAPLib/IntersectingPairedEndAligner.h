@@ -96,8 +96,49 @@ public:
         _int64                 maxSecondaryResultsToReturn,
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        );
+        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64                 maxLVCandidatesForAffineGapBufferSize,
+        _int64                *nLVCandidatesForAffineGap,
+        PairedAlignmentResult *lvCandidatesForAffineGap // Landau-Vishkin candidates that need to be rescored using affine gap
+	);
+
+    bool alignLandauVishkin(
+        Read                  *read0,
+        Read                  *read1,
+        PairedAlignmentResult* result,
+        PairedAlignmentResult* firstALTResult,
+        int                    maxEditDistanceForSecondaryResults,
+        _int64                 secondaryResultBufferSize,
+        _int64                *nSecondaryResults,
+        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        _int64                 singleSecondaryBufferSize,
+        _int64                 maxSecondaryResultsToReturn,
+        _int64                *nSingleEndSecondaryResultsForFirstRead,
+        _int64                *nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64                 maxLVCandidatesForAffineGapBufferSize,
+        _int64                *nLVCandidatesForAffineGap,
+        PairedAlignmentResult *lvCandidatesForAffineGap
+    );
+
+    bool alignAffineGap(
+        Read                  *read0,
+        Read                  *read1,
+        PairedAlignmentResult* result,
+        PairedAlignmentResult* firstALTResult,
+        int                    maxEditDistanceForSecondaryResults,
+        _int64                 secondaryResultBufferSize,
+        _int64                *nSecondaryResults,
+        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        _int64                 singleSecondaryBufferSize,
+        _int64                 maxSecondaryResultsToReturn,
+        _int64                *nSingleEndSecondaryResultsForFirstRead,
+        _int64                *nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64                 maxLVCandidatesForAffineGapBufferSize,
+        _int64                *nLVCandidatesForAffineGap,
+        PairedAlignmentResult *lvCandidatesForAffineGap
+    );
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
                                              double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
@@ -378,9 +419,23 @@ private:
             bool                *usedAffineGapScoring = NULL,
             int                 *basesClippedBefore = NULL,
             int                 *basesClippedAfter = NULL,
-            int                 *agScore = NULL
+            int                 *agScore = NULL,
+            int                 *totalIndelsLV = NULL
     );
 
+	void scoreLocationWithAffineGap(
+            unsigned             whichRead,
+            Direction            direction,
+            GenomeLocation       genomeLocation,
+            unsigned             seedOffset,
+            int                  scoreLimit,
+            int                 *score,
+            double              *matchProbability,
+            int                 *genomeLocationOffset,
+            int                 *basesClippedBefore,
+            int                 *basesClippedAfter,
+            int                 *agScore
+	);
 
     //
     // These are used to keep track of places where we should merge together candidate locations for MAPQ purposes, because they're sufficiently
@@ -416,7 +471,7 @@ private:
         // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
         //
         bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, 
-                        int newAPairGScore, double *oldMatchProbability); 
+                        int newAPairGScore, double *oldMatchProbability, bool *mergeReplacement = false);
     }; // MergeAnchor
 
     //
@@ -441,6 +496,7 @@ private:
         int                     basesClippedBefore;
         int                     basesClippedAfter;
         int                     agScore;
+        int                     lvIndels;
 
         void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
@@ -454,6 +510,7 @@ private:
             basesClippedBefore = 0;
             basesClippedAfter = 0;
             agScore = 0;
+            lvIndels = 0;
         }
 
         static const int LocationNotYetScored = -2;
@@ -473,6 +530,8 @@ private:
         int                     basesClippedBefore;
         int                     basesClippedAfter;
         int                     agScore;
+        int                     lvIndels;
+        double                  matchProbability;
 
         void init(GenomeLocation readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
                   unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_)
@@ -489,6 +548,8 @@ private:
             basesClippedBefore = 0;
             basesClippedAfter = 0;
             agScore = 0;
+            lvIndels = 0;
+            matchProbability = 1.0;
          }
     }; // ScoringCandidate
 
@@ -539,10 +600,16 @@ private:
         void init() {
             for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
                 bestResultGenomeLocation[i] = InvalidGenomeLocation;
+                bestResultOrigGenomeLocation[i] = InvalidGenomeLocation;
                 bestResultScore[i] = ScoreAboveLimit;
+                bestResultDirection[i] = FORWARD;
+                bestResultUsedAffineGapScoring[i] = false;
                 bestResultBasesClippedBefore[i] = 0;
                 bestResultBasesClippedAfter[i] = 0;
                 bestResultAGScore[i] = 0;
+                bestResultSeedOffset[i] = 0;
+                bestResultLVIndels[i] = 0;
+                bestResultMatchProbability[i] = 0.0;
             }
 
             probabilityOfBestPair = 0;
@@ -551,17 +618,47 @@ private:
             bestPairAGScore = 0;
         } // init()
 
+        void init(PairedAlignmentResult* result) {
+            for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
+                bestResultGenomeLocation[i] = result->location[i];
+                bestResultOrigGenomeLocation[i] = result->origLocation[i];
+                bestResultScore[i] = result->score[i];
+                bestResultDirection[i] = result->direction[i];
+                bestResultUsedAffineGapScoring[i] = result->usedAffineGapScoring[i];
+                bestResultBasesClippedBefore[i] = result->basesClippedBefore[i];
+                bestResultBasesClippedAfter[i] = result->basesClippedAfter[i];
+                bestResultAGScore[i] = result->agScore[i];
+                bestResultSeedOffset[i] = result->seedOffset[i];
+                bestResultLVIndels[i] = result->lvIndels[i];
+                bestResultMatchProbability[i] = result->matchProbability[i];
+            }
+            probabilityOfBestPair = result->matchProbability[0] * result->matchProbability[1];
+            probabilityOfAllPairs = result->probabilityAllPairs;
+            bestPairScore = result->score[0] + result->score[1];
+            bestPairAGScore = result->agScore[0] + result->agScore[1];
+        }
+
         void updateProbabilityOfAllPairs(double oldPairProbability);
+        inline void updateProbabilityOfBestPair(double newPairProbability) {
+            probabilityOfBestPair = newPairProbability;
+            probabilityOfAllPairs += probabilityOfBestPair;
+        }
         bool updateBestHitIfNeeded(int pairScore, int pairAGScore, double pairProbability, int fewerEndScore, int readWithMoreHits, GenomeDistance fewerEndGenomeLocationOffset, ScoringCandidate* candidate, ScoringMateCandidate* mate); // returns true iff it updated the best hit
+        bool updateBestHitIfNeeded(int pairScore, int pairAGScore, double pairProbability, PairedAlignmentResult* newResult); // returns true iff it updated the best hit
+
         void fillInResult(PairedAlignmentResult* result, unsigned *popularSeedsSkipped);
 
         GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
+        GenomeLocation bestResultOrigGenomeLocation[NUM_READS_PER_PAIR];
         Direction bestResultDirection[NUM_READS_PER_PAIR];
         unsigned bestResultScore[NUM_READS_PER_PAIR];
         bool bestResultUsedAffineGapScoring[NUM_READS_PER_PAIR];
         int bestResultBasesClippedBefore[NUM_READS_PER_PAIR];
         int bestResultBasesClippedAfter[NUM_READS_PER_PAIR];
         int bestResultAGScore[NUM_READS_PER_PAIR];
+        int bestResultSeedOffset[NUM_READS_PER_PAIR];
+        int bestResultLVIndels[NUM_READS_PER_PAIR];
+        double bestResultMatchProbability[NUM_READS_PER_PAIR];
 
         double probabilityOfBestPair;
         double probabilityOfAllPairs;

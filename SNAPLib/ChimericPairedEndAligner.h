@@ -82,8 +82,11 @@ public:
         _int64                 maxSecondaryAlignmentsToReturn,
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        );
+        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64                 maxLVCandidatesForAffineGapBufferSize,
+        _int64                *nLVCandidatesForAffineGap,
+        PairedAlignmentResult *lvCandidatesForAffineGap
+	);
 
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}

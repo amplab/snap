@@ -188,6 +188,11 @@ public:
             o_nEdits = &localnEdits;
         }
 
+        if (w < 0) {
+            *o_nEdits = ScoreAboveLimit;
+            return -1;
+        }
+
         //
         // Start with perfect match probability and work our way down.
         //
@@ -649,6 +654,11 @@ got_answer:
             // having to check it all the time.
             //
             o_nEdits = &localnEdits;
+        }
+
+        if (w < 0) {
+            *o_nEdits = ScoreAboveLimit;
+            return -1;
         }
 
         //
