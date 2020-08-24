@@ -52,7 +52,7 @@ using namespace std;
 
 using util::stringEndsWith;
 
-static const int DEFAULT_MIN_SPACING = 1;
+static const int DEFAULT_MIN_SPACING = 0;
 static const int DEFAULT_MAX_SPACING = 1000;
 static const int DEFAULT_MAX_HITS_FOR_UNDERLYING_SINGLE_END_ALIGNER = 25;
 
@@ -663,7 +663,7 @@ void PairedAlignerContext::runIterationThread()
 #endif // TIME_HISTOGRAM
 
         _int64 nSecondaryResults;
-		_int64 nLVCandidatesForAffineGap;
+        _int64 nLVCandidatesForAffineGap;
         _int64 nSingleSecondaryResults[2];
         PairedAlignmentResult firstALTResult;
 
