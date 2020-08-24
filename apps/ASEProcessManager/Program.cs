@@ -1324,30 +1324,28 @@ namespace ASEProcessManager
             linuxScript.Write("sudo mkdir " + mountpoint + "\n");
             linuxScript.Write("sudo chmod 777 " + mountpoint + "\n");
             linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(inputFilename) + "' " + mountpoint + "\n");
-            var copiedBamDirectory = "/mnt/d/temp/" + fileId;
-            linuxScript.Write("mkdir " + copiedBamDirectory + "\n");
+            var copiedBamDirectory = "/mnt/d/temp/freebayes_temp/";
             linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(inputFilename)) + " " + copiedBamDirectory + "/\n");
             linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(inputFilename))) + "/*bai " + copiedBamDirectory + "/\n");
 
             linuxScript.Write("cd ~/freebayes/scripts\n");
             var outputFilename = fileId + outputExtension;
             linuxScript.Write("./freebayes-parallel " + regionFileName + " `nproc` --fasta-reference " + fastaName + " " + copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(inputFilename) +
-                " > /mnt/d/temp/" + outputFilename + "\n");
+                " > " + copiedBamDirectory + outputFilename + "\n");
 
             linuxScript.Write("if [ $? = 0 ]; then\n");
             var outputDirectory = mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(inputFilename)) + @"\..\..\" + derivedFilesDirectory + @"\" + caseId);
 
             linuxScript.Write("    mkdir " + outputDirectory + "\n");
-            linuxScript.Write("    cp ~/" + outputFilename + " " + outputDirectory + "/\n");
-            linuxScript.Write("    rm ~/" + outputFilename + "\n");
+            linuxScript.Write("    cp " + copiedBamDirectory + outputFilename + " " + outputDirectory + "/\n");
+            linuxScript.Write("    rm " + copiedBamDirectory + "*\n");
             linuxScript.Write("else\n");
             linuxScript.Write(@"    echo " + fileId + " >> variant_calling_errors\n");
             linuxScript.Write("fi\n");
             linuxScript.Write("sleep 60\n");    // Time to let the copy finish before we can umount
             linuxScript.Write("sudo umount " + mountpoint + "\n");
             linuxScript.Write("sudo rmdir " + mountpoint + "\n");
-            linuxScript.Write("rm -rf " + copiedBamDirectory + "\n"); // * is to get bai as well
-            for (int i = 21; i <= 36; i++)
+            for (int i = 19; i <= 36; i++)
             {
                 linuxScript.Write("# Placeholder\n");
             }
@@ -1534,7 +1532,7 @@ namespace ASEProcessManager
 
                     WriteFreebayesLinuxScript(linuxScript, case_.case_id, ASETools.getRealignedNormalDNAByAligner[aligner](case_), case_.normal_dna_file_id, 
                         ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.Freebayes],  // Only normal for now
-                        "~/genomes/GRCh38.d1.vd1-100k-regions", stateOfTheWorld.configuration.derivedFilesDirectory, "~/genomes/GRCh38.d1.vd1.fa");
+                        "/mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta.100k-regions-only-main-chromosomes", stateOfTheWorld.configuration.derivedFilesDirectory, "/mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta");
 
                     nAddedToScript++;
                 } // cases
@@ -5370,6 +5368,16 @@ namespace ASEProcessManager
                 filesToDownload = null;
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
 
+                string fastaName;
+
+                if (variantCaller == ASETools.VariantCaller.Freebayes)
+                {
+                    fastaName = "/mnt/d/sequence/genomes/Homo_sapiens_assembly38-ACTGN.fasta";
+                } else
+                {
+                    fastaName = "/mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta";
+                }
+
                 foreach (var case_ in stateOfTheWorld.listOfCases)
                 {
                     if (case_.concordance[alignerPair][variantCaller][tumor].concordance_tarball_filename != "")
@@ -5403,7 +5411,7 @@ namespace ASEProcessManager
                         linuxScript.Write("cat " + alignersFile + " | parallel -j 2 bcftools annotate -x FORMAT/AD -O z -o " + tempBase + "{}.NoAd.vcf.gz " + tempBase + "{}.vcf\n");
                         linuxScript.Write("cat " + alignersFile + " | parallel -j 2 bcftools view -c 1 -O z -o " + tempBase + "{}.NoAd.NoHomRef.vcf.gz " + tempBase + "{}.NoAd.vcf.gz\n");
                         linuxScript.Write("cd ~/hap.py\n");
-                        linuxScript.Write("python hap.py-install/bin/hap.py " + tempBase + firstAlignerName + ".NoAd.NoHomRef.vcf.gz " + tempBase + secondAlignerName + ".NoAd.NoHomRef.vcf.gz -r /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -o " +
+                        linuxScript.Write("python hap.py-install/bin/hap.py " + tempBase + firstAlignerName + ".NoAd.NoHomRef.vcf.gz " + tempBase + secondAlignerName + ".NoAd.NoHomRef.vcf.gz -r " + fastaName + " -o " +
                             tempBase + "output/" + case_.getDNAFileIdByTumor(tumor) + "." + alignerPair + ".concordance --engine=vcfeval\n");
                         linuxScript.Write("cd " + tempBase + "output/\n");
 
@@ -5673,12 +5681,12 @@ namespace ASEProcessManager
             processingStages.Add(new OverallVCFStatisticsProcessingStage());
             processingStages.Add(new ReadStaticticsProcessingStage());
             processingStages.Add(new miRNAProcessingStage());
-            processingStages.Add(new SNAPRealignmentProcessingStage(false));
-            //processingStages.Add(new SNAPRealignmentProcessingStage(true));
             processingStages.Add(new SummarizeCaseMetadataProcessingStage());
             processingStages.Add(new ConsolodatedCaseMetadataProcessingStage());
             processingStages.Add(new FASTQGenerationProcessingStage(false));
             processingStages.Add(new FASTQGenerationProcessingStage(true));
+            processingStages.Add(new SNAPRealignmentProcessingStage(false));
+            //processingStages.Add(new SNAPRealignmentProcessingStage(true));
             foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
             {
                 if (aligner == ASETools.Aligner.SNAP)
@@ -5711,7 +5719,7 @@ namespace ASEProcessManager
                     //continue;   // Not yet
                 }
                 processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
-                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
+                processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
             }
 
             foreach (var alignerPair in ASETools.allAlignerPairs)

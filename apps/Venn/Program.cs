@@ -87,7 +87,7 @@ namespace Venn
                 Console.Write("The following concordance tarballs are suspiciously small and will not be processed:");
                 foreach (var caseWithSmallTarball in casesToRun.Where(case_ => case_.concordance.Any(alignerPair => case_.concordance[alignerPair.Key][variantCaller][tumor].concordance_tarball_size < 512 * 1024)))
                 {
-                    foreach (var alignerPair in ASETools.EnumUtil.GetValues<ASETools.AlignerPair>())
+                    foreach (var alignerPair in ASETools.allAlignerPairs)
                     {
                         if (caseWithSmallTarball.concordance[alignerPair][variantCaller][tumor].concordance_tarball_size < 512 * 1024) 
                         {

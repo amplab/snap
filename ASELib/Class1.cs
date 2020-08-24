@@ -3997,7 +3997,7 @@ namespace ASELib
 
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
-        public const int maxTimeForRealignHistograms = 5 * 60 * 60;
+        public const int maxTimeForRealignHistograms = 10 * 60 * 60;
         public const int maxSpeedForRealignmentHistograms = 750000;
         public const int stepForSpeedRealignmentHistograms = 1000;
 
@@ -16994,7 +16994,85 @@ namespace ASELib
                     Console.WriteLine("Exception deleting dir: " + e.Message);
                 }
             }
-        }
+        } // TryToRecursivelyDeleteDirectory
+
+        public class VennResults
+        {
+            public readonly Dictionary<VariantType, int> nVariants = new Dictionary<VariantType, int>();
+            public readonly Dictionary<VariantType, Dictionary<AlignerSet, int>> countBySet = new Dictionary<VariantType, Dictionary<AlignerSet, int>>();
+
+            VennResults()
+            {
+                foreach (var variantType in EnumUtil.GetValues<VariantType>())
+                {
+                    nVariants.Add(variantType, 0);
+                    countBySet.Add(variantType, new Dictionary<AlignerSet, int>());
+                    foreach (var alignerSet in allAlignerSets)
+                    {
+                        countBySet[variantType].Add(alignerSet, 0);
+                    } // alignerSet
+                } // variantType
+            } // ctor
+
+            public static VennResults LoadFromFile(string filename)
+            {
+                var wantedFields = new List<string>();
+
+                foreach (var variantType in EnumUtil.GetValues<VariantType>())
+                {
+                    wantedFields.Add(" nVariants " + variantTypeToName[variantType]);   // yes, there's a leading space.
+                    
+                    foreach (var alignerSet in allAlignerSets)
+                    {
+                        wantedFields.Add(alignerSet.ToString() + " " + variantTypeToName[variantType]);
+                    } // alignerSet
+                } // variantType
+
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (inputFile == null)
+                {
+                    Console.WriteLine("ASETools.VennResults.LoadFromFile: unable to open input file " + filename);
+                    return null;
+                }
+
+                var headerizedFile = new HeaderizedFile<VennResults>(inputFile, false, true, "", wantedFields);
+                List<VennResults> results;
+                var worked = headerizedFile.ParseFile(Parse, out results);
+                inputFile.Close();
+
+                if (!worked)
+                {
+                    Console.WriteLine("ASETools.VennResults.LoadFromFile: unable to parse input file " + filename);
+                    return null;
+                }
+
+                if (results.Count() != 1)
+                {
+                    Console.WriteLine("ASETools.VennResults.LoadFromFile: got unexpected number of item from input file " + filename + ": " + results.Count());
+                    return null;
+                }
+
+                return results[0];
+
+            } // LoadFromFile
+
+            static VennResults Parse(HeaderizedFile<VennResults>.FieldGrabber fieldGrabber)
+            {
+                var retVal = new VennResults();
+
+                foreach (var variantType in EnumUtil.GetValues<VariantType>())
+                {
+                    retVal.nVariants[variantType] = fieldGrabber.AsInt(" nVariants " + variantTypeToName[variantType]);
+
+                    foreach (var alignerSet in allAlignerSets)
+                    {
+                        retVal.countBySet[variantType][alignerSet] = fieldGrabber.AsInt(alignerSet.ToString() + " " + variantTypeToName[variantType]);
+                    } // alignerSet
+                } // variantType
+
+                return retVal;
+            }
+        } // VennResults
 
     } // ASETools
 
