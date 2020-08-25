@@ -208,6 +208,8 @@ namespace SnapTimer
             int tooShort = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Too Short/Too Many Ns")));
             int speed = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Reads/s")));
             int timeInAligner = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Time in Aligner (s)")));
+            double agCalledSingle = ASETools.GetDoubleFromString(statsLine.Substring(headerLine.IndexOf("%AgSingle"))) / 100.0;
+            double agUsedSingle = ASETools.GetDoubleFromString(statsLine.Substring(headerLine.IndexOf("%AgUsedSingle"))) / 100.0;
 
             double pairs = 0;
             if (headerLine.Contains("%Pairs"))
@@ -233,7 +235,7 @@ namespace SnapTimer
                 return; // We already have an error message printed.
             }
 
-            outputFile.WriteLine("Copy in Time (s)\tOverall Runtime (s)\tLoading Time (s)\tTime in Aligner (s)\tSort Time (s)\tTotal Reads\tAligned, MAPQ >= 10\tAligned, MAPQ < 10\tUnaligned\tToo Short/Too Many Ns\t%Pairs\tReads/s\tCopy out Time (s)\tStart Time\tStop Time");
+            outputFile.WriteLine("Copy in Time (s)\tOverall Runtime (s)\tLoading Time (s)\tTime in Aligner (s)\tSort Time (s)\tTotal Reads\tAligned, MAPQ >= 10\tAligned, MAPQ < 10\tUnaligned\tToo Short/Too Many Ns\t%Pairs\tReads/s\tCopy out Time (s)\tStart Time\tStop Time\tAG called Single\tAG used single result");
             outputFile.WriteLine(
                 ASETools.ElapsedTimeInSeconds(copyInTimer) + "\t" +
                 ASETools.GetIntFromString(ASETools.ElapsedTimeInSeconds(runTimer)) + "\t" + 
@@ -249,7 +251,9 @@ namespace SnapTimer
                 speed + "\t" + 
                 ASETools.ElapsedTimeInSeconds(copyOutTimer) + "\t" +
                 startTime.ToString() + "\t" + 
-                stopTime.ToString());
+                stopTime.ToString() + "\t" +
+                agCalledSingle,
+                agUsedSingle);
 
             snapOutput.ForEach(_ => outputFile.WriteLine(_));
             outputFile.WriteLine("**done**");
