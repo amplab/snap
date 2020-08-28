@@ -30,7 +30,7 @@ Environment:
 #include "DataReader.h"
 
 // for debugging file I/O, validate BAM records on input & output
-//#define VALIDATE_BAM
+#define VALIDATE_BAM
 
 // BAM format layout
 // SAM Format Specification v1.4-r985

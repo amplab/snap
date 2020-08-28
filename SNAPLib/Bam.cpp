@@ -541,28 +541,64 @@ BAMAlignment::reg2bins(
     void
 BAMAlignment::validate()
 {
-    _ASSERT(block_size < 0x100000); // sanity check, should be <1MB!
-    _ASSERT(size(l_read_name, n_cigar_op, l_seq, 0) <= block_size + sizeof(block_size));
-    _ASSERT(refID >= -1 && refID <= (int) 0x100000);
-    // todo: validate bin, requires more info
-    _ASSERT(MAPQ <= 80 || MAPQ == 255);
-    _ASSERT(FLAG <= 0x7ff);
-    _ASSERT(next_refID >= -1 && refID <= (int) 0x100000);
-    for (char* p = read_name(); p < read_name() + l_read_name - 1; p++) {
-        _ASSERT(*p >= ' ' && *p <= '~');
+    if (block_size >= 0x100000) { // sanity check, should be <1MB!
+        WriteErrorMessage("Read name: %.*s. Block size: %d greater than 1 MB", l_read_name, read_name(), block_size);
+        soft_exit(1);
     }
-    _ASSERT(read_name()[l_read_name - 1] == 0);
+    if (size(l_read_name, n_cigar_op, l_seq, 0) > block_size + sizeof(block_size)) {
+        WriteErrorMessage("Read name: %.*s. Size of BAM record %lld larger than allocated %lld\n", l_read_name, read_name(), size(l_read_name, n_cigar_op, l_seq, 0), block_size + sizeof(block_size));
+        soft_exit(1);
+    }
+    if (refID < -1 || refID >(int)0x100000) {
+        WriteErrorMessage("Read name: %.*s. refID: %d out of range\n", l_read_name, read_name(), refID);
+        soft_exit(1);
+    }
+    // todo: validate bin, requires more info
+    if (MAPQ > 80 && MAPQ != 255) {
+        WriteErrorMessage("Read name: %.*s. MAPQ %u incorrect\n", l_read_name, read_name(), MAPQ);
+        soft_exit(1);
+    }
+    if (FLAG > 0x7fff) {
+        WriteErrorMessage("Read name: %.*s. FLAG %u incorrect\n", l_read_name, read_name(), FLAG);
+        soft_exit(1);
+    }
+    if (next_refID < -1 || next_refID >(int)0x100000) {
+        WriteErrorMessage("Read name: %.*s. next_refID: %d out of range\n", l_read_name, read_name(), next_refID);
+        soft_exit(1);
+    }
+    for (char* p = read_name(); p < read_name() + l_read_name - 1; p++) {
+        if (*p < ' ' || *p > '~') {
+            WriteErrorMessage("Read name: %.*s has strange character %c\n", l_read_name, read_name(), *p);
+            soft_exit(1);
+        }
+    }
+    if (read_name()[l_read_name - 1] != 0) {
+        WriteErrorMessage("Read name: %.*s not null terminated.\n", l_read_name, read_name());
+        soft_exit(1);
+    }
     // can't validate seq, all values are valid (though some are unlikely!)
     char* q = qual();
     for (int i = 0; i < l_seq; i++) {
-        _ASSERT(q[i] >= -1 && q[i] <= 80);
+        if (q[i] < -1 && q[i] > 80) {
+            WriteErrorMessage("Read name: %.*s. Base quality %c incorrect\n", l_read_name, read_name(), q[i]);
+            soft_exit(1);
+        }
     }
     BAMAlignAux* aux = firstAux();
     for (; (char*)aux - (char*)firstAux() < auxLen(); aux = aux->next()) {
-        _ASSERT(aux->tag[0] >= ' ' && aux->tag[0] <= '~' && aux->tag[1] >= ' ' && aux->tag[1] <= '~');
-        _ASSERT(strchr("AcCsSiIfZHB", aux->val_type) != NULL);
+        if (aux->tag[0] < ' ' || aux->tag[0] > '~' || aux->tag[1] < ' ' || aux->tag[1] > '~') {
+            WriteErrorMessage("Read name: %.*s. Aux tag1 %c tag2 %c incorrect\n", l_read_name, read_name(), aux->tag[0], aux->tag[1]);
+            soft_exit(1);
+        }
+        if (strchr("AcCsSiIfZHB", aux->val_type) == NULL) {
+            WriteErrorMessage("Read name: %.*s. Aux val type %c incorrect\n", l_read_name, read_name(), aux->val_type);
+            soft_exit(1);
+        }
     }
-    _ASSERT((char*) aux - (char*) firstAux() == auxLen());
+    if ((char*)aux - (char*)firstAux() != auxLen()) {
+        WriteErrorMessage("Read name: %.*s. Aux field length mismatch. Found %d. Expected %d\n", l_read_name, read_name(), (char*)aux - (char*)firstAux(), auxLen());
+        soft_exit(1);
+    }
 }
 #endif
 
@@ -1415,7 +1451,7 @@ BAMFormat::writeRead(
             auxLen = 0;
         }
     }
-    size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, auxLen);
+    size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, !translateReadGroupFromSAM ? auxLen : auxLen - 1);
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
         if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
             bamSize += 4 + strlen(read->getReadGroup());
@@ -1674,7 +1710,7 @@ BAMFormat::writeRead(
             auxLen = 0;
         }
     }
-    size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, auxLen);
+    size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, !translateReadGroupFromSAM ? auxLen : auxLen - 1);
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
         if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
             bamSize += 4 + strlen(read->getReadGroup());
@@ -1682,6 +1718,10 @@ BAMFormat::writeRead(
         else {
             bamSize += context.defaultReadGroupAuxLen;
         }
+    }
+
+    if (read->getLibrary() != NULL) {
+        bamSize += 4 + read->getLibraryLength();
     }
 
     //
@@ -1788,6 +1828,19 @@ BAMFormat::writeRead(
         *(_int32*)in->value() = (flags & SAM_UNMAPPED) ? -1 : internalScore;
         _ASSERT(in->size() == 7);   // Known above in the bamSize += line
         auxLen += (unsigned)in->size();
+    }
+
+    // LB
+    if (read->getLibrary() != NULL) {
+        if ((char*)bam->firstAux() + auxLen + 4 + read->getLibraryLength() > buffer + bufferSpace) {
+            return false;
+        }
+        BAMAlignAux* lb = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
+        lb->tag[0] = 'L'; lb->tag[1] = 'B'; lb->val_type = 'Z';
+        strncpy((char*)lb->value(), read->getLibrary(), read->getLibraryLength());
+        ((char*)(lb->value()))[read->getLibraryLength()] = '\0';
+        _ASSERT(lb->size() == 4 + read->getLibraryLength());
+        auxLen += (unsigned)lb->size();
     }
 
     if (NULL != spaceUsed) {

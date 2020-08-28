@@ -1676,38 +1676,59 @@ DecompressDataReader::decompress(
         zstream->zfree = zfree;
         zstream->opaque = heap;
     } else if (mode != ContinueMultiBlock) {
-        zstream->zalloc = NULL;
-        zstream->zfree = NULL;
+        zstream->zalloc = Z_NULL;
+        zstream->zfree = Z_NULL;
+        zstream->opaque = Z_NULL;
     }
     uInt oldAvailOut, oldAvailIn;
     int block = 0;
     bool multiBlock = true;
     int status;
     do {
-        if (mode != ContinueMultiBlock || block != 0) {
-            if (heap != NULL) {
-                heap->reset();
+        do {
+            if (mode != ContinueMultiBlock || block != 0) {
+                if (heap != NULL) {
+                    heap->reset();
+                }
+                status = inflateInit2(zstream, windowBits | ENABLE_ZLIB_GZIP);
+                if (status < 0) {
+                    WriteErrorMessage("GzipDataReader: inflateInit2 failed with %d\n", status);
+                    return false;
+                }
             }
-            status = inflateInit2(zstream, windowBits | ENABLE_ZLIB_GZIP);
-            if (status < 0) {
-                WriteErrorMessage("GzipDataReader: inflateInit2 failed with %d\n", status);
-                return false;
+            oldAvailOut = zstream->avail_out;
+            oldAvailIn = zstream->avail_in;
+            status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
+            // fprintf(stderr, "decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
+            block++;
+            if (status < 0 && status != Z_BUF_ERROR) {
+                WriteErrorMessage("GzipDataReader: inflate failed with %d\n", status);
+                soft_exit(1);
+            }
+            if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
+                WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
+                soft_exit(1);
+            }
+        } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
+
+        if (status == Z_STREAM_END) {
+            //
+            // Try and read another GZIP member in the remaining data, since we reached the end of a gzip stream
+            //
+            if (zstream->avail_in != 0) {
+                if (heap != NULL) {
+                    heap->reset();
+                }
+                status = inflateReset2(zstream, windowBits | ENABLE_ZLIB_GZIP);
+                if (status < 0) {
+                    WriteErrorMessage("GzipDataReader: inflateReset2 failed with %d\n", status);
+                    return false;
+                }
+                block = 0;
             }
         }
-        oldAvailOut = zstream->avail_out;
-        oldAvailIn = zstream->avail_in;
-        status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
-        // fprintf(stderr, "decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
-        block++;
-        if (status < 0 && status != Z_BUF_ERROR) {
-            WriteErrorMessage("GzipDataReader: inflate failed with %d\n", status);
-            soft_exit(1);
-        }
-        if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
-            WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
-            soft_exit(1);
-        }
-    } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
+
+    } while (zstream->avail_in != 0);
     // fprintf(stderr, "end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
     if (o_inputRead) {
         *o_inputRead = inputBytes - zstream->avail_in;

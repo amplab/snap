@@ -147,6 +147,7 @@ GzipCompressWorkerManager::beginStep()
     else if (inputSize > bufferSize) {
         //fprintf(stderr, "CompressManager::beginStep() prevInputSize: %lld inputSize: %lld\n", bufferSize, inputSize);
         BigDealloc(buffer);
+        buffer = NULL;
         buffer = (char*)BigAlloc(inputSize);
         if (buffer == NULL) {
             WriteErrorMessage("Unable to allocate %lld bytes for gzip compression buffer\n", inputSize);
@@ -170,11 +171,19 @@ GzipCompressWorkerManager::finishStep()
         _ASSERT(sizes[i] <= chunkSize);
         size_t logicalChunk = min(chunkSize, inputUsed - i * chunkSize);
         logicalOffset += logicalChunk;
-        _ASSERT(((BgzfHeader*)(buffer + i * chunkSize))->validate(sizes[i], logicalChunk));
+        // _ASSERT(((BgzfHeader*)(buffer + i * chunkSize))->validate(sizes[i], logicalChunk));
+        if (!((BgzfHeader*)(buffer + i * chunkSize))->validate(sizes[i], logicalChunk)) {
+            WriteErrorMessage("BGZF Header validation failed. input:%.*s, size:%lld, logicalChunk:%lld\n", 32, buffer + i * chunkSize, sizes[i], logicalChunk);
+            soft_exit(1);
+        }
         memcpy(input + toUsed, buffer + i * chunkSize, sizes[i]);
         toUsed += sizes[i];
     }
-    _ASSERT(BgzfHeader::validate(input, toUsed));
+    // _ASSERT(BgzfHeader::validate(input, toUsed));
+    if (!BgzfHeader::validate(input, toUsed)) {
+        WriteErrorMessage("BGZF Header validation failed. input:%.*s, toUsed:%lld\n", 32, input, toUsed);
+        soft_exit(1);
+    }
     encoder->setEncodedBatchSize(toUsed);
     filterSupplier->addTranslations(&translation);
     translation.clear();
