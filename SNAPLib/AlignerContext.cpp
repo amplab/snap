@@ -369,11 +369,12 @@ char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen
 AlignerContext::printStats()
 {
 
-    WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)%s\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
+    WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)%s%s\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
         (stats->filtered > 0) ? "Filtered               " : "",
         (stats->extraAlignments) ? "Extra Alignments  " : "",
         isPaired() ? "%Pairs    " : "   ",
-        options->profile ? (!options->sortOutput ? " Read Align Write(& compress)" : " Read Align Write") : ""
+        options->profile ? (!options->sortOutput ? " Read Align Write(& compress)" : " Read Align Write") : "",
+        (isPaired() && options->profileAffineGap) ? " %AgSingle %AgUsedSingle" : ""
         );
 
 	const size_t strBufLen = 50;	// Way more than enough for 64 bit numbers with commas
@@ -391,6 +392,7 @@ AlignerContext::printStats()
     char pctRead[strBufLen];
     char pctAlign[strBufLen];
     char pctWrite[strBufLen];
+    char pctAg[strBufLen];
     _int64 totalTime = stats->millisReading + stats->millisAligning + stats->millisWriting;
 
     /*
@@ -402,10 +404,11 @@ AlignerContext::printStats()
                          |  |  |  |  |  filtered   |  | %Read       
                          |  |  |  |  |  | extra    |  | | %Align    
                          |  |  |  |  |  | | pairs  |  | | | %Write 
-                         |  |  |  |  |  | | |      |  | | | |  
-                         v  v  v  v  v  v v v      v  v v v v
+                         |  |  |  |  |  | | |      |  | | | | Ag 
+                         v  v  v  v  v  v v v      v  v v v v v v AgUsed
     */
-    WriteStatusMessage("%s %s %s %s %s %s%s%s   %-9s %s%s%s%s\n",
+
+    WriteStatusMessage("%s %s %s %s %s %s%s%s   %-9s %s%s%s%s%s%s\n",
         FormatUIntWithCommas(stats->totalReads, numReads, strBufLen, 14),
         numPctAndPad(single, stats->singleHits, 100.0 * stats->singleHits / stats->totalReads, 22, strBufLen),
         numPctAndPad(multi, stats->multiHits, 100.0 * stats->multiHits / stats->totalReads, 22, strBufLen),
@@ -418,8 +421,10 @@ AlignerContext::printStats()
 		FormatUIntWithCommas((alignTime + 500) / 1000, alignTimeString, strBufLen, 20),
         options->profile ? pctAndPad(pctRead, (double)stats->millisReading / (double)totalTime, 5, strBufLen, false) : "",
         options->profile ? pctAndPad(pctAlign, (double)stats->millisAligning / (double)totalTime, 6, strBufLen, false) : "",
-        options->profile ? pctAndPad(pctWrite, (double)stats->millisWriting / (double)totalTime, 6, strBufLen, false) : ""
-        );
+        options->profile ? pctAndPad(pctWrite, (double)stats->millisWriting / (double)totalTime, 6, strBufLen, false) : "",
+        (isPaired() && options->profileAffineGap) ? pctAndPad(pctAg, (double)stats->agForcedSingleEndAlignment / (double)stats->totalReads, 10, strBufLen, true) : "",
+        (isPaired() && options->profileAffineGap) ? pctAndPad(pctAg, (double)stats->agUsedSingleEndAlignment / (double)stats->totalReads, 14, strBufLen, true) : ""
+    );
 
     if (NULL != perfFile) {
         fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%0.2f%%\t%lld\tt%.0f\n",
@@ -438,10 +443,79 @@ AlignerContext::printStats()
 
 
 #if TIME_HISTOGRAM
-    WriteStatusMessage("Per-read alignment time histogram:\nlog2(ns)\tcount\ttotal time (ns)\n");
+    WriteStatusMessage("\n%lld time stamps were negative, for a total of %lld ns.  They are otherwise ignored.\n", stats->backwardsTimeStamps, stats->totalBackwardsTimeStamps);
+
+    WriteStatusMessage("\nPer-read alignment time histogram:\nlog2(ns)\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    _int64 totalReads = 0;
+    _int64 totalTimeX = 0;  // totalTime is already used
     for (int i = 0; i < 31; i++) {
-        WriteStatusMessage("%d\t%lld\t%lld\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i]);
+        totalReads += stats->countByTimeBucket[i];
+        totalTimeX += stats->nanosByTimeBucket[i];
     }
+
+    _int64 readsSoFar = 0;
+    _int64 timeSoFar = 0;
+    for (int i = 0; i < 31; i++) {
+        readsSoFar += stats->countByTimeBucket[i];
+        timeSoFar += stats->nanosByTimeBucket[i];
+        _int64 timePerRead;
+        if (stats->countByTimeBucket[i] == 0) {
+            timePerRead = 0;
+        } else {
+            timePerRead = stats->nanosByTimeBucket[i] / stats->countByTimeBucket[i];
+        }
+
+        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar/(double)totalTimeX);
+    }
+
+    WriteStatusMessage("\nPer-read alignment count and time by MAPQ\nMAPQ\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    totalReads = stats->countOfUnaligned;
+    totalTimeX = stats->timeOfUnaligned;
+    for (int i = 0; i <= 70; i++) {
+        totalReads += stats->countByMAPQ[i];
+        totalTimeX += stats->timeByMAPQ[i];
+    }
+    readsSoFar = stats->countOfUnaligned;
+    timeSoFar = stats->timeOfUnaligned;
+
+
+    WriteStatusMessage("unaligned\t%lld\t%lld\t%lld\t%f\t%f\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+    for (int i = 0; i <= 70; i++) {
+        readsSoFar += stats->countByMAPQ[i];
+        timeSoFar += stats->timeByMAPQ[i];
+        _int64 timePerRead;
+        if (stats->countByMAPQ[i] == 0) {
+            timePerRead = 0;
+        } else {
+            timePerRead = stats->timeByMAPQ[i] / stats->countByMAPQ[i];
+        }
+        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByMAPQ[i], stats->timeByMAPQ[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+    }
+
+    WriteStatusMessage("\nPer-read alignment count and time by final edit distance\nEditDistance\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    totalReads = stats->countOfUnaligned;
+    totalTimeX = stats->timeOfUnaligned;
+    for (int i = 0; i < 31; i++) {
+        totalReads += stats->countByNM[i];
+        totalTimeX += stats->timeByNM[i];
+    }
+    readsSoFar = 0;
+    timeSoFar = 0;
+    for (int i = 0; i < 31; i++) {
+        readsSoFar += stats->countByNM[i];
+        timeSoFar += stats->timeByNM[i];
+        _int64 timePerRead;
+        if (stats->countByNM[i] == 0) {
+            timePerRead = 0;
+        } else {
+            timePerRead = stats->timeByNM[i] / stats->countByNM[i];
+        }
+        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByNM[i], stats->timeByNM[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+    }
+    readsSoFar += stats->countOfUnaligned;
+    timeSoFar += stats->timeOfUnaligned;
+    WriteStatusMessage("unaligned\t%lld\t%lld\t%lld\t%f\t%f\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+
 #endif // TIME_HISTOGRAM
 
 

@@ -113,6 +113,7 @@ struct AlignerOptions : public AbstractOptions
     bool                killIfTooSlow;
     const char *        sortIntermediateDirectory;
     bool                profile;
+    bool                profileAffineGap;
     bool                ignoreAlignmentAdjustmentsForOm;
     bool                emitInternalScore;
     char                internalScoreTag[3];

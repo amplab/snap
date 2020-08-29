@@ -43,7 +43,10 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     millisAligning(0),
     millisWriting(0),
     filtered(0),
-    extraAlignments(0)
+    extraAlignments(0),
+    sameComplement(0), 
+    agForcedSingleEndAlignment(0),
+    agUsedSingleEndAlignment(0)
 {
     for (int i = 0; i <= AlignerStats::maxMapq; i++) {
         mapqHistogram[i] = 0;
@@ -56,8 +59,17 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     }
 
 #if     TIME_HISTOGRAM
+    countOfUnaligned = 0;
+    timeOfUnaligned = 0;
+    backwardsTimeStamps = 0;
+    totalBackwardsTimeStamps = 0;
+
     for (unsigned i = 0; i < 31; i++) {
-        countByTimeBucket[i] = nanosByTimeBucket[i] = 0;
+        countByTimeBucket[i] = nanosByTimeBucket[i] = countByNM[i] = timeByNM[i] = 0;
+    }
+
+    for (unsigned i = 0; i <= 70; i++) {
+        countByMAPQ[i] = timeByMAPQ[i] = 0;
     }
 #endif  // TIME_HISTOGRAM
 
@@ -97,6 +109,10 @@ AlignerStats::add(
     millisWriting += other->millisWriting;
     filtered += other->filtered;
     extraAlignments += other->extraAlignments;
+    sameComplement += other->sameComplement;
+    agForcedSingleEndAlignment += other->agForcedSingleEndAlignment;
+    agUsedSingleEndAlignment += other->agUsedSingleEndAlignment;
+
 
     if (extra != NULL && other->extra != NULL) {
         extra->add(other->extra);
@@ -113,9 +129,22 @@ AlignerStats::add(
     }
 
 #if TIME_HISTOGRAM
+    countOfUnaligned += other->countOfUnaligned;
+    timeOfUnaligned += other->timeOfUnaligned;
+
+    backwardsTimeStamps += other->backwardsTimeStamps;
+    totalBackwardsTimeStamps += other->totalBackwardsTimeStamps;
+
     for (unsigned i = 0; i < 31; i++) {
         countByTimeBucket[i] += other->countByTimeBucket[i];
         nanosByTimeBucket[i] += other->nanosByTimeBucket[i];
+        countByNM[i] += other->countByNM[i];
+        timeByNM[i] += other->timeByNM[i];
+    }
+
+    for (unsigned i = 0; i < 71; i++) {
+        countByMAPQ[i] += other->countByMAPQ[i];
+        timeByMAPQ[i] += other->timeByMAPQ[i];
     }
 #endif // TIME_HISTOGRAM
 }

@@ -62,7 +62,7 @@ struct PairedAlignerStats : public AlignerStats
     static const int MAX_DISTANCE = 1000;
     static const int MAX_SCORE = 15;
 
-    _int64 sameComplement;
+
     _int64* distanceCounts; // histogram of distances
     // TODO: could save a bit of memory & time since this is a triangular matrix
     _int64* scoreCounts; // 2-d histogram of scores for paired ends
@@ -144,8 +144,7 @@ const int PairedAlignerStats::MAX_DISTANCE;
 const int PairedAlignerStats::MAX_SCORE;
 
 PairedAlignerStats::PairedAlignerStats(AbstractStats* i_extra)
-    : AlignerStats(i_extra),
-    sameComplement(0)
+    : AlignerStats(i_extra)
 {
     int dsize = sizeof(_int64) * (MAX_DISTANCE+1);
     distanceCounts = (_int64*)BigAlloc(dsize);
@@ -189,6 +188,8 @@ void PairedAlignerStats::add(const AbstractStats * i_other)
 {
     AlignerStats::add(i_other);
     PairedAlignerStats* other = (PairedAlignerStats*) i_other;
+
+
     for (int i = 0; i < MAX_DISTANCE + 1; i++) {
         distanceCounts[i] += other->distanceCounts[i];
     }
@@ -470,7 +471,6 @@ void PairedAlignerContext::runIterationThread()
         PairedAlignmentResult result;
         memset(&result, 0, sizeof(result));
         result.location[0] = result.location[1] = InvalidGenomeLocation;
-
          
         while (supplier->getNextReadPair(&reads[0],&reads[1])) {
             // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
@@ -714,9 +714,29 @@ void PairedAlignerContext::runIterationThread()
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
-        int timeBucket = min(30, cheezyLogBase2(runTime));
-        stats->countByTimeBucket[timeBucket]++;
-        stats->nanosByTimeBucket[timeBucket] += runTime;
+        if (runTime < 0) { // For reasons that I really don't understand, this seems to run backwards sometimes.  Just ignore the sample when it does.
+            stats->backwardsTimeStamps++;
+            stats->totalBackwardsTimeStamps += runTime;
+        } else {
+            int timeBucket = min(30, cheezyLogBase2(runTime));
+            stats->countByTimeBucket[timeBucket] += 2;
+            stats->nanosByTimeBucket[timeBucket] += runTime;
+
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+                if (results[0].status[whichRead] == NotFound) {
+                    stats->countOfUnaligned++;
+                    stats->timeOfUnaligned += runTime / 2;
+                }
+                else {
+                    stats->countByMAPQ[results[0].mapq[whichRead]]++;
+                    stats->timeByMAPQ[results[0].mapq[whichRead]] += runTime / 2;
+
+                    int score = __min(results[0].score[whichRead], 30);
+                    stats->countByNM[score]++;
+                    stats->timeByNM[score] += runTime / 2;
+                }
+            }
+        }
 #endif // TIME_HISTOGRAM
 
         if (forceSpacing && isOneLocation(results[0].status[0]) != isOneLocation(results[0].status[1])) {
@@ -883,6 +903,13 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     if (result->alignedAsPair) {
         stats->recordAlignTogetherMapqAndTime(__max(result->mapq[0], result->mapq[1]), result->nanosInAlignTogether, result->nSmallHits, result->nLVCalls);
         stats->alignedAsPairs += 2; // They are a pair, after all.  Hence, +2.
+    }
+
+    if (result->agForcedSingleAlignerCall) {
+        stats->agForcedSingleEndAlignment += 2;
+        if (!result->alignedAsPair) {
+            stats->agUsedSingleEndAlignment += 2;
+        }
     }
 }
 

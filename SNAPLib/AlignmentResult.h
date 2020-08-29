@@ -108,6 +108,7 @@ struct PairedAlignmentResult {
     unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
 
     bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
+    bool agForcedSingleAlignerCall;             // Did we call the single aligner only because affine gap asked us to?  
     _int64 nanosInAlignTogether;
     unsigned nLVCalls;
     unsigned nSmallHits;

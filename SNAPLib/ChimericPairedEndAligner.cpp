@@ -146,6 +146,7 @@ bool ChimericPairedEndAligner::align(
     result->basesClippedAfter[0] = result->basesClippedAfter[1] = 0;
     result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
     result->agScore[0] = result->agScore[1] = 0;
+    result->agForcedSingleAlignerCall = false;
 
     firstALTResult->status[0] = firstALTResult->status[1] = NotFound;
 
@@ -229,10 +230,13 @@ bool ChimericPairedEndAligner::align(
     int scoreLimitLeft = maxKSingleEnd;
     if (compareWithSingleEndAlignment) {
         scoreLimitLeft = sumPairScore - 3;
+        if (result->status[0] != NotFound && result->status[1] != NotFound) {
+            result->agForcedSingleAlignerCall = true;   // Only set this if we wouldn't have done it anyway.
+        }
     }
 
     //
-    // If the intersecting aligner didn't find an alignment for these reads, then they may be
+    // If the intersecting aligner didn't find an alignment for these reads (or we're double checking because of affine gap alignments), then they may be
     // chimeric and so we should just align them with the single end aligner and apply a MAPQ penalty.
     //
     Read *read[NUM_READS_PER_PAIR] = {read0, read1};
@@ -294,8 +298,7 @@ bool ChimericPairedEndAligner::align(
             if (compareWithSingleEndAlignment) {
                 if (singleResult[r].score != ScoreAboveLimit) {
                     scoreLimitLeft -= singleResult[r].score;
-                }
-                else {
+                } else {
                     scoreLimitLeft = ScoreAboveLimit;
                 }
                 singleEndAGScore += singleResult[r].agScore;

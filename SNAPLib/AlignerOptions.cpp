@@ -91,6 +91,7 @@ AlignerOptions::AlignerOptions(
     killIfTooSlow(false),
     sortIntermediateDirectory(NULL),
     profile(false),
+    profileAffineGap(false),
     ignoreAlignmentAdjustmentsForOm(true),
     emitInternalScore(false),
 	altAwareness(true),
@@ -137,7 +138,7 @@ AlignerOptions::usage()
             "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
             "       with small caches or lots of cores/cache\n"
             "  -so  sort output file by alignment location\n"
-            "  -sm  memory to use for sorting in Gb\n"
+            "  -sm  memory to use for sorting in Gbytes.  Default is 1 Gbyte/thread.\n"
             " -sid  Specifies the sort intermediate directory.  When SNAP is sorting, it aligns the reads in the order in which they come in, and writes\n"
             "       the aligned reads in batches to a temporary file.  When the aligning is done, it does a merge sort from the temporary file into the\n"
             "       final output file.  By default, the intermediate file is in the same directory as the output file, but for performance or space\n"
@@ -214,6 +215,7 @@ AlignerOptions::usage()
             "       sorting, try using -di.\n"
 
             " -pro  Profile alignment to give you an idea of how much time is spent aligning and how much waiting for IO\n"
+            " -proAg Profile affine-gap scoring to show how often it forces single-end alignment\n"
             "  -ae  Apply the end-of-contig soft clipping before the -om processing rather than after it.  A read that's soft clipped because of hanging off one end or the other\n"
             "       of a contig does not have a penalty in its NM tag, but it does in SNAP's internal scoring.  This flag says to use the NM value for -om processing\n"
             "       rather than SNAP's internal score.\n"
@@ -647,6 +649,9 @@ AlignerOptions::usage()
             return true;
         } else if (strcmp(argv[n], "-pro") == 0) {
             profile = true;
+            return true;
+        } else if (strcmp(argv[n], "-proAg") == 0) {
+            profileAffineGap = true;
             return true;
         } else if (strcmp(argv[n], "-G") == 0) {
             useAffineGap = true;

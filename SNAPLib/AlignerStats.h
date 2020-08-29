@@ -43,7 +43,6 @@ struct AlignerStats : public AbstractStats
 {
     AlignerStats(AbstractStats* i_extra = NULL);
 
-    // TODO: This should also count both-aligned vs one-aligned etc.
     _int64 totalReads;
     _int64 uselessReads;    // Too short or too many Ns, so unalignable
     _int64 singleHits;
@@ -57,6 +56,10 @@ struct AlignerStats : public AbstractStats
     _int64 filtered;
     _int64 extraAlignments;
 
+    _int64 sameComplement;
+    _int64 agForcedSingleEndAlignment;
+    _int64 agUsedSingleEndAlignment;
+
     static const unsigned maxMapq = 70;
     unsigned mapqHistogram[maxMapq+1];
 
@@ -67,6 +70,14 @@ struct AlignerStats : public AbstractStats
     //
     _int64 countByTimeBucket[31];
     _int64 nanosByTimeBucket[31];
+    _int64 countByMAPQ[71];
+    _int64 timeByMAPQ[71];
+    _int64 countByNM[31];
+    _int64 timeByNM[31];
+    _int64 countOfUnaligned;
+    _int64 timeOfUnaligned;
+    _int64 backwardsTimeStamps;
+    _int64 totalBackwardsTimeStamps;
 #endif // TIME_HISTOGRAM
 
 
