@@ -2673,7 +2673,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         //
         // Extract QS (mate quality score) and LB fields from BAM aux tags
         //
-        while (aux != NULL && aux->val_type != NULL && aux < record->endAux()) {
+        while (aux != NULL && aux->isValidValType() && aux < record->endAux()) {
             if (aux->tag[0] == 'Q' && aux->tag[1] == 'S' && aux->val_type == 'i') {
                 entry.mateQual = entryFragment.mateQual = *(_int32*)aux->value();
             }

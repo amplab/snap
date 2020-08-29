@@ -471,7 +471,7 @@ private:
         // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
         //
         bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, 
-                        int newAPairGScore, double *oldMatchProbability, bool *mergeReplacement = false);
+                        int newAPairGScore, double *oldMatchProbability, bool *mergeReplacement = NULL);
     }; // MergeAnchor
 
     //

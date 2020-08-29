@@ -173,7 +173,7 @@ GzipCompressWorkerManager::finishStep()
         logicalOffset += logicalChunk;
         // _ASSERT(((BgzfHeader*)(buffer + i * chunkSize))->validate(sizes[i], logicalChunk));
         if (!((BgzfHeader*)(buffer + i * chunkSize))->validate(sizes[i], logicalChunk)) {
-            WriteErrorMessage("BGZF Header validation failed. input:%.*s, size:%lld, logicalChunk:%lld\n", 32, buffer + i * chunkSize, sizes[i], logicalChunk);
+            WriteErrorMessage("BGZF Header validation failed. size:%lld, logicalChunk:%lld\n", sizes[i], logicalChunk);
             soft_exit(1);
         }
         memcpy(input + toUsed, buffer + i * chunkSize, sizes[i]);
@@ -181,7 +181,7 @@ GzipCompressWorkerManager::finishStep()
     }
     // _ASSERT(BgzfHeader::validate(input, toUsed));
     if (!BgzfHeader::validate(input, toUsed)) {
-        WriteErrorMessage("BGZF Header validation failed. input:%.*s, toUsed:%lld\n", 32, input, toUsed);
+        WriteErrorMessage("BGZF Header validation failed. toUsed:%lld\n", toUsed);
         soft_exit(1);
     }
     encoder->setEncodedBatchSize(toUsed);

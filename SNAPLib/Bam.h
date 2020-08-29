@@ -316,6 +316,28 @@ struct BAMAlignAux
 
     BAMAlignAux* next()
     { return (BAMAlignAux*) (size() + (char*) this); }
+
+    bool isValidValType() {
+        switch (val_type) {
+
+        case INT8_VAL_TYPE:
+        case UINT8_VAL_TYPE:
+        case CHAR_VAL_TYPE:
+        case INT16_VAL_TYPE:
+        case UINT16_VAL_TYPE:
+
+        case INT32_VAL_TYPE:
+        case UINT32_VAL_TYPE:
+        case FLOAT_VAL_TYPE:
+
+        case ARRAY_VAL_TYPE:
+        case STRING_VAL_TYPE:
+        case HEX_VAL_TYPE:
+            return true;
+        default:
+            return false;
+        }
+    }
 };
 
 struct BgzfExtra
