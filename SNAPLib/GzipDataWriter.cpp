@@ -107,7 +107,8 @@ private:
 GzipCompressWorkerManager::~GzipCompressWorkerManager()
 {
     if (buffer != NULL) {
-        delete buffer;
+        BigDealloc(buffer);
+        buffer = NULL;
     }
 }
 

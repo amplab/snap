@@ -98,6 +98,7 @@ public:
         for (int i = 0; i < count; i++) {
             delete batches[i].file;
             BigDealloc(batches[i].buffer);
+	    batches[i].buffer = NULL;
         }
         delete [] batches;
         if (encoder != NULL) {
@@ -234,16 +235,9 @@ FileEncoder::checkForInput()
         encoderBatch = nextBatch;
         AsyncDataWriter::Batch* encode = &writer->batches[encoderBatch];
         // fprintf(stderr, "Encoding batch %d, used %lld\n", encoderBatch, encode->used);
-        if (encode->used > 0) {
-            encoderRunning = true;
-            coworker->step();
-            break;
-        }
-        else {
-            AcquireExclusiveLock(lock);
-            AllowEventWaitersToProceed(&encode->encoded);
-            ReleaseExclusiveLock(lock);
-        }
+        encoderRunning = true;
+        coworker->step();
+        break;
     }
 }
 
@@ -438,7 +432,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
             _ASSERT(lastBatch); // Is this really necessary?  You could imagine filters that save more than the last batch.
             suppressWrite = true;
         }
-	    if (newSize) {
+        if (newSize) {
             if (filter->filterType == DupMarkFilter) {
                 if (needMoreBuffer) {
                     size_t newBufferSize = write->bufferSize * 2;
@@ -453,7 +447,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                     batches[current].logicalUsed = batches[current].used;
                     batches[current].bufferSize = newBufferSize;
                     batches[current].buffer = newBuffer;
-                    // fprintf(stderr, "Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
+                    // fprintf(stderr, "1-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
                     write->used = 0;
                     write->logicalUsed = 0;
                 }
@@ -471,6 +465,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                         BigDealloc(batches[current].buffer);
                         batches[current].bufferSize = newBufferSize;
                         batches[current].buffer = newBuffer;
+                        // fprintf(stderr, "2-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
                     }
                     else {
                         memcpy(batches[current].buffer, write->buffer + bytesRead, batches[current].used);
@@ -480,9 +475,9 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                 }
             }
             write->used = n;
-            // fprintf(stderr, "batch:%d, used:%lld, logicalUsed:%lld, filterType:%d\n", written, write->used, write->logicalUsed, filter->filterType);
+            // fprintf(stderr, "batch:%d, used:%lld, logicalUsed:%lld, batchSize:%lld, filterType:%d\n", written, write->used, write->logicalUsed, write->bufferSize, filter->filterType);
             supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
-	    }
+        }
         if (newBuffer) {
             // current has used>0, written has logicalUsed>0, for compressed & uncompressed data respectively
             batches[current].used = write->used;
