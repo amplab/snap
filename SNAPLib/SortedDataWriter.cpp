@@ -504,7 +504,10 @@ DataQueue::~DataQueue()
 
     for (int i = 0; i < nBuffers; i++) 
     {
-        BigDealloc(buffers[i].buffer);
+        if (buffers[i].buffer != NULL) {
+            BigDealloc(buffers[i].buffer);
+            buffers[i].buffer = NULL;
+        }
     }
 
     delete[] buffers;
@@ -785,7 +788,10 @@ public:
 
     ~BufferDataReader()
     {
-        BigDealloc(buffer);
+        if (buffer != NULL) {
+            BigDealloc(buffer);
+            buffer = NULL;
+        }
     }
 
     bool init(const char* fileName) { return true; }

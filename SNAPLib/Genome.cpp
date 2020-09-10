@@ -122,7 +122,6 @@ Genome::markContigALT(
 
 Genome::~Genome()
 {
-    BigDealloc(bases - N_PADDING);
     for (int i = 0; i < nContigs; i++) {
         delete [] contigs[i].name;
         contigs[i].name = NULL;
@@ -134,10 +133,13 @@ Genome::~Genome()
     }
     contigs = NULL;
 
-	if (NULL != mappedFile) {
-		mappedFile->close();
-		delete mappedFile;
-	}
+    if (NULL != mappedFile) {
+        mappedFile->close();
+        delete mappedFile;
+    }
+    else {
+        BigDealloc(bases - N_PADDING);
+    }
 }
 
 // Flags for the options field in the header
@@ -315,18 +317,19 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
     }
 
     size_t readSize;
-	if (map) {
-		GenericFile_map *mappedFile = (GenericFile_map *)loadFile;
-		genome->bases = (char *)mappedFile->mapAndAdvance(length, &readSize);
-		genome->mappedFile = mappedFile;
-		mappedFile->prefetch();
-	} else {
-		readSize = loadFile->read(genome->bases, length);
+    if (map) {
+        GenericFile_map *mappedFile = (GenericFile_map *)loadFile;
+        BigDealloc(genome->bases - N_PADDING);
+        genome->bases = (char *)mappedFile->mapAndAdvance(length, &readSize);
+        genome->mappedFile = mappedFile;
+        mappedFile->prefetch();
+    } else {
+        readSize = loadFile->read(genome->bases, length);
 
-		loadFile->close();
-		delete loadFile;
-		loadFile = NULL;
-	}
+        loadFile->close();
+        delete loadFile;
+        loadFile = NULL;
+    }
 
 	if (length != readSize) {
 		WriteErrorMessage("Genome::loadFromFile: fread of bases failed; wanted %u, got %d\n", length, readSize);

@@ -98,7 +98,7 @@ public:
         for (int i = 0; i < count; i++) {
             delete batches[i].file;
             BigDealloc(batches[i].buffer);
-	    batches[i].buffer = NULL;
+            batches[i].buffer = NULL;
         }
         delete [] batches;
         if (encoder != NULL) {
@@ -455,7 +455,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                     batches[current].used = write->used - bytesRead;
                     batches[current].logicalUsed = batches[current].used;
                     if (batches[current].used > batches[current].bufferSize) {
-                        size_t newBufferSize = write->bufferSize * 2;
+                        size_t newBufferSize = write->bufferSize;
                         char* newBuffer = (char*)BigAlloc(newBufferSize);
                         if (newBuffer == NULL) {
                             WriteErrorMessage("Unable to allocate %lld bytes for write buffer\n", newBufferSize);
