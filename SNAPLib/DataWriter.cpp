@@ -28,6 +28,8 @@ Environment:
 using std::min;
 using std::max;
 
+#define VALIDATE_WRITE 1
+
 char *
 DataWriterSupplier::generateSortIntermediateFilePathName(AlignerOptions *options)
 {
@@ -210,7 +212,13 @@ FileEncoder::outputReady()
     // begin writing the buffer to disk
     AsyncDataWriter::Batch* write = &writer->batches[encoderBatch];
     writer->supplier->advance(write->used, 0, &write->fileOffset, &write->logicalOffset);
-    //fprintf(stderr, "outputReady write batch %d @%lld:%lld\n", encoderBatch, write->fileOffset, write->used);
+#ifdef VALIDATE_WRITE
+    fprintf(stderr, "outputReady beginWrite #%d @%lld: %lld bytes\n", encoderBatch, write->fileOffset, write->used);
+    if (!BgzfHeader::validate(write->buffer, write->used)) {
+        WriteErrorMessage("BGZF Header validation failed. toUsed:%lld\n", write->used);
+        soft_exit(1);
+    }
+#endif
     if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
         WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
         soft_exit(1);
@@ -497,7 +505,13 @@ AsyncDataWriter::nextBatch(bool lastBatch)
 
     InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
     if (encoder == NULL) {
-        // fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
+#ifdef VALIDATE_WRITE
+        fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", written, write->fileOffset, write->used);
+        if (!BgzfHeader::validate(write->buffer, write->used)) {
+            WriteErrorMessage("BGZF Header validation failed. toUsed:%lld\n", write->used);
+            soft_exit(1);
+        }
+#endif
         //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
         if (!suppressWrite) {
             if (!write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
