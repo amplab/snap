@@ -311,7 +311,10 @@ Arguments:
 {
     if (NULL == memory) return;
 #if 1
-    VirtualFree(memory,0,MEM_RELEASE);
+    if (!VirtualFree(memory, 0, MEM_RELEASE)) {
+        WriteErrorMessage("BigDealloc VirtualFree failed with error 0x%x\n", GetLastError());
+        soft_exit(1);
+    }
 #else
     // for debugging dangling pointer read/writes
     MEMORY_BASIC_INFORMATION info;
