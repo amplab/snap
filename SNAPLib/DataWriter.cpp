@@ -418,7 +418,9 @@ AsyncDataWriter::nextBatch(bool lastBatch)
     Batch* write = &batches[written];
     write->logicalUsed = write->used;
     current = (current + 1) % count;
-    // fprintf(stderr, "nextBatch reset %d used=0 count %d\n", current, count);
+#ifdef VALIDATE_WRITE
+    fprintf(stderr, "nextBatch reset %d used=0 count %d\n", current, count);
+#endif
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
     bool newSize = filter != NULL && (filter->filterType == TransformFilter || filter->filterType == ResizeFilter || filter->filterType == DupMarkFilter);
@@ -513,13 +515,6 @@ AsyncDataWriter::nextBatch(bool lastBatch)
 
     InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
     if (encoder == NULL) {
-#ifdef VALIDATE_WRITE
-        fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", written, write->fileOffset, write->used);
-        if (!BgzfHeader::validate(write->buffer, write->used)) {
-            WriteErrorMessage("BGZF Header validation failed. toUsed:%lld\n", write->used);
-            soft_exit(1);
-        }
-#endif
         //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
         if (!suppressWrite) {
             if (!write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
