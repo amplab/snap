@@ -242,7 +242,9 @@ FileEncoder::checkForInput()
         }
         encoderBatch = nextBatch;
         AsyncDataWriter::Batch* encode = &writer->batches[encoderBatch];
-        // fprintf(stderr, "Encoding batch %d, used %lld\n", encoderBatch, encode->used);
+#ifdef VALIDATE_WRITE
+        fprintf(stderr, "Encoding batch %d, used %lld\n", encoderBatch, encode->used);
+#endif
         encoderRunning = true;
         coworker->step();
         break;
@@ -455,7 +457,9 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                     batches[current].logicalUsed = batches[current].used;
                     batches[current].bufferSize = newBufferSize;
                     batches[current].buffer = newBuffer;
-                    // fprintf(stderr, "1-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
+#ifdef VALIDATE_WRITE
+                    fprintf(stderr, "1-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
+#endif
                     write->used = 0;
                     write->logicalUsed = 0;
                 }
@@ -473,7 +477,9 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                         BigDealloc(batches[current].buffer);
                         batches[current].bufferSize = newBufferSize;
                         batches[current].buffer = newBuffer;
-                        // fprintf(stderr, "2-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
+#ifdef VALIDATE_WRITE
+                        fprintf(stderr, "2-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
+#endif
                     }
                     else {
                         memcpy(batches[current].buffer, write->buffer + bytesRead, batches[current].used);
@@ -483,7 +489,9 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                 }
             }
             write->used = n;
-            // fprintf(stderr, "batch:%d, used:%lld, logicalUsed:%lld, batchSize:%lld, filterType:%d\n", written, write->used, write->logicalUsed, write->bufferSize, filter->filterType);
+#ifdef VALIDATE_WRITE
+            fprintf(stderr, "batch:%d, used:%lld, logicalUsed:%lld, batchSize:%lld, filterType:%d\n", written, write->used, write->logicalUsed, write->bufferSize, filter->filterType);
+#endif
             supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
         }
         if (newBuffer) {
@@ -604,7 +612,9 @@ AsyncDataWriterSupplier::advance(
     sharedOffset += physical;
     *o_logical = sharedLogical;
     sharedLogical += logical;
-    // fprintf(stderr, "advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
+#ifdef VALIDATE_WRITE
+    fprintf(stderr, "advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
+#endif
     ReleaseExclusiveLock(&lock);
 }
 
