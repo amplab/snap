@@ -418,6 +418,10 @@ AsyncDataWriter::nextBatch(bool lastBatch)
     Batch* write = &batches[written];
     write->logicalUsed = write->used;
     current = (current + 1) % count;
+    if (!batches[current].file->waitForCompletion()) {
+        WriteErrorMessage("error: file write failed\n");
+        soft_exit(1);
+    }
 #ifdef VALIDATE_WRITE
     fprintf(stderr, "nextBatch reset %d used=0 count %d\n", current, count);
 #endif
@@ -506,6 +510,11 @@ AsyncDataWriter::nextBatch(bool lastBatch)
             written = current;
             write = &batches[written];
             current = (current + 1) % count;
+
+            if (!batches[current].file->waitForCompletion()) {
+                WriteErrorMessage("error: file write failed\n");
+                soft_exit(1);
+            }
             batches[current].used = 0;
             batches[current].logicalUsed = 0;
         }
@@ -527,10 +536,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
         encoder->inputReady();
     }
 
-    if (! batches[current].file->waitForCompletion()) {
-        WriteErrorMessage("error: file write failed\n");
-        soft_exit(1);
-    }
+
     InterlockedAdd64AndReturnNewValue(&WaitTime, timeInNanos() - start2);
     return true;
 }

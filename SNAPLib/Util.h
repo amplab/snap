@@ -543,4 +543,5 @@ private:
 char *reallocatingFgets(char **buffer, int *io_bufferSize, FILE *stream);
 char *reallocatingFgetsGenericFile(char **buffer, int *io_bufferSize, GenericFile *file);
 
+#define xassert(cond) {if (!(cond)) {WriteErrorMessage("xassert failed at %s:%d\n", __FILE__, __LINE__); *((volatile int*) NULL) = 42; }} // An assert that gets checked even when not in the debug build.
 

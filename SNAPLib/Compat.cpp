@@ -522,6 +522,8 @@ public:
         size_t              writeOffset;
         size_t*             writeBytesWritten;
 
+        int                 squirrel;   // A squirreled-away copy of the first bytes of the buffer at write time.  It's used to assert that the buffer hasn't been overwritten when the write completes.
+
         void launchWrite(); //Actually send the write down to Windows
     }; // Writer
 
@@ -705,6 +707,7 @@ WindowsAsyncFile::Writer::beginWrite(
     writeLength = length;
     writeOffset = offset;
     writeBytesWritten = bytesWritten;
+    squirrel = *((int*)buffer);
 
     ResetEvent(hWriteStartedEvent);
 
@@ -772,6 +775,8 @@ WindowsAsyncFile::Writer::waitForCompletion()
         if (!GetOverlappedResult(file->hFile,&lap,&nBytesTransferred,TRUE)) {
             return false;
         }
+
+        xassert(squirrel == *((int*)writeBuffer));
         writing = false;
 
         ResetEvent(hWriteStartedEvent);
