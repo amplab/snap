@@ -27,6 +27,8 @@ Revision History:
 #include "ParallelTask.h"
 #include "Genome.h"
 
+// #define VALIDATE_WRITE 1
+
 class DataWriterSupplier;
 struct AlignerOptions;
 

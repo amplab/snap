@@ -1470,8 +1470,10 @@ SAMFormat::fillMateInfo(
 {
     flags |= SAM_MULTI_SEGMENT;
     flags |= (firstInPair ? SAM_FIRST_SEGMENT : SAM_LAST_SEGMENT);
+
+    GenomeDistance extraBasesClippedBefore, mateExtraBasesClippedBefore;
+
     if (mateLocation != InvalidGenomeLocation) {
-        GenomeDistance mateExtraBasesClippedBefore;
         const Genome::Contig *mateContig = genome->getContigForRead(mateLocation, mate->getDataLength(), &mateExtraBasesClippedBefore);
         mateLocation += mateExtraBasesClippedBefore;
         matecontigName = mateContig->name;
@@ -1507,12 +1509,17 @@ SAMFormat::fillMateInfo(
         if (alignedAsPair) {
             flags |= SAM_ALL_ALIGNED;
         }
+
+        // Add in any clipping from running off the end of reference
+        const Genome::Contig* contig = genome->getContigForRead(genomeLocation, read->getDataLength(), &extraBasesClippedBefore);
+        genomeLocation += extraBasesClippedBefore;
+
         // Also compute the length of the whole paired-end string whose ends we saw. This is slightly
         // tricky because (a) we may have clipped some bases before/after each end and (b) we need to
         // give a signed result based on whether our read is first or second in the pair.
-        GenomeLocation myStart = genomeLocation - basesClippedBefore;
+        GenomeLocation myStart = genomeLocation - basesClippedBefore - extraBasesClippedBefore;
         GenomeLocation myEnd = genomeLocation + myRefSpanFromCigar;
-        GenomeLocation mateStart = mateLocation - mateBasesClippedBefore;
+        GenomeLocation mateStart = mateLocation - mateBasesClippedBefore - mateExtraBasesClippedBefore;
         GenomeLocation mateEnd = mateLocation + mateRefSpanFromCigar;
 
         if (myStart < mateStart) {

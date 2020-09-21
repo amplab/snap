@@ -173,7 +173,7 @@ struct BAMAlignment
     static const int MAX_BIN = (((1<<18)-1)/7);
     static int reg2bins(int beg, int end, _uint16* list/*[MAX_BIN]*/);
 
-    // absoluate genome locations
+    // absolute genome locations
 
     GenomeLocation getLocation(const Genome* genome) const
     {
