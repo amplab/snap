@@ -28,7 +28,7 @@ Environment:
 using std::min;
 using std::max;
 
-#define VALIDATE_WRITE 1
+//#define VALIDATE_WRITE 1
 
 char *
 DataWriterSupplier::generateSortIntermediateFilePathName(AlignerOptions *options)
