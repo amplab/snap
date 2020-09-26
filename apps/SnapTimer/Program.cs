@@ -36,6 +36,7 @@ namespace SnapTimer
 
             var initialInputFiles = new List<string>();
             var tempInputFiles = new List<string>();
+            var tempFilesToDelete = new List<string>();
 
             var snapArgs = "";
             for (int i = 2; i < configuration.commandLineArgs.Count(); i++)
@@ -46,14 +47,32 @@ namespace SnapTimer
                     if (outputArgIndex != i) 
                     {
                         initialInputFiles.Add(thisArg);
-                        var tempFilename = tempDirectory + ASETools.GetFileNameFromPathname(thisArg);
+                        string tempFilename;
+                        if (thisArg.StartsWith(@"\\"))
+                        {
+                            tempFilename = tempDirectory + ASETools.GetFileNameFromPathname(thisArg);
+                            tempFilesToDelete.Add(tempFilename);
+                        } else
+                        {
+                            tempFilename = thisArg;
+                        }
                         snapArgs += tempFilename + " ";
                         tempInputFiles.Add(tempFilename);                        
                     }
                     else
                     {
-                        tempOutputFile = tempDirectory + ASETools.GetFileNameFromPathname(thisArg);
-                        tempOutputBAIFile = tempOutputFile + ".bai";
+                        if (thisArg.StartsWith(@"\\"))
+                        {
+                            tempOutputFile = tempDirectory + ASETools.GetFileNameFromPathname(thisArg);
+                            tempOutputBAIFile = tempOutputFile + ".bai";
+
+                            tempFilesToDelete.Add(tempOutputFile);
+                            tempFilesToDelete.Add(tempOutputBAIFile);
+                        } else
+                        {
+                            tempOutputFile = thisArg;
+                            tempOutputBAIFile = thisArg + ".bai";
+                        }
                         initialOutputFile = thisArg;
                         snapArgs += tempOutputFile + " ";
                     }
@@ -89,10 +108,10 @@ namespace SnapTimer
             //
             // Copy in the input files.
             //
-            Console.Write("Copying input files...");
             var copyInTimer = new Stopwatch();
             copyInTimer.Start();
-            foreach (var inputFile in initialInputFiles)
+            Console.Write("Copying input files...");
+            foreach (var inputFile in initialInputFiles.Where(_ => _.StartsWith(@"\\")))
             {
                 var tempFilename = tempDirectory + ASETools.GetFileNameFromPathname(inputFile);
                 File.Copy(inputFile, tempFilename, true); // true allows overwrite
@@ -201,15 +220,21 @@ namespace SnapTimer
             }
 
             var statsLine = snapOutput[4];
-            int totalReads = ASETools.GetIntFromString(statsLine);
-            int alignedHQ = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Aligned, MAPQ >= 10")));
-            int alignedLQ = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Aligned, MAPQ < 10")));
-            int unaligned = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Unaligned")));
-            int tooShort = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Too Short/Too Many Ns")));
-            int speed = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Reads/s")));
-            int timeInAligner = ASETools.GetIntFromString(statsLine.Substring(headerLine.IndexOf("Time in Aligner (s)")));
-            double agCalledSingle = ASETools.GetDoubleFromString(statsLine.Substring(headerLine.IndexOf("%AgSingle"))) / 100.0;
-            double agUsedSingle = ASETools.GetDoubleFromString(statsLine.Substring(headerLine.IndexOf("%AgUsedSingle"))) / 100.0;
+            long totalReads = ASETools.GetLongFromString(statsLine);
+            long alignedHQ = ASETools.GetLongFromString(statsLine.Substring(headerLine.IndexOf("Aligned, MAPQ >= 10")));
+            long alignedLQ = ASETools.GetLongFromString(statsLine.Substring(headerLine.IndexOf("Aligned, MAPQ < 10")));
+            long unaligned = ASETools.GetLongFromString(statsLine.Substring(headerLine.IndexOf("Unaligned")));
+            long tooShort = ASETools.GetLongFromString(statsLine.Substring(headerLine.IndexOf("Too Short/Too Many Ns")));
+            long speed = ASETools.GetLongFromString(statsLine.Substring(headerLine.IndexOf("Reads/s")));
+            long timeInAligner = ASETools.GetLongFromString(statsLine.Substring(headerLine.IndexOf("Time in Aligner (s)")));
+            double agCalledSingle = 0;
+            double agUsedSingle = 0;
+
+            if (headerLine.IndexOf("%AgSingle") >= 0)
+            {
+                agCalledSingle = ASETools.GetDoubleFromString(statsLine.Substring(headerLine.IndexOf("%AgSingle"))) / 100.0;
+                agUsedSingle = ASETools.GetDoubleFromString(statsLine.Substring(headerLine.IndexOf("%AgUsedSingle"))) / 100.0;
+            }
 
             double pairs = 0;
             if (headerLine.Contains("%Pairs"))
@@ -220,14 +245,16 @@ namespace SnapTimer
             Console.Write("Copying back output...");
             var copyOutTimer = new Stopwatch();
             copyOutTimer.Start();
-            File.Copy(tempOutputFile, initialOutputFile, true);
-            File.Copy(tempOutputBAIFile, initialOutputFile + ".bai", true);
+            if (tempOutputFile != initialOutputFile)
+            {
+                File.Copy(tempOutputFile, initialOutputFile, true);
+                File.Copy(tempOutputBAIFile, initialOutputFile + ".bai", true);
+            }
+
             copyOutTimer.Stop();
             Console.Write(ASETools.ElapsedTimeInSeconds(copyOutTimer));
 
-            tempInputFiles.ForEach(_ => File.Delete(_));
-            File.Delete(tempOutputFile);
-            File.Delete(tempOutputBAIFile);
+            tempFilesToDelete.ForEach(_ => File.Delete(_));
 
             var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.commandLineArgs[0]);
             if (null == outputFile)
@@ -252,7 +279,7 @@ namespace SnapTimer
                 ASETools.ElapsedTimeInSeconds(copyOutTimer) + "\t" +
                 startTime.ToString() + "\t" + 
                 stopTime.ToString() + "\t" +
-                agCalledSingle,
+                agCalledSingle + "\t" +
                 agUsedSingle);
 
             snapOutput.ForEach(_ => outputFile.WriteLine(_));

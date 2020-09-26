@@ -227,6 +227,14 @@ namespace CheckDone
                 HandleFilename(case_.variant_phasing_filename, "VariantPhasing", fileTypesToUse);
                 HandleFilename(case_.vcf_statistics_filename, "VCFStatistics", fileTypesToUse);
                 HandleFilename(case_.read_statictics_filename, "ReadStatictics", fileTypesToUse);
+
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
+                    {
+                        HandleFilename(case_.perVariantCaller[variantCaller][tumor].venn_filename, "Venn", fileTypesToUse);
+                    }
+                }
             }
 
             HandleFilenameIfExists(configuration.finalResultsDirectory + ASETools.SingleReadPhasingFilename, "SingleReadPhasing", fileTypesToUse);

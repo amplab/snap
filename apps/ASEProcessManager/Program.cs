@@ -11,6 +11,7 @@ using System.Linq.Expressions;
 using System.ComponentModel.Design;
 using System.Globalization;
 using System.Runtime.Remoting;
+using System.Security.Policy;
 
 namespace ASEProcessManager
 {
@@ -28,6 +29,8 @@ namespace ASEProcessManager
         const string scriptFilename = "ASENextSteps.cmd";
         const string linuxScriptFilename = "ASENextStepsLinux";
         const string downloadScriptFilename = "ASEDownload.cmd";
+
+        const bool useGEM = ASETools.useGEM;
 
         static string jobAddString = "";
 
@@ -1018,88 +1021,76 @@ namespace ASEProcessManager
 
         } // GenerateCasesProcessingStage
 
+ 
         class AllcountProcesingStage : ProcessingStage
         {
-            public AllcountProcesingStage() { }
+            public AllcountProcesingStage(bool tumor_, bool dna_) 
+            {
+                tumor = tumor_;
+                dna = dna_;
+            }
+
+            bool tumor;
+            bool dna;
 
             public string GetStageName()
             {
-                return "Generate Allcount files";
+                return ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " Allcount";
             }
 
             public bool NeedsCases() { return true; }
 
             public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
-                filesToDownload = null;
                 nDone = 0;
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
                 filesToDownload = new List<string>();
 
-                foreach (var caseEntry in stateOfTheWorld.cases)
+                foreach (var case_ in stateOfTheWorld.cases.Select(_ => _.Value).ToList())
                 {
-                    var case_ = caseEntry.Value;
-
-                    HandleFile(stateOfTheWorld, case_.tumor_rna_file_id, case_.tumor_rna_file_bam_md5, case_.case_id, ASETools.DerivedFile.Type.TumorRNAAllcount,
-                        ASETools.tumorRNAAllcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-
-                    HandleFile(stateOfTheWorld, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, case_.case_id, ASETools.DerivedFile.Type.NormalDNAAllcount,
-                        ASETools.normalDNAAllcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-
-                    HandleFile(stateOfTheWorld, case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5, case_.case_id, ASETools.DerivedFile.Type.TumorDNAAllcount,
-                        ASETools.tumorDNAAllcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-
-                    if (case_.normal_rna_file_id != "")
+                    var file_id = case_.getDownloadedReadsFileId(tumor, dna);
+                    if (file_id == "")
                     {
-                        HandleFile(stateOfTheWorld, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, case_.case_id, ASETools.DerivedFile.Type.NormalRNAAllcount,
-                            ASETools.normalRNAAllcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                        if (!tumor && !dna) continue;   // Lots of cases don't have normal RNA
+                        Console.WriteLine("Missing file ID for case " + case_.case_id + " " + ASETools.tumorToString[tumor] + " " + ASETools.dnaToString[dna] + " reads");
+                        continue;
                     }
 
-                } // Foreach case
-            }// EvaluateStage
-
-            void HandleFile(StateOfTheWorld stateOfTheWorld, string file_id, string expectedMD5, string case_id, ASETools.DerivedFile.Type type, string extension, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, ref List<string> filesToDownload,ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
-            {
-
-                if (!stateOfTheWorld.downloadedFiles.ContainsKey(file_id))
-                {
-                    filesToDownload.Add(file_id);
-                }
-                else
-                {
-                    var downloadedFile = stateOfTheWorld.downloadedFiles[file_id];
-
-                    if (!stateOfTheWorld.fileDownloadedAndVerified(file_id, expectedMD5) || (stateOfTheWorld.configuration.isBeatAML && !File.Exists(downloadedFile.fileInfo.FullName.Substring(0, downloadedFile.fileInfo.FullName.Length - 4) + ".bai")))
+                    if (!stateOfTheWorld.downloadedFiles.ContainsKey(file_id))
                     {
-                        nWaitingForPrerequisites++;
-                    }
-                    else if (stateOfTheWorld.containsDerivedFile(case_id, file_id, type))
-                    {
-                        if (stateOfTheWorld.getDrivedFile(case_id, file_id, type).fileinfo.Length < 200 * 1024)
-                        {
-                            Console.WriteLine("Suspiciously small allcount file of size " + stateOfTheWorld.getDrivedFile(case_id, file_id, type).fileinfo.Length + ": " + stateOfTheWorld.getDrivedFile(case_id, file_id, type).fileinfo.FullName);
-                        }
-                        nDone++;
+                        filesToDownload.Add(file_id);
                     }
                     else
                     {
-                        nAddedToScript++;
-                        string caseDirectory = ASETools.GetDirectoryFromPathname(stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_id + @"\";
-                        script.WriteLine("md " + caseDirectory + " & " +
-                            stateOfTheWorld.configuration.binariesDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | " + 
-                            stateOfTheWorld.configuration.binariesDirectory + "gzip -9 > " +
-                            caseDirectory + file_id + extension);
+                        var downloadedFile = stateOfTheWorld.downloadedFiles[file_id];
 
-                        hpcScript.WriteLine(jobAddString + 
-                            stateOfTheWorld.configuration.hpcBinariesDirectory + "MakeDirectoryAndCountReadsCovering.cmd " + caseDirectory + " " + stateOfTheWorld.configuration.hpcBinariesDirectory + " " +
-                            stateOfTheWorld.configuration.hpcIndexDirectory + " " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " " + caseDirectory + file_id + extension);
-                    }
-                }
-            } // HandleFile
+                        if (!stateOfTheWorld.fileDownloadedAndVerified(file_id, case_.getDownloadedReadsBamMD5(tumor, dna)) || 
+                            (stateOfTheWorld.configuration.isBeatAML && !File.Exists(downloadedFile.fileInfo.FullName.Substring(0, downloadedFile.fileInfo.FullName.Length - 4) + ".bai")))
+                        {
+                            nWaitingForPrerequisites++;
+                        }
+                        else if (case_.getDownloadedReadsFilename(tumor, dna) != "")
+                        {
+                            nDone++;
+                        }
+                        else
+                        {
+                            nAddedToScript++;
+                            string caseDirectory = ASETools.GetDirectoryFromPathname(stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\";
+                            script.WriteLine("md " + caseDirectory + " & " +
+                                stateOfTheWorld.configuration.binariesDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | " +
+                                stateOfTheWorld.configuration.binariesDirectory + "gzip -9 > " +
+                                caseDirectory + file_id + ASETools.getAllcountExtension(tumor, dna));
+                        } // added to script
+                    } // downloaded
+
+                } // case
+            } // EvaluateStage
 
             public bool EvaluateDependencies(StateOfTheWorld stateOFTheWorld) 
             {
+#if false
                 if (stateOFTheWorld.cases == null)
                 {
                     return true;
@@ -1135,9 +1126,13 @@ namespace ASEProcessManager
                 }
 
                 return allOK;
+#else
+                return true;
+#endif
             }
 
         } // AllcountProcessingStage
+
 
         class DownloadProcessingStage : ProcessingStage
         {
@@ -1182,7 +1177,12 @@ namespace ASEProcessManager
 
         class MD5ComputationProcessingStage : ProcessingStage
         {
-            public MD5ComputationProcessingStage() { }
+            public MD5ComputationProcessingStage(bool verifyMD5s_) 
+            {
+                verifyMD5s = verifyMD5s_;
+            }
+
+            bool verifyMD5s;
 
             public string GetStageName()
             {
@@ -1284,11 +1284,11 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (downloadedFile.storedMD5 != null && downloadedFile.storedMD5 != "")
+                if (downloadedFile.storedMD5 != null && downloadedFile.md5FileInfo != null)
                 {
                     nDone++;
 
-                    if (downloadedFile.storedMD5 != expectedMD5)
+                    if (verifyMD5s && downloadedFile.storedMD5 != expectedMD5)
                     {
                         Console.WriteLine("MD5 checksum mismatch on file " + downloadedFile.fileInfo.FullName + " " + downloadedFile.storedMD5 + " != " + expectedMD5);
                     }
@@ -1329,29 +1329,31 @@ namespace ASEProcessManager
             linuxScript.Write("sudo mkdir " + mountpoint + "\n");
             linuxScript.Write("sudo chmod 777 " + mountpoint + "\n");
             linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(inputFilename) + "' " + mountpoint + "\n");
-            var copiedBamDirectory = "~/" + fileId;
-            linuxScript.Write("mkdir " + copiedBamDirectory + "\n");
+            var copiedBamDirectory = "/mnt/d/temp/freebayes_temp/";
             linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(inputFilename)) + " " + copiedBamDirectory + "/\n");
             linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(inputFilename))) + "/*bai " + copiedBamDirectory + "/\n");
 
             linuxScript.Write("cd ~/freebayes/scripts\n");
             var outputFilename = fileId + outputExtension;
             linuxScript.Write("./freebayes-parallel " + regionFileName + " `nproc` --fasta-reference " + fastaName + " " + copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(inputFilename) +
-                " > ~/" + outputFilename + "\n");
+                " > " + copiedBamDirectory + outputFilename + "\n");
 
             linuxScript.Write("if [ $? = 0 ]; then\n");
             var outputDirectory = mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(inputFilename)) + @"\..\..\" + derivedFilesDirectory + @"\" + caseId);
 
             linuxScript.Write("    mkdir " + outputDirectory + "\n");
-            linuxScript.Write("    cp ~/" + outputFilename + " " + outputDirectory + "/\n");
-            linuxScript.Write("    rm ~/" + outputFilename + "\n");
+            linuxScript.Write("    cp " + copiedBamDirectory + outputFilename + " " + outputDirectory + "/\n");
+            linuxScript.Write("    rm " + copiedBamDirectory + "*\n");
             linuxScript.Write("else\n");
             linuxScript.Write(@"    echo " + fileId + " >> variant_calling_errors\n");
             linuxScript.Write("fi\n");
             linuxScript.Write("sleep 60\n");    // Time to let the copy finish before we can umount
             linuxScript.Write("sudo umount " + mountpoint + "\n");
             linuxScript.Write("sudo rmdir " + mountpoint + "\n");
-            linuxScript.Write("rm -rf " + copiedBamDirectory + "\n"); // * is to get bai as well
+            for (int i = 19; i <= 36; i++)
+            {
+                linuxScript.Write("# Placeholder\n");
+            }
         }
 
         class GermlineVariantCallingProcessingStage : ProcessingStage
@@ -1376,12 +1378,11 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    if (stateOfTheWorld.containsDerivedFile(case_.case_id, case_.normal_dna_file_id, ASETools.DerivedFile.Type.VCF))
+                    if (case_.vcf_filename != "")
                     {
                         nDone++;
                         continue;
                     }
-
 
                     //
                     // The Azure script downloads on the fly, so add every one that isn't done.  
@@ -1536,7 +1537,7 @@ namespace ASEProcessManager
 
                     WriteFreebayesLinuxScript(linuxScript, case_.case_id, ASETools.getRealignedNormalDNAByAligner[aligner](case_), case_.normal_dna_file_id, 
                         ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.Freebayes],  // Only normal for now
-                        "~/genomes/GRCh38.d1.vd1-100k-regions", stateOfTheWorld.configuration.derivedFilesDirectory, "~/genomes/GRCh38.d1.vd1.fa");
+                        "/mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta.100k-regions-only-main-chromosomes", stateOfTheWorld.configuration.derivedFilesDirectory, "/mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta");
 
                     nAddedToScript++;
                 } // cases
@@ -2006,6 +2007,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
+#if false
                 if (stateOfTheWorld.cases == null)
                 {
                     return true;
@@ -2016,7 +2018,7 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    if (stateOfTheWorld.containsDerivedFile(case_.case_id, case_.case_id, ASETools.DerivedFile.Type.ExtractedMAFLines))
+                    if (case_.extracted_maf_lines_filename != "")
                     {
                         var derivedFile = stateOfTheWorld.derivedFiles[case_.case_id].Where(x => x.type == ASETools.DerivedFile.Type.ExtractedMAFLines).ToList()[0];
 
@@ -2035,6 +2037,9 @@ namespace ASEProcessManager
                 } // foreach case
 
                 return allOK;
+#else
+                return true;
+#endif
             } // EvaluateDependencies
 
         } // ExtractMAFLinesProcessingStage
@@ -4311,13 +4316,14 @@ namespace ASEProcessManager
         //
         class StateOfTheWorld
         {
-            public StateOfTheWorld(ASETools.Configuration configuration_) 
+            public StateOfTheWorld(ASETools.Configuration configuration_, bool verifyMD5s_) 
             {
                 configuration = configuration_;
                 if (configuration.configurationFileLocationExplicitlySpecified)
                 {
                     configurationString = " -configuration " + configuration.configuationFilePathname + " ";
                 }
+                verifyMD5s = verifyMD5s_;
             }
 
             public ASETools.Configuration configuration;
@@ -4340,6 +4346,7 @@ namespace ASEProcessManager
             public Dictionary<string, ASETools.CaseMetadata> caseMetadata = null;
 
             bool commonDataAvailable = false;
+            bool verifyMD5s;
 
             public bool hasCommonData() { return commonDataAvailable; }
 
@@ -4353,7 +4360,7 @@ namespace ASEProcessManager
                                       commonData.aseCorrection != null && commonData.expressionDistributionByChromosomeMap != null && commonData.diseases != null && commonData.clinicalSummariesByPatientId != null;
 
                 
-                ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles, out fileSystems);
+                ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles, out fileSystems, verifyMD5s);
 
                 randomFilesystemByFreeSpace = new ASETools.BiasedRandom<string>(fileSystems.Select(_ => new KeyValuePair<string, ulong>(_.Key, _.Value.totalFreeBytes)).ToList());
 
@@ -4624,30 +4631,9 @@ namespace ASEProcessManager
 
             public bool fileDownloadedAndVerified(string file_id, string expectedMD5)
             {
-                return downloadedFiles.ContainsKey(file_id) && (null == expectedMD5 || "" == expectedMD5 || downloadedFiles[file_id].storedMD5 == expectedMD5);
+                return downloadedFiles.ContainsKey(file_id) && (null == expectedMD5 || "" == expectedMD5 || downloadedFiles[file_id].storedMD5 == expectedMD5 || !verifyMD5s);
             }
 
-            public bool containsDerivedFile(string case_id, string derived_from_file_id, ASETools.DerivedFile.Type type)
-            {
-                return derivedFiles.ContainsKey(case_id) && derivedFiles[case_id].Where(x => x.derived_from_file_id == derived_from_file_id && x.type == type).Count() != 0;
-            }
-
-            public ASETools.DerivedFile getDrivedFile(string case_id, string derived_from_file_id, ASETools.DerivedFile.Type type)
-            {
-                if (!derivedFiles.ContainsKey(case_id))
-                {
-                    return null;
-                }
-
-                var set = derivedFiles[case_id].Where(x => x.derived_from_file_id == derived_from_file_id && x.type == type);
-
-                if (set.Count() == 0)
-                {
-                    return null;
-                }
-
-                return set.ToList()[0];
-            }
         } // StateOfTheWorld
 
         class SingleReadPhasingProcessingStage : SingleOutputProcessingStage
@@ -4820,7 +4806,7 @@ namespace ASEProcessManager
                         nAddedToScript++;
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SnapTimer.exe " +
                             ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna-statistics.txt" + @" d:\temp\ " +
-                            (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 -proAg -C-- " + getInputFilename(case_) +
+                            (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 -proAg " + getInputFilename(case_) +
                             (bamMetadata.isPaired ? " " + getInputFilename2(case_) : "") +
                             @" -mrl 40 -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputBAMFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
                             fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna.bam");
@@ -4831,6 +4817,75 @@ namespace ASEProcessManager
 
             bool tumor;
         } // SNAPRealignmentProcessingStage
+
+        class VennProcessingStage : ProcessingStage
+        {
+            public VennProcessingStage(bool tumor_, ASETools.VariantCaller variantCaller_)
+            {
+                tumor = tumor_;
+                variantCaller = variantCaller_;
+            }
+
+            public string GetStageName()
+            {
+                return ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor] + " Venn";
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                return true; // later
+            }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+                            StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = null;
+                nDone = nAddedToScript = nWaitingForPrerequisites = 0;
+
+                string outputLine = "";
+                int nOnOutputLine = 0;
+
+                foreach (var case_ in stateOfTheWorld.listOfCases)
+                {
+                    if (case_.perVariantCaller[variantCaller][tumor].venn_filename != "")
+                    {
+                        nDone++;
+                    } 
+                    else if (case_.concordance.Any(_ => _.Value[variantCaller][tumor].concordance_tarball_filename == ""))
+                    {
+                        nWaitingForPrerequisites++;
+                    } else
+                    {
+                        nAddedToScript++;
+
+                        if (nOnOutputLine == 0)
+                        {
+                            outputLine = stateOfTheWorld.configuration.binariesDirectory + "Venn.exe " + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor];
+                        }
+
+                        outputLine += " " + case_.case_id;
+
+                        nOnOutputLine++;
+                        if (nOnOutputLine >= 10)    // It doesn't really get that great parallelism, probably contending for some lock in the runtime
+                        {
+                            script.WriteLine(outputLine);
+                            nOnOutputLine = 0;
+                            outputLine = "";
+                        }
+                    }
+                } // case
+
+                if (nOnOutputLine > 0)
+                {
+                    script.WriteLine(outputLine);
+                }
+            } // EvaluateStage
+
+            bool tumor;
+            ASETools.VariantCaller variantCaller;
+        }
 
         class FASTQGenerationProcessingStage : ProcessingStage
         {
@@ -5077,6 +5132,8 @@ namespace ASEProcessManager
 
                         string localSecondInputFile = paired ? tempDir + ASETools.GetFileNameFromPathname(getSecondInput(case_)) : "";
                         string samFileName = "/mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor) + "." + ASETools.alignerName[aligner] + "_realigned.sam";
+                        var unsortedSuffix = "." + ASETools.alignerName[aligner] + "_unsorted.bam";
+                        var unsortedBamFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + unsortedSuffix;
 
                         if (paired)
                         {
@@ -5111,6 +5168,7 @@ namespace ASEProcessManager
                                     linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1  2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
+#if useGEM
 
                             case ASETools.Aligner.GEM:
 
@@ -5123,6 +5181,18 @@ namespace ASEProcessManager
                                     linuxScript.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -i " + localInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
+#endif // useGEM
+
+                            case ASETools.Aligner.Novoalign:
+                                if (paired)
+                                {
+                                    linuxScript.Write(@"/mnt/d/gdc/novocraft/novoalign -d /mnt/d/sequence/indices/Homo_sapiens_assembly38.nix -f " + localInputFile + " " + localSecondInputFile + " --alt on -o BAM 0 \"@RG\\tID:4\\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1" + "\" > " + unsortedBamFilename + "\n");
+                                }
+                                else
+                                {
+                                    linuxScript.Write(@"/mnt/d/gdc/novocraft/novoalign -d /mnt/d/sequence/indices/Homo_sapiens_assembly38.nix -f " + localInputFile + " --alt on -o BAM 0 \"@RG\\tID:4\\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1" + "\" > " + unsortedBamFilename + "\n");
+                                }
+                                break;
 
                             default:
                                 throw new Exception("LinuxAlignerAlignmentStage: unrecognized aligner " + aligner);
@@ -5130,22 +5200,42 @@ namespace ASEProcessManager
                         } // switch
                         linuxScript.Write("date >> " + timingFilename + "\n"); // alignment
 
-                        var unsortedSuffix = "." + ASETools.alignerName[aligner] + "_unsorted.bam";
                         var sortedSuffix = "." + ASETools.alignerName[aligner] + "_sorted.bam";
                         var sortTempSuffix = "." + ASETools.alignerName[aligner] + "_sort.temp";
 
-                        var unsortedBamFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + unsortedSuffix;
-                        linuxScript.Write("~/bin/samtools view -@ 16 -S -1 -b " + samFileName + " > " + unsortedBamFilename + "\n");   // samtools auto-appends .bam to the output filename
+                        if (aligner != ASETools.Aligner.Novoalign)
+                        {
+                            linuxScript.Write("~/bin/samtools view -@ 16 -S -1 -b " + samFileName + " > " + unsortedBamFilename + "\n");   // samtools auto-appends .bam to the output filename
+                        } else
+                        {
+                            // Novoalign makes an unsorted BAM directly
+                            linuxScript.Write("# Placeholder\n");
+                        }
                         linuxScript.Write("date >> " + timingFilename + "\n"); // sam->bam
 
                         var sortedBamFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + sortedSuffix;
                         var sortIntermediatePrefix = tempDir + case_.getDNAFileIdByTumor(tumor) + sortTempSuffix;
-                        // ~/bin/samtools sort -n -m 10G -@ 16 /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary.bam  -T /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary_name_sorted_temp -o /mnt/d/temp/cad67cb1-39df-4576-9d82-cec6605a180b.filtered_supplementary_name_sorted.bam
-                        linuxScript.Write("~/bin/samtools sort -@ 16 -m 10G -l 1 " + unsortedBamFilename + " -o " + sortedBamFilename + " -T " + sortIntermediatePrefix + "\n"); // L6 is the default compression that SNAP uses
+                        var outputFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + outputExtension;
+
+                        if (aligner == ASETools.Aligner.Novoalign)
+                        {
+                            linuxScript.Write(@"/mnt/d/gdc/novocraft/novosort --md " + unsortedBamFilename + " > " + outputFilename + "\n");
+                        }
+                        else
+                        {
+                            linuxScript.Write("~/bin/samtools sort -@ 16 -m 10G -l 1 " + unsortedBamFilename + " -o " + sortedBamFilename + " -T " + sortIntermediatePrefix + "\n"); // L6 is the default compression that SNAP uses
+                        }
                         linuxScript.Write("date >> " + timingFilename + "\n"); // sort
 
-                        var outputFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + outputExtension;
-                        linuxScript.Write("java -jar /mnt/d/gdc/bin/picard.jar MarkDuplicates I=" + sortedBamFilename + " O=" + outputFilename + " M=/dev/null 2>&1 >> /dev/null\n");
+                        if (aligner == ASETools.Aligner.Novoalign)
+                        {
+                            // Novosort does sort & mark duplicate together
+                            linuxScript.Write("# Placeholder\n");
+                        }
+                        else
+                        {
+                            linuxScript.Write("java -jar /mnt/d/gdc/bin/picard.jar MarkDuplicates I=" + sortedBamFilename + " O=" + outputFilename + " M=/dev/null 2>&1 >> /dev/null\n");
+                        }
                         linuxScript.Write("date >> " + timingFilename + "\n"); // mark duplicates
 
                         var outputBaiFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + outputExtensionBai;
@@ -5230,8 +5320,8 @@ namespace ASEProcessManager
                         CopyFileInLinux(linuxScript, sourceBAIFilename, localBAIFilename);
 
                         linuxScript.Write("cd ~/gatk\n");
-                        linuxScript.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j `nproc` ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
-                            ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE --dont-use-soft-clipped-bases true\n");
+                        linuxScript.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j 12 ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
+                            ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE --dont-use-soft-clipped-bases true --dbsnp /mnt/d/sequence/genomes/Homo_sapiens_assembly38.dbsnp138.vcf\n"); // Using less parallelism than cores speeds things up, becuase chr1 starts first and ends last, so giving it more resources helps
 
                         string localOutputFile = tempDirectory + case_.getDNAFileIdByTumor(tumor) + ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.HaplotypeCaller];  // Only normal for now
 
@@ -5285,6 +5375,16 @@ namespace ASEProcessManager
                 filesToDownload = null;
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
 
+                string fastaName;
+
+                if (variantCaller == ASETools.VariantCaller.Freebayes)
+                {
+                    fastaName = "/mnt/d/sequence/genomes/Homo_sapiens_assembly38-ACTGN.fasta";
+                } else
+                {
+                    fastaName = "/mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta";
+                }
+
                 foreach (var case_ in stateOfTheWorld.listOfCases)
                 {
                     if (case_.concordance[alignerPair][variantCaller][tumor].concordance_tarball_filename != "")
@@ -5318,7 +5418,7 @@ namespace ASEProcessManager
                         linuxScript.Write("cat " + alignersFile + " | parallel -j 2 bcftools annotate -x FORMAT/AD -O z -o " + tempBase + "{}.NoAd.vcf.gz " + tempBase + "{}.vcf\n");
                         linuxScript.Write("cat " + alignersFile + " | parallel -j 2 bcftools view -c 1 -O z -o " + tempBase + "{}.NoAd.NoHomRef.vcf.gz " + tempBase + "{}.NoAd.vcf.gz\n");
                         linuxScript.Write("cd ~/hap.py\n");
-                        linuxScript.Write("python hap.py-install/bin/hap.py " + tempBase + firstAlignerName + ".NoAd.NoHomRef.vcf.gz " + tempBase + secondAlignerName + ".NoAd.NoHomRef.vcf.gz -r /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -o " +
+                        linuxScript.Write("python hap.py-install/bin/hap.py " + tempBase + firstAlignerName + ".NoAd.NoHomRef.vcf.gz " + tempBase + secondAlignerName + ".NoAd.NoHomRef.vcf.gz -r " + fastaName + " -o " +
                             tempBase + "output/" + case_.getDNAFileIdByTumor(tumor) + "." + alignerPair + ".concordance --engine=vcfeval\n");
                         linuxScript.Write("cd " + tempBase + "output/\n");
 
@@ -5361,12 +5461,15 @@ namespace ASEProcessManager
                 return;
             }
 
-            if (configuration.commandLineArgs.Count() > 1 || configuration.commandLineArgs.Count() == 1 && configuration.commandLineArgs[0] != "-d")
+            if (configuration.commandLineArgs.Any(_ => _ != "-m" && _ != "-d"))
             {
-                Console.WriteLine("usage: ASEProcessManager {-configuration configurationFilename} {-d}");
+                Console.WriteLine("usage: ASEProcessManager {-configuration configurationFilename} {-d} {-m}");
                 Console.WriteLine("-d means to check dependencies.");
+                Console.WriteLine("-m means to check MD5s on downloaded files.");
             }
-            
+
+            bool verifyMD5s = configuration.commandLineArgs.Any(_ => _ == "-m");
+
             //
             // Delete any existing scripts.
             //
@@ -5386,7 +5489,7 @@ namespace ASEProcessManager
 
             bool checkDependencies = configuration.commandLineArgs.Count() >= 1 && configuration.commandLineArgs.Contains("-d");
 
-            var stateOfTheWorld = new StateOfTheWorld(configuration);
+            var stateOfTheWorld = new StateOfTheWorld(configuration, verifyMD5s);
             stateOfTheWorld.DetermineTheStateOfTheWorld(args);
 
             foreach (var directoryToEnsure in stateOfTheWorld.configuration.neededGlobalDirectories())
@@ -5511,9 +5614,15 @@ namespace ASEProcessManager
 
             processingStages.Add(new MAFConfigurationProcessingStage());
 			processingStages.Add(new GenerateCasesProcessingStage());
-			processingStages.Add(new AllcountProcesingStage());
+            foreach (var tumor in ASETools.BothBools)
+            {
+                foreach (var dna in ASETools.BothBools)
+                {
+                    processingStages.Add(new AllcountProcesingStage(tumor, dna));
+                }
+            }
 			processingStages.Add(new DownloadProcessingStage());
-			processingStages.Add(new MD5ComputationProcessingStage());
+			processingStages.Add(new MD5ComputationProcessingStage(verifyMD5s));
 			processingStages.Add(new GermlineVariantCallingProcessingStage());
 			processingStages.Add(new SelectVariantsProcessingStage());
 			processingStages.Add(new AnnotateVariantsProcessingStage(stateOfTheWorld));
@@ -5582,12 +5691,12 @@ namespace ASEProcessManager
             processingStages.Add(new OverallVCFStatisticsProcessingStage());
             processingStages.Add(new ReadStaticticsProcessingStage());
             processingStages.Add(new miRNAProcessingStage());
-            processingStages.Add(new SNAPRealignmentProcessingStage(false));
-            //processingStages.Add(new SNAPRealignmentProcessingStage(true));
             processingStages.Add(new SummarizeCaseMetadataProcessingStage());
             processingStages.Add(new ConsolodatedCaseMetadataProcessingStage());
             processingStages.Add(new FASTQGenerationProcessingStage(false));
             processingStages.Add(new FASTQGenerationProcessingStage(true));
+            processingStages.Add(new SNAPRealignmentProcessingStage(false));
+            //processingStages.Add(new SNAPRealignmentProcessingStage(true));
             foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
             {
                 if (aligner == ASETools.Aligner.SNAP)
@@ -5596,13 +5705,6 @@ namespace ASEProcessManager
                     continue;
                 }
 
-                if (aligner == ASETools.Aligner.GEM)
-                {
-                    //
-                    // GEM crashes too much.
-                    //
-                    continue;
-                }
 
                 foreach (var tumor in ASETools.BothBools)
                 {
@@ -5616,24 +5718,17 @@ namespace ASEProcessManager
             }
 
 
-            // off until we have a final version of snap processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligners.SNAP));
-            //processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligner.BWA));
-            //processingStages.Add(new RealignedFreebayesProcessingStage(ASETools.Aligner.Bowtie));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.SNAP));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.BWA));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.Bowtie));
 
             foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
             {
-                if (aligner == ASETools.Aligner.SNAP)
-                {
-                    //continue;   // Not yet
-                }
                 processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
                 //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
             }
 
-            foreach (var alignerPair in ASETools.alignerPairs)
+            foreach (var alignerPair in ASETools.allAlignerPairs)
             {
                 foreach (var tumor in ASETools.BothBools)
                 {
@@ -5644,8 +5739,16 @@ namespace ASEProcessManager
 
                     foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
                     {
-                        processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
+                        //processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
                     }
+                }
+            }
+
+            foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
+            {
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    processingStages.Add(new VennProcessingStage(tumor, variantCaller));
                 }
             }
 
