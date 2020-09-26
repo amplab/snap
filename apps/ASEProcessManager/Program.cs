@@ -5719,7 +5719,7 @@ namespace ASEProcessManager
                     //continue;   // Not yet
                 }
                 processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
-                processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
+                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
             }
 
             foreach (var alignerPair in ASETools.allAlignerPairs)

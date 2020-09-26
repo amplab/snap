@@ -17,7 +17,7 @@ namespace ASELib
 {
     public class ASETools
     {
-        public const bool useGEM = false;
+        public const bool useGEM = true;
 
         static void AddAlignerSubsetsToListOfAllAlignerSets(List<Aligner> alignersInSet, List<Aligner> alignersToBeConsidered)
         {
