@@ -1177,7 +1177,12 @@ namespace ASEProcessManager
 
         class MD5ComputationProcessingStage : ProcessingStage
         {
-            public MD5ComputationProcessingStage() { }
+            public MD5ComputationProcessingStage(bool verifyMD5s_) 
+            {
+                verifyMD5s = verifyMD5s_;
+            }
+
+            bool verifyMD5s;
 
             public string GetStageName()
             {
@@ -1279,11 +1284,11 @@ namespace ASEProcessManager
                     return;
                 }
 
-                if (downloadedFile.storedMD5 != null && downloadedFile.storedMD5 != "")
+                if (downloadedFile.storedMD5 != null && downloadedFile.md5FileInfo != null)
                 {
                     nDone++;
 
-                    if (downloadedFile.storedMD5 != expectedMD5)
+                    if (verifyMD5s && downloadedFile.storedMD5 != expectedMD5)
                     {
                         Console.WriteLine("MD5 checksum mismatch on file " + downloadedFile.fileInfo.FullName + " " + downloadedFile.storedMD5 + " != " + expectedMD5);
                     }
@@ -4311,13 +4316,14 @@ namespace ASEProcessManager
         //
         class StateOfTheWorld
         {
-            public StateOfTheWorld(ASETools.Configuration configuration_) 
+            public StateOfTheWorld(ASETools.Configuration configuration_, bool verifyMD5s_) 
             {
                 configuration = configuration_;
                 if (configuration.configurationFileLocationExplicitlySpecified)
                 {
                     configurationString = " -configuration " + configuration.configuationFilePathname + " ";
                 }
+                verifyMD5s = verifyMD5s_;
             }
 
             public ASETools.Configuration configuration;
@@ -4340,6 +4346,7 @@ namespace ASEProcessManager
             public Dictionary<string, ASETools.CaseMetadata> caseMetadata = null;
 
             bool commonDataAvailable = false;
+            bool verifyMD5s;
 
             public bool hasCommonData() { return commonDataAvailable; }
 
@@ -4353,7 +4360,7 @@ namespace ASEProcessManager
                                       commonData.aseCorrection != null && commonData.expressionDistributionByChromosomeMap != null && commonData.diseases != null && commonData.clinicalSummariesByPatientId != null;
 
                 
-                ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles, out fileSystems);
+                ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles, out fileSystems, verifyMD5s);
 
                 randomFilesystemByFreeSpace = new ASETools.BiasedRandom<string>(fileSystems.Select(_ => new KeyValuePair<string, ulong>(_.Key, _.Value.totalFreeBytes)).ToList());
 
@@ -4624,7 +4631,7 @@ namespace ASEProcessManager
 
             public bool fileDownloadedAndVerified(string file_id, string expectedMD5)
             {
-                return downloadedFiles.ContainsKey(file_id) && (null == expectedMD5 || "" == expectedMD5 || downloadedFiles[file_id].storedMD5 == expectedMD5);
+                return downloadedFiles.ContainsKey(file_id) && (null == expectedMD5 || "" == expectedMD5 || downloadedFiles[file_id].storedMD5 == expectedMD5 || !verifyMD5s);
             }
 
         } // StateOfTheWorld
@@ -4799,8 +4806,8 @@ namespace ASEProcessManager
                         nAddedToScript++;
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SnapTimer.exe " +
                             ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna-statistics.txt" + @" d:\temp\ " +
-                            (bamMetadata.isPaired ? "paired" : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 " + getInputFilename(case_) +
-                            (bamMetadata.isPaired ? " -s 0 1000 " + getInputFilename2(case_) : "") +
+                            (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 -proAg " + getInputFilename(case_) +
+                            (bamMetadata.isPaired ? " " + getInputFilename2(case_) : "") +
                             @" -mrl 40 -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputBAMFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
                             fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna.bam");
                     } // We thought we had everything
@@ -5314,7 +5321,7 @@ namespace ASEProcessManager
 
                         linuxScript.Write("cd ~/gatk\n");
                         linuxScript.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j 12 ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
-                            ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE --dont-use-soft-clipped-bases true\n"); // Using less parallelism than cores speeds things up, becuase chr1 starts first and ends last, so giving it more resources helps
+                            ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE --dont-use-soft-clipped-bases true --dbsnp /mnt/d/sequence/genomes/Homo_sapiens_assembly38.dbsnp138.vcf\n"); // Using less parallelism than cores speeds things up, becuase chr1 starts first and ends last, so giving it more resources helps
 
                         string localOutputFile = tempDirectory + case_.getDNAFileIdByTumor(tumor) + ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.HaplotypeCaller];  // Only normal for now
 
@@ -5454,12 +5461,15 @@ namespace ASEProcessManager
                 return;
             }
 
-            if (configuration.commandLineArgs.Count() > 1 || configuration.commandLineArgs.Count() == 1 && configuration.commandLineArgs[0] != "-d")
+            if (configuration.commandLineArgs.Any(_ => _ != "-m" && _ != "-d"))
             {
-                Console.WriteLine("usage: ASEProcessManager {-configuration configurationFilename} {-d}");
+                Console.WriteLine("usage: ASEProcessManager {-configuration configurationFilename} {-d} {-m}");
                 Console.WriteLine("-d means to check dependencies.");
+                Console.WriteLine("-m means to check MD5s on downloaded files.");
             }
-            
+
+            bool verifyMD5s = configuration.commandLineArgs.Any(_ => _ == "-m");
+
             //
             // Delete any existing scripts.
             //
@@ -5479,7 +5489,7 @@ namespace ASEProcessManager
 
             bool checkDependencies = configuration.commandLineArgs.Count() >= 1 && configuration.commandLineArgs.Contains("-d");
 
-            var stateOfTheWorld = new StateOfTheWorld(configuration);
+            var stateOfTheWorld = new StateOfTheWorld(configuration, verifyMD5s);
             stateOfTheWorld.DetermineTheStateOfTheWorld(args);
 
             foreach (var directoryToEnsure in stateOfTheWorld.configuration.neededGlobalDirectories())
@@ -5612,7 +5622,7 @@ namespace ASEProcessManager
                 }
             }
 			processingStages.Add(new DownloadProcessingStage());
-			processingStages.Add(new MD5ComputationProcessingStage());
+			processingStages.Add(new MD5ComputationProcessingStage(verifyMD5s));
 			processingStages.Add(new GermlineVariantCallingProcessingStage());
 			processingStages.Add(new SelectVariantsProcessingStage());
 			processingStages.Add(new AnnotateVariantsProcessingStage(stateOfTheWorld));
@@ -5714,10 +5724,6 @@ namespace ASEProcessManager
 
             foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
             {
-                if (aligner == ASETools.Aligner.SNAP)
-                {
-                    //continue;   // Not yet
-                }
                 processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
                 //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
             }
@@ -5733,7 +5739,7 @@ namespace ASEProcessManager
 
                     foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
                     {
-                        processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
+                        //processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
                     }
                 }
             }

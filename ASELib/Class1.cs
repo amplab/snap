@@ -3998,7 +3998,8 @@ namespace ASELib
         public const string basesInKnownCodingRegionsPrefix = "BasesInKnownCodingRegions_";
 
         public const int maxTimeForRealignHistograms = 10 * 60 * 60;
-        public const int maxSpeedForRealignmentHistograms = 750000;
+        public const int timeStepForRealignHistograms = 15;
+        public const int maxSpeedForRealignmentHistograms = 1000000;
         public const int stepForSpeedRealignmentHistograms = 1000;
 
         public enum Aligner
@@ -4274,7 +4275,7 @@ namespace ASELib
             }
         }
 
-        static void ScanOneFilesystem(Configuration configuration, string downloadedFilesDirectory, ScannedFilesystem state, Stopwatch stopwatch, int directoryFieldLength)
+        static void ScanOneFilesystem(Configuration configuration, string downloadedFilesDirectory, ScannedFilesystem state, Stopwatch stopwatch, int directoryFieldLength, bool verifyMD5s)
         {
             if (!Directory.Exists(downloadedFilesDirectory))
             {
@@ -4395,24 +4396,27 @@ namespace ASELib
                         }
                         else
                         {
-                            try
+                            if (verifyMD5s)
                             {
-                                var lines = File.ReadAllLines(md5Pathname); // Don't use the with retry version, because we don't want to get stuck behind a worker hashing a file.
-                                if (lines.Count() != 1 || lines[0].Count() != 32)
+                                try
                                 {
-                                    Console.WriteLine("md5 file " + md5Pathname + " has a non-md5 content.  Ignoring.");
+                                    var lines = File.ReadAllLines(md5Pathname); // Don't use the with retry version, because we don't want to get stuck behind a worker hashing a file.
+                                    if (lines.Count() != 1 || lines[0].Count() != 32)
+                                    {
+                                        Console.WriteLine("md5 file " + md5Pathname + " has a non-md5 content.  Ignoring.");
+                                    }
+                                    else
+                                    {
+                                        md5Value = lines[0];
+                                    }
                                 }
-                                else
+                                catch (IOException)
                                 {
-                                    md5Value = lines[0];
+                                    Console.WriteLine("Skipping md5 file " + md5Pathname + " because of an IO error.  It's most likely being created now.");
                                 }
-                            }
-                            catch (IOException)
-                            {
-                                Console.WriteLine("Skipping md5 file " + md5Pathname + " because of an IO error.  It's most likely being created now.");
-                            }
-                        }
-                    }
+                            } 
+                        } // MD5 name matches
+                    } // Has an MD5
 
 
                     if (null == candidatePathname)
@@ -4491,7 +4495,7 @@ namespace ASELib
         //
         // Grovel the file system(s) to look for downloaded and derived files.  Returns a dictionary that maps from file_id -> DownloadedFile object.
         //
-        public static void ScanFilesystems(Configuration configuration, out Dictionary<string, DownloadedFile> downloadedFiles, out Dictionary<string, List<DerivedFile>> derivedFiles, out Dictionary<string, ScannedFilesystem> fileSystems)
+        public static void ScanFilesystems(Configuration configuration, out Dictionary<string, DownloadedFile> downloadedFiles, out Dictionary<string, List<DerivedFile>> derivedFiles, out Dictionary<string, ScannedFilesystem> fileSystems, bool verifyMD5s)
         {
             var stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -4526,7 +4530,7 @@ namespace ASELib
             
             foreach (var directory in configuration.dataDirectories)
             {
-                threads.Add(new Thread(() => ScanOneFilesystem(configuration, directory, perDirectoryState[directory], stopwatch, paddingLength + directoryHeader.Count())));
+                threads.Add(new Thread(() => ScanOneFilesystem(configuration, directory, perDirectoryState[directory], stopwatch, paddingLength + directoryHeader.Count(), verifyMD5s)));
             } // foreach data directory
 
             threads.ForEach(t => t.Start());
@@ -16723,7 +16727,27 @@ namespace ASELib
         } // GetIntFromString
 
         //
-        // This is like Convert.ToInt32, except it allows stuff to be after the value in the string.
+        // This is like Convert.ToInt64, except it removes any commas and if the string extends beyond the number it will truncate it.  Strings that don't start
+        // with a number will still throw a format exception.
+        //
+        public static long GetLongFromString(string value)
+        {
+            var withoutCommas = value.Replace(",", "");
+
+            for (int i = 0; i < withoutCommas.Length; i++)
+            {
+                if (withoutCommas[i] < '0' || withoutCommas[i] > '9')
+                {
+                    withoutCommas = withoutCommas.Substring(0, i);
+                    break;
+                }
+            }
+
+            return Convert.ToInt64(withoutCommas);
+        } // GetLongFromString
+
+        //
+        // This is like Convert.ToDouble, except it allows stuff to be after the value in the string.
         //
         public static double GetDoubleFromString(string value)
         {

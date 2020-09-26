@@ -99,7 +99,7 @@ namespace ReadLengthDistributions
                             outputFile.Write("Max");
                         }
 
-                        outputFile.WriteLine(" read depth distribution for tumor: " + tumor + " dna: " + dna);
+                        outputFile.WriteLine(" read length distribution for tumor: " + tumor + " dna: " + dna);
                         outputFile.WriteLine(ASETools.HistogramResultLine.Header());
                         globalState.histograms[mam][tumor][dna].ComputeHistogram().ToList().ForEach(_ => outputFile.WriteLine(_.ToString()));
                         outputFile.WriteLine();

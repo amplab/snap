@@ -16,18 +16,31 @@ namespace SummarizeSNAPPerformance
 
         static Dictionary<string, ASETools.CaseMetadata> metadataByCase;
 
+        static int[] speedByReadCountMins = { 0, 60000000, 70000000, 80000000, 90000000, 100000000, 110000000, 120000000, 130000000, 140000000, 150000000, 160000000, 170000000, 180000000, 190000000, 200000000 };
+
         class Histograms
         {
-            public ASETools.PreBucketedHistogram alignTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
-            public ASETools.PreBucketedHistogram indexLoadTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
-            public ASETools.PreBucketedHistogram loadAndAlignTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
-            public ASETools.PreBucketedHistogram sortTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
-            public ASETools.PreBucketedHistogram totalSNAPTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
-            public ASETools.PreBucketedHistogram copyInTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
-            public ASETools.PreBucketedHistogram copyOutTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
-            public ASETools.PreBucketedHistogram endToEndTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, 60);
+            public ASETools.PreBucketedHistogram alignTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
+            public ASETools.PreBucketedHistogram indexLoadTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
+            public ASETools.PreBucketedHistogram loadAndAlignTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
+            public ASETools.PreBucketedHistogram sortTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
+            public ASETools.PreBucketedHistogram totalSNAPTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
+            public ASETools.PreBucketedHistogram copyInTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
+            public ASETools.PreBucketedHistogram copyOutTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
+            public ASETools.PreBucketedHistogram endToEndTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
             public ASETools.PreBucketedHistogram readsPerSecondReportedHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxSpeedForRealignmentHistograms, ASETools.stepForSpeedRealignmentHistograms);
+            public ASETools.PreBucketedHistogram readsPerLoadAndAlignSecondHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxSpeedForRealignmentHistograms, ASETools.stepForSpeedRealignmentHistograms);
             public ASETools.PreBucketedHistogram readsPerSecondAllSnapHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxSpeedForRealignmentHistograms, ASETools.stepForSpeedRealignmentHistograms);
+            public ASETools.PreBucketedHistogram totalReadsHistogram = new ASETools.PreBucketedHistogram(0, 1000000000, 1000000);
+            public ASETools.PreBucketedHistogram[] speedByReadCount = new ASETools.PreBucketedHistogram[speedByReadCountMins.Count()];
+
+            public Histograms()
+            {
+                for (int i = 0; i < speedByReadCountMins.Count(); i++)
+                {
+                    speedByReadCount[i] = new ASETools.PreBucketedHistogram(0, ASETools.maxSpeedForRealignmentHistograms, ASETools.stepForSpeedRealignmentHistograms);
+                }
+            }
 
             public int timeForSlowestRun = 0;
             public string caseIdForSlowestRun = "";
@@ -43,13 +56,21 @@ namespace SummarizeSNAPPerformance
                 copyOutTimeHistogram.merge(peer.copyOutTimeHistogram);
                 endToEndTimeHistogram.merge(peer.endToEndTimeHistogram);
                 readsPerSecondReportedHistogram.merge(peer.readsPerSecondReportedHistogram);
+                readsPerLoadAndAlignSecondHistogram.merge(peer.readsPerLoadAndAlignSecondHistogram);
                 readsPerSecondAllSnapHistogram.merge(peer.readsPerSecondAllSnapHistogram);
+                totalReadsHistogram.merge(peer.totalReadsHistogram);
 
                 if (timeForSlowestRun < peer.timeForSlowestRun)
                 {
                     timeForSlowestRun = peer.timeForSlowestRun;
                     caseIdForSlowestRun = peer.caseIdForSlowestRun;
                 }
+
+                for (int i = 0; i < speedByReadCountMins.Count(); i++)
+                {
+                    speedByReadCount[i].merge(peer.speedByReadCount[i]);
+                }
+
             }
         } // Histograms
 
@@ -106,13 +127,26 @@ namespace SummarizeSNAPPerformance
                 state.histograms[tumor][paired].copyOutTimeHistogram.addValue(stats.copyOutTime);
                 state.histograms[tumor][paired].endToEndTimeHistogram.addValue(stats.overallRuntime + stats.copyInTime + stats.copyOutTime);
                 state.histograms[tumor][paired].readsPerSecondReportedHistogram.addValue(stats.readsPerSecond);
+                state.histograms[tumor][paired].readsPerLoadAndAlignSecondHistogram.addValue(stats.totalReads / (stats.alignTime + stats.loadingTime));
                 state.histograms[tumor][paired].readsPerSecondAllSnapHistogram.addValue(stats.totalReads / stats.overallRuntime);
+                state.histograms[tumor][paired].totalReadsHistogram.addValue(stats.totalReads);
 
                 if (stats.overallRuntime > state.histograms[tumor][paired].timeForSlowestRun)
                 {
                     state.histograms[tumor][paired].timeForSlowestRun = stats.overallRuntime;
                     state.histograms[tumor][paired].caseIdForSlowestRun = case_.case_id;
                 }
+
+                int whichSpeedBucket = 0;
+                for (int i = 0; i < speedByReadCountMins.Count(); i++)
+                {
+                    if (stats.totalReads > speedByReadCountMins[i])
+                    {
+                        whichSpeedBucket = i;
+                    }
+                }
+
+                state.histograms[tumor][paired].speedByReadCount[whichSpeedBucket].addValue(stats.readsPerSecond);
             } // tumor/normal
         } // ProcessOneCase
 
@@ -184,6 +218,7 @@ namespace SummarizeSNAPPerformance
 
                     var rateHistograms = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
                     rateHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("reads per second reported", globalState.histograms[tumor][paired].readsPerSecondReportedHistogram));
+                    rateHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("reads per second of load and align time", globalState.histograms[tumor][paired].readsPerLoadAndAlignSecondHistogram));
                     rateHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("reads per second in SNAP", globalState.histograms[tumor][paired].readsPerSecondAllSnapHistogram));
 
                     outputFile.WriteLine("Data for " + (tumor ? "tumor" : "normal") + " " + (paired ? "paired-end" : "single-end"));
@@ -197,7 +232,23 @@ namespace SummarizeSNAPPerformance
 
                     outputFile.WriteLine();
                     ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(outputFile, timeHistograms);
+
+                    outputFile.WriteLine();
                     ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(outputFile, rateHistograms);
+
+                    outputFile.WriteLine();
+                    outputFile.WriteLine("Total reads per sample");
+                    globalState.histograms[tumor][paired].totalReadsHistogram.WriteHistogram(outputFile);
+
+                    var speedByReadCountHistograms = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
+                    for (int i = 0; i < speedByReadCountMins.Count(); i++)
+                    {
+                        speedByReadCountHistograms.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>(speedByReadCountMins[i].ToString() + ((i == speedByReadCountMins.Count() - 1) ? "+" : "-" + speedByReadCountMins[i + 1]), globalState.histograms[tumor][paired].speedByReadCount[i]));
+                    }
+
+                    outputFile.WriteLine();
+                    outputFile.WriteLine("Reads/s reported in SNAP by size of input file.");
+                    ASETools.PreBucketedHistogram.WriteBatchOfHistogramCDFs(outputFile, speedByReadCountHistograms);
 
                     outputFile.WriteLine();
                 } // tumor/normal

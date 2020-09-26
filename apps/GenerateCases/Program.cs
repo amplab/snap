@@ -72,7 +72,7 @@ namespace GenerateCases
             Dictionary<string, List<ASETools.DerivedFile>> derivedFiles = new Dictionary<string, List<ASETools.DerivedFile>>();
 
             Dictionary<string, ASETools.ScannedFilesystem> scannedFileSystems;
-            ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles, out scannedFileSystems);
+            ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles, out scannedFileSystems, true);
 
             var mafManifest = ASETools.MAFInfo.LoadMAFManifest(configuration.mafManifestPathname);
 
