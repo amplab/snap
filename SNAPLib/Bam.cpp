@@ -1233,7 +1233,7 @@ BAMFormat::writePairs(
         bam->l_seq = fullLength[whichRead];
         bam->next_refID = mateContigIndex[whichRead];
         bam->next_pos = (int)matePositionInContig[whichRead] - 1;
-        bam->tlen = (int)templateLength[whichRead];
+        bam->tlen = templateLength[whichRead] >= 0 ? (templateLength[whichRead] & INT_MAX) : -((-templateLength[whichRead]) & INT_MAX);
         memcpy(bam->read_name(), read->getId(), qnameLen[whichRead]);
         bam->read_name()[qnameLen[whichRead]] = 0;
         memcpy(bam->cigar(), cigarBuf[whichRead], cigarOps[whichRead] * 4);
@@ -2457,7 +2457,13 @@ public:
         if (mates.size() > 0) {
             WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", mates.size());
             for (MateMap::iterator i = mates.begin(); i != mates.end(); i = mates.next(i)) {
-	      WriteErrorMessage("%u%s/%u%s\n", GenomeLocationAsInt64(i->key.locations[0]), i->key.isRC[0] ? "rc" : "", GenomeLocationAsInt64(i->key.locations[1]), i->key.isRC[1] ? "rc" : "");
+	            WriteErrorMessage("%u%s/%u%s\n", GenomeLocationAsInt64(i->key.locations[0]), i->key.isRC[0] ? "rc" : "", GenomeLocationAsInt64(i->key.locations[1]), i->key.isRC[1] ? "rc" : "");
+            }
+        }
+        if (fragments.size() > 0) {
+            WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", fragments.size());
+            for (FragmentMap::iterator i = fragments.begin(); i != fragments.end(); i = fragments.next(i)) {
+                WriteErrorMessage("%u%s\n", GenomeLocationAsInt64(i->key.location), i->key.isRC ? "rc" : "");
             }
         }
 #endif
@@ -2641,6 +2647,16 @@ BAMDupMarkFilter::onNextBatch(
         *fromBufferUsed = bytesRead;
     }
 
+#ifdef VALIDATE_WRITE
+    if (lastBatch) {
+        if (mates.size() > 0) {
+            WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", mates.size());
+        }
+    }
+    fprintf(stderr, "MateMap size:%d\n", mates.size());
+    fprintf(stderr, "FragmentMap size:%d\n", fragments.size());
+#endif
+
     return bytesRead; // return bytes consumed in current batch. This may be less than 'bytes', if reads require duplicate marking in subsequent batch
 }
 
@@ -2718,23 +2734,19 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         // skip unmapped reads and reads with unmapped mates
         if (((record->FLAG & SAM_UNMAPPED) != 0) || (record->FLAG & SAM_NEXT_UNMAPPED) != 0) continue;
 
-        // adjacent entries with different library names
-        if ((i == run.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
-            (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
+        bool prevRecordMismatch = (i == run.begin()) || ((i->libraryNameHash != ((i - 1)->libraryNameHash)) ||
+                                  (i->info != (i - 1)->info) ||
+                                  (i->mateInfo != (i - 1)->mateInfo));
+
+        bool nextRecordMismatch = (i + 1 == run.end()) || ((i->libraryNameHash != ((i + 1)->libraryNameHash)) ||
+                                  (i->info != (i + 1)->info) ||
+                                  (i->mateInfo != (i + 1)->mateInfo));
+
+        // adjacent entries with different library names, different location/orientation, different mate location/orientation
+        if (prevRecordMismatch && nextRecordMismatch) {
             continue;
         }
 
-        // adjacent entries with different location/orientation
-        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
-            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
-            continue;
-        }
-
-        // check if mate location/orientation matches adjacent entry
-        if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
-            (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
-            continue;
-        }
         foundRun = true;
         DuplicateReadKey key(record, genome, i->libraryNameHash);
         MateMap::iterator f = mates.find(key);
@@ -2760,6 +2772,9 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
     for (RunVector::iterator i = runFragment.begin(); i != runFragment.end(); i++) {
         offset = i->runOffset;
         BAMAlignment* record = getRead(offset);
+
+        // skip unmapped reads
+        if ((record->FLAG & SAM_UNMAPPED) != 0) continue;
 
         if ((i == runFragment.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
             (i + 1 == runFragment.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
@@ -2820,16 +2835,17 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
 
     // go back and adjust flags
     for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
-        if ((i == run.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
-            (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
-            continue;
-        }
-        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
-            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
-            continue;
-        }
-        if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
-            (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
+        bool prevRecordMismatch = (i == run.begin()) || ((i->libraryNameHash != ((i - 1)->libraryNameHash)) ||
+                                  (i->info != (i - 1)->info) ||
+                                  (i->mateInfo != (i - 1)->mateInfo));
+
+        bool nextRecordMismatch = (i + 1 == run.end()) || ((i->libraryNameHash != ((i + 1)->libraryNameHash)) ||
+                                  (i->info != (i + 1)->info) ||
+                                  (i->mateInfo != (i + 1)->mateInfo));
+
+
+        // adjacent entries with different library names, different location/orientation, different mate location/orientation
+        if (prevRecordMismatch && nextRecordMismatch) {
             continue;
         }
 
@@ -2853,17 +2869,17 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
     // clean up
     for (RunVector::iterator i = run.begin(); i != run.end(); i++) {
 
-        // skip singletons
-        if ((i == run.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
-            (i + 1 == run.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
-            continue;
-        }
-        if ((i == run.begin() || (i->info) != ((i - 1)->info)) &&
-            (i + 1 == run.end() || (i->info) != ((i + 1)->info))) {
-            continue;
-        }
-        if ((i == run.begin() || (i->mateInfo) != ((i - 1)->mateInfo)) &&
-            (i + 1 == run.end() || (i->mateInfo) != ((i + 1)->mateInfo))) {
+        bool prevRecordMismatch = (i == run.begin()) || ((i->libraryNameHash != ((i - 1)->libraryNameHash)) ||
+                                  (i->info != (i - 1)->info) ||
+                                  (i->mateInfo != (i - 1)->mateInfo));
+
+        bool nextRecordMismatch = (i + 1 == run.end()) || ((i->libraryNameHash != ((i + 1)->libraryNameHash)) ||
+                                  (i->info != (i + 1)->info) ||
+                                  (i->mateInfo != (i + 1)->mateInfo));
+
+
+        // adjacent entries with different library names, different location/orientation, different mate location/orientation
+        if (prevRecordMismatch && nextRecordMismatch) {
             continue;
         }
 
@@ -2875,15 +2891,20 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
 
         DuplicateReadKey key(record, genome, i->libraryNameHash);
         MateMap::iterator m = mates.find(key);
-        DuplicateMateInfo* minfo = &m->value;
         if (m != mates.end()) {
             bool isRC = (record->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
             GenomeLocation loc = record->getLocation(genome);
             loc = (isRC) ? record->getUnclippedEnd(loc) : record->getUnclippedStart(loc);
+
+            GenomeLocation nextLoc = record->getNextLocation(genome);
+            GenomeDistance spacing = nextLoc > loc ? nextLoc - loc : loc - nextLoc;
             // 
-            // Keep duplicate entry around till we find the mate. This allows us to match indexInFile tie breaking used in Picard MarkDup
+            // Keep duplicate entry around till we find the mate. This allows us to match indexInFile tie breaking used in Picard MarkDup.
+            // TODO: We have not ensured this when the read and its mate are mapped more than INT_MAX apart, since TLEN is 32-bit signed.
+            //       The SAM spec says TLEN = 0 for reads mapped to different chromosomes. In these cases we must store the offset of the
+            //       in an auxiliary tag.
             //
-            if (loc == key.locations[1] && isRC == key.isRC[1]) {
+            if (spacing > INT_MAX || (loc == key.locations[1] && isRC == key.isRC[1])) {
                 //fprintf(stderr, "erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                 mates.erase(key);
             }
@@ -2926,35 +2947,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
     }
 
     // clean up
-    for (RunVector::iterator i = runFragment.begin(); i != runFragment.end(); i++) {
-        offset = i->runOffset;
-        BAMAlignment* record = getRead(offset);
+    fragments.clear();
 
-        if ((i == runFragment.begin() || (i->libraryNameHash != ((i - 1)->libraryNameHash))) &&
-            (i + 1 == runFragment.end() || (i->libraryNameHash != ((i + 1)->libraryNameHash)))) {
-            continue;
-        }
-
-        if ((i == runFragment.begin() || (i->info) != ((i - 1)->info)) &&
-            (i + 1 == runFragment.end() || (i->info) != ((i + 1)->info))) {
-            continue;
-        }
-
-        //
-        // Skip unmapped reads and reads with mapped mates
-        //
-        if ((record->FLAG & SAM_UNMAPPED) != 0 || ((record->FLAG & SAM_MULTI_SEGMENT) != 0 && (record->FLAG & SAM_NEXT_UNMAPPED) == 0)) {
-            continue;
-        }
-
-        // location and library matches
-        DuplicateFragmentKey key(record, genome, i->libraryNameHash);
-        FragmentMap::iterator f = fragments.find(key);
-
-        if (f != fragments.end()) {
-            fragments.erase(key);
-        }
-    }
+    run.clear();
+    runFragment.clear();
 }
 
 

@@ -131,6 +131,7 @@ private:
     {
         char* buffer;
         AsyncFile::Writer* file;
+        size_t bufferSizeInit;
         size_t bufferSize;
         size_t used;
         size_t fileOffset;
@@ -223,6 +224,29 @@ FileEncoder::outputReady()
         WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
         soft_exit(1);
     }
+
+    //
+    // Shrink MarkDup buffers to reduce memory consumption
+    //
+    if (write->bufferSize > write->bufferSizeInit) {
+        if (!write->file->waitForCompletion()) {
+            WriteErrorMessage("error: file write failed\n");
+            soft_exit(1);
+        }
+        size_t newBufferSize = write->bufferSizeInit;
+        char* newBuffer = (char*)BigAlloc(newBufferSize);
+        if (newBuffer == NULL) {
+            WriteErrorMessage("Unable to allocate %lld bytes for write buffer\n", newBufferSize);
+            soft_exit(1);
+        }
+#ifdef VALIDATE_WRITE
+        fprintf(stderr, "Shrinking MarkDup buffer from %lld to %lld bytes\n", write->bufferSize, newBufferSize);
+#endif
+        BigDealloc(write->buffer);
+        write->buffer = newBuffer;
+        write->bufferSize = newBufferSize;
+    }
+
     AllowEventWaitersToProceed(&write->encoded);
 
     // check for more work
@@ -319,6 +343,7 @@ AsyncDataWriter::AsyncDataWriter(
             WriteErrorMessage("Unable to allocate %lld bytes for write buffer\n", i_bufferSize);
             soft_exit(1);
         }
+        batches[i].bufferSizeInit = i_bufferSize;
         batches[i].bufferSize = i_bufferSize;
         batches[i].file = i_file->getWriter();
         batches[i].used = 0;

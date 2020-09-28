@@ -60,6 +60,7 @@ private:
     GzipWriterFilterSupplier* filterSupplier;
     char* input;
     size_t inputSize;
+    size_t bufferSizeInit;
     size_t bufferSize;
     size_t inputUsed;
     char* buffer;
@@ -143,10 +144,13 @@ GzipCompressWorkerManager::beginStep()
             WriteErrorMessage("Unable to allocate %lld bytes for gzip compression buffer\n", inputSize);
             soft_exit(1);
         }
+        bufferSizeInit = inputSize;
         bufferSize = inputSize;
     }
     else if (inputSize > bufferSize) {
-        //fprintf(stderr, "CompressManager::beginStep() prevInputSize: %lld inputSize: %lld\n", bufferSize, inputSize);
+#ifdef VALIDATE_WRITE
+        fprintf(stderr, "CompressManager::beginStep() prevInputSize: %lld inputSize: %lld\n", bufferSize, inputSize);
+#endif
         BigDealloc(buffer);
         buffer = NULL;
         buffer = (char*)BigAlloc(inputSize);
@@ -188,6 +192,24 @@ GzipCompressWorkerManager::finishStep()
     encoder->setEncodedBatchSize(toUsed);
     filterSupplier->addTranslations(&translation);
     translation.clear();
+
+    //
+    // Shrink buffers to reduce memory consumption
+    //
+    if (bufferSize > bufferSizeInit) {
+        size_t newBufferSize = bufferSizeInit;
+        char* newBuffer = (char*)BigAlloc(newBufferSize);
+        if (newBuffer == NULL) {
+            WriteErrorMessage("Unable to allocate %lld bytes for write buffer\n", newBufferSize);
+            soft_exit(1);
+        }
+#ifdef VALIDATE_WRITE
+        fprintf(stderr, "Shrinking compression buffer from %lld to %lld bytes\n", bufferSize, newBufferSize);
+#endif
+        BigDealloc(buffer);
+        buffer = newBuffer;
+        bufferSize = newBufferSize;
+    }
 }
 
     void
