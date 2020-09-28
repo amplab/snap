@@ -1055,7 +1055,8 @@ BAMFormat::writePairs(
             }
 
             if (locations[whichRead] != InvalidGenomeLocation) {
-                if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 0)) {
+                // Call affine gap either when we used affine gap scoring, or when read as NM > 2
+                if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 2)) {
                     cigarOps[whichRead] = computeCigarOps(context.genome, ag, (char*)cigarBuf[whichRead], cigarBufSize * sizeof(_uint32),
                         clippedData[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], (unsigned)extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead],
                         read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
