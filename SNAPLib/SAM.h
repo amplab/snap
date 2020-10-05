@@ -338,13 +338,14 @@ struct SAMAlignment {
     _int64 tlen;
     size_t libraryNameHash;
     GenomeLocation location;
+    GenomeLocation mateLocation;
     GenomeLocation unclippedStartLocation;
     GenomeLocation unclippedEndLocation;
     char* qName; // query name
     size_t qNameLength;
     char* flagOffset; // offset of flag field in the original buffer. This is helpful for duplicate marking
 
-    SAMAlignment() : flag(0), qual(0), mateQual(0), tlen(0), libraryNameHash(0), location(InvalidGenomeLocation),
+    SAMAlignment() : flag(0), qual(0), mateQual(0), tlen(0), libraryNameHash(0), location(InvalidGenomeLocation), mateLocation(InvalidGenomeLocation),
         unclippedStartLocation(InvalidGenomeLocation), unclippedEndLocation(InvalidGenomeLocation), qName(NULL), flagOffset(NULL) {}
 
     void setReadName(char* qName_, size_t qNameLength_) {
