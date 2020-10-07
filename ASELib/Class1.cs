@@ -10,6 +10,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
+using System.Security.Policy;
 using System.Text;
 using System.Threading;
 
@@ -59,9 +60,9 @@ namespace ASELib
             alignerName.Add(Aligner.BWA, "BWA");
             alignerName.Add(Aligner.Bowtie, "Bowtie");
             alignerName.Add(Aligner.Novoalign, "Novoalign");
-#if useGEM
+//#if useGEM
             alignerName.Add(Aligner.GEM, "GEM");
-#endif // useGEM
+//#endif // useGEM
 
             foreach (var alignerA in EnumUtil.GetValues<Aligner>())
             {
@@ -4005,9 +4006,9 @@ namespace ASELib
         public enum Aligner
         {
             SNAP, BWA, Bowtie,
-#if useGEM
+//#if useGEM
             GEM, 
-#endif // useGEM
+//#endif // useGEM
             Novoalign,
         };
 
@@ -4918,7 +4919,7 @@ namespace ASELib
                         break;
                     }
 
-                    var fields = inputLine.Split('\t');
+                    var fields = inputLine.Split(separator);
                     if (fields.Count() <= maxNeededField && !allowMissingColumnsInData)
                     {
                         Console.WriteLine("HeaderizedFile.Parse (" + inputFilename + "): input line didn't include a needed field " + inputLine);
@@ -17097,6 +17098,124 @@ namespace ASELib
                 return retVal;
             }
         } // VennResults
+
+        public class SingleConcordanceResult    // for SNV or indel
+        {
+            public readonly string type;
+            public readonly string filter;
+            public readonly long truthTotal;
+            public readonly long truthTruePositive;
+            public readonly long truthFalseNegative;
+            public readonly long queryTotal;
+            public readonly long queryFalsePositive;
+            public readonly long queryUnknown;
+            public readonly double recall;
+            public readonly double precision;
+            public readonly double fracNA;
+            public readonly double F1_score;
+
+            public SingleConcordanceResult(string type_, string filter_, long truthTotal_, long truthTruePositive_, long truthFalseNegative_, long queryTotal_, long queryFalsePositive_, long queryUnknown_, 
+                                           double recall_, double precision_, double fracNA_, double F1_score_)
+            {
+                type = type_;
+                filter = filter_;
+                truthTotal = truthTotal_;
+                truthTruePositive = truthTruePositive_;
+                truthFalseNegative = truthFalseNegative_;
+                queryTotal = queryTotal_;
+                queryFalsePositive = queryFalsePositive_;
+                queryUnknown = queryUnknown_;
+                recall = recall_;
+                precision = precision_;
+                fracNA = fracNA_;
+                F1_score = F1_score_;
+            } // ctor
+
+            public SingleConcordanceResult(string type_, double recall_, double precision_)
+            {
+                type = type_;
+                filter = "PASS";
+                truthTotal = 0;
+                truthTruePositive = 0;
+                truthFalseNegative = 0;
+                queryTotal = 0;
+                queryFalsePositive = 0;
+                queryUnknown = 0;
+                recall = recall_;
+                precision = precision_;
+                fracNA = 0;
+                F1_score = 2 * recall * precision / (recall + precision);
+            } // ctor
+
+        } // SingleConcordanceResult
+        public class ConcordanceResults
+        {
+            string[] wantedFields = { "Type", "Filter", "TRUTH.TOTAL", "TRUTH.TP", "TRUTH.FN", "QUERY.TOTAL", "QUERY.FP", "QUERY.UNK", "FP.gt", "FP.al", "METRIC.Recall", "METRIC.Precision", "METRIC.Frac_NA",
+                                      "METRIC.F1_Score", "TRUTH.TOTAL.TiTv_ratio", "QUERY.TOTAL.TiTv_ratio", "TRUTH.TOTAL.het_hom_ratio", "QUERY.TOTAL.het_hom_ratio" };
+
+            public readonly Dictionary<VariantType, SingleConcordanceResult> results = new Dictionary<VariantType, SingleConcordanceResult>();
+
+            public ConcordanceResults(SingleConcordanceResult snvResult, SingleConcordanceResult indelResult)
+            {
+                results.Add(VariantType.SNV, snvResult);
+                results.Add(VariantType.Indel, indelResult);
+            }
+
+            public ConcordanceResults(string tarballFilename)
+            {
+                if (!tarballFilename.EndsWith(".tar"))
+                {
+                    throw new Exception("ASETools.ConordanceResults.ConsordanceResults(" + tarballFilename + "): tarball filename must end in .tar");
+                }
+                
+
+                var sampleName = GetFileNameFromPathname(tarballFilename).Substring(0, GetFileNameFromPathname(tarballFilename).Length - 4);
+                var summaryFilename = sampleName + ".summary.csv";
+                var tempDirectory = @"d:\temp\";
+
+                ExtractFileFromTarball(tarballFilename, summaryFilename, tempDirectory);
+
+                var extractedFilename = tempDirectory + summaryFilename;
+                if (!File.Exists(extractedFilename))
+                {
+                    throw new Exception("ASETools.ConordanceResults.ConsordanceResults(" + tarballFilename + "): unable to extract csv file " + summaryFilename);
+                }
+
+                var inputFile = CreateStreamReaderWithRetry(extractedFilename);
+                if (null == inputFile)
+                {
+                    throw new Exception("ASETools.ConordanceResults.ConsordanceResults(" + tarballFilename + "): unable to open " + extractedFilename);
+                }
+
+                var headerizedFile = new HeaderizedFile<SingleConcordanceResult>(inputFile, false, false, "", wantedFields.ToList(), separator_: ',');
+                List<SingleConcordanceResult> singleResults;
+
+                if (!headerizedFile.ParseFile(Parse, out singleResults))
+                {
+                    throw new Exception("ASETools.ConordanceResults.ConsordanceResults(" + tarballFilename + "): unable to parse file.");
+                }
+
+                inputFile.Close();
+                File.Delete(extractedFilename);
+
+                if (singleResults.Where(_ => _.type == "INDEL" && _.filter == "PASS").Count() != 1 ||
+                    singleResults.Where(_ => _.type == "SNP" && _.filter == "PASS").Count() != 1)
+                {
+                    throw new Exception("ASETools.ConordanceResults.ConsordanceResults(" + tarballFilename + "): didn't parse correct count of lines.");
+                }
+
+                results.Add(VariantType.Indel, singleResults.Where(_ => _.type == "INDEL" && _.filter == "PASS").ToList()[0]);
+                results.Add(VariantType.SNV, singleResults.Where(_ => _.type == "SNP" && _.filter == "PASS").ToList()[0]);
+            }
+        } // ConcordanceResults
+
+        static SingleConcordanceResult Parse(HeaderizedFile<SingleConcordanceResult>.FieldGrabber fieldGrabber)
+        {
+            return new SingleConcordanceResult(
+                type_: fieldGrabber.AsString("Type"), filter_: fieldGrabber.AsString("Filter"), truthTotal_: fieldGrabber.AsLong("TRUTH.TOTAL"), truthTruePositive_: fieldGrabber.AsLong("TRUTH.TP"), truthFalseNegative_: fieldGrabber.AsLong("TRUTH.FN"),
+                queryTotal_: fieldGrabber.AsLong("QUERY.TOTAL"), queryFalsePositive_: fieldGrabber.AsLong("QUERY.FP"), queryUnknown_: fieldGrabber.AsLong("QUERY.UNK"), recall_: fieldGrabber.AsDouble("METRIC.Recall"), 
+                precision_: fieldGrabber.AsDouble("METRIC.Precision"), fracNA_: fieldGrabber.AsDouble("METRIC.Frac_NA"), F1_score_: fieldGrabber.AsDouble("METRIC.F1_Score"));
+        }
 
     } // ASETools
 

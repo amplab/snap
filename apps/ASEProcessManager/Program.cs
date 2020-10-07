@@ -5168,7 +5168,7 @@ namespace ASEProcessManager
                                     linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1  2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
-#if useGEM
+//#if useGEM
 
                             case ASETools.Aligner.GEM:
 
@@ -5181,7 +5181,7 @@ namespace ASEProcessManager
                                     linuxScript.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -i " + localInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
-#endif // useGEM
+//#endif // useGEM
 
                             case ASETools.Aligner.Novoalign:
                                 if (paired)
@@ -5739,7 +5739,7 @@ namespace ASEProcessManager
 
                     foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
                     {
-                        //processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
+                        processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
                     }
                 }
             }
