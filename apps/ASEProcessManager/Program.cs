@@ -5725,7 +5725,7 @@ namespace ASEProcessManager
             foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
             {
                 processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
-                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
+                processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
             }
 
             foreach (var alignerPair in ASETools.allAlignerPairs)
@@ -5749,6 +5749,27 @@ namespace ASEProcessManager
                 foreach (var tumor in ASETools.BothBools)
                 {
                     processingStages.Add(new VennProcessingStage(tumor, variantCaller));
+                }
+            }
+
+            //
+            // Special check for empty concordance tarballs.
+            //
+            foreach (var tumor in ASETools.BothBools)
+            {
+                foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
+                {
+                    foreach (var alignerPair in ASETools.allAlignerPairs)
+                    {
+                        foreach (var case_ in stateOfTheWorld.listOfCases)
+                        {
+                            if (case_.concordance[alignerPair][variantCaller][tumor].concordance_tarball_size == 10240 &&
+                                case_.concordance[alignerPair][variantCaller][tumor].concordance_tarball_filename != "")
+                            {
+                                Console.WriteLine("Probable empty concordance tarball: " + case_.concordance[alignerPair][variantCaller][tumor].concordance_tarball_filename);
+                            }
+                        }
+                    }
                 }
             }
 
