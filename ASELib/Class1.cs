@@ -51,6 +51,11 @@ namespace ASELib
             chromosomeSizes.ToList().ForEach(x => chromosomeSizesByName.Add(x.name, x));
             chromosomeSizes.ToList().ForEach(x => chromosomeSizesByName.Add(chromosomeNameToNonChrForm(x.name), x));
 
+            foreach (var aligner in EnumUtil.GetValues<Aligner>())
+            {
+                allAligners.Add(aligner);
+            }
+
             variantTypeToName = new Dictionary<VariantType, string>();
             variantTypeToName.Add(VariantType.SNV, "SNV");
             variantTypeToName.Add(VariantType.Indel, "Indel");
@@ -153,6 +158,7 @@ namespace ASELib
         public static readonly string[] chromosomes = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrx", "chry" };// Leaves off the mitochondrial genes
         public static readonly string[] chromosomesWithMitochondria = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrx", "chry", "chrm" };
         public static readonly string[] autosomes = { "chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22" };
+        public static readonly string[] daysOfTheWeek = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };   // This is the beginning of the date output.
 
         // Used for writing out Bonferroni corrected p values in Mann Whitney tests
         public class OutputLine
@@ -4005,7 +4011,7 @@ namespace ASELib
 
         public enum Aligner
         {
-            SNAP, BWA, Bowtie,
+            SNAP, Bowtie, BWA, 
 //#if useGEM
             GEM, 
 //#endif // useGEM
@@ -4175,6 +4181,7 @@ namespace ASELib
 
         public static List<AlignerSet> allAlignerSets = new List<AlignerSet>();
         public static List<AlignerSet> allNonEmptyAlignerSets = new List<AlignerSet>();
+        public static List<Aligner> allAligners = new List<Aligner>();
 
         public enum VariantCaller
         {
@@ -16853,7 +16860,7 @@ namespace ASELib
             return new DateTime(year, month, day, hour, minute, second, DateTimeKind.Local);
         }
 
-        public class SNAPRunTiming
+        public class RunTiming
         {
             // Copy in Time (s)\tOverall Runtime (s)\tLoading Time (s)\tTime in Aligner (s)\tSort Time (s)\tTotal Reads\tAligned, MAPQ >= 10\tAligned, MAPQ < 10\tUnaligned\tToo Short/Too Many Ns\t%Pairs\tReads/s\tCopy out Time (s)\tStart Time\tStop Time
             public readonly int copyInTime;
@@ -16872,7 +16879,7 @@ namespace ASELib
             public readonly DateTime startTime;
             public readonly DateTime stopTime;
 
-            SNAPRunTiming(int copyInTime_, int overallRuntime_, int loadingTime_, int alignTime_, int sortTime_, long totalReads_, long alignedMapQAtLeast10_, long alignedMapQLessThan10_, long unaligned_, long tooShortTooManyNs_, 
+            RunTiming(int copyInTime_, int overallRuntime_, int loadingTime_, int alignTime_, int sortTime_, long totalReads_, long alignedMapQAtLeast10_, long alignedMapQLessThan10_, long unaligned_, long tooShortTooManyNs_, 
                 double fractionPairs_, int readsPerSecond_, int copyOutTime_, DateTime startTime_, DateTime stopTime_)
             {
                 copyInTime = copyInTime_;
@@ -16892,7 +16899,7 @@ namespace ASELib
                 stopTime = stopTime_;
             } // ctor
 
-            public static SNAPRunTiming LoadFromFile(string filename)
+            public static RunTiming LoadFromSNAPFile(string filename)
             {
                 //
                 // There's only one per file, so we don't return a list.
@@ -16904,9 +16911,9 @@ namespace ASELib
                     return null;
                 }
 
-                var headerizedFile = new HeaderizedFile<SNAPRunTiming>(inputFile, false, true, "", wantedFields.ToList(), totalRowsToParse_: 1);
+                var headerizedFile = new HeaderizedFile<RunTiming>(inputFile, false, true, "", wantedFields.ToList(), totalRowsToParse_: 1);
 
-                List<SNAPRunTiming> listOfResult;
+                List<RunTiming> listOfResult;
 
                 if (!headerizedFile.ParseFile(parser, out listOfResult))
                 {
@@ -16924,7 +16931,7 @@ namespace ASELib
                 }
 
                 return listOfResult[0];
-            } // LoadFromFile
+            } // LoadFromSNAPFile
 
             static readonly string[] wantedFields =
             {
@@ -16945,9 +16952,9 @@ namespace ASELib
                 "Stop Time"
             };
 
-            static SNAPRunTiming parser(HeaderizedFile<SNAPRunTiming>.FieldGrabber fieldGrabber)
+            static RunTiming parser(HeaderizedFile<RunTiming>.FieldGrabber fieldGrabber)
             {
-                return new SNAPRunTiming(
+                return new RunTiming(
                     fieldGrabber.AsIntIgnoringLeadingOrTrailingJunk("Copy in Time (s)"),
                     fieldGrabber.AsInt("Overall Runtime (s)"),
                     fieldGrabber.AsInt("Loading Time (s)"),
@@ -16964,7 +16971,103 @@ namespace ASELib
                     fieldGrabber.AsDateTime("Start Time"),
                     fieldGrabber.AsDateTime("Stop Time"));
             }
-        } // SNAPRunTiming
+
+            RunTiming(double copyInTime_, double overallRuntime_, double alignTime_, double sortTime_, DateTime startTime_, DateTime stopTime_)
+            {
+                copyInTime = (int)copyInTime_;
+                overallRuntime = (int)overallRuntime_;
+                alignTime = (int)alignTime_;
+                sortTime = (int)sortTime_;
+                startTime = startTime_;
+                stopTime = stopTime_;
+            } // ctor
+
+            public static RunTiming LoadFromLinuxFile(string inputFilename)
+            {
+                var inputFile = ASETools.CreateStreamReaderWithRetry(inputFilename);
+                if (inputFile == null)
+                {
+                    throw new Exception("Unable to open " + inputFilename);
+                }
+
+                var inputLines = new List<string>();
+                string inputLine;
+                while (null != (inputLine = inputFile.ReadLine()))
+                {
+                    inputLines.Add(inputLine);
+                }
+
+                var linesWithDates = Enumerable.Range(0, inputLines.Count()).Where(_ => daysOfTheWeek.Any(day => inputLines[_].StartsWith(day))).ToList();
+                if (linesWithDates.Count() != 7)
+                {
+                    Console.WriteLine("Incorrect number of lines with dates for " + inputFilename);
+                    return null;
+                }
+
+                List<DateTime> dates;
+                try
+                {
+                    dates = linesWithDates.Select(_ => ASETools.LinuxDateStringToDateTime(inputLines[_])).ToList();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Exception.  Lines with dates: ");
+                    linesWithDates.ForEach(_ => Console.WriteLine((inputLines[_])));
+                    Console.WriteLine("input filename " + inputFilename);
+                    throw e;
+                }
+
+                if (dates[2].Subtract(dates[1]).TotalSeconds < 30)
+                {
+                    Console.WriteLine("Extremely fast aligner run for stats file " + inputFilename);
+                }
+
+                return new RunTiming(dates[1].Subtract(dates[0]).TotalSeconds, dates[6].Subtract(dates[1]).TotalSeconds, dates[2].Subtract(dates[1]).TotalSeconds, dates[4].Subtract(dates[3]).TotalSeconds, dates[0], dates[6]);
+            } // LoadFromLinuxFile
+
+            public static RunTiming LoadFromReplicaFile(string inputFilename)
+            {
+                var inputFile = ASETools.CreateStreamReaderWithRetry(inputFilename);
+                if (inputFile == null)
+                {
+                    throw new Exception("Unable to open " + inputFilename);
+                }
+
+                var inputLines = new List<string>();
+                string inputLine;
+                while (null != (inputLine = inputFile.ReadLine()))
+                {
+                    inputLines.Add(inputLine);
+                }
+
+                var linesWithDates = Enumerable.Range(0, inputLines.Count()).Where(_ => daysOfTheWeek.Any(day => inputLines[_].StartsWith(day))).ToList();
+                if (linesWithDates.Count() != 3)
+                {
+                    Console.WriteLine("Incorrect number of lines with dates for " + inputFilename);
+                    return null;
+                }
+
+                List<DateTime> dates;
+                try
+                {
+                    dates = linesWithDates.Select(_ => ASETools.LinuxDateStringToDateTime(inputLines[_])).ToList();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Exception.  Lines with dates: ");
+                    linesWithDates.ForEach(_ => Console.WriteLine((inputLines[_])));
+                    Console.WriteLine("input filename " + inputFilename);
+                    throw e;
+                }
+
+                if (dates[2].Subtract(dates[1]).TotalSeconds < 30)
+                {
+                    Console.WriteLine("Extremely fast aligner run for stats file " + inputFilename);
+                }
+
+                return new RunTiming(dates[1].Subtract(dates[0]).TotalSeconds, 0, dates[2].Subtract(dates[1]).TotalSeconds, 0, dates[0], dates[2]);
+            }
+        } // RunTiming
 
         public static void ExtractFileFromTarball(string tarballName, string filename, string outputDirectory)
         {
@@ -17159,6 +17262,11 @@ namespace ASELib
             {
                 results.Add(VariantType.SNV, snvResult);
                 results.Add(VariantType.Indel, indelResult);
+            }
+
+            public double Mean_F1_Score()
+            {
+                return (results[VariantType.Indel].F1_score + results[VariantType.SNV].F1_score) / 2;
             }
 
             public ConcordanceResults(string tarballFilename)

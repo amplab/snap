@@ -116,7 +116,7 @@ namespace SummarizeSNAPPerformance
 
                 var paired = metadataByCase[case_.case_id].getBAMMetadata(tumor, true).isPaired;
 
-                var stats = ASETools.SNAPRunTiming.LoadFromFile(inputFilename);
+                var stats = ASETools.RunTiming.LoadFromSNAPFile(inputFilename);
 
                 state.histograms[tumor][paired].alignTimeHistogram.addValue(stats.alignTime);
                 state.histograms[tumor][paired].indexLoadTimeHistogram.addValue(stats.loadingTime);

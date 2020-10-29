@@ -69,7 +69,6 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
         } // PerThreadState
 
         static Dictionary<bool, PerThreadState> globalState = new Dictionary<bool, PerThreadState>(); // tumor -> state
-        static string[] daysOfTheWeek = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };   // This is the beginning of the date output.
         static ASETools.Aligner aligner;
 
 
@@ -105,7 +104,7 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
                     inputLines.Add(inputLine);
                 }
 
-                var linesWithDates = Enumerable.Range(0, inputLines.Count()).Where(_ => daysOfTheWeek.Any(day => inputLines[_].StartsWith(day))).ToList();
+                var linesWithDates = Enumerable.Range(0, inputLines.Count()).Where(_ => ASETools.daysOfTheWeek.Any(day => inputLines[_].StartsWith(day))).ToList();
                 if (linesWithDates.Count() != 7)
                 {
                     Console.WriteLine("Incorrect number of lines with dates for " + inputFilename);
