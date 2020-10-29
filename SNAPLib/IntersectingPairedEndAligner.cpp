@@ -659,7 +659,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
 
 
     //
-    // Phase 3: score and merge the candidates we've found.
+    // Phase 3: score and merge the candidates we've found using Laundau-Vishkin (edit distance, not affine gap).
     //
     int currentBestPossibleScoreList = 0;
 
@@ -850,24 +850,24 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                                     return false;
                                 }
 
-                                PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-                                result->alignedAsPair = true;
+                                PairedAlignmentResult *secondaryResult = &secondaryResults[*nSecondaryResults];
+                                secondaryResult->alignedAsPair = true;
 
                                 for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-                                    result->direction[r] = scoresForAllAlignments.bestResultDirection[r];
-                                    result->location[r] = scoresForAllAlignments.bestResultGenomeLocation[r];
-                                    result->origLocation[r] = scoresForAllAlignments.bestResultOrigGenomeLocation[r];
-                                    result->mapq[r] = 0;
-                                    result->score[r] = scoresForAllAlignments.bestResultScore[r];
-                                    result->status[r] = MultipleHits;
-                                    result->usedAffineGapScoring[r] = scoresForAllAlignments.bestResultUsedAffineGapScoring[r];
-                                    result->basesClippedBefore[r] = scoresForAllAlignments.bestResultBasesClippedBefore[r];
-                                    result->basesClippedAfter[r] = scoresForAllAlignments.bestResultBasesClippedAfter[r];
-                                    result->agScore[r] = scoresForAllAlignments.bestResultAGScore[r];
-                                    result->seedOffset[r] = scoresForAllAlignments.bestResultSeedOffset[r];
-                                    result->popularSeedsSkipped[r] = popularSeedsSkipped[r];
-                                    result->lvIndels[r] = scoresForAllAlignments.bestResultLVIndels[r];
-                                    result->matchProbability[r] = scoresForAllAlignments.bestResultMatchProbability[r];
+                                    secondaryResult->direction[r] = scoresForAllAlignments.bestResultDirection[r];
+                                    secondaryResult->location[r] = scoresForAllAlignments.bestResultGenomeLocation[r];
+                                    secondaryResult->origLocation[r] = scoresForAllAlignments.bestResultOrigGenomeLocation[r];
+                                    secondaryResult->mapq[r] = 0;
+                                    secondaryResult->score[r] = scoresForAllAlignments.bestResultScore[r];
+                                    secondaryResult->status[r] = MultipleHits;
+                                    secondaryResult->usedAffineGapScoring[r] = scoresForAllAlignments.bestResultUsedAffineGapScoring[r];
+                                    secondaryResult->basesClippedBefore[r] = scoresForAllAlignments.bestResultBasesClippedBefore[r];
+                                    secondaryResult->basesClippedAfter[r] = scoresForAllAlignments.bestResultBasesClippedAfter[r];
+                                    secondaryResult->agScore[r] = scoresForAllAlignments.bestResultAGScore[r];
+                                    secondaryResult->seedOffset[r] = scoresForAllAlignments.bestResultSeedOffset[r];
+                                    secondaryResult->popularSeedsSkipped[r] = popularSeedsSkipped[r];
+                                    secondaryResult->lvIndels[r] = scoresForAllAlignments.bestResultLVIndels[r];
+                                    secondaryResult->matchProbability[r] = scoresForAllAlignments.bestResultMatchProbability[r];
                                 }
  
                                 (*nSecondaryResults)++;
@@ -875,28 +875,31 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                             } // If we're saving the old best score as a secondary result
 
                             if (!mergeReplacement && (pairProbability > scoresForAllAlignments.probabilityOfBestPair) && (maxLVCandidatesForAffineGapBufferSize > 0) && (extraSearchDepth >= scoresForAllAlignments.bestPairScore - pairScore)) {
+                                //
+                                // This is close enough that scoring it with affine gap scoring might make it be the best result.  Save it for possible consideration in pase 4.
+                                //
                                 if (*nLVCandidatesForAffineGap >= maxLVCandidatesForAffineGapBufferSize) {
                                     *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1;
                                     return false;
                                 }
-                                PairedAlignmentResult *result = &lvCandidatesForAffineGap[*nLVCandidatesForAffineGap];
-                                result->alignedAsPair = true;
+                                PairedAlignmentResult *agResult = &lvCandidatesForAffineGap[*nLVCandidatesForAffineGap];
+                                agResult->alignedAsPair = true;
 
                                 for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-                                    result->direction[r] = scoresForAllAlignments.bestResultDirection[r];
-                                    result->location[r] = scoresForAllAlignments.bestResultGenomeLocation[r];
-                                    result->origLocation[r] = scoresForAllAlignments.bestResultOrigGenomeLocation[r];
-                                    result->mapq[r] = 0;
-                                    result->score[r] = scoresForAllAlignments.bestResultScore[r];
-                                    result->status[r] = MultipleHits;
-                                    result->usedAffineGapScoring[r] = scoresForAllAlignments.bestResultUsedAffineGapScoring[r];
-                                    result->basesClippedBefore[r] = scoresForAllAlignments.bestResultBasesClippedBefore[r];
-                                    result->basesClippedAfter[r] = scoresForAllAlignments.bestResultBasesClippedAfter[r];
-                                    result->agScore[r] = scoresForAllAlignments.bestResultAGScore[r];
-                                    result->seedOffset[r] = scoresForAllAlignments.bestResultSeedOffset[r];
-                                    result->popularSeedsSkipped[r] = popularSeedsSkipped[r];
-                                    result->lvIndels[r] = scoresForAllAlignments.bestResultLVIndels[r];
-                                    result->matchProbability[r] = scoresForAllAlignments.bestResultMatchProbability[r];
+                                    agResult->direction[r] = scoresForAllAlignments.bestResultDirection[r];
+                                    agResult->location[r] = scoresForAllAlignments.bestResultGenomeLocation[r];
+                                    agResult->origLocation[r] = scoresForAllAlignments.bestResultOrigGenomeLocation[r];
+                                    agResult->mapq[r] = 0;
+                                    agResult->score[r] = scoresForAllAlignments.bestResultScore[r];
+                                    agResult->status[r] = MultipleHits;
+                                    agResult->usedAffineGapScoring[r] = scoresForAllAlignments.bestResultUsedAffineGapScoring[r];
+                                    agResult->basesClippedBefore[r] = scoresForAllAlignments.bestResultBasesClippedBefore[r];
+                                    agResult->basesClippedAfter[r] = scoresForAllAlignments.bestResultBasesClippedAfter[r];
+                                    agResult->agScore[r] = scoresForAllAlignments.bestResultAGScore[r];
+                                    agResult->seedOffset[r] = scoresForAllAlignments.bestResultSeedOffset[r];
+                                    agResult->popularSeedsSkipped[r] = popularSeedsSkipped[r];
+                                    agResult->lvIndels[r] = scoresForAllAlignments.bestResultLVIndels[r];
+                                    agResult->matchProbability[r] = scoresForAllAlignments.bestResultMatchProbability[r];
                                 }
 
                                 (*nLVCandidatesForAffineGap)++;
@@ -1256,6 +1259,10 @@ IntersectingPairedEndAligner::alignAffineGap(
         PairedAlignmentResult *lvCandidatesForAffineGap
     )
 {
+    //
+    // Phase 4: Re-score candidates that need to be using affine gap scoring, and change the result if necessary.
+    //
+
     if (result->status[0] == NotFound || result->status[1] == NotFound) {
         return true;
     }
@@ -1338,12 +1345,10 @@ IntersectingPairedEndAligner::alignAffineGap(
             if (result->score[r] != ScoreAboveLimit) {
                 result->location[r] = result->origLocation[r] + genomeOffset[r];
                 scoreLimit -= result->score[r];
-            }
-            else {
+            } else {
                 result->status[r] = NotFound;
             }
-        }
-        else {
+        } else {
             //
             // Skip affine gap scoring for reads we know that LV and affine gap will agree on the alignment
             //
@@ -1425,69 +1430,69 @@ IntersectingPairedEndAligner::alignAffineGap(
 
         for (int i = 0; i < *nLVCandidatesForAffineGap; i++) {
 
-        PairedAlignmentResult* lvResult = &lvCandidatesForAffineGap[i];
-        int lvPairScore = lvResult->score[0] + lvResult->score[1];
-        int lvPairIndels = lvResult->lvIndels[0] + lvResult->lvIndels[1];
+            PairedAlignmentResult* lvResult = &lvCandidatesForAffineGap[i];
+            int lvPairScore = lvResult->score[0] + lvResult->score[1];
+            int lvPairIndels = lvResult->lvIndels[0] + lvResult->lvIndels[1];
 
-        //
-        // Use the maximum scoreLimit if we expect the read could have alignments with large indels
-        //
-        if ((lvPairScore > bestPairScore + extraSearchDepth) && (lvPairIndels > 1)) {
-            scoreLimit = maxK + extraSearchDepth;
-        }
-
-        if ((lvPairScore <= bestPairScore + extraSearchDepth) || (lvPairIndels > 1)) {
-        _ASSERT(lvResult->status[0] != NotFound && lvResult->status[1] != NotFound);
-        bool nonALTAlignment = (!altAwareness) || !genome->isGenomeLocationALT(lvResult->location[0]);
-        double oldPairProbability = lvResult->matchProbability[0] * lvResult->matchProbability[1];
-
-        if (!skipAffineGap[0]) {
             //
-            // Score first read with affine gap
+            // Use the maximum scoreLimit if we expect the read could have alignments with large indels
             //
-            lvResult->usedAffineGapScoring[0] = true;
-            scoreLocationWithAffineGap(0, lvResult->direction[0], lvResult->origLocation[0],
-	            lvResult->seedOffset[0], scoreLimit, &lvResult->score[0], &lvResult->matchProbability[0],
-	            &genomeOffset[0], &lvResult->basesClippedBefore[0], &lvResult->basesClippedAfter[0], &lvResult->agScore[0]);
+            if ((lvPairScore > bestPairScore + extraSearchDepth) && (lvPairIndels > 1)) {
+                scoreLimit = maxK + extraSearchDepth;
             }
 
-            if (lvResult->score[0] != ScoreAboveLimit) {
-                lvResult->location[0] = lvResult->origLocation[0] + genomeOffset[0];
+            if ((lvPairScore <= bestPairScore + extraSearchDepth) || (lvPairIndels > 1)) {
+                _ASSERT(lvResult->status[0] != NotFound && lvResult->status[1] != NotFound);
+                bool nonALTAlignment = (!altAwareness) || !genome->isGenomeLocationALT(lvResult->location[0]);
+                double oldPairProbability = lvResult->matchProbability[0] * lvResult->matchProbability[1];
 
-                if (!skipAffineGap[1]) {
+                if (!skipAffineGap[0]) {
                     //
-                    // Score mate with affine gap
+                    // Score first read with affine gap
                     //
-                    lvResult->usedAffineGapScoring[1] = true;
-                    scoreLocationWithAffineGap(1, lvResult->direction[1], lvResult->origLocation[1],
-	                    lvResult->seedOffset[1], scoreLimit - lvResult->score[0], &lvResult->score[1], &lvResult->matchProbability[1],
-	                    &genomeOffset[1], &lvResult->basesClippedBefore[1], &lvResult->basesClippedAfter[1], &lvResult->agScore[1]);
+                    lvResult->usedAffineGapScoring[0] = true;
+                    scoreLocationWithAffineGap(0, lvResult->direction[0], lvResult->origLocation[0],
+	                    lvResult->seedOffset[0], scoreLimit, &lvResult->score[0], &lvResult->matchProbability[0],
+	                    &genomeOffset[0], &lvResult->basesClippedBefore[0], &lvResult->basesClippedAfter[0], &lvResult->agScore[0]);
                 }
 
-                if (lvResult->score[1] != ScoreAboveLimit) {
-                    lvResult->location[1] = lvResult->origLocation[1] + genomeOffset[1];
-                    double pairProbability = lvResult->matchProbability[0] * lvResult->matchProbability[1];
-                    int pairScore = lvResult->score[0] + lvResult->score[1];
-                    int pairAGScore = lvResult->agScore[0] + lvResult->agScore[1];
+                if (lvResult->score[0] != ScoreAboveLimit) {
+                    lvResult->location[0] = lvResult->origLocation[0] + genomeOffset[0];
 
-                    //
-                    // Update match probabilities for read pair and best hit if better
-                    //
-                    scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbability);
-                    bool updatedBestScore = scoresForAllAlignments.updateBestHitIfNeeded(pairScore, pairAGScore, pairProbability, lvResult);
-                    if (nonALTAlignment) {
-	                    scoresForNonAltAlignments.updateProbabilityOfAllPairs(oldPairProbability);
-	                    scoresForNonAltAlignments.updateBestHitIfNeeded(pairScore, pairAGScore, pairProbability, lvResult);
-                    }
+                    if (!skipAffineGap[1]) {
+                        //
+                        // Score mate with affine gap
+                        //
+                        lvResult->usedAffineGapScoring[1] = true;
+                        scoreLocationWithAffineGap(1, lvResult->direction[1], lvResult->origLocation[1],
+	                        lvResult->seedOffset[1], scoreLimit - lvResult->score[0], &lvResult->score[1], &lvResult->matchProbability[1],
+	                        &genomeOffset[1], &lvResult->basesClippedBefore[1], &lvResult->basesClippedAfter[1], &lvResult->agScore[1]);
+                    } // if !skipAffineGap[1]
 
-                    //
-                    // Update scoreLimit so that we only look for alignments extraSearchDepth worse than the best
-                    //
-                    scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
-                    }
-                }
-            }
-        }
+                    if (lvResult->score[1] != ScoreAboveLimit) {
+                        lvResult->location[1] = lvResult->origLocation[1] + genomeOffset[1];
+                        double pairProbability = lvResult->matchProbability[0] * lvResult->matchProbability[1];
+                        int pairScore = lvResult->score[0] + lvResult->score[1];
+                        int pairAGScore = lvResult->agScore[0] + lvResult->agScore[1];
+
+                        //
+                        // Update match probabilities for read pair and best hit if better
+                        //
+                        scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbability);
+                        bool updatedBestScore = scoresForAllAlignments.updateBestHitIfNeeded(pairScore, pairAGScore, pairProbability, lvResult);
+                        if (nonALTAlignment) {
+	                        scoresForNonAltAlignments.updateProbabilityOfAllPairs(oldPairProbability);
+	                        scoresForNonAltAlignments.updateBestHitIfNeeded(pairScore, pairAGScore, pairProbability, lvResult);
+                        } // nonALTAlignment
+
+                        //
+                        // Update scoreLimit so that we only look for alignments extraSearchDepth worse than the best
+                        //
+                        scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
+                    } // lvResult->score[1] != ScoreAboveLimit
+                } // lvResult->score[0] != ScoreAboveLimit
+            } // If we want to score this candidate with affine gap
+        } // for each candidate from LV
     }
 
     //

@@ -2649,11 +2649,6 @@ BAMDupMarkFilter::onNextBatch(
     }
 
 #ifdef VALIDATE_WRITE
-    if (lastBatch) {
-        if (mates.size() > 0) {
-            WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", mates.size());
-        }
-    }
     fprintf(stderr, "MateMap size:%d\n", mates.size());
     fprintf(stderr, "FragmentMap size:%d\n", fragments.size());
 #endif
@@ -2903,9 +2898,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             // Keep duplicate entry around till we find the mate. This allows us to match indexInFile tie breaking used in Picard MarkDup.
             // TODO: We have not ensured this when the read and its mate are mapped more than INT_MAX apart, since TLEN is 32-bit signed.
             //       The SAM spec says TLEN = 0 for reads mapped to different chromosomes. In these cases we must store the offset of the
-            //       in an auxiliary tag.
+            //       mate in an auxiliary tag.
             //
-            if (spacing > INT_MAX || (loc == key.locations[1] && isRC == key.isRC[1])) {
+            if (spacing > INT_MAX || (loc == key.locations[1] && isRC == key.isRC[1]) ||
+               (loc == key.locations[0] && isRC == key.isRC[0] && (record->getLocation(genome) > record->getNextLocation(genome)))) {
                 //fprintf(stderr, "erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                 mates.erase(key);
             }
