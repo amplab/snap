@@ -11,6 +11,8 @@ namespace Pareto
 {
     class Program
     {
+
+        enum ParetoRunType { HAndS, D};
         class Result
         {
             public Result(string resultName_, ASETools.RunTiming timing_, ASETools.ConcordanceResults concordance_)
@@ -71,122 +73,131 @@ namespace Pareto
             readonly public string resultName;
         }
 
-        static void Pareto(string runName)
+        static void Pareto(string runName, ParetoRunType runType)
         {
-            int[] hValues = { 250, 500, 1000, 2000, 4000, 8000, 16000, 32000 };
-            int[] seedSizes = { 16, 20, 22, 25, 27, 30, 32 };
 
             var timingDirectory = @"d:\temp\timings\";
             var concordanceDirectory = @"d:\temp\concordance\";
 
-            var results = new Dictionary<int, Dictionary<int, Result>>();
-
             int nRunsFound = 0;
             int nRunsWithConcordance = 0;
 
-            foreach (var H in hValues)
+            var allResults = new List<Result>();
+
+            switch (runType) 
             {
-                results.Add(H, new Dictionary<int, Result>());
-                foreach (var seedSize in seedSizes)
-                {
-                    var timingFilename = timingDirectory + runName + ".snap.H" + H + ".s" + seedSize + "_timings.txt";
-                    var concordanceFilename = concordanceDirectory + runName + ".snap.H" + H + ".s" + seedSize + ".concordance.tar";
+                case ParetoRunType.HAndS:
 
-                    //
-                    // Special case H4000 s25, which is the default.
-                    //
-                    if (H == 4000 && seedSize == 25)
+                    int[] hValues = { 250, 500, 1000, 2000, 4000, 8000, 16000, 32000 };
+                    int[] seedSizes = { 16, 20, 22, 25, 27, 30, 32 };
+
+                    foreach (var H in hValues)
                     {
-                        timingFilename = timingDirectory + runName + ".snap_timings.txt";
-                        concordanceFilename = concordanceDirectory + runName + ".snap.concordance.tar";
-                    }
-
-                    if (File.Exists(timingFilename))
-                    {
-                        nRunsFound++;
-
-                        var runTiming = ASETools.RunTiming.LoadFromSNAPFile(timingFilename);
-
-                        ASETools.ConcordanceResults concordance = null;
-
-                        if (File.Exists(concordanceFilename))
+                        foreach (var seedSize in seedSizes)
                         {
-                            concordance = new ASETools.ConcordanceResults(concordanceFilename);
-                            nRunsWithConcordance++;
+                            var timingFilename = timingDirectory + runName + ".snap.H" + H + ".s" + seedSize + "_timings.txt";
+                            var concordanceFilename = concordanceDirectory + runName + ".snap.H" + H + ".s" + seedSize + ".concordance.tar";
+
+                            //
+                            // Special case H4000 s25, which is the default.
+                            //
+                            if (H == 4000 && seedSize == 25)
+                            {
+                                timingFilename = timingDirectory + runName + ".snap_timings.txt";
+                                concordanceFilename = concordanceDirectory + runName + ".snap.concordance.tar";
+                            }
+
+                            if (File.Exists(timingFilename))
+                            {
+                                nRunsFound++;
+
+                                var runTiming = ASETools.RunTiming.LoadFromSNAPFile(timingFilename);
+
+                                ASETools.ConcordanceResults concordance = null;
+
+                                if (File.Exists(concordanceFilename))
+                                {
+                                    concordance = new ASETools.ConcordanceResults(concordanceFilename);
+                                    nRunsWithConcordance++;
+                                }
+
+                                allResults.Add(new Result("" + H + "\t" + seedSize, runTiming, concordance));
+                            }
+                            else
+                            {
+                                allResults.Add(new Result("" + H + "\t" + seedSize, 0, null));
+                            }
+
+                        } // seed size
+                    } // H
+                    break;
+
+                case ParetoRunType.D:
+                    int[] dValues = { 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 }; 
+
+                    foreach (var d in dValues)
+                    {
+                        var timingFilename = timingDirectory + runName + ".snap.d" + d + ".s25_timings.txt";
+                        var concordanceFilename = concordanceDirectory + runName + ".snap.d" + d + ".s25.concordance.tar";
+
+                        //
+                        // d32 is the default, special case it.
+                        if (d == 32)
+                        {
+                            timingFilename = timingDirectory + runName + ".snap_timings.txt";
+                            concordanceFilename = concordanceDirectory + runName + ".snap.concordance.tar";
                         }
 
-                        results[H].Add(seedSize, new Result("" + H + "\t" + seedSize, runTiming, concordance));
-                    }
-                    else
-                    {
-                        results[H].Add(seedSize, new Result("" + H + "\t" + seedSize, 0, null));
+                        if (File.Exists(timingFilename))
+                        {
+
+                            var runTiming = ASETools.RunTiming.LoadFromSNAPFile(timingFilename);
+
+                            if (runTiming != null)
+                            {
+                                nRunsFound++;
+
+                                ASETools.ConcordanceResults condordance = null;
+
+                                if (File.Exists(concordanceFilename))
+                                {
+                                    condordance = new ASETools.ConcordanceResults(concordanceFilename);
+                                    nRunsWithConcordance++;
+                                }
+
+                                allResults.Add(new Result("" + d, runTiming, condordance));
+                            }
+                        } 
                     }
 
-                } // seed size
-            } // H
+                    break;
+
+            }
 
             Console.WriteLine(runName + ": " + nRunsFound + " total SNAP runs, of which " + nRunsWithConcordance + " have concordance.");
 
-            var allResults = new List<Result>();
 
-            foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
-            {
-                if (aligner == ASETools.Aligner.SNAP) continue;
-
-                var timingFilename = timingDirectory + runName + "." + ASETools.alignerName[aligner].ToLower() + "_timings.txt";
-                if (File.Exists(timingFilename))
-                {
-                    ASETools.ConcordanceResults concordance = null;
-
-                    var concordanceFilename = concordanceDirectory + runName + "." + ASETools.alignerName[aligner].ToLower() + ".concordance.tar";
-                    if (File.Exists(concordanceFilename))
-                    {
-                        concordance = new ASETools.ConcordanceResults(concordanceFilename);
-                    }
-
-                    allResults.Add(new Result(ASETools.alignerName[aligner] + "\t", ASETools.RunTiming.LoadFromLinuxFile(timingFilename), concordance));
-                }
-            }
-
-#if false
-
-            var bwa = new Result("BWA\t", 0.832175926, new ASETools.ConcordanceResults(new ASETools.SingleConcordanceResult("SNP", 0.999568, 0.982369), new ASETools.SingleConcordanceResult("INDEL", 0.961477, 0.955432)));
-            var bowtie = new Result("Bowtie\t", 1.045185185, new ASETools.ConcordanceResults(new ASETools.SingleConcordanceResult("SNP", 0.978907, 0.993347), new ASETools.SingleConcordanceResult("INDEL", 0.95743, 0.965235)));
-            var novoalign = new Result("Novoalign\t", 8.247222222, new ASETools.ConcordanceResults(new ASETools.SingleConcordanceResult("SNP", 0.999556, 0.988173), new ASETools.SingleConcordanceResult("INDEL", 0.968255, 0.963358)));
-            var gem = new Result("GEM\t", 0.222291667, new ASETools.ConcordanceResults(new ASETools.SingleConcordanceResult("SNP", 0.983147, 0.992375), new ASETools.SingleConcordanceResult("INDEL", 0.950528, 0.963512)));
-
-            allResults.Add(bwa);
-            allResults.Add(bowtie);
-            allResults.Add(novoalign);
-            allResults.Add(gem);
-#endif // false
-
-            var snapResultsWithConcordance = new List<Result>();
-
-            foreach (var H in hValues)
-            {
-                foreach (var seedSize in seedSizes)
-                {
-                    allResults.Add(results[H][seedSize]);
-                    if (results[H][seedSize].concordance != null)
-                    {
-                        snapResultsWithConcordance.Add(results[H][seedSize]);
-                    }
-                } // seedSize
-            } // H
-
-            var outputFilename = @"d:\temp\pareto_" + runName + ".txt";
+            var outputFilename = @"d:\temp\pareto_" + runName + (runType == ParetoRunType.D ? "-d" : "") + ".txt";
             var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
 
             if (null == outputFile) return;
 
-            outputFile.WriteLine("H\tseed\tRun time\tSNV F1\tIndel F1\tMean F1\tSNV recall\tSNV precision\tIndel recall\tIndel precision\t2D dominated\t3D dominated\t5D dominated\t2D dominating\t3D dominating\t5D dominating");
+            switch (runType)
+            {
+                case ParetoRunType.HAndS:
+                    outputFile.Write("H\tseed\t");
+                    break;
+                case ParetoRunType.D:
+                    outputFile.Write("D\t");
+                    break;
+            }
+            outputFile.WriteLine("Run time\tSNV F1\tIndel F1\tMean F1\tSNV recall\tSNV precision\tIndel recall\tIndel precision\t2D dominated\t3D dominated\t5D dominated\t2D dominating\t3D dominating\t5D dominating");
             foreach (var result in allResults)
             {
                 outputFile.Write(result.resultName + "\t" + result.runTimeInDays);
                 if (result.concordance != null)
                 {
-                    var otherSNAPResults = snapResultsWithConcordance.Where(_ => _ != result).ToList();
+                    var otherSNAPResults = allResults.Where(_ => _ != result && _.concordance != null).ToList();
                     outputFile.Write("\t" + result.F1(ASETools.VariantType.SNV) + "\t" + result.F1(ASETools.VariantType.Indel) + "\t" +
                         result.meanF1() + "\t" +
                         result.recall(ASETools.VariantType.SNV) + "\t" + result.precision(ASETools.VariantType.SNV) + "\t" +
@@ -201,8 +212,10 @@ namespace Pareto
         }
         static void Main(string[] args)
         {
-            Pareto("hg003");
-            Pareto("ERR194147");
+            Pareto("hg003", ParetoRunType.HAndS);
+            Pareto("ERR194147", ParetoRunType.HAndS);
+            Pareto("hg007", ParetoRunType.HAndS);
+            Pareto("hg003", ParetoRunType.D);
         } // Main
 
 
