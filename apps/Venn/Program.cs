@@ -21,6 +21,8 @@ namespace Venn
         static ASETools.VariantCaller variantCaller;
         static bool tumor;
 
+        static ASETools.BedFile lowCompexityRegions;
+
 
          static void Main(string[] args)
         {
@@ -33,9 +35,9 @@ namespace Venn
                 return;
             }
 
-            if (configuration.commandLineArgs.Count() < 3)
+            if (configuration.commandLineArgs.Count() < 4)
             {
-                Console.WriteLine("usage: Venn variantCaller tumorOrNormal {caseID}");
+                Console.WriteLine("usage: Venn variantCaller tumorOrNormal lowComplexityBEDFileName {caseID}");
                 return;
             }
 
@@ -56,6 +58,8 @@ namespace Venn
             tumor = configuration.commandLineArgs[1] == ASETools.tumorToString[true];
             variantCaller = ASETools.variantCallerName.Where(_ => _.Value == configuration.commandLineArgs[0]).ToList()[0].Key;
 
+            lowCompexityRegions = new ASETools.BedFile(args[2]);
+
             cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
             if (null == cases)
             {
@@ -63,7 +67,7 @@ namespace Venn
                 return;
             }
 
-            for (int i = 2; i < configuration.commandLineArgs.Count(); i++)
+            for (int i = 3; i < configuration.commandLineArgs.Count(); i++)
             {
                 if (!cases.ContainsKey(configuration.commandLineArgs[i]))
                 {
@@ -240,6 +244,15 @@ namespace Venn
                 }
 
                 var variant = Variant.FromVCFLine(inputLine, alignerPair);
+
+                if (lowCompexityRegions.isRangeIncluded(variant.locus.contig, variant.locus.pos))
+                {
+                    // Skip the ones in low-complexity regions.
+Console.WriteLine("Skipping variant in LCR " + variant.locus.contig + ":" + variant.locus.pos);
+                    continue;
+                }
+Console.WriteLine("Keeping variant " + variant.locus.contig + ":" + variant.locus.pos);
+
                 if (!retVal.ContainsKey(variant.locus))
                 {
                     retVal.Add(variant.locus, new List<Variant>());
@@ -269,7 +282,7 @@ namespace Venn
                     if (!variantsByLocus.ContainsKey(locus))
                     {
                         variantsByLocus.Add(locus, new List<Variant>());
-                    } else { }
+                    }
 
                     variantsByLocus[locus].AddRange(variantsForThisPair[locus]);
                 } // locus

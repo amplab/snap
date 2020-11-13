@@ -4862,7 +4862,7 @@ namespace ASEProcessManager
 
                         if (nOnOutputLine == 0)
                         {
-                            outputLine = stateOfTheWorld.configuration.binariesDirectory + "Venn.exe " + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor];
+                            outputLine = stateOfTheWorld.configuration.binariesDirectory + "Venn.exe " + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor] + @" d:\gdc\LCR-hs38.bed.gz";
                         }
 
                         outputLine += " " + case_.case_id;
@@ -5725,7 +5725,7 @@ namespace ASEProcessManager
             foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
             {
                 processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
-                processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
+                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
             }
 
             foreach (var alignerPair in ASETools.allAlignerPairs)
@@ -5739,6 +5739,7 @@ namespace ASEProcessManager
 
                     foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
                     {
+                        if (variantCaller == ASETools.VariantCaller.Freebayes) continue;    // not now
                         processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
                     }
                 }

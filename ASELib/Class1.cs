@@ -59,15 +59,15 @@ namespace ASELib
             variantTypeToName = new Dictionary<VariantType, string>();
             variantTypeToName.Add(VariantType.SNV, "SNV");
             variantTypeToName.Add(VariantType.Indel, "Indel");
- 
+
             alignerName = new Dictionary<Aligner, string>();
             alignerName.Add(Aligner.SNAP, "SNAP");
             alignerName.Add(Aligner.BWA, "BWA");
             alignerName.Add(Aligner.Bowtie, "Bowtie");
             alignerName.Add(Aligner.Novoalign, "Novoalign");
-//#if useGEM
+            //#if useGEM
             alignerName.Add(Aligner.GEM, "GEM");
-//#endif // useGEM
+            //#endif // useGEM
 
             foreach (var alignerA in EnumUtil.GetValues<Aligner>())
             {
@@ -1424,7 +1424,7 @@ namespace ASELib
             }
         }
 
-        public class VariantCallFiles 
+        public class VariantCallFiles
         {
             public string vcf_filename = "";
             public string vcf_idx_filename = "";
@@ -2082,7 +2082,7 @@ namespace ASELib
                                                                         c => c.normal_isoform_expression_quantification_md5, (c, v) => c.normal_isoform_expression_quantification_md5 = v));
 
 
-                    derivedFileTypes.Add(new DerivedFileType("Normal DNA Allcount", c => c.normal_dna_allcount_filename, (c, v) => c.normal_dna_allcount_filename = v,normalDNAAllcountExtension, c => c.normal_dna_file_id, c => c.normal_dna_allcount_size, (c, v) => c.normal_dna_allcount_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Normal DNA Allcount", c => c.normal_dna_allcount_filename, (c, v) => c.normal_dna_allcount_filename = v, normalDNAAllcountExtension, c => c.normal_dna_file_id, c => c.normal_dna_allcount_size, (c, v) => c.normal_dna_allcount_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Tumor DNA Allcount", c => c.tumor_dna_allcount_filename, (c, v) => c.tumor_dna_allcount_filename = v, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Normal RNA Allcount", c => c.normal_rna_allcount_filename, (c, v) => c.normal_rna_allcount_filename = v, normalRNAAllcountExtension, c => c.normal_rna_file_id, c => c.normal_rna_allcount_size, (c, v) => c.normal_rna_allcount_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Tumor RNA Allcount", c => c.tumor_rna_allcount_filename, (c, v) => c.tumor_rna_allcount_filename = v, tumorRNAAllcountExtension, c => c.tumor_rna_file_id, c => c.tumor_rna_allcount_size, (c, v) => c.tumor_rna_allcount_size = v));
@@ -2154,7 +2154,7 @@ namespace ASELib
                                 var variantCaller_ = variantCaller;
 
                                 derivedFileTypes.Add(new DerivedFileType(alignerPair.ToString() + " " + variantCallerName[variantCaller] + " " + tumorToString[tumor] + " Concordance Tarball", c => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_filename,
-                                    (c,v) => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_filename = v, 
+                                    (c, v) => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_filename = v,
                                     "." + alignerPair + "-" + tumorToString[tumor] + "-" + variantCallerName[variantCaller] + ".tar", c => c.getDNAFileIdByTumor(tumor_),
                                     c => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_size, (c, v) => c.concordance[alignerPair_][variantCaller_][tumor_].concordance_tarball_size = v));
                             } // variant caller
@@ -4011,10 +4011,10 @@ namespace ASELib
 
         public enum Aligner
         {
-            SNAP, Bowtie, BWA, 
-//#if useGEM
-            GEM, 
-//#endif // useGEM
+            SNAP, BWA, Bowtie,
+            //#if useGEM
+            GEM,
+            //#endif // useGEM
             Novoalign,
         };
 
@@ -4240,7 +4240,7 @@ namespace ASELib
 
                 if (possibleFields.Count() == 0)
                 {
-                    if (useGEM || !pathname.ToLower().Contains("gem")) 
+                    if (useGEM || !pathname.ToLower().Contains("gem"))
                     {
                         Console.WriteLine("Derived file with unknown extension: " + pathname);
                     }
@@ -4422,7 +4422,7 @@ namespace ASELib
                                 {
                                     Console.WriteLine("Skipping md5 file " + md5Pathname + " because of an IO error.  It's most likely being created now.");
                                 }
-                            } 
+                            }
                         } // MD5 name matches
                     } // Has an MD5
 
@@ -4535,7 +4535,7 @@ namespace ASELib
             configuration.dataDirectories.ForEach(_ => perDirectoryState.Add(_, new ScannedFilesystem()));
 
             var threads = new List<Thread>();
-            
+
             foreach (var directory in configuration.dataDirectories)
             {
                 threads.Add(new Thread(() => ScanOneFilesystem(configuration, directory, perDirectoryState[directory], stopwatch, paddingLength + directoryHeader.Count(), verifyMD5s)));
@@ -4562,7 +4562,7 @@ namespace ASELib
 
                     if (downloadedFile.fileInfo.LastWriteTime < downloadedFiles[downloadedFile.file_id].fileInfo.LastWriteTime)
                     {
-                        Console.WriteLine(downloadedFile.fileInfo.FullName +" (" + downloadedFile.fileInfo.LastWriteTime + ") and " + downloadedFiles[downloadedFile.file_id].fileInfo.FullName + " (" + downloadedFiles[downloadedFile.file_id].fileInfo.LastWriteTime + ")");
+                        Console.WriteLine(downloadedFile.fileInfo.FullName + " (" + downloadedFile.fileInfo.LastWriteTime + ") and " + downloadedFiles[downloadedFile.file_id].fileInfo.FullName + " (" + downloadedFiles[downloadedFile.file_id].fileInfo.LastWriteTime + ")");
                     } else
                     {
                         Console.WriteLine(downloadedFiles[downloadedFile.file_id].fileInfo.FullName + " (" + downloadedFiles[downloadedFile.file_id].fileInfo.LastWriteTime + ") and " + downloadedFile.fileInfo.FullName + " (" + downloadedFile.fileInfo.LastWriteTime + ")");
@@ -5035,7 +5035,7 @@ namespace ASELib
                         return 0;
                     }
 
-                    return Convert.ToInt32(stringValue.Substring(firstDigit, lastDigit - firstDigit +1));
+                    return Convert.ToInt32(stringValue.Substring(firstDigit, lastDigit - firstDigit + 1));
 
                 } // AsIntIgnoringLeadingOrTrailingJunk
 
@@ -5539,8 +5539,7 @@ namespace ASELib
         } // MethylationDistribution
 
 
-
-        public class BedLine
+        public class BedLine : IComparable<BedLine>, IComparable
         {
             public readonly string Chromosome;
             public readonly int Start_Position;
@@ -5569,6 +5568,41 @@ namespace ASELib
                 thickStart = thickStart_;
                 thickEnd = thickEnd_;
             }
+
+            public BedLine(string Chromosome_,
+                int Start_Position_,
+                int End_Position_)
+            {
+                Chromosome = Chromosome_;
+                Start_Position = Start_Position_;
+                End_Position = End_Position_;
+            }
+
+
+            public static List<BedLine> ReadFromFileShortFormat(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetryCompressedBasedOnFilename(filename);
+
+                if (null == inputFile) return null;
+
+                var retVal = new List<BedLine>();
+
+                string inputLine;
+                while ((inputLine = inputFile.ReadLine()) != null)
+                {
+                    var fields = inputLine.Split('\t');
+
+                    if (fields.Count() != 3)
+                    {
+                        inputFile.Close();
+                        throw new Exception("BedLine.ReadFromFileShortFormat: input file " + filename + " has line with bad format: " + inputLine);
+                    }
+
+                    retVal.Add(new BedLine(fields[0], Convert.ToInt32(fields[1]), Convert.ToInt32(fields[2])));
+                }
+
+                return retVal;
+            } // ReadFromFileShortFormat
 
             public bool overlaps(string otherChromosome, int otherStart, int otherEnd)
             {
@@ -5627,8 +5661,53 @@ namespace ASELib
                 inputFile.Close();
 
                 return result;
+            } // ReadFile
+
+            public int CompareTo(BedLine peer)
+            {
+                if (Chromosome != peer.Chromosome)
+                {
+                    return Chromosome.CompareTo(peer.Chromosome);
+                }
+
+                if (Start_Position != peer.Start_Position) {
+                    return Start_Position.CompareTo(peer.Start_Position);
+                }
+
+                return End_Position.CompareTo(peer.End_Position);
+            } // CompareTo
+
+            public int CompareTo(object peer)
+            {
+                return CompareTo((BedLine)peer);
             }
-        }
+
+        } // BedLine
+
+        public class BedFile
+        {
+            public readonly AVLTree<BedLine> lines = new AVLTree<BedLine>();
+
+            public bool isRangeIncluded(string chrom, int location)
+            {
+                var query = new BedLine(chrom, location, location);
+
+                var prevEntry = lines.FindFirstLessThanOrEqualTo(query);
+
+                if (prevEntry == null) return false;
+
+                if (prevEntry.Chromosome != chrom || prevEntry.Start_Position > location || prevEntry.End_Position < location) return false;
+
+                return true;
+            } // isRangeIncluded
+
+
+            public BedFile(string inputFilename)
+            {
+                BedLine.ReadFromFileShortFormat(inputFilename).ForEach(_ => lines.Insert(_)); ;
+            } // BedFile
+
+        } // BedFile
 
         public class MAFLine : IComparable
         {
@@ -17269,7 +17348,7 @@ namespace ASELib
                 return (results[VariantType.Indel].F1_score + results[VariantType.SNV].F1_score) / 2;
             }
 
-            public ConcordanceResults(string tarballFilename)
+            public ConcordanceResults(string tarballFilename, string sampleNameOverride = null)
             {
                 if (!tarballFilename.EndsWith(".tar"))
                 {
@@ -17278,6 +17357,10 @@ namespace ASELib
                 
 
                 var sampleName = GetFileNameFromPathname(tarballFilename).Substring(0, GetFileNameFromPathname(tarballFilename).Length - 4);
+                if (sampleNameOverride != null)
+                {
+                    sampleName = sampleNameOverride;
+                }
                 var summaryFilename = sampleName + ".summary.csv";
                 var tempDirectory = @"d:\temp\";
 

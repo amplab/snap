@@ -98,15 +98,6 @@ namespace Pareto
                             var timingFilename = timingDirectory + runName + ".snap.H" + H + ".s" + seedSize + "_timings.txt";
                             var concordanceFilename = concordanceDirectory + runName + ".snap.H" + H + ".s" + seedSize + ".concordance.tar";
 
-                            //
-                            // Special case H4000 s25, which is the default.
-                            //
-                            if (H == 4000 && seedSize == 25)
-                            {
-                                timingFilename = timingDirectory + runName + ".snap_timings.txt";
-                                concordanceFilename = concordanceDirectory + runName + ".snap.concordance.tar";
-                            }
-
                             if (File.Exists(timingFilename))
                             {
                                 nRunsFound++;
@@ -117,7 +108,12 @@ namespace Pareto
 
                                 if (File.Exists(concordanceFilename))
                                 {
-                                    concordance = new ASETools.ConcordanceResults(concordanceFilename);
+                                    string sampleNameOverride = null;
+                                    if (H == 4000 && seedSize == 25) // This used to be the default, and I renamed the tar files without rerunning them.
+                                    {
+                                        sampleNameOverride = runName + ".snap.concordance";
+                                    }
+                                    concordance = new ASETools.ConcordanceResults(concordanceFilename, sampleNameOverride);
                                     nRunsWithConcordance++;
                                 }
 
@@ -139,14 +135,6 @@ namespace Pareto
                     {
                         var timingFilename = timingDirectory + runName + ".snap.d" + d + ".s25_timings.txt";
                         var concordanceFilename = concordanceDirectory + runName + ".snap.d" + d + ".s25.concordance.tar";
-
-                        //
-                        // d32 is the default, special case it.
-                        if (d == 32)
-                        {
-                            timingFilename = timingDirectory + runName + ".snap_timings.txt";
-                            concordanceFilename = concordanceDirectory + runName + ".snap.concordance.tar";
-                        }
 
                         if (File.Exists(timingFilename))
                         {
@@ -216,8 +204,9 @@ namespace Pareto
             Pareto("ERR194147", ParetoRunType.HAndS);
             Pareto("hg007", ParetoRunType.HAndS);
             Pareto("hg003", ParetoRunType.D);
+            Pareto("ERR194147", ParetoRunType.D);
         } // Main
 
 
-        } // Program
+    } // Program
 } // namespace

@@ -298,6 +298,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BIllSplit2", "apps\BIllSpli
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaperGraphs", "apps\PaperGraphs\PaperGraphs.csproj", "{CDD76F4C-935B-453B-8ABA-3BD0AB178705}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BillSamCat", "apps\BillSamCat\BillSamCat.csproj", "{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2356,6 +2358,22 @@ Global
 		{CDD76F4C-935B-453B-8ABA-3BD0AB178705}.Release|Win32.Build.0 = Release|Any CPU
 		{CDD76F4C-935B-453B-8ABA-3BD0AB178705}.Release|x64.ActiveCfg = Release|x64
 		{CDD76F4C-935B-453B-8ABA-3BD0AB178705}.Release|x64.Build.0 = Release|x64
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Debug|Win32.Build.0 = Debug|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Debug|x64.ActiveCfg = Debug|x64
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Debug|x64.Build.0 = Debug|x64
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|Win32.ActiveCfg = Release|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|Win32.Build.0 = Release|Any CPU
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|x64.ActiveCfg = Release|x64
+		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

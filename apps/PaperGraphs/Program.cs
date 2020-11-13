@@ -29,7 +29,7 @@ namespace PaperGraphs
             var timingsDirectory = @"d:\temp\timings\";
             var concordanceDirectory = @"d:\temp\concordance\";
 
-            string[] dataSets = { "hg002", "hg003", "hg004", "hg006", "hg007", "ERR194146", "ERR194147", "mp002", "mp003", "mp004", "mp005", "mp006", "mp007", "hg001", "hg005", };
+            string[] dataSets = { "hg001", "hg002", "hg003", "hg004", "hg005", "hg006", "hg007", "ERR194146", "ERR194147", "mp002", "mp003", "mp004", "mp005", "mp006", "mp007",  };
 
             Dictionary<string, Dictionary<ASETools.Aligner, Result>> resultsByDataSetAndAligner = new Dictionary<string, Dictionary<ASETools.Aligner, Result>>();
             Dictionary<string, Dictionary<ASETools.Aligner, List<Result>>> replicasByDataSetAndAligner = new Dictionary<string, Dictionary<ASETools.Aligner, List<Result>>>();
