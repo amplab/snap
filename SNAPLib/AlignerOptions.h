@@ -29,6 +29,14 @@ Revision History:
 #include "Genome.h"
 #include "Read.h"
 
+#define INSTRUMENTATION_FOR_PAPER 1 // Turn this on to generate raw data about hit sets and their intersections for the paper
+
+#if INSTRUMENTATION_FOR_PAPER
+#define MAX_HIT_SIZE_LOG_2  15  // This is for the instrumentation
+extern _int64 g_alignmentTimeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2+1][MAX_HIT_SIZE_LOG_2+1];  // In the paired-end aligner, if you have seeds A and B with hit set sizes |A| and |B| then the total time in ns gets added into g_alignmentTimeByHitCountsOfEachSeed[log2(|A|)][log2(|B|)]
+extern _int64 g_alignmentCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // Same as above, but just add one per time.
+#endif // INSTRUMENTATION_FOR_PAPER
+
 #define MAPQ_LIMIT_FOR_SINGLE_HIT 10
 
 struct AbstractOptions

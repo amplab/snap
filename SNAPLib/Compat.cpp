@@ -143,7 +143,7 @@ _int64 timeInNanos()
 
     LARGE_INTEGER perfCount;
     QueryPerformanceCounter(&perfCount);
-    return perfCount.QuadPart * 1000000000 / performanceFrequency;
+    return (perfCount.QuadPart * (_int64)1000000000) / performanceFrequency;
 }
 
 void AcquireUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock) {

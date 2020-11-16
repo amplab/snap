@@ -40,6 +40,11 @@ Revision History:
 using std::max;
 using std::min;
 
+#if INSTRUMENTATION_FOR_PAPER
+_int64 g_alignmentTimeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // In the paired-end aligner, if you have seeds A and B with hit set sizes |A| and |B| then the total time in ns gets added into g_alignmentTimeByHitCountsOfEachSeed[log2(|A|)][log2(|B|)]
+_int64 g_alignmentCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // Same as above, but just add one per time.
+#endif // INSTRUMENTATION_FOR_PAPER
+
 //
 // Save the index & index directory globally so that we don't need to reload them on multiple runs.
 //
@@ -69,6 +74,7 @@ AlignerContext::~AlignerContext()
     }
 }
 
+
 void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
 {
     options = parseOptions(argc, argv, version, argsConsumed, isPaired());
@@ -81,6 +87,16 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
 #ifdef _MSC_VER
 	useTimingBarrier = options->useTimingBarrier;
 #endif
+
+#if INSTRUMENTATION_FOR_PAPER
+    for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+        for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+            g_alignmentTimeByHitCountsOfEachSeed[i][j] = 0;
+            g_alignmentCountByHitCountsOfEachSeed[i][j] = 0;
+        } // j
+    } // i
+#endif // INSTRUMENTATION_FOR_PAPER
+
 	
 	if (!initialize()) {
 		return;

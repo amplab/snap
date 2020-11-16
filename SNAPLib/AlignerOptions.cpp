@@ -99,12 +99,12 @@ AlignerOptions::AlignerOptions(
     maxScoreGapToPreferNonALTAlignment(16)
 {
     if (forPairedEnd) {
-        maxDist                 = 32;
+        maxDist                 = 27;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
         maxHits                 = 300;
      } else {
-        maxDist                 = 14;
+        maxDist                 = 27;
         numSeedsFromCommandLine = 25;
         maxHits                 = 300;
 		seedCoverage			= 0;
