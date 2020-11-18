@@ -1,12 +1,15 @@
 # SNAP
 
-Scalable Nucleotide Alignment Program - <http://snap.cs.berkeley.edu>
+Scalable Nucleotide Alignment Program - <https://www.microsoft.com/en-us/research/project/snap/>
 
 ## Overview
 
 SNAP is a fast and accurate aligner for short DNA reads. It is optimized for
 modern read lengths of 100 bases or higher, and takes advantage of these reads
 to align data quickly through a hash-based indexing scheme.
+
+It also includes support for sorting, marking duplicates and indexing its results, eliminating the 
+need for several pipeline stages used by other aligners.
 
 ## Binaries
 
@@ -15,8 +18,8 @@ The SNAP executable
 - [v1.0.0 for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpZQUgOEMrmA5qaLA?e=6FYxAv)
 
 The SNAPCommand tool
-- [SnapCommand for Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=swOlYD)
-- [SnapCommand for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=vXH8y6)
+- [SNAPCommand for Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=swOlYD)
+- [SNAPCommand for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=vXH8y6)
 
 
 ## Documentation
