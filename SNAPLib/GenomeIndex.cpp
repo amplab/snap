@@ -55,8 +55,8 @@ static void usage()
     WriteErrorMessage(
         "Usage: %s index <input.fa> <output-dir> [<options>]\n"
         "Options:\n"
-        "  -s               Seed size (default: %d)\n"
-        "  -h               Hash table slack (default: %.1f)\n"
+        " -s                Seed size (default: %d)\n"
+        " -h                Hash table slack (default: %.1f)\n"
         " -t                Specify the maximum number of threads to use. Default is the number of cores. Do not leave a space after the -t, e.g., -t16\n"
         " -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
         "                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
