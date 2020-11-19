@@ -18,7 +18,7 @@ The SNAP executable
 - [v1.0.0 for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpZQUgOEMrmA5qaLA?e=6FYxAv)
 
 The SNAPCommand tool
-- [SNAPCommand for Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=swOlYD)
+- [SNAPCommand for Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpdvv0ZBdB1BqF57g?e=IHVbq2>)
 - [SNAPCommand for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=vXH8y6)
 
 
@@ -35,8 +35,8 @@ For Windows, we provide a Visual C++ project, `snap.sln`. Requirements:
 
 When you build it, you will have to set it to build for x64, not "Any CPU" or 32 bit.
 
-For Linux and OS X, simply type `make`. Requirements:
-- g++ version 4.6
-- zlib 1.2.8 from http://zlib.net/
+For Linux, simply type `make`. Requirements:
+- g++ version 4.8.5
+- zlib 1.2.11 from http://zlib.net/
 
 
