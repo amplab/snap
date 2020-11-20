@@ -377,7 +377,7 @@ SetInvalidGenomeLocation(unsigned locationSize)
     ContigForInvalidGenomeLocation.beginningLocation = InvalidGenomeLocation;
     ContigForInvalidGenomeLocation.isALT = false;
     ContigForInvalidGenomeLocation.length = 1;
-    ContigForInvalidGenomeLocation.name = "InvalidGenomeLocation";
+    ContigForInvalidGenomeLocation.name = (char *)"InvalidGenomeLocation";  // This is never going to be written in to, but the field is char * because other contigs have changes made to their names.
     ContigForInvalidGenomeLocation.nameLength = (int)strlen(ContigForInvalidGenomeLocation.name);
 }
 
