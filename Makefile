@@ -26,6 +26,11 @@ ifeq ($(UNAME), Darwin)
   LIBS += -lz
 endif
 
+ifneq ($(STATIC),)
+  STATIC_GCC=-static-libgcc -static-libstdc++
+  LIBS += $(STATIC_GCC)
+endif
+
 CXX = g++
 
 LIB_SRC = $(wildcard SNAPLib/*.cpp)

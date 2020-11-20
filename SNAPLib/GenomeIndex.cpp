@@ -41,7 +41,7 @@ Revision History:
 
 using namespace std;
 
-static const int DEFAULT_SEED_SIZE = 20;
+static const int DEFAULT_SEED_SIZE = 27;
 static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
 
@@ -55,8 +55,8 @@ static void usage()
     WriteErrorMessage(
         "Usage: %s index <input.fa> <output-dir> [<options>]\n"
         "Options:\n"
-        "  -s               Seed size (default: %d)\n"
-        "  -h               Hash table slack (default: %.1f)\n"
+        " -s                Seed size (default: %d)\n"
+        " -h                Hash table slack (default: %.1f)\n"
         " -t                Specify the maximum number of threads to use. Default is the number of cores. Do not leave a space after the -t, e.g., -t16\n"
         " -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
         "                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
@@ -96,7 +96,7 @@ static void usage()
         DEFAULT_SLACK,
         DEFAULT_PADDING);
 
-    soft_exit_no_print(1);    // Don't use soft-exit, it's confusing people to get an error message after the usage
+    soft_exit_no_print(0);    // Don't use soft-exit, it's confusing people to get an error message after the usage
 }
 
 // Copies the input string, reallocates the list and adds it to the end.
@@ -377,7 +377,7 @@ SetInvalidGenomeLocation(unsigned locationSize)
     ContigForInvalidGenomeLocation.beginningLocation = InvalidGenomeLocation;
     ContigForInvalidGenomeLocation.isALT = false;
     ContigForInvalidGenomeLocation.length = 1;
-    ContigForInvalidGenomeLocation.name = "InvalidGenomeLocation";
+    ContigForInvalidGenomeLocation.name = (char *)"InvalidGenomeLocation";  // This is never going to be written in to, but the field is char * because other contigs have changes made to their names.
     ContigForInvalidGenomeLocation.nameLength = (int)strlen(ContigForInvalidGenomeLocation.name);
 }
 

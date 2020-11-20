@@ -240,6 +240,10 @@ IntersectingPairedEndAligner::alignLandauVishkin(
         PairedAlignmentResult *lvCandidatesForAffineGap
 	)
 {
+#if INSTRUMENTATION_FOR_PAPER
+        _int64 startTime = timeInNanos();
+#endif // INSTRUMENTATION_FOR_PAPER
+
     firstALTResult->status[0] = firstALTResult->status[1] = NotFound;
 
     result->nLVCalls = 0;
@@ -363,6 +367,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
     //
     // Phase 1: do the hash table lookups for each of the seeds for each of the reads and add them to the hit sets.
     //
+
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
         int nextSeedToTest = 0;
         unsigned wrapCount = 0;
@@ -457,6 +462,10 @@ IntersectingPairedEndAligner::alignLandauVishkin(
             }
         } // while we need to lookup seeds for this read
     } // for each read
+
+#if INSTRUMENTATION_FOR_PAPER
+    int log2HashTableHits[NUM_READS_PER_PAIR] = { __min(cheezyLogBase2(totalHashTableHits[0][FORWARD] + totalHashTableHits[0][RC]), MAX_HIT_SIZE_LOG_2), __min(cheezyLogBase2(totalHashTableHits[1][FORWARD] + totalHashTableHits[1][RC]), MAX_HIT_SIZE_LOG_2) };
+#endif // INSTRUMENTATION_FOR_PAPER
 
     readWithMoreHits = totalHashTableHits[0][FORWARD] + totalHashTableHits[0][RC] > totalHashTableHits[1][FORWARD] + totalHashTableHits[1][RC] ? 0 : 1;
     readWithFewerHits = 1 - readWithMoreHits;
@@ -1235,6 +1244,15 @@ IntersectingPairedEndAligner::alignLandauVishkin(
         qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), PairedAlignmentResult::compareByScore);
         *nSecondaryResults = maxSecondaryResultsToReturn;   // Just truncate it
     }
+
+#if INSTRUMENTATION_FOR_PAPER
+    _int64 runTime = timeInNanos() - startTime;
+    if (runTime >= 0) { // Really don't understand why timeInNanos() sometimes produces garbage, but it does.
+        InterlockedAdd64AndReturnNewValue(&g_alignmentCountByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], 1);
+        InterlockedAdd64AndReturnNewValue(&g_alignmentTimeByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], runTime);
+    }
+#endif // INSTRUMENTATION_FOR_PAPER
+
 
     return true;
 }
