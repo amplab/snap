@@ -96,7 +96,7 @@ static void usage()
         DEFAULT_SLACK,
         DEFAULT_PADDING);
 
-    soft_exit_no_print(1);    // Don't use soft-exit, it's confusing people to get an error message after the usage
+    soft_exit_no_print(0);    // Don't use soft-exit, it's confusing people to get an error message after the usage
 }
 
 // Copies the input string, reallocates the list and adds it to the end.

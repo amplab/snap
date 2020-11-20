@@ -1246,8 +1246,11 @@ IntersectingPairedEndAligner::alignLandauVishkin(
     }
 
 #if INSTRUMENTATION_FOR_PAPER
-    InterlockedAdd64AndReturnNewValue(&g_alignmentCountByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], 1);
-    InterlockedAdd64AndReturnNewValue(&g_alignmentTimeByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], timeInNanos() - startTime);
+    _int64 runTime = timeInNanos() - startTime;
+    if (runTime >= 0) { // Really don't understand why timeInNanos() sometimes produces garbage, but it does.
+        InterlockedAdd64AndReturnNewValue(&g_alignmentCountByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], 1);
+        InterlockedAdd64AndReturnNewValue(&g_alignmentTimeByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], runTime);
+    }
 #endif // INSTRUMENTATION_FOR_PAPER
 
 

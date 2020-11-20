@@ -36,7 +36,7 @@ For Windows, we provide a Visual C++ project, `snap.sln`. Requirements:
 When you build it, you will have to set it to build for x64, not "Any CPU" or 32 bit.
 
 For Linux, simply type `make`. Requirements:
-- g++ version 4.8.5
-- zlib 1.2.11 from http://zlib.net/
+- g++ version 4.8.5 or later
+- zlib 1.2.11 or later from http://zlib.net/
 
 

@@ -120,6 +120,46 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
     extension->finishAlignment();
     PrintBigAllocProfile();
     PrintWaitProfile();
+
+#if INSTRUMENTATION_FOR_PAPER
+    FILE* outputFile = fopen("SNAPInstrumentation.txt", "w");
+
+    if (outputFile == NULL) {
+        fprintf(stderr, "Unable to open instrumentation output file\n");
+    }
+    else {
+        fprintf(outputFile, "Alignment count by hit counts of each seed\nHits 1/2");
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "\t%d", 1 << i);
+        }
+        fprintf(outputFile, "\n");
+
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "%d", 1 << i);
+            for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+                fprintf(outputFile, "\t%lld", g_alignmentCountByHitCountsOfEachSeed[i][j]);
+            } // j
+            fprintf(outputFile, "\n");
+        } // i
+
+        fprintf(outputFile, "\nAlignment time by hit counts of each seed (ns)\nHits 1/2");
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "\t%d", 1 << i);
+        }
+        fprintf(outputFile, "\n");
+
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "%d", 1 << i);
+            for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+                fprintf(outputFile, "\t%lld", g_alignmentTimeByHitCountsOfEachSeed[i][j]);
+            } // j
+            fprintf(outputFile, "\n");
+        } // i
+
+        fclose(outputFile);
+    }
+#endif // INSTRUMENTATION_FOR_PAPER
+
 }
 
     void

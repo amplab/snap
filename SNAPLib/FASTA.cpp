@@ -175,9 +175,10 @@ ReadFASTAGenome(
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
     // A bound is the number of bytes in the FASTA file, because we store at most one base per
-    // byte.  Get the file size to use for this bound.
+    // byte. We count the bytes as we read them rather than getting the file size so that
+    // we can deal with inputs that are redirected to pipes.
     //
-    _int64 fileSize = QueryFileSize(fileName);
+    _int64 fileSize = 0;
     bool isValidGenomeCharacter[256];
 
     for (int i = 0; i < 256; i++) {
@@ -210,6 +211,7 @@ ReadFASTAGenome(
     bool inAContig = false;
 
     while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, fastaFile)) {
+        fileSize += strlen(lineBuffer);
         if (lineBuffer[0] == '>') {
             nContigs++;
 
