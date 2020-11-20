@@ -4862,7 +4862,7 @@ namespace ASEProcessManager
 
                         if (nOnOutputLine == 0)
                         {
-                            outputLine = stateOfTheWorld.configuration.binariesDirectory + "Venn.exe " + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor] + @" d:\gdc\LCR-hs38.bed.gz";
+                            outputLine = stateOfTheWorld.configuration.binariesDirectory + "Venn.exe " + ASETools.variantCallerName[variantCaller] + " " + ASETools.tumorToString[tumor] + @" d:\gdc\LCR-hs38.bed";
                         }
 
                         outputLine += " " + case_.case_id;

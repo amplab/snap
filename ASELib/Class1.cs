@@ -16957,6 +16957,7 @@ namespace ASELib
             public readonly int copyOutTime;
             public readonly DateTime startTime;
             public readonly DateTime stopTime;
+            public readonly List<RunTiming> splits = null;  // This is for split timings, essentially where we had to break Novoalign into pieces
 
             RunTiming(int copyInTime_, int overallRuntime_, int loadingTime_, int alignTime_, int sortTime_, long totalReads_, long alignedMapQAtLeast10_, long alignedMapQLessThan10_, long unaligned_, long tooShortTooManyNs_, 
                 double fractionPairs_, int readsPerSecond_, int copyOutTime_, DateTime startTime_, DateTime stopTime_)
@@ -17051,7 +17052,7 @@ namespace ASELib
                     fieldGrabber.AsDateTime("Stop Time"));
             }
 
-            RunTiming(double copyInTime_, double overallRuntime_, double alignTime_, double sortTime_, DateTime startTime_, DateTime stopTime_)
+            RunTiming(double copyInTime_, double overallRuntime_, double alignTime_, double sortTime_, DateTime startTime_, DateTime stopTime_, List<RunTiming> splits_ = null)
             {
                 copyInTime = (int)copyInTime_;
                 overallRuntime = (int)overallRuntime_;
@@ -17059,6 +17060,7 @@ namespace ASELib
                 sortTime = (int)sortTime_;
                 startTime = startTime_;
                 stopTime = stopTime_;
+                splits = splits_;
             } // ctor
 
             public static RunTiming LoadFromLinuxFile(string inputFilename)
@@ -17104,8 +17106,70 @@ namespace ASELib
                 return new RunTiming(dates[1].Subtract(dates[0]).TotalSeconds, dates[6].Subtract(dates[1]).TotalSeconds, dates[2].Subtract(dates[1]).TotalSeconds, dates[4].Subtract(dates[3]).TotalSeconds, dates[0], dates[6]);
             } // LoadFromLinuxFile
 
+            public static RunTiming LoadFromSplitFile(string inputFilename)
+            {
+                var inputFile = ASETools.CreateStreamReaderWithRetry(inputFilename);
+                if (inputFile == null)
+                {
+                    throw new Exception("Unable to open " + inputFilename);
+                }
+
+                var inputLines = new List<string>();
+                string inputLine;
+                while (null != (inputLine = inputFile.ReadLine()))
+                {
+                    inputLines.Add(inputLine);
+                }
+
+                var linesWithDates = Enumerable.Range(0, inputLines.Count()).Where(_ => daysOfTheWeek.Any(day => inputLines[_].StartsWith(day))).ToList();
+                if (linesWithDates.Count() != 3)
+                {
+                    Console.WriteLine("Split file: Incorrect number of lines with dates for " + inputFilename);
+                    return null;
+                }
+
+                List<DateTime> dates;
+                try
+                {
+                    dates = linesWithDates.Select(_ => ASETools.LinuxDateStringToDateTime(inputLines[_])).ToList();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Exception.  Lines with dates: ");
+                    linesWithDates.ForEach(_ => Console.WriteLine((inputLines[_])));
+                    Console.WriteLine("input filename " + inputFilename);
+                    throw e;
+                }
+
+                if (dates[2].Subtract(dates[1]).TotalSeconds < 30)
+                {
+                    Console.WriteLine("Extremely fast aligner run for stats file " + inputFilename);
+                }
+
+                return new RunTiming(dates[1].Subtract(dates[0]).TotalSeconds, 0, dates[2].Subtract(dates[1]).TotalSeconds, 0, dates[0], dates[2]);
+            }
+
+            public static RunTiming LoadFromSplitFiles(List<string> inputFilenames)
+            {
+                var splits = inputFilenames.Select(_ => LoadFromSplitFile(_)).ToList();
+
+                return new RunTiming(
+                    splits.Select(_ => _.copyInTime).Sum(),
+                    splits.Select(_ => _.overallRuntime).Sum(),
+                    splits.Select(_ => _.alignTime).Sum(),
+                    splits.Select(_ => _.sortTime).Sum(),
+                    splits.Select(_ => _.startTime).Min(),
+                    splits.Select(_ => _.stopTime).Max(),
+                    splits);
+            }
+
             public static RunTiming LoadFromReplicaFile(string inputFilename)
             {
+                if (inputFilename.ToLower().Contains(".snap"))
+                {
+                    return LoadFromSNAPFile(inputFilename);
+                }
+
                 var inputFile = ASETools.CreateStreamReaderWithRetry(inputFilename);
                 if (inputFile == null)
                 {
@@ -17406,6 +17470,11 @@ namespace ASELib
                 type_: fieldGrabber.AsString("Type"), filter_: fieldGrabber.AsString("Filter"), truthTotal_: fieldGrabber.AsLong("TRUTH.TOTAL"), truthTruePositive_: fieldGrabber.AsLong("TRUTH.TP"), truthFalseNegative_: fieldGrabber.AsLong("TRUTH.FN"),
                 queryTotal_: fieldGrabber.AsLong("QUERY.TOTAL"), queryFalsePositive_: fieldGrabber.AsLong("QUERY.FP"), queryUnknown_: fieldGrabber.AsLong("QUERY.UNK"), recall_: fieldGrabber.AsDouble("METRIC.Recall"), 
                 precision_: fieldGrabber.AsDouble("METRIC.Precision"), fracNA_: fieldGrabber.AsDouble("METRIC.Frac_NA"), F1_score_: fieldGrabber.AsDouble("METRIC.F1_Score"));
+        }
+
+        public static string DoubleRounded(double value, int decimalDigits)
+        {
+            return Math.Round(value, decimalDigits).ToString("F" + decimalDigits);
         }
 
     } // ASETools

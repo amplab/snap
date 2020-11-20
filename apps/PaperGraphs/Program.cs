@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ASELib;
 using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace PaperGraphs
 {
@@ -24,6 +25,25 @@ namespace PaperGraphs
                 replicas = replicas_;
             }
         }
+
+        delegate double ExtractConcordanceValue(ASETools.ConcordanceResults concordance);
+
+        class ScatterGraphInfo
+        {
+            public readonly string name;
+            public readonly ExtractConcordanceValue extractor;
+
+            public ScatterGraphInfo(string name_, ExtractConcordanceValue extractor_)
+            {
+                name = name_;
+                extractor = extractor_;
+            } // ctor
+
+        } // ScatterGraphInfo
+
+
+        static int nDigits = 4;
+
         static void Main(string[] args)
         {
             var timingsDirectory = @"d:\temp\timings\";
@@ -47,7 +67,13 @@ namespace PaperGraphs
                     nTotal++;
 
                     var timingFilename = timingsDirectory + dataSet + "." + ASETools.alignerName[aligner] + "_timings.txt";
-                    if (File.Exists(timingFilename)) {
+                    var splitTimingsFilenames = new List<string>();
+                    for (int i = 0; i < 9; i++)
+                    {
+                        splitTimingsFilenames.Add(timingsDirectory + dataSet + "." + i + "." + ASETools.alignerName[aligner] + "_timings.txt");
+                    }
+
+                    if (File.Exists(timingFilename) || splitTimingsFilenames.All(_ => File.Exists(_))) {
                         nWithTimings++;
 
                         var replicas = new List<ASETools.RunTiming>();
@@ -58,7 +84,13 @@ namespace PaperGraphs
                             timings = ASETools.RunTiming.LoadFromSNAPFile(timingFilename);
                         } else
                         {
-                            timings = ASETools.RunTiming.LoadFromLinuxFile(timingFilename);
+                            if (File.Exists(timingFilename))
+                            {
+                                timings = ASETools.RunTiming.LoadFromLinuxFile(timingFilename);
+                            } else
+                            {
+                                timings = ASETools.RunTiming.LoadFromSplitFiles(splitTimingsFilenames);
+                            }
                         }
 
                         var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + ".concordance.tar";
@@ -122,7 +154,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].recall);
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].recall, nDigits));
                     }
                 } // aligner
 
@@ -132,7 +164,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].precision);
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].precision, nDigits));
                     }
                 } // aligner
 
@@ -142,7 +174,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].recall);
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].recall, nDigits));
                     }
                 } // aligner
 
@@ -152,7 +184,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].precision);
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].precision, nDigits));
                     }
                 } // aligner
 
@@ -162,7 +194,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].F1_score);
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].F1_score, nDigits));
                     }
                 } // aligner
 
@@ -172,7 +204,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].F1_score);
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].F1_score, nDigits));
                     }
                 } // aligner
 
@@ -182,7 +214,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(resultsByDataSetAndAligner[dataSet][aligner].concordance.Mean_F1_Score());
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.Mean_F1_Score(), nDigits));
                     }
                 } // aligner
 
@@ -213,7 +245,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write("\t" + -Math.Log10(1 - concordance.results[ASETools.VariantType.SNV].F1_score));
+                        outputFile.Write("\t" + ASETools.DoubleRounded(-Math.Log10(1 - concordance.results[ASETools.VariantType.SNV].F1_score), nDigits));
                     }
                     else
                     {
@@ -226,7 +258,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write("\t" + -Math.Log10(1 - concordance.results[ASETools.VariantType.Indel].F1_score));
+                        outputFile.Write("\t" + ASETools.DoubleRounded(-Math.Log10(1 - concordance.results[ASETools.VariantType.Indel].F1_score), nDigits));
                     }
                     else
                     {
@@ -239,7 +271,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write("\t" + -Math.Log10(1 - concordance.Mean_F1_Score()));
+                        outputFile.Write("\t" + ASETools.DoubleRounded(-Math.Log10(1 - concordance.Mean_F1_Score()), nDigits));
                     }
                     else
                     {
@@ -273,19 +305,28 @@ namespace PaperGraphs
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     if (timing != null)
                     {
-                        outputFile.Write("\t" + (double)(timing.alignTime + timing.loadingTime) / 3600 / 24); // Math converts seconds to days.
+                        int runTime;
+
+                        if (resultsByDataSetAndAligner[dataSet][aligner].replicas != null)
+                        {
+                            runTime = (resultsByDataSetAndAligner[dataSet][aligner].replicas.Select(_ => _.alignTime + _.loadingTime).Sum() + timing.alignTime + timing.loadingTime) / (1 + resultsByDataSetAndAligner[dataSet][aligner].replicas.Count());
+                        }
+                        else
+                        {
+                            runTime = timing.alignTime + timing.loadingTime;
+                        }
+                        outputFile.Write("\t" + ASETools.DoubleRounded(((double)runTime / 3600 / 24), nDigits)); // Math converts seconds to days.
                     }
                     else
                     {
                         outputFile.Write("\t");
-                    }// If we have concordance
+                    }// If we have timing
+
                 } // aligner
 
                 // Standard error for load & align
                 foreach (var aligner in ASETools.allAligners)
                 {
-                    
-
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     var replicas = resultsByDataSetAndAligner[dataSet][aligner].replicas;
 
@@ -296,7 +337,7 @@ namespace PaperGraphs
 
                         var sigma = ASETools.StandardDeviationOfList(times);
 
-                        outputFile.Write("\t" + sigma / Math.Sqrt(times.Count()));
+                        outputFile.Write("\t" + ASETools.DoubleRounded(sigma / Math.Sqrt(times.Count()), nDigits));
                     } else
                     {
                         outputFile.Write("\t");
@@ -308,7 +349,7 @@ namespace PaperGraphs
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     if (timing != null)
                     {
-                        outputFile.Write("\t" + (double)timing.overallRuntime / 3600 / 24); // Math converts seconds to days.
+                        outputFile.Write("\t" + ASETools.DoubleRounded((double)timing.overallRuntime / 3600 / 24, nDigits)); // Math converts seconds to days.
                     }
                     else
                     {
@@ -320,7 +361,7 @@ namespace PaperGraphs
 
             outputFile.WriteLine();
 
-            outputFile.WriteLine("\tLoad & Align\t\t\t\tWhole Pipeline");
+            outputFile.WriteLine("\tLoad & Align\t\t\t\t\tWhole Pipeline");
             outputFile.Write("Normalized run time");
             for (int i = 0; i < 2; i++)
             {
@@ -342,7 +383,7 @@ namespace PaperGraphs
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     if (timing != null && snapTiming != null)
                     {
-                        outputFile.Write("\t" + (double)(timing.alignTime + timing.loadingTime) / (snapTiming.alignTime + snapTiming.loadingTime)); // Math converts seconds to days.
+                        outputFile.Write("\t" + ASETools.DoubleRounded((double)(timing.alignTime + timing.loadingTime) / (snapTiming.alignTime + snapTiming.loadingTime), 2)); // Math converts seconds to days.
                     }
                     else
                     {
@@ -355,7 +396,7 @@ namespace PaperGraphs
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     if (timing != null && snapTiming != null)
                     {
-                        outputFile.Write("\t" + (double)timing.overallRuntime / snapTiming.overallRuntime); // Math converts seconds to days.
+                        outputFile.Write("\t" + ASETools.DoubleRounded((double)timing.overallRuntime / snapTiming.overallRuntime, 2)); // Math converts seconds to days.
                     }
                     else
                     {
@@ -365,7 +406,27 @@ namespace PaperGraphs
                 outputFile.WriteLine();
             } // dataSet
 
+            //
+            // Scatter graphs
+            //
+            outputFile.WriteLine();
+            outputFile.WriteLine("Scatter Graphs");
+            string[] scatterGraphTypes = { "SNV Recall", "SNV Precision", "SNV F1", "Indel Recall", "Indel Precision", "Indel F1", "Mean F1" };
+            foreach (var scatterGraphType in scatterGraphTypes)
+            {
+                outputFile.Write("\t" + scatterGraphType + "\t\t\t\t");                
+            } // scatter graph type
+            outputFile.WriteLine();
 
+            outputFile.Write("Sample");
+            foreach (var scatterGraphType in scatterGraphTypes)
+            {
+                foreach (var aligner in ASETools.allAligners)
+                {
+
+                } // aligners
+            } // scatter graph type
+            outputFile.WriteLine();
 
             outputFile.WriteLine("**done**");
             outputFile.Close();

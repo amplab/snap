@@ -248,10 +248,8 @@ namespace Venn
                 if (lowCompexityRegions.isRangeIncluded(variant.locus.contig, variant.locus.pos))
                 {
                     // Skip the ones in low-complexity regions.
-Console.WriteLine("Skipping variant in LCR " + variant.locus.contig + ":" + variant.locus.pos);
                     continue;
                 }
-Console.WriteLine("Keeping variant " + variant.locus.contig + ":" + variant.locus.pos);
 
                 if (!retVal.ContainsKey(variant.locus))
                 {
