@@ -293,11 +293,11 @@ AlignerOptions::usage()
 }
 
     bool
-        AlignerOptions::parse(
-            const char** argv,
-            int argc,
-            int& n,
-            bool* done)
+    AlignerOptions::parse(
+        const char** argv,
+        int argc,
+        int& n,
+        bool* done)
     {
         *done = false;
 
@@ -1077,7 +1077,6 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
 				return false;
             }
 
- 
             snapFile->isCompressed = !strcmp(args[0], "-compressedFastq");
 
             if (paired) {

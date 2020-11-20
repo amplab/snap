@@ -55,7 +55,7 @@ struct SNAPFile {
     FileType             fileType;
     bool                 isCompressed;
     bool                 isStdio;           // Only applies to the first file for two-file inputs
-	bool				 omitSQLines;		// Special undocumented option for Charles Chiu's group.  Mostly a bad idea.
+	bool				 omitSQLines;		// Special (formerly) undocumented option for Charles Chiu's group.  Mostly a bad idea.
 
     PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
     ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
