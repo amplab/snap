@@ -504,7 +504,7 @@ int cheezyLogBase2(_int64 value);
 //
 inline bool isWithin(unsigned a, unsigned b, unsigned distance)
     {
-	return a <= b && a+distance >= b || a >= b && a <= b + distance;
+	return (a <= b && a+distance >= b) || (a >= b && a <= b + distance);
 }
 
 inline int getSignBit64(_int64 value)

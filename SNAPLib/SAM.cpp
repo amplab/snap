@@ -281,7 +281,7 @@ SAMReader::parseHeader(
             //
             // Verify that they actually match what's in our reference genome.
             //
-            if (lineBuffer + 3 >= endOfLine || ' ' != lineBuffer[3] && '\t' != lineBuffer[3]) {
+            if (lineBuffer + 3 >= endOfLine || (' ' != lineBuffer[3] && '\t' != lineBuffer[3])) {
                 WriteErrorMessage("Malformed SAM file '%s' has @SQ without a following space or tab.\n", fileName);
                 delete[] lineBuffer;
                 return false;
@@ -370,7 +370,7 @@ SAMReader::parseHeader(
             !strncmp("@CO",nextLineToProcess,3)) {
 
             if (!strncmp("@RG", nextLineToProcess, 3)) {
-                if (nextLineToProcess + 3 >= endOfBuffer || ' ' != nextLineToProcess[3] && '\t' != nextLineToProcess[3]) {
+                if (nextLineToProcess + 3 >= endOfBuffer || (' ' != nextLineToProcess[3] && '\t' != nextLineToProcess[3])) {
                     WriteErrorMessage("Malformed SAM file '%s' has @RG without a following space or tab.\n", fileName);
                     return false;
                 }

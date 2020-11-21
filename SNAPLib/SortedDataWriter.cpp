@@ -1231,7 +1231,7 @@ SortedDataFilterSupplier::mergeSort()
         if (i->reader == NULL) // Otheriwse, it's the last block that's in memory
         {
             i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0,
-                min(1UL << 23, max(1UL << 17, bufferSpace / blocks.size()))); // 128kB to 8MB buffer space per block
+                __min(1UL << 23, __max(1UL << 17, bufferSpace / blocks.size()))); // 128kB to 8MB buffer space per block
             i->reader->init(tempFileName);
             i->reader->reinit(i->start, i->bytes);
         }

@@ -749,7 +749,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                     // If we haven't yet scored this mate, or we've scored it and not gotten an answer, but had a higher score limit than we'd
                     // use now, score it.
                     //
-                    if (mate->score == ScoringMateCandidate::LocationNotYetScored || mate->score == ScoreAboveLimit && mate->scoreLimit < scoreLimit - fewerEndScore) {
+                    if (mate->score == ScoringMateCandidate::LocationNotYetScored || (mate->score == ScoreAboveLimit && mate->scoreLimit < scoreLimit - fewerEndScore)) {
 	                    scoreLocation(readWithMoreHits, setPairDirection[candidate->whichSetPair][readWithMoreHits], GenomeLocationAsInt64(mate->readWithMoreHitsGenomeLocation),
                             mate->seedOffset, scoreLimit - fewerEndScore, &mate->score, &mate->matchProbability,
                             &mate->genomeOffset, &mate->usedAffineGapScoring, &mate->basesClippedBefore, &mate->basesClippedAfter, &mate->agScore, &mate->lvIndels);
@@ -2125,7 +2125,7 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
         //
         // Within merge distance.  Keep the better score (or if they're tied the better match probability).
         //
-        if (newPairAGScore > pairAGScore || newPairAGScore == pairAGScore && newMatchProbability > matchProbability) {
+        if (newPairAGScore > pairAGScore || (newPairAGScore == pairAGScore && newMatchProbability > matchProbability)) {
 #ifdef _DEBUG
             if (_DumpAlignments) {
                 printf("Merge replacement at anchor (%llu, %llu), loc (%llu, %llu), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",

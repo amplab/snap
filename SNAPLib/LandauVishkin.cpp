@@ -257,7 +257,7 @@ done1:
                         t += 8;
                     }
                 }
-                if (best > bestbest || best == bestbest && bestIndels < bestBestIndels) {
+                if (best > bestbest || (best == bestbest && bestIndels < bestBestIndels)) {
                     bestbest = best;
                     bestdelta = delta;
                     bestBestIndels = bestIndels;
