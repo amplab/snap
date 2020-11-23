@@ -16,10 +16,12 @@ need for several pipeline stages used by other aligners.
 The SNAP executable
 - [v1.0.0 For Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpYCkpLlDktZnVaow?e=YX60aF)
 - [v1.0.0 for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpZQUgOEMrmA5qaLA?e=6FYxAv)
+- [v1.0.0 for OSX](https://1drv.ms/u/s!AhuEg_0yZD86hcphrIjwoeTjdSvgoA?e=coSU85)
 
 The SNAPCommand tool
 - [SNAPCommand for Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpdvv0ZBdB1BqF57g?e=IHVbq2>)
 - [SNAPCommand for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=vXH8y6)
+- [SNAPCommand for OSX](https://1drv.ms/u/s!AhuEg_0yZD86hcpgy-ONBaw0DjFpTQ?e=cMc6eE)
 
 
 ## Documentation
@@ -28,7 +30,7 @@ SNAP has a one page [Quick Start Guide](https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSw
 
 ## Building
 
-SNAP runs on Windows and Linux.
+SNAP runs on Windows, Linux and OSX.
 
 For Windows, we provide a Visual C++ project, `snap.sln`. Requirements:
 - Visual Studio 2019
