@@ -81,6 +81,7 @@ int getpagesize();
 #include <xmmintrin.h>  // This is currently (in Dec 2013) broken on Mac OS X 10.9 (Apple clang-500.2.79)
 #else
 #define _mm_prefetch(...) {}
+#include <emmintrin.h> // For vector types like __m128i
 #endif
 
 typedef int64_t _int64;

@@ -246,7 +246,7 @@ PairedReadMatcher::getNextReadPair(
         }
 
         if (quicklyDropUnpairedReads) {
-            if (((localRead.getOriginalSAMFlags() & SAM_NEXT_UNMAPPED) == 0) && (localRead.getOriginalPNEXT() == 0 || localRead.getOriginalRNEXTLength() == 1 && localRead.getOriginalRNEXT()[0] == '*')) {
+            if (((localRead.getOriginalSAMFlags() & SAM_NEXT_UNMAPPED) == 0) && (localRead.getOriginalPNEXT() == 0 || (localRead.getOriginalRNEXTLength() == 1 && localRead.getOriginalRNEXT()[0] == '*'))) {
                 nReadsQuicklyDropped++;
                 skipped--;
                 continue;

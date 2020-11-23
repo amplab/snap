@@ -220,7 +220,7 @@ AlignerContext::initialize()
              WriteStatusMessage("%llds.  %u bases, seed size %d\n",
                     loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
 
-			 if (index->getMajorVersion() < 5 || index->getMajorVersion() == 5 && index->getMinorVersion() == 0) {
+			 if (index->getMajorVersion() < 5 || (index->getMajorVersion() == 5 && index->getMinorVersion() == 0)) {
 				 WriteErrorMessage("WARNING: The version of the index you're using was built with an earlier version of SNAP and will result in Ns in the reference NOT matching Ns in reads.\n         If you do not want this behavior, rebuild the index.\n");
 			 }
          } else {
@@ -473,7 +473,7 @@ AlignerContext::printStats()
         (stats->filtered > 0) ? numPctAndPad(filtered, stats->filtered, 100.0 * stats->filtered / stats->totalReads, 23, strBufLen) : "",
         (stats->extraAlignments > 0) ? FormatUIntWithCommas(stats->extraAlignments, extraAlignments, strBufLen, 18) : "",
 		isPaired() ? pctAndPad(pctPairs,  100.0 * stats->alignedAsPairs / stats->totalReads, 7, strBufLen, true) : "",
-		FormatUIntWithCommas((unsigned _int64)(1000 * stats->totalReads / max(alignTime, (_int64)1)), readsPerSecond, strBufLen),	// Aligntime is in ms
+		FormatUIntWithCommas((_uint64)(1000 * stats->totalReads / max(alignTime, (_int64)1)), readsPerSecond, strBufLen),	// Aligntime is in ms
 		FormatUIntWithCommas((alignTime + 500) / 1000, alignTimeString, strBufLen, 20),
         options->profile ? pctAndPad(pctRead, (double)stats->millisReading / (double)totalTime, 5, strBufLen, false) : "",
         options->profile ? pctAndPad(pctAlign, (double)stats->millisAligning / (double)totalTime, 6, strBufLen, false) : "",

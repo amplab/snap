@@ -912,8 +912,8 @@ AlignerOptions::usage()
                 WriteErrorMessage("Must specify the desired extra search depth after -D\n");
             }
         } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
-            if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
-                '-' != argv[n][3] && '+' != argv[n][3]) {
+            if (strlen(argv[n]) != 4 || ('-' != argv[n][2] && '+' != argv[n][2]) ||
+                ('-' != argv[n][3] && '+' != argv[n][3])) {
 
                 WriteErrorMessage("Invalid -C argument.\n\n");
                 return false;
