@@ -170,7 +170,7 @@ AlignerOptions::usage()
             "  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
             "       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
             "       backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
-            "       with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
+            "       with default tag foo, and an @RG line that also included the DS:my data field.\n"
             "  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
             "  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
             "       to allow for secondary alignments\n"
