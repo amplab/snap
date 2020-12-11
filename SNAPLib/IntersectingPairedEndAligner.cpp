@@ -1341,7 +1341,8 @@ IntersectingPairedEndAligner::alignAffineGap(
 
     int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
     int bestPairScore = result->score[0] + result->score[1];
-    int scoreLimit = maxK + extraSearchDepth;
+    int scoreLimit, scoreLimitALT;
+    scoreLimit = scoreLimitALT = maxK + extraSearchDepth;
     int genomeOffset[NUM_READS_PER_PAIR] = { 0, 0 };
     bool skipAffineGap[NUM_READS_PER_PAIR] = { false, false };
 
@@ -1349,6 +1350,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     // Keep track of old bestPairProbability as this is used in updating the new match probability after affine gap scoring
     //
     double oldPairProbabilityBestResult = result->matchProbability[0] * result->matchProbability[1];
+    double oldPairProbabilityBestResultALT = (firstALTResult->status[0] != NotFound) ? firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1] : 0.0;
 
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
         if (result->score[r] > maxKForSameAlignment) {
@@ -1365,6 +1367,26 @@ IntersectingPairedEndAligner::alignAffineGap(
                 scoreLimit -= result->score[r];
             } else {
                 result->status[r] = NotFound;
+            }
+
+            //
+            // Use affine gap scoring for ALT result if it was computed in Phase 3
+            //
+            if (firstALTResult->status[r] != NotFound) {
+                if (firstALTResult->score[r] > maxKForSameAlignment) { // affine gap may produce a better alignment
+                    firstALTResult->usedAffineGapScoring[r] = true;
+                    scoreLocationWithAffineGap(r, firstALTResult->direction[r], firstALTResult->origLocation[r],
+                        firstALTResult->seedOffset[r], scoreLimitALT, &firstALTResult->score[r], &firstALTResult->matchProbability[r],
+                        &genomeOffset[r], &firstALTResult->basesClippedBefore[r], &firstALTResult->basesClippedAfter[r], &firstALTResult->agScore[r]);
+
+                    if (firstALTResult->score[r] != ScoreAboveLimit) {
+                        firstALTResult->location[r] = firstALTResult->origLocation[r] + genomeOffset[r];
+                        scoreLimitALT -= firstALTResult->score[r];
+                    }
+                    else {
+                        firstALTResult->status[r] = NotFound;
+                    }
+                }
             }
         } else {
             //
@@ -1413,7 +1435,12 @@ IntersectingPairedEndAligner::alignAffineGap(
     // It is important to initialize the score set here and not before affine gap scoring, since only affine gap does clipping of alignments
     //
     bool nonALTBestAlignment = (!altAwareness) || !genome->isGenomeLocationALT(result->location[0]);
-    scoresForAllAlignments.init(result);
+    if (firstALTResult->status[0] != NotFound) { // best result is an ALT result
+        scoresForAllAlignments.init(firstALTResult);
+    }
+    else {
+        scoresForAllAlignments.init(result);
+    }
     if (nonALTBestAlignment) {
         scoresForNonAltAlignments.init(result);
     }
@@ -1423,8 +1450,15 @@ IntersectingPairedEndAligner::alignAffineGap(
     //
     if (!skipAffineGap[0] || !skipAffineGap[1]) {
         double newPairProbability = result->matchProbability[0] * result->matchProbability[1];
-        scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResult);
-        scoresForAllAlignments.updateProbabilityOfBestPair(newPairProbability);
+        if (firstALTResult->status[0] != NotFound) { // best result is an ALT result
+            double newPairProbabilityALT = firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1];
+            scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResultALT);
+            scoresForAllAlignments.updateProbabilityOfBestPair(newPairProbabilityALT);
+        }
+        else {
+            scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResult);
+            scoresForAllAlignments.updateProbabilityOfBestPair(newPairProbability);
+        }
         if (nonALTBestAlignment) {
             scoresForNonAltAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResult);
             scoresForNonAltAlignments.updateProbabilityOfBestPair(newPairProbability);
