@@ -220,28 +220,31 @@ IntersectingPairedEndAligner::align(
     }
 }
 
-	bool
-IntersectingPairedEndAligner::alignLandauVishkin(
-        Read                  *read0,
-        Read                  *read1,
+bool
+    IntersectingPairedEndAligner::alignLandauVishkin(
+        Read* read0,
+        Read* read1,
         PairedAlignmentResult* result,
         PairedAlignmentResult* firstALTResult,
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
-        _int64                *nSecondaryResults,
-        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        _int64* nSecondaryResults,
+        PairedAlignmentResult* secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
         _int64                 singleSecondaryBufferSize,
         _int64                 maxSecondaryResultsToReturn,
-        _int64                *nSingleEndSecondaryResultsForFirstRead,
-        _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64* nSingleEndSecondaryResultsForFirstRead,
+        _int64* nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult* singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         _int64                 maxLVCandidatesForAffineGapBufferSize,
-        _int64                *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap
-	)
+        _int64* nLVCandidatesForAffineGap,
+        PairedAlignmentResult* lvCandidatesForAffineGap
+)
 {
 #if INSTRUMENTATION_FOR_PAPER
-        _int64 startTime = timeInNanos();
+    _int64 startTime = timeInNanos();
+    _int64 nScored = 0;
+    _int64 setIntersectionSize = 0;
+    bool bestCandidateScoredFirst = false;
 #endif // INSTRUMENTATION_FOR_PAPER
 
     firstALTResult->status[0] = firstALTResult->status[1] = NotFound;
@@ -262,7 +265,8 @@ IntersectingPairedEndAligner::alignLandauVishkin(
     int maxSeeds;
     if (numSeedsFromCommandLine != 0) {
         maxSeeds = (int)numSeedsFromCommandLine;
-    } else {
+    }
+    else {
         maxSeeds = (int)(max(read0->getDataLength(), read1->getDataLength()) * seedCoverage / index->getSeedLength());
     }
 
@@ -294,10 +298,10 @@ IntersectingPairedEndAligner::alignLandauVishkin(
 
     //
     // Don't bother if one or both reads are too short.  The minimum read length here is the seed length, but usually there's a longer
-	// minimum enforced by our caller
+    // minimum enforced by our caller
     //
     if (read0->getDataLength() < seedLen || read1->getDataLength() < seedLen) {
-         return true;
+        return true;
     }
 
     //
@@ -306,7 +310,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
     unsigned countOfNs = 0;
 
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-        Read *read = reads[whichRead][FORWARD];
+        Read* read = reads[whichRead][FORWARD];
         readLen[whichRead] = read->getDataLength();
         popularSeedsSkipped[whichRead] = 0;
         countOfHashTableLookups[whichRead] = 0;
@@ -323,7 +327,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
 
         if (readLen[whichRead] > maxReadSize) {
             WriteErrorMessage("IntersectingPairedEndAligner:: got too big read (%d > %d)\n"
-                              "Change MAX_READ_LENTH at the beginning of Read.h and recompile.\n", readLen[whichRead], maxReadSize);
+                "Change MAX_READ_LENTH at the beginning of Read.h and recompile.\n", readLen[whichRead], maxReadSize);
             soft_exit(1);
         }
 
@@ -346,7 +350,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
     //
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
         for (Direction dir = 0; dir < NUM_DIRECTIONS; dir++) {
-            Read *read = reads[whichRead][dir];
+            Read* read = reads[whichRead][dir];
 
             for (unsigned i = 0; i < read->getDataLength(); i++) {
                 reversedRead[whichRead][dir][i] = read->getData()[read->getDataLength() - i - 1];
@@ -354,16 +358,16 @@ IntersectingPairedEndAligner::alignLandauVishkin(
         }
     }
 
-    unsigned thisPassSeedsNotSkipped[NUM_READS_PER_PAIR][NUM_DIRECTIONS] = {{0,0}, {0,0}};
+    unsigned thisPassSeedsNotSkipped[NUM_READS_PER_PAIR][NUM_DIRECTIONS] = { {0,0}, {0,0} };
 
     //
     // Initialize the member variables that are effectively stack locals, but are in the object
     // to avoid having to pass them to score.
     //
-    
+
     localBestPairProbability[0] = 0;
     localBestPairProbability[1] = 0;
-    
+
     //
     // Phase 1: do the hash table lookups for each of the seeds for each of the reads and add them to the hit sets.
     //
@@ -373,12 +377,12 @@ IntersectingPairedEndAligner::alignLandauVishkin(
         unsigned wrapCount = 0;
         int nPossibleSeeds = (int)readLen[whichRead] - seedLen + 1;
         memset(seedUsed, 0, (__max(readLen[0], readLen[1]) + 7) / 8);
-        bool beginsDisjointHitSet[NUM_DIRECTIONS] = {true, true};
+        bool beginsDisjointHitSet[NUM_DIRECTIONS] = { true, true };
 
         while (countOfHashTableLookups[whichRead] < nPossibleSeeds && countOfHashTableLookups[whichRead] < maxSeeds) {
             if (nextSeedToTest >= nPossibleSeeds) {
                 wrapCount++;
-				beginsDisjointHitSet[FORWARD] = beginsDisjointHitSet[RC] = true;
+                beginsDisjointHitSet[FORWARD] = beginsDisjointHitSet[RC] = true;
                 if (wrapCount >= seedLen) {
                     //
                     // There aren't enough valid seeds in this read to reach our target.
@@ -418,13 +422,14 @@ IntersectingPairedEndAligner::alignLandauVishkin(
             // Find all instances of this seed in the genome.
             //
             _int64 nHits[NUM_DIRECTIONS];
-            const GenomeLocation *hits[NUM_DIRECTIONS];
-            const unsigned *hits32[NUM_DIRECTIONS];
+            const GenomeLocation* hits[NUM_DIRECTIONS];
+            const unsigned* hits32[NUM_DIRECTIONS];
 
             if (doesGenomeIndexHave64BitLocations) {
-                index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], 
-                            hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
-            } else {
+                index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC],
+                    hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
+            }
+            else {
                 index->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
             }
 
@@ -433,7 +438,8 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                 int offset;
                 if (dir == FORWARD) {
                     offset = nextSeedToTest;
-                } else {
+                }
+                else {
                     offset = readLen[whichRead] - seedLen - nextSeedToTest;
                 }
 
@@ -441,11 +447,13 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                     totalHashTableHits[whichRead][dir] += nHits[dir];
                     if (doesGenomeIndexHave64BitLocations) {
                         hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], beginsDisjointHitSet[dir]);
-                    } else {
+                    }
+                    else {
                         hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], beginsDisjointHitSet[dir]);
                     }
                     beginsDisjointHitSet[dir] = false;
-                } else {
+                }
+                else {
                     popularSeedsSkipped[whichRead]++;
                 }
             } // for each direction
@@ -457,14 +465,21 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                 _ASSERT((nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1) >= (int)seedLen);
                 nextSeedToTest += (nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1);
                 _ASSERT(nextSeedToTest < nPossibleSeeds);   // We haven't run off the end of the read.
-            } else {
+            }
+            else {
                 nextSeedToTest += seedLen;
             }
         } // while we need to lookup seeds for this read
     } // for each read
 
 #if INSTRUMENTATION_FOR_PAPER
-    int log2HashTableHits[NUM_READS_PER_PAIR] = { __min(cheezyLogBase2(totalHashTableHits[0][FORWARD] + totalHashTableHits[0][RC]), MAX_HIT_SIZE_LOG_2), __min(cheezyLogBase2(totalHashTableHits[1][FORWARD] + totalHashTableHits[1][RC]), MAX_HIT_SIZE_LOG_2) };
+    int hashTableHits[NUM_READS_PER_PAIR] = { hashTableHitSets[0][FORWARD]->getNumDistinctHitLocations(0) + hashTableHitSets[0][RC]->getNumDistinctHitLocations(0),
+                                                hashTableHitSets[1][FORWARD]->getNumDistinctHitLocations(0) + hashTableHitSets[1][RC]->getNumDistinctHitLocations(0) };
+
+    int log2HashTableHits[NUM_READS_PER_PAIR] = { __min(cheezyLogBase2(hashTableHits[0]), MAX_HIT_SIZE_LOG_2),__min(cheezyLogBase2(hashTableHits[1]), MAX_HIT_SIZE_LOG_2) };
+
+    // = { __min(cheezyLogBase2(totalHashTableHits[0][FORWARD] + totalHashTableHits[0][RC]), MAX_HIT_SIZE_LOG_2), __min(cheezyLogBase2(totalHashTableHits[1][FORWARD] + totalHashTableHits[1][RC]), MAX_HIT_SIZE_LOG_2) };
+
 #endif // INSTRUMENTATION_FOR_PAPER
 
     readWithMoreHits = totalHashTableHits[0][FORWARD] + totalHashTableHits[0][RC] > totalHashTableHits[1][FORWARD] + totalHashTableHits[1][RC] ? 0 : 1;
@@ -646,6 +661,10 @@ IntersectingPairedEndAligner::alignLandauVishkin(
 
                 scoringCandidates[bestPossibleScore] = &scoringCandidatePool[lowestFreeScoringCandidatePoolEntry];
 
+#if     INSTRUMENTATION_FOR_PAPER
+                setIntersectionSize++;
+#endif // INSTRUMENTATION_FOR_PAPER
+
 #ifdef _DEBUG
                 if (_DumpAlignments) {
                     printf("SetPair %d, added fewer hits candidate %d at genome location %s:%llu, bestPossibleScore %d, seedOffset %d\n",
@@ -714,6 +733,10 @@ IntersectingPairedEndAligner::alignLandauVishkin(
             candidate->seedOffset, scoreLimit, &fewerEndScore, &fewerEndMatchProbability, &fewerEndGenomeLocationOffset, &candidate->usedAffineGapScoring,
             &candidate->basesClippedBefore, &candidate->basesClippedAfter, &candidate->agScore, &candidate->lvIndels);
 
+#if INSTRUMENTATION_FOR_PAPER
+        nScored++;
+#endif // INSTRUMENTATION_FOR_PAPER
+
         candidate->matchProbability = fewerEndMatchProbability;
 
         _ASSERT(ScoreAboveLimit == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
@@ -762,6 +785,10 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                                 mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset, mate->agScore, mate->matchProbability);
                         }
 #endif // _DEBUG
+
+#if INSTRUMENTATION_FOR_PAPER
+                        nScored++;
+#endif // INSTRUMENTATION_FOR_PAPER
 
                         _ASSERT(ScoreAboveLimit == mate->score || mate->score >= mate->bestPossibleScore);
 
@@ -919,6 +946,12 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                             }
 
                             bool updatedBestScore = scoresForAllAlignments.updateBestHitIfNeeded(pairScore, pairAGScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
+#if INSTRUMENTATION_FOR_PAPER
+                            if (updatedBestScore) {
+                                bestCandidateScoredFirst = nScored == 2;
+                            }
+#endif // INSTRUMENTATION_FOR_PAPER
+
 
                             scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
                             
@@ -1250,6 +1283,21 @@ IntersectingPairedEndAligner::alignLandauVishkin(
     if (runTime >= 0) { // Really don't understand why timeInNanos() sometimes produces garbage, but it does.
         InterlockedAdd64AndReturnNewValue(&g_alignmentCountByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], 1);
         InterlockedAdd64AndReturnNewValue(&g_alignmentTimeByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], runTime);
+        InterlockedAdd64AndReturnNewValue(&g_scoreCountByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], nScored);
+        InterlockedAdd64AndReturnNewValue(&g_setIntersectionSizeByHitCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], setIntersectionSize);
+        if (__min(hashTableHits[0], hashTableHits[1]) > 0) {
+            InterlockedAdd64AndReturnNewValue(&g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[log2HashTableHits[0]][log2HashTableHits[1]], 
+                (100 * setIntersectionSize) / __min(hashTableHits[0], hashTableHits[1]));
+        }
+        InterlockedAdd64AndReturnNewValue(&g_totalSizeOfSmallerHitSet, __min(hashTableHits[0], hashTableHits[1]));
+        InterlockedAdd64AndReturnNewValue(&g_totalSizeOfSetIntersection, setIntersectionSize);
+    }
+
+    if (nScored > 2) {
+        InterlockedAdd64AndReturnNewValue(&g_alignmentsWithMoreThanOneCandidate, 1);
+        if (bestCandidateScoredFirst) {
+            InterlockedAdd64AndReturnNewValue(&g_alignmentsWithMoreThanOneCandidateWhereTheBestCandidateIsScoredFirst, 1);
+        }
     }
 #endif // INSTRUMENTATION_FOR_PAPER
 
@@ -2268,3 +2316,85 @@ int IntersectingPairedEndAligner::computeScoreLimit(bool nonALTAlignment, const 
         return extraSearchDepth + min(maxK, min(scoresForAllAlignments->bestPairScore, scoresForNonAltAlignments->bestPairScore - maxScoreGapToPreferNonAltAlignment));
     }
 }
+
+#if INSTRUMENTATION_FOR_PAPER
+    int
+IntersectingPairedEndAligner::HashTableHitSet::getNumDistinctHitLocations(unsigned maxK)
+{
+    int nextSeed[MAX_MAX_SEEDS];
+    int nDistinctHits = 0;
+
+    GenomeLocation currentAnchor = InvalidGenomeLocation;
+    int nSetsRemaining = nLookupsUsed;
+
+    for (int i = 0; i < nLookupsUsed; i++) {
+        nextSeed[i] = 0;
+    }
+
+#define BODY(lookups)                                                                                       \
+    while (true) {                                                                                          \
+        int setForThisPass = -1;                                                                            \
+        GenomeLocation locationForThisPass = 0;                                                             \
+        for (int whichSet = 0; whichSet < nLookupsUsed; whichSet++) {                                       \
+            if (lookups[whichSet].nHits == nextSeed[whichSet]) {                                            \
+                nextSeed[whichSet]++;                                                                       \
+                nSetsRemaining--;                                                                           \
+            } else if (lookups[whichSet].nHits > nextSeed[whichSet] &&                                      \
+                ((GenomeLocation)lookups[whichSet].hits[nextSeed[whichSet]] -                               \
+                    lookups[whichSet].seedOffset) > locationForThisPass) {                                  \
+                setForThisPass = whichSet;                                                                  \
+                locationForThisPass = lookups[whichSet].hits[nextSeed[whichSet]] -                          \
+                    lookups[whichSet].seedOffset;                                                           \
+            }                                                                                               \
+        }                                                                                                   \
+                                                                                                            \
+        _ASSERT(nSetsRemaining == 0 || setForThisPass != -1);                                               \
+        if (nSetsRemaining == 0) {                                                                          \
+            return nDistinctHits;                                                                           \
+        }                                                                                                   \
+                                                                                                            \
+        if (currentAnchor - locationForThisPass > maxK) {                                                   \
+            nDistinctHits++;                                                                                \
+            currentAnchor = locationForThisPass;                                                            \
+        }                                                                                                   \
+                                                                                                            \
+        nextSeed[setForThisPass]++;                                                                         \
+    }
+
+    if (doesGenomeIndexHave64BitLocations) {
+        BODY(lookups64);
+    } else {
+        while (true) {            
+            int setForThisPass = -1;                                                                            
+            GenomeLocation locationForThisPass = 0;                                         
+            for (int whichSet = 0; whichSet < nLookupsUsed; whichSet++) {
+                     if (lookups32[whichSet].nHits == nextSeed[whichSet]) {                            
+                            nSetsRemaining--;         
+                            nextSeed[whichSet]++;
+                    } else if (lookups32[whichSet].nHits > nextSeed[whichSet] &&
+                        ((GenomeLocation)lookups32[whichSet].hits[nextSeed[whichSet]] - lookups32[whichSet].seedOffset) > locationForThisPass) {
+                            
+                            setForThisPass = whichSet;                                                                  
+                            locationForThisPass = lookups32[whichSet].hits[nextSeed[whichSet]] - lookups32[whichSet].seedOffset;
+                    }                                                                                               
+            }                                                                                                   
+                    
+            _ASSERT(nSetsRemaining == 0 || setForThisPass != -1);                                               
+            if (nSetsRemaining == 0) {                                    
+                return nDistinctHits;                                                                           
+            }                                                                                                   
+                                   
+            if (currentAnchor - locationForThisPass > maxK) {
+                nDistinctHits++;                                                                                
+                currentAnchor = locationForThisPass;
+            }                                                                                                   
+
+            nextSeed[setForThisPass]++;                                                                         
+        }
+    }
+#undef BODY
+
+    _ASSERT(!"NOTREACHED");
+    return -1;
+}
+#endif // INSTRUMENTATION_FOR_PAPER

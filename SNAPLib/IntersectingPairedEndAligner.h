@@ -29,6 +29,7 @@ Revision History:
 #include "LandauVishkin.h"
 #include "FixedSizeMap.h"
 #include "AlignmentAdjuster.h"
+#include "AlignerOptions.h"
 
 const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 4000;
 const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;
@@ -309,6 +310,9 @@ private:
             return &lookups64[nLookupsUsed].singletonGenomeLocation[1];
         }
 
+#if INSTRUMENTATION_FOR_PAPER
+        int getNumDistinctHitLocations(unsigned maxK);
+#endif // INSTRUMENTATION_FOR_PAPER
 
     private:
         struct DisjointHitSet {

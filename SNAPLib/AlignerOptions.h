@@ -29,12 +29,21 @@ Revision History:
 #include "Genome.h"
 #include "Read.h"
 
-#define INSTRUMENTATION_FOR_PAPER 0 // Turn this on to generate raw data about hit sets and their intersections for the paper
+#define INSTRUMENTATION_FOR_PAPER 1 // Turn this on to generate raw data about hit sets and their intersections for the paper
 
 #if INSTRUMENTATION_FOR_PAPER
+
 #define MAX_HIT_SIZE_LOG_2  15  // This is for the instrumentation
 extern _int64 g_alignmentTimeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2+1][MAX_HIT_SIZE_LOG_2+1];  // In the paired-end aligner, if you have seeds A and B with hit set sizes |A| and |B| then the total time in ns gets added into g_alignmentTimeByHitCountsOfEachSeed[log2(|A|)][log2(|B|)]
 extern _int64 g_alignmentCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // Same as above, but just add one per time.
+extern _int64 g_scoreCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+extern _int64 g_setIntersectionSizeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+extern _int64 g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+extern _int64 g_totalSizeOfSmallerHitSet;
+extern _int64 g_totalSizeOfSetIntersection;
+extern _int64 g_alignmentsWithMoreThanOneCandidateWhereTheBestCandidateIsScoredFirst;
+extern _int64 g_alignmentsWithMoreThanOneCandidate;
+
 #endif // INSTRUMENTATION_FOR_PAPER
 
 #define MAPQ_LIMIT_FOR_SINGLE_HIT 10

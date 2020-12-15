@@ -43,6 +43,13 @@ using std::min;
 #if INSTRUMENTATION_FOR_PAPER
 _int64 g_alignmentTimeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // In the paired-end aligner, if you have seeds A and B with hit set sizes |A| and |B| then the total time in ns gets added into g_alignmentTimeByHitCountsOfEachSeed[log2(|A|)][log2(|B|)]
 _int64 g_alignmentCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // Same as above, but just add one per time.
+_int64 g_scoreCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+_int64 g_setIntersectionSizeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+_int64 g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+_int64 g_totalSizeOfSmallerHitSet = 0;
+_int64 g_totalSizeOfSetIntersection = 0;
+_int64 g_alignmentsWithMoreThanOneCandidateWhereTheBestCandidateIsScoredFirst = 0;
+_int64 g_alignmentsWithMoreThanOneCandidate = 0;
 #endif // INSTRUMENTATION_FOR_PAPER
 
 //
@@ -93,6 +100,9 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
         for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
             g_alignmentTimeByHitCountsOfEachSeed[i][j] = 0;
             g_alignmentCountByHitCountsOfEachSeed[i][j] = 0;
+            g_scoreCountByHitCountsOfEachSeed[i][j] = 0;
+            g_setIntersectionSizeByHitCountsOfEachSeed[i][j] = 0;
+            g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[i][j] = 0;
         } // j
     } // i
 #endif // INSTRUMENTATION_FOR_PAPER
@@ -126,8 +136,10 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
 
     if (outputFile == NULL) {
         fprintf(stderr, "Unable to open instrumentation output file\n");
-    }
-    else {
+    } else {
+        fprintf(outputFile, "%lld alignments have more than one candidate scored.  Of those, %lld had the best candidate scored first\n", g_alignmentsWithMoreThanOneCandidate, g_alignmentsWithMoreThanOneCandidateWhereTheBestCandidateIsScoredFirst);
+        fprintf(outputFile, "Total size of set intersection %lld.  Total size of smaller set %lld\n", g_totalSizeOfSetIntersection, g_totalSizeOfSmallerHitSet);
+
         fprintf(outputFile, "Alignment count by hit counts of each seed\nHits 1/2");
         for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
             fprintf(outputFile, "\t%d", 1 << i);
@@ -152,6 +164,48 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
             fprintf(outputFile, "%d", 1 << i);
             for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
                 fprintf(outputFile, "\t%lld", g_alignmentTimeByHitCountsOfEachSeed[i][j]);
+            } // j
+            fprintf(outputFile, "\n");
+        } // i
+
+        fprintf(outputFile, "\nLocations scored by hit counts of each seed\nHits 1/2");
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "\t%d", 1 << i);
+        }
+        fprintf(outputFile, "\n");
+
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "%d", 1 << i);
+            for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+                fprintf(outputFile, "\t%lld", g_scoreCountByHitCountsOfEachSeed[i][j]);
+            } // j
+            fprintf(outputFile, "\n");
+        } // i
+
+        fprintf(outputFile, "\nSet intersection size by hit counts of each seed\nHits 1/2");
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "\t%d", 1 << i);
+        }
+        fprintf(outputFile, "\n");
+
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "%d", 1 << i);
+            for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+                fprintf(outputFile, "\t%lld", g_setIntersectionSizeByHitCountsOfEachSeed[i][j]);
+            } // j
+            fprintf(outputFile, "\n");
+        } // i
+
+        fprintf(outputFile, "\n100x Total of Ratio of Set Intersection size to size of smaller seed hit count\nHits 1/2");
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "\t%d", 1 << i);
+        }
+        fprintf(outputFile, "\n");
+
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "%d", 1 << i);
+            for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+                fprintf(outputFile, "\t%lld", g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[i][j]);
             } // j
             fprintf(outputFile, "\n");
         } // i

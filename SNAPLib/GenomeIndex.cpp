@@ -63,7 +63,8 @@ static void usage()
         "                   the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
         "                   indicating that a space is a terminator.\n"
         " -bSpace           Indicates that the space and tab characters are terminators for chromosome names (see -B above).  This may be used in addition\n"
-        "                   to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
+        "                   to other terminators specified by -B.  -B and -bSpace are case sensitive.  This is the default.\n"
+        " -bSpace-          Indicates that space and tab characters should be included in chromosome names.\n"
         " -p                Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
         "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
         "                   read you'll process.  Default is %d.  Specify the amount of padding directly after -p without a space.\n"
@@ -134,7 +135,7 @@ GenomeIndex::runIndexer(
     int seedLen = DEFAULT_SEED_SIZE;
     double slack = DEFAULT_SLACK;
     const char *pieceNameTerminatorCharacters = NULL;
-    bool spaceIsAPieceNameTerminator = false;
+    bool spaceIsAPieceNameTerminator = true;
     const char *histogramFileName = NULL;
     unsigned chromosomePadding = DEFAULT_PADDING;
     bool forceExact = false;
@@ -213,9 +214,10 @@ GenomeIndex::runIndexer(
             }
         } else if (argv[n][0] == '-' && argv[n][1] == 'B') {
             pieceNameTerminatorCharacters = argv[n] + 2;
-		}
-		else if (!strcmp(argv[n], "-bSpace")) {
-			spaceIsAPieceNameTerminator = true;
+		} else if (!strcmp(argv[n], "-bSpace")) {
+            spaceIsAPieceNameTerminator = true;
+        } else if (!strcmp(argv[n], "-bSpace-")) {
+            spaceIsAPieceNameTerminator = false;
 		} else if (!_stricmp(argv[n], "-AutoAlt-")) {
             autoALT = false;
 		} else if (!strcmp(argv[n], "-maxAltContigSize")) {
