@@ -703,8 +703,10 @@ SAMReader::getReadFromLine(
                     if (!strncmp(rgFromAux, rgStart, rgLen)) {
                         char* lbStart = rgEnd + 1;
                         char* lbEnd = strchr(lbStart, '\t');
-                        read->setLibrary(lbStart);
-                        read->setLibraryLength((int)(lbEnd - lbStart));
+                        if (lbEnd != NULL) {
+                            read->setLibrary(lbStart);
+                            read->setLibraryLength((int)(lbEnd - lbStart));
+                        }
                     }
                 }
             }
