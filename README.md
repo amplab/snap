@@ -14,8 +14,8 @@ need for several pipeline stages used by other aligners.
 ## Binaries
 
 The SNAP executable
-- [v1.0.2 For Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpYCkpLlDktZnVaow?e=YX60aF)
-- [v1.0.2 for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpZQUgOEMrmA5qaLA?e=6FYxAv)
+- [v1.0.3 For Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpYCkpLlDktZnVaow?e=YX60aF)
+- [v1.0.3 for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpZQUgOEMrmA5qaLA?e=6FYxAv)
 - [v1.0.0 for OSX](https://1drv.ms/u/s!AhuEg_0yZD86hcphrIjwoeTjdSvgoA?e=coSU85)
 
 The SNAPCommand tool
