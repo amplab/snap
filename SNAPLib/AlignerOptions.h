@@ -29,7 +29,7 @@ Revision History:
 #include "Genome.h"
 #include "Read.h"
 
-#define INSTRUMENTATION_FOR_PAPER 1 // Turn this on to generate raw data about hit sets and their intersections for the paper
+#define INSTRUMENTATION_FOR_PAPER 0 // Turn this on to generate raw data about hit sets and their intersections for the paper
 
 #if INSTRUMENTATION_FOR_PAPER
 
