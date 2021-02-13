@@ -49,7 +49,7 @@ namespace PaperGraphs
             var timingsDirectory = @"d:\temp\timings\";
             var concordanceDirectory = @"d:\temp\concordance\";
 
-            string[] dataSets = { "hg001", "hg002", "hg003", "hg004", "hg005", "hg006", "hg007", "ERR194146", "ERR194147", "mp002", "mp003", "mp004", "mp005", "mp006", "mp007",  };
+            string[] dataSets = { "hg001", "hg002", "hg003", "hg004", "hg005", "hg006", "hg007", "ERR194146", "ERR194147"  };
 
             Dictionary<string, Dictionary<ASETools.Aligner, Result>> resultsByDataSetAndAligner = new Dictionary<string, Dictionary<ASETools.Aligner, Result>>();
             Dictionary<string, Dictionary<ASETools.Aligner, List<Result>>> replicasByDataSetAndAligner = new Dictionary<string, Dictionary<ASETools.Aligner, List<Result>>>();
@@ -66,14 +66,16 @@ namespace PaperGraphs
                 {
                     nTotal++;
 
-                    var timingFilename = timingsDirectory + dataSet + "." + ASETools.alignerName[aligner] + "_timings.txt";
+                    var timingFilename = timingsDirectory + dataSet + "." + ASETools.alignerName[aligner] + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + "_timings.txt";
                     var splitTimingsFilenames = new List<string>();
                     for (int i = 0; i < 9; i++)
                     {
-                        splitTimingsFilenames.Add(timingsDirectory + dataSet + "." + i + "." + ASETools.alignerName[aligner] + "_timings.txt");
+                        splitTimingsFilenames.Add(timingsDirectory + dataSet + "." + i + "." + ASETools.alignerName[aligner]  + "_timings.txt");
                     }
 
-                    if (File.Exists(timingFilename) || splitTimingsFilenames.All(_ => File.Exists(_))) {
+                    var secondStageFilename = timingsDirectory + dataSet + "." + ASETools.alignerName[aligner] + "_second_stage_timings.txt";
+
+                    if (File.Exists(timingFilename) || splitTimingsFilenames.All(_ => File.Exists(_) && File.Exists(secondStageFilename))) {
                         nWithTimings++;
 
                         var replicas = new List<ASETools.RunTiming>();
@@ -89,11 +91,11 @@ namespace PaperGraphs
                                 timings = ASETools.RunTiming.LoadFromLinuxFile(timingFilename);
                             } else
                             {
-                                timings = ASETools.RunTiming.LoadFromSplitFiles(splitTimingsFilenames);
+                                timings = ASETools.RunTiming.LoadFromSplitFiles(splitTimingsFilenames, secondStageFilename);
                             }
                         }
 
-                        var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + ".concordance.tar";
+                        var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + ".concordance.tar";
                         //Console.WriteLine(concordanceFilename);
                         ASETools.ConcordanceResults concordance = null;
 
@@ -409,24 +411,53 @@ namespace PaperGraphs
             //
             // Scatter graphs
             //
-            outputFile.WriteLine();
-            outputFile.WriteLine("Scatter Graphs");
-            string[] scatterGraphTypes = { "SNV Recall", "SNV Precision", "SNV F1", "Indel Recall", "Indel Precision", "Indel F1", "Mean F1" };
-            foreach (var scatterGraphType in scatterGraphTypes)
-            {
-                outputFile.Write("\t" + scatterGraphType + "\t\t\t\t");                
-            } // scatter graph type
-            outputFile.WriteLine();
 
-            outputFile.Write("Sample");
-            foreach (var scatterGraphType in scatterGraphTypes)
+            var scatterGraphs = new List<ScatterGraphInfo>();
+            scatterGraphs.Add(new ScatterGraphInfo("Mean F1", _ => _.Mean_F1_Score()));
+            scatterGraphs.Add(new ScatterGraphInfo("SNV F1", _ => _.results[ASETools.VariantType.SNV].F1_score));
+            scatterGraphs.Add(new ScatterGraphInfo("Indel F1", _ => _.results[ASETools.VariantType.Indel].F1_score));
+            scatterGraphs.Add(new ScatterGraphInfo("SNV Recall", _ => _.results[ASETools.VariantType.SNV].recall));
+            scatterGraphs.Add(new ScatterGraphInfo("SNV Precision", _ => _.results[ASETools.VariantType.SNV].precision));
+            scatterGraphs.Add(new ScatterGraphInfo("Indel Recall", _ => _.results[ASETools.VariantType.Indel].recall));
+            scatterGraphs.Add(new ScatterGraphInfo("Indel Precision", _ => _.results[ASETools.VariantType.Indel].precision));
+
+            foreach (var dataSet in dataSets)
             {
+                //
+                // Write the graph headers
+                //
+                outputFile.WriteLine();
+                outputFile.WriteLine("Scatter graphs for " + dataSet);
+                foreach (var scatterGraph in scatterGraphs)
+                {
+                    outputFile.Write("\t" + scatterGraph.name + "\t");
+                }
+                outputFile.WriteLine();
+
+                outputFile.Write("Aligner");
+                foreach (var scatterGraph in scatterGraphs)
+                {
+                    outputFile.Write("\tRun Time\tConcordance"); ;
+                }
+                outputFile.WriteLine();
+
                 foreach (var aligner in ASETools.allAligners)
                 {
-
-                } // aligners
-            } // scatter graph type
-            outputFile.WriteLine();
+                    outputFile.Write(ASETools.alignerName[aligner]);
+                    foreach (var scatterGraph in scatterGraphs)
+                    {
+                        if (resultsByDataSetAndAligner[dataSet][aligner].runTiming != null && resultsByDataSetAndAligner[dataSet][aligner].concordance != null)
+                        {
+                            outputFile.Write("\t" + (double)(resultsByDataSetAndAligner[dataSet][aligner].runTiming.alignTime + resultsByDataSetAndAligner[dataSet][aligner].runTiming.loadingTime) / 3600 / 24 + "\t" +
+                                ASETools.DoubleRounded(scatterGraph.extractor(resultsByDataSetAndAligner[dataSet][aligner].concordance), nDigits));
+                        } else
+                        {
+                            outputFile.Write("\t\t");
+                        }
+                    } // scatter graph
+                    outputFile.WriteLine();
+                } // aligner
+            }
 
             outputFile.WriteLine("**done**");
             outputFile.Close();

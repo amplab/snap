@@ -300,6 +300,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaperGraphs", "apps\PaperGr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BillSamCat", "apps\BillSamCat\BillSamCat.csproj", "{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaperGraphsWithDragen", "apps\PaperGraphsWithDragen\PaperGraphsWithDragen.csproj", "{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2374,6 +2376,22 @@ Global
 		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|Win32.Build.0 = Release|Any CPU
 		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|x64.ActiveCfg = Release|x64
 		{E5F830A6-83A0-4355-A9E8-2FDCA6B1C39D}.Release|x64.Build.0 = Release|x64
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Debug|Win32.Build.0 = Debug|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Debug|x64.ActiveCfg = Debug|x64
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Debug|x64.Build.0 = Debug|x64
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Release|Win32.ActiveCfg = Release|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Release|Win32.Build.0 = Release|Any CPU
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Release|x64.ActiveCfg = Release|x64
+		{1EB860AD-A733-45FF-A47F-6EB824BBAC6F}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

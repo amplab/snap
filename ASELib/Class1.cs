@@ -17149,17 +17149,56 @@ namespace ASELib
                 return new RunTiming(dates[1].Subtract(dates[0]).TotalSeconds, 0, dates[2].Subtract(dates[1]).TotalSeconds, 0, dates[0], dates[2]);
             }
 
-            public static RunTiming LoadFromSplitFiles(List<string> inputFilenames)
+            static RunTiming LoadFromSecondStageFile(string inputFilename)
+            {
+                var inputFile = ASETools.CreateStreamReaderWithRetry(inputFilename);
+                if (inputFile == null)
+                {
+                    throw new Exception("Unable to open " + inputFilename);
+                }
+
+                var inputLines = new List<string>();
+                string inputLine;
+                while (null != (inputLine = inputFile.ReadLine()))
+                {
+                    inputLines.Add(inputLine);
+                }
+
+                var linesWithDates = Enumerable.Range(0, inputLines.Count()).Where(_ => daysOfTheWeek.Any(day => inputLines[_].StartsWith(day))).ToList();
+                if (linesWithDates.Count() != 5)
+                {
+                    Console.WriteLine("Split file: Incorrect number of lines with dates for " + inputFilename);
+                    return null;
+                }
+
+                List<DateTime> dates;
+                try
+                {
+                    dates = linesWithDates.Select(_ => ASETools.LinuxDateStringToDateTime(inputLines[_])).ToList();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Exception.  Lines with dates: ");
+                    linesWithDates.ForEach(_ => Console.WriteLine((inputLines[_])));
+                    Console.WriteLine("input filename " + inputFilename);
+                    throw e;
+                }
+
+                return new RunTiming(0, 0, 0, dates[4].Subtract(dates[0]).TotalSeconds, dates[0], dates[4]);
+            }
+
+            public static RunTiming LoadFromSplitFiles(List<string> inputFilenames, string secondStageFilename)
             {
                 var splits = inputFilenames.Select(_ => LoadFromSplitFile(_)).ToList();
+                var secondStage = LoadFromSecondStageFile(secondStageFilename);
 
                 return new RunTiming(
                     splits.Select(_ => _.copyInTime).Sum(),
-                    splits.Select(_ => _.overallRuntime).Sum(),
+                    splits.Select(_ => _.alignTime).Sum() + secondStage.sortTime,
                     splits.Select(_ => _.alignTime).Sum(),
-                    splits.Select(_ => _.sortTime).Sum(),
+                    secondStage.sortTime,
                     splits.Select(_ => _.startTime).Min(),
-                    splits.Select(_ => _.stopTime).Max(),
+                    secondStage.stopTime,
                     splits);
             }
 
@@ -17419,14 +17458,13 @@ namespace ASELib
                     throw new Exception("ASETools.ConordanceResults.ConsordanceResults(" + tarballFilename + "): tarball filename must end in .tar");
                 }
                 
-
                 var sampleName = GetFileNameFromPathname(tarballFilename).Substring(0, GetFileNameFromPathname(tarballFilename).Length - 4);
                 if (sampleNameOverride != null)
                 {
                     sampleName = sampleNameOverride;
                 }
                 var summaryFilename = sampleName + ".summary.csv";
-                var tempDirectory = @"d:\temp\";
+                var tempDirectory = @"d:\temp\extractedTarballs\";
 
                 ExtractFileFromTarball(tarballFilename, summaryFilename, tempDirectory);
 

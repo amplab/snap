@@ -5161,7 +5161,7 @@ namespace ASEProcessManager
                         
                                 if (paired)
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -t -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -t --maxins 1000 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 else
                                 {
