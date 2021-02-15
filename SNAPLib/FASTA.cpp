@@ -154,7 +154,7 @@ AddContigToGenome(
     char            *paddingBuffer)
 {
     genome->addData(paddingBuffer);
-    genome->startContig(contig->name);
+    genome->startContig(contig->name, contig->contigNumber);
 
     for (ContigLine* line = contig->lines; NULL != line; line = line->next) {
         genome->addData(line->bases);

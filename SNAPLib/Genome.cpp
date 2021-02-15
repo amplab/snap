@@ -74,7 +74,7 @@ Genome::addData(const char *data)
 }
 
     void
-Genome::startContig(const char *contigName)
+Genome::startContig(const char *contigName, int originalContigNumber)
 {
     if (nContigs == maxContigs) {
         //
@@ -103,6 +103,7 @@ Genome::startContig(const char *contigName)
     strncpy(contigs[nContigs].name,contigName,len);
     contigs[nContigs].name[len-1] = '\0';
 	contigs[nContigs].isALT = false;
+    contigs[nContigs].originalContigNumber = originalContigNumber;
 
     nContigs++;
 }
@@ -174,7 +175,7 @@ Genome::saveToFile(const char *fileName) const
         fprintf(saveFile, "%lld", GenomeLocationAsInt64(contigs[i].beginningLocation));
 
 		if (areALTContigsMarked) {
-			fprintf(saveFile, " %x", (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), contigs[i].name);
+			fprintf(saveFile, " %x", (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0));
 		}
         
         if (isOriginalContigOrderRemembered) {

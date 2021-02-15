@@ -176,7 +176,8 @@ public:
             bool                    i_isOriginalContigOrderRemembered);
 
 		void startContig(
-			const char          *contigName);
+			const char          *contigName,
+            int                  originalContigNumber);
 
 		void markContigALT(
 			const char			*contigName);
