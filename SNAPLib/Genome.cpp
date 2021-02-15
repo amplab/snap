@@ -32,9 +32,8 @@ Revision History:
 #include "Error.h"
 #include "Util.h"
 
-Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding, unsigned i_maxContigs, bool i_areALTContigsMarked)
-: maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding), maxContigs(i_maxContigs),
-  mappedFile(NULL)
+Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding, unsigned i_maxContigs, bool i_areALTContigsMarked, bool i_isOriginalContigOrderRemembered)
+: maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding), maxContigs(i_maxContigs), mappedFile(NULL)
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
@@ -52,6 +51,7 @@ Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned 
     contigs = new Contig[maxContigs];
     contigsByName = NULL;
     areALTContigsMarked = i_areALTContigsMarked;
+    isOriginalContigOrderRemembered = i_isOriginalContigOrderRemembered;
 }
 
     void
@@ -143,7 +143,8 @@ Genome::~Genome()
 }
 
 // Flags for the options field in the header
-#define	GENOME_FLAG_ALT_CONTIGS_MARKED		0x1
+#define	GENOME_FLAG_ALT_CONTIGS_MARKED		            0x1
+#define GENOME_FLAG_ORIGINAL_CONTIG_ORDER_REMEMBERED    0x2
 
 // Flags for the per-contig options
 #define GENOME_FLAG_CONTIG_IS_ALT			0x1
@@ -151,7 +152,7 @@ Genome::~Genome()
 Genome::saveToFile(const char *fileName) const
 {
     //
-    // Save file format is (in binary) the number of bases, the number of contigs, followed by
+    // Save file format is the number of bases, the number of contigs, followed by
     //  the contigs themselves, rounded up to 4K, followed by the bases.
     //
 
@@ -161,7 +162,7 @@ Genome::saveToFile(const char *fileName) const
         return false;
     } 
 
-    fprintf(saveFile,"%lld %d %d\n",nBases, nContigs, (areALTContigsMarked ? GENOME_FLAG_ALT_CONTIGS_MARKED : 0));	
+    fprintf(saveFile,"%lld %d %d\n",nBases, nContigs, (areALTContigsMarked ? GENOME_FLAG_ALT_CONTIGS_MARKED : 0) | (isOriginalContigOrderRemembered ? GENOME_FLAG_ORIGINAL_CONTIG_ORDER_REMEMBERED : 0));	
     char *curChar = NULL;
 
     for (int i = 0; i < nContigs; i++) {
@@ -170,11 +171,17 @@ Genome::saveToFile(const char *fileName) const
          if (*curChar == ' '){ *curChar = '_'; }
         }
 
+        fprintf(saveFile, "%lld", GenomeLocationAsInt64(contigs[i].beginningLocation));
+
 		if (areALTContigsMarked) {
-			fprintf(saveFile, "%lld %x %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), contigs[i].name);
-		} else {
-			fprintf(saveFile, "%lld %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), contigs[i].name);
+			fprintf(saveFile, " %x", (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), contigs[i].name);
 		}
+        
+        if (isOriginalContigOrderRemembered) {
+            fprintf(saveFile, " %d", contigs[i].originalContigNumber);
+        }
+		
+        fprintf(saveFile, " %s\n", contigs[i].name);
     }
 
 	//
@@ -209,8 +216,9 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
     GenomeDistance nBases;
     unsigned nContigs;
 	bool hasALTContigsMarked;
+    bool isOriginalContigOrderRemembered;
 
-    if (!openFileAndGetSizes(fileName, &loadFile, &nBases, &nContigs, map, &hasALTContigsMarked)) {
+    if (!openFileAndGetSizes(fileName, &loadFile, &nBases, &nContigs, map, &hasALTContigsMarked, &isOriginalContigOrderRemembered)) {
         //
         // It already printed an error.  Just fail.
         //
@@ -229,7 +237,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         maxLocation = minLocation + length;
     }
 
-    Genome *genome = new Genome(nBases, length, chromosomePadding, nContigs, hasALTContigsMarked);
+    Genome *genome = new Genome(nBases, length, chromosomePadding, nContigs, hasALTContigsMarked, isOriginalContigOrderRemembered);
    
     genome->nBases = nBases;
     genome->nContigs = genome->maxContigs = nContigs;
@@ -239,7 +247,6 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         WriteErrorMessage("Genome::loadFromFile: specified minOffset %u >= nBases %u\n", GenomeLocationAsInt64(minLocation), nBases);
         soft_exit(-1);
     }
-	genome->isContigAware = hasALTContigsMarked;
 
     genome->maxLocation = maxLocation;
 
@@ -274,6 +281,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
 	    n++; // increment n so we start copying at the position after the space
 
 		bool contigIsALT = false;
+        int originalContigNumber = -1;
 
 		if (hasALTContigsMarked) {
 			//
@@ -281,12 +289,14 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
 			//
 			char *nextSpace = strchr(contigNameBuffer + n, ' ');
 			if (nextSpace == NULL) {
-				WriteErrorMessage("Failure loading genome.  Contigs are supposed to have flags to mark whether they're ALT, but one doesn't.  Line: '%s'\n", contigNameBuffer);
+				WriteErrorMessage("Failure loading genome. Contigs are supposed to have flags to mark whether they're ALT, but one doesn't.  Line: '%s'\n", contigNameBuffer);
 				soft_exit(1);
 			}
 			*nextSpace = '\0';
 			int flags;
-			if (1 != sscanf(contigNameBuffer + n, "%x", &flags)) {
+
+            if (1 != sscanf(contigNameBuffer + n, "%x", &flags)) {
+                *nextSpace = ' ';
 				WriteErrorMessage("Failure loading genome.  Unable to parse contig flags in line: '%s'\n", contigNameBuffer);
 				soft_exit(1);
 			}
@@ -297,9 +307,46 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
 
 			*nextSpace = ' ';
 			n = nextSpace - contigNameBuffer + 1;
-		}
+        } 
+
+        if (isOriginalContigOrderRemembered) {
+            //
+            // There is an extra %d after the size (and after the flags is hasALTContigsMarked) that's the original contig number.
+            //
+            char* nextSpace = strchr(contigNameBuffer + n, ' ');
+            char* startLocation = contigNameBuffer + n;
+
+            if (hasALTContigsMarked) {
+                //
+                // Don't have to check NULL here, since we already did it above.
+                //
+                startLocation = nextSpace + 1;
+                nextSpace = strchr(startLocation, ' ');
+
+                if (nextSpace == NULL) {
+                    WriteErrorMessage("Failure loading genome.  Contigs are suppoed to have the original FASTA order marked, but this one doesn't.  Line: '%s'\n", contigNameBuffer);
+                    soft_exit(1);
+                }
+            } // hasALTContigsMarked
+
+            *nextSpace = '\0';
+
+            if (1 != sscanf(startLocation, "%d", &originalContigNumber)) {
+                *nextSpace = ' ';
+                WriteErrorMessage("Failure loading genome. Unable to parse original contig number in line: '%s'\n", contigNameBuffer);
+                soft_exit(1);
+            }
+
+            *nextSpace = ' ';
+
+            if (originalContigNumber < 0) {
+                WriteErrorMessage("Failure loading genome. Invalid (negative) original contig number in line: '%s'\n", contigNameBuffer);
+                soft_exit(1);
+            }
+        } // isOriginalContigOrderRemembered
 
 		genome->contigs[i].isALT = contigIsALT;
+        genome->contigs[i].originalContigNumber = originalContigNumber;
 
 	    contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
         genome->contigs[i].name = new char[contigSize + 1];
@@ -382,7 +429,7 @@ Genome::sortContigsByName()
 }
 
     bool
-Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map, bool *hasALTContigsMarked)
+Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map, bool *hasALTContigsMarked, bool *isOriginalContigOrderRemembered)
 {
 	if (map) {
 		*file = GenericFile_map::open(filename);
@@ -417,23 +464,31 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDist
 		{
 			*hasALTContigsMarked = false;
 		}
+
+        if (flags & GENOME_FLAG_ORIGINAL_CONTIG_ORDER_REMEMBERED) {
+            *isOriginalContigOrderRemembered = true;
+        }
+        else {
+            *isOriginalContigOrderRemembered = false;
+        }
 	}
 	else 
 	{
 		*hasALTContigsMarked = false;
+        *isOriginalContigOrderRemembered = false;
 	}
     return true;
 }
 
 
     bool 
-Genome::getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs, bool *hasALTContigsMarked)
+Genome::getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs, bool *hasALTContigsMarked, bool *isOriginalContigOrderRemembered)
 {
     GenericFile *file;
     GenomeDistance localNBases;
     unsigned localnContigs;
     
-    if (!openFileAndGetSizes(fileName,&file, nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs, false, hasALTContigsMarked)) {
+    if (!openFileAndGetSizes(fileName,&file, nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs, false, hasALTContigsMarked, isOriginalContigOrderRemembered)) {
         return false;
     }
 

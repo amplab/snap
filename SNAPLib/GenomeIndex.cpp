@@ -1757,6 +1757,10 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 		return NULL;
 	}
 
+    if (!index->genome->doesGenomeRecordOriginalContigOrder()) {
+        WriteStatusMessage("WARNING: The index you're using does not record the original order of contigs, so the generated output will not match the input.  This may or may not matter to downstream tools.\n");
+    }
+
     snprintf(filenameBuffer,filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, OverflowTableFileName);
 
 	if (map) {

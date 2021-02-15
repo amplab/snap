@@ -89,6 +89,7 @@ struct RawContigData {
     GenomeDistance totalSize;
     char* name;
     RawContigData* next;
+    int contigNumber;   // Where this contig is in the original FASTA file
 
     RawContigData() {
         lines = NULL;
@@ -96,6 +97,7 @@ struct RawContigData {
         totalSize = 0;
         name = NULL;
         next = NULL;
+        contigNumber = -1;
     }
 
     void addLine(const char* bases) {
@@ -159,6 +161,30 @@ AddContigToGenome(
     }
 } // AddContigToGenome
 
+   void
+ReverseContigList(RawContigData** head) 
+{
+    if (*head == NULL) {
+        return;
+    }
+
+    RawContigData* cur = *head;
+    RawContigData* prev = NULL;
+
+    for (;;) {
+        RawContigData* next = cur->next;
+        cur->next = prev;
+
+        if (next == NULL) {
+            *head = cur;
+            return;
+        }
+
+        prev = cur;
+        cur = next;
+    } // for ever
+} // ReverseContigList
+
     const Genome *
 ReadFASTAGenome(
 	const char		*fileName,
@@ -210,6 +236,8 @@ ReadFASTAGenome(
     bool warningIssued = false;
     bool inAContig = false;
 
+    int nextContigNumber = 0;
+
     while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, fastaFile)) {
         fileSize += strlen(lineBuffer);
         if (lineBuffer[0] == '>') {
@@ -260,10 +288,12 @@ ReadFASTAGenome(
 
             currentContig->name = new char[nameLength];
             strncpy(currentContig->name, lineBuffer + 1, nameLength);
+            currentContig->contigNumber = nextContigNumber;
+            nextContigNumber++;
 
         } else {
             if (!inAContig) {
-                WriteErrorMessage("\nFASTA file doesn't beging with a contig name (i.e., the first line doesn't start with '>').\n");
+                WriteErrorMessage("\nFASTA file doesn't begin with a contig name (i.e., the first line doesn't start with '>').\n");
                 soft_exit(1);
             }
 
@@ -305,7 +335,14 @@ ReadFASTAGenome(
 
     AddRawContigToList(currentContig, &altContigs, &regularContigs, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names, opt_out_alt_names_count, maxSizeForAutomaticALT, autoALT);
 
-    Genome* genome = new Genome(fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1, altContigs != NULL);
+    //
+    // AddRawContigToList reversed them.  Reverse them again so that they're in the same order as the FASTA, except that all ALTs follow all non-ALTs.
+    // That's necessary to have the test for ALT be a simple comparison.  We fix that at sort time so they come out in the original order.
+    //
+    ReverseContigList(&altContigs);
+    ReverseContigList(&regularContigs);
+
+    Genome* genome = new Genome(fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1, altContigs != NULL, true);
 
     char* paddingBuffer = new char[(GenomeDistance)chromosomePaddingSize + 1];
     for (unsigned i = 0; i < chromosomePaddingSize; i++) {

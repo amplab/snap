@@ -172,7 +172,8 @@ public:
             GenomeDistance          nBasesStored,
             unsigned                i_chromosomePadding,
             unsigned                maxContigs,
-            bool                    i_areALTContigsMarked);
+            bool                    i_areALTContigsMarked,
+            bool                    i_isOriginalContigOrderRemembered);
 
 		void startContig(
 			const char          *contigName);
@@ -207,7 +208,7 @@ public:
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
 
-        static bool getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs, bool *hasAltContigsMarked);
+        static bool getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs, bool *hasAltContigsMarked, bool *isOriginalContigOrderRemembered);
 
         bool saveToFile(const char *fileName) const;
 
@@ -254,10 +255,11 @@ public:
         }
 
         struct Contig {
-            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false) {}
+            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false), originalContigNumber(-1) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;
             unsigned           nameLength;
+            int                originalContigNumber;    // Where was this contig in the FASTA file?  We reorder them because of ALTs, but then undo that at sort time.
             char              *name;
 			bool			   isALT;
         };
@@ -272,10 +274,6 @@ public:
         const Contig *getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const;
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
         int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
-		inline bool isGenomeContigAware() 
-		{
-			return isContigAware;
-		}
 
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
@@ -285,6 +283,10 @@ public:
 
         inline bool isGenomeLocationALT(GenomeLocation location) const {
             return location >= genomeLocationOfFirstALTContig;
+        }
+
+        bool doesGenomeRecordOriginalContigOrder() const {
+            return isOriginalContigOrderRemembered;
         }
 
         char* genomeLocationInStringForm(GenomeLocation location, char *buffer, size_t bufferSize) const;
@@ -310,18 +312,17 @@ private:
         int          maxContigs;
 
 		bool		areALTContigsMarked;
+        bool        isOriginalContigOrderRemembered;
 
         Contig      *contigs;    // This is always in order (it's not possible to express it otherwise in FASTA).
 
         Contig      *contigsByName;
  
-        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map, bool *hasALTContigsMarked);
+        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map, bool *hasALTContigsMarked, bool *isOriginalContigOrderRemembered);
 
         const unsigned chromosomePadding;
 
 		GenericFile_map *mappedFile;
-
-		bool isContigAware;
 
         GenomeLocation  genomeLocationOfFirstALTContig;
 };
