@@ -236,7 +236,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         return NULL;
     }
 
-    GenomeLocation maxLocation(nBases);
+    GenomeLocation maxLocation(nBases); 
 
     if (0 == length) {
         length = maxLocation - minLocation;
