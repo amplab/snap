@@ -276,12 +276,24 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
             return NULL;
         }
 
-        for (n = 0; n < (unsigned)contigNameBufferSize; n++) {
-	        if (contigNameBuffer[n] == ' ') {
-	            contigNameBuffer[n] = '\0'; 
-	            break;
-	        }
-	    }
+        int spacesFound = 0;
+        n = 0;
+        for (;;) {
+            if (contigNameBuffer[n] == ' ') {
+                spacesFound++;
+                if (spacesFound >= 3) {
+                    contigNameBuffer[n] = '\0';
+                    break;
+                } // If we've found all three
+            } // if it's a space
+
+            n++;
+
+            if (n >= contigNameBufferSize) {
+                WriteErrorMessage("Corrupt contig line in genome file found.  Try rebuilding the index.  If that doesn't work, submit a bug report.  Line: '%s'\n", contigNameBuffer);
+                soft_exit(1);
+            }   // if we got to the end without finding enough spaces
+        } // for ever
 
         _int64 contigStart;
         int originalContigNumber = -1;
