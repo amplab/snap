@@ -1092,7 +1092,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
     // merge temp blocks into output
     _int64 total = 0;
     // get initial merge sort data
-    typedef PriorityQueue<GenomeLocation, _int64> BlockQueue;
+    typedef PriorityQueue<GenomeLocationOrderedByOriginalContigs, _int64> BlockQueue;
     BlockQueue queue;
     for (SortBlockVector::iterator b = blocksForThisThread->begin(); b != blocksForThisThread->end(); b++) {
         _int64 bytes;
@@ -1108,7 +1108,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
             readWaitTime += timeInMillis() - start;
         }
         format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
-        queue.add((_uint32)(b - blocksForThisThread->begin()), b->location);
+        queue.add((_uint32)(b - blocksForThisThread->begin()), GenomeLocationOrderedByOriginalContigs(b->location, genome));
     }
     GenomeLocation current = 0; // current location for validation
     int lastRefID = -1, lastPos = 0;
@@ -1120,7 +1120,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
 #endif
         GenomeLocation secondLocation;
         _int64 smallestIndex = queue.pop();
-        _int64 secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
+        _int64 secondIndex = queue.size() > 0 ? queue.peek(&GenomeLocationOrderedByOriginalContigs(secondLocation, genome)) : -1;
         GenomeLocation limit = secondIndex != -1 ? secondLocation : InvalidGenomeLocation;
         SortBlock* b = &((*blocksForThisThread)[smallestIndex]);
         char* writeBuffer;
@@ -1184,7 +1184,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
             _ASSERT(b->length <= readBytes && b->location >= previous);
         }
         if (b->reader != NULL) {
-            queue.add(smallestIndex, b->location);
+            queue.add(smallestIndex, GenomeLocationOrderedByOriginalContigs(b->location, genome));
         }
     }
 

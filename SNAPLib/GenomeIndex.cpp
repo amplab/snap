@@ -43,7 +43,7 @@ using namespace std;
 
 static const int DEFAULT_SEED_SIZE = 27;
 static const double DEFAULT_SLACK = 0.3;
-static const unsigned DEFAULT_PADDING = 500;
+static const unsigned DEFAULT_PADDING = 1000;
 
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
@@ -1420,7 +1420,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
         // it in the overflow table.
         //
         int entryIndex = usingComplement ? 1 : 0;
-        void *entryPointer = entry64 + locationSize * entryIndex;
+        void *entryPointer = entry64 + (_int64)locationSize * entryIndex;
         if (locationSize > 4) {
             entry32 = NULL; // Using this would be bad
             _int64 entryValue = 0;
@@ -1709,7 +1709,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     if (10 != (nRead = sscanf(indexFileBuf,"%d %d %d %lld %d %d %d %lld %d %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
 											&hashTableKeySize, &hashTablesFileSize, &smallHashTable, &locationSize))) {
         if (3 == nRead || 6 == nRead || 7 == nRead || 9 == nRead) {
-            WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
+            WriteErrorMessage("Indices built by versions before 1.0.4 are no longer supported.  Please rebuild your index.\n");
         } else {
             WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }
@@ -1756,10 +1756,6 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 		delete index;
 		return NULL;
 	}
-
-    if (!index->genome->doesGenomeRecordOriginalContigOrder()) {
-        WriteStatusMessage("WARNING: The index you're using does not record the original order of contigs, so the generated output will not match the input.  This may or may not matter to downstream tools.\n");
-    }
 
     snprintf(filenameBuffer,filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, OverflowTableFileName);
 

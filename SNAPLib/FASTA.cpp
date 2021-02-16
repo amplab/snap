@@ -342,7 +342,7 @@ ReadFASTAGenome(
     ReverseContigList(&altContigs);
     ReverseContigList(&regularContigs);
 
-    Genome* genome = new Genome(fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1, altContigs != NULL, true);
+    Genome* genome = new Genome(fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1);
 
     char* paddingBuffer = new char[(GenomeDistance)chromosomePaddingSize + 1];
     for (unsigned i = 0; i < chromosomePaddingSize; i++) {
@@ -371,6 +371,7 @@ ReadFASTAGenome(
     genome->addData(paddingBuffer);
     genome->fillInContigLengths();
     genome->sortContigsByName();
+    genome->setUpContigNumbersByOriginalOrder();
 
     fclose(fastaFile);
     delete [] paddingBuffer;

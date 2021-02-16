@@ -968,21 +968,25 @@ BAMFormat::writeHeader(
 		bamHeader->n_ref() = numContigs;
 		BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
 		GenomeDistance genomeLen = context.genome->getCountOfBases();
+        const int* contigNumbersByOriginalOrder = context.genome->getContigNumbersByOriginalOrder();
+
 		for (int i = 0; i < numContigs; i++) {
-			int len = (int)strlen(contigs[i].name) + 1;
+            const Genome::Contig* contig = &contigs[contigNumbersByOriginalOrder[i]];
+			int len = (int)strlen(contig->name) + 1;
 			cursor += BAMHeaderRefSeq::size(len);
 			if (cursor > headerBufferSize) {
 				return false;
 			}
 			refseq->l_name = len;
-			memcpy(refseq->name(), contigs[i].name, len);
-			GenomeLocation start = contigs[i].beginningLocation;
-            GenomeLocation end = ((i + 1 < numContigs) ? contigs[i+1].beginningLocation : genomeLen) - context.genome->getChromosomePadding();
+			memcpy(refseq->name(), contig->name, len);
+			GenomeLocation start = contig->beginningLocation;
+            GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1 )->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
             refseq->l_ref() = (int)(end - start);
 			refseq = refseq->next();
 			_ASSERT((char*) refseq - header == cursor);
 		}
-	}
+    }
+
     *headerActualSize = cursor;
     return true;
 }

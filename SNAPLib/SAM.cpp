@@ -1243,9 +1243,12 @@ SAMFormat::writeHeader(
         int numContigs = context.genome->getNumContigs();
         GenomeDistance genomeLen = context.genome->getCountOfBases();
         size_t originalBytesConsumed = bytesConsumed;
+        const int* contigNumbersByOriginalOrder = context.genome->getContigNumbersByOriginalOrder();
+
         for (int i = 0; i < numContigs; i++) {
-            GenomeLocation start = contigs[i].beginningLocation;
-            GenomeLocation end = ((i + 1 < numContigs) ? contigs[i+1].beginningLocation : genomeLen) - context.genome->getChromosomePadding();
+            const Genome::Contig* contig = &contigs[contigNumbersByOriginalOrder[i]];
+            GenomeLocation start = contig->beginningLocation;
+            GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1)->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
             bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%llu\n", contigs[i].name, end - start);
 
             if (bytesConsumed >= headerBufferSize) {
