@@ -979,9 +979,9 @@ BAMFormat::writeHeader(
 			}
 			refseq->l_name = len;
 			memcpy(refseq->name(), contig->name, len);
-			GenomeLocation start = contig->beginningLocation;
-            GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1 )->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
-            refseq->l_ref() = (int)(end - start);
+			//GenomeLocation start = contig->beginningLocation;
+            //GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1 )->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
+            refseq->l_ref() = (int)(contig->length);
 			refseq = refseq->next();
 			_ASSERT((char*) refseq - header == cursor);
 		}

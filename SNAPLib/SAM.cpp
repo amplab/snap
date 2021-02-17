@@ -1247,9 +1247,9 @@ SAMFormat::writeHeader(
 
         for (int i = 0; i < numContigs; i++) {
             const Genome::Contig* contig = &contigs[contigNumbersByOriginalOrder[i]];
-            GenomeLocation start = contig->beginningLocation;
-            GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1)->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
-            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%llu\n", contigs[i].name, end - start);
+            //GenomeLocation start = contig->beginningLocation;
+            //GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1)->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
+            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%llu\n", contig->name, contig->length);
 
             if (bytesConsumed >= headerBufferSize) {
                 // todo: increase buffer size (or change to write in batch

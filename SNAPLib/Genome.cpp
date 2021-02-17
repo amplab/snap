@@ -408,7 +408,7 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDist
         return false;
     }
 
-    if (!flags & GENOME_FLAG_ALT_CONTIGS_MARKED) {
+    if (!(flags & GENOME_FLAG_ALT_CONTIGS_MARKED)) {
         WriteErrorMessage("Genome doesn't have the ALT contigs marked flag set.  Either it is corrupt or this is a code bug.  Rebuild the index and if this recurs please submit a bug report.\n");
         soft_exit(1);
     }
