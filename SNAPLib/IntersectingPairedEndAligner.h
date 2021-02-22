@@ -100,7 +100,8 @@ public:
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         _int64                 maxLVCandidatesForAffineGapBufferSize,
         _int64                *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap // Landau-Vishkin candidates that need to be rescored using affine gap
+        PairedAlignmentResult *lvCandidatesForAffineGap, // Landau-Vishkin candidates that need to be rescored using affine gap
+        int                   maxK_
 	);
 
     bool alignLandauVishkin(

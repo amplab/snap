@@ -504,8 +504,8 @@ got_answer:
         }
 
         if (score > scoreInit) { 
-            // Perform traceback and compute nEdits assuming the entire pattern is aligned
-            int rowIdx = bestGlobalAlignmentTextOffset, colIdx = patternLen - 1, matrixIdx;
+            // Perform traceback and compute nEdits
+            int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
             int actionCount = 1;
             int nMatches = 0, nMismatches = 0, nGaps = 0;
@@ -573,7 +573,7 @@ got_answer:
 
             *o_nEdits = nMismatches + nGaps;
 
-            *o_nEdits = (*o_nEdits <= w) ? *o_nEdits : -1; // return -1 if we have more edits than threshold w
+            // *o_nEdits = (*o_nEdits <= w) ? *o_nEdits : -1; // return -1 if we have more edits than threshold w
 
             *matchProbability *= lv_perfectMatchProbability[nMatches];
 
@@ -924,8 +924,8 @@ got_answer:
         }
 
         if (score > scoreInit) {
-            // Perform traceback and compute nEdits assuming the entire pattern is aligned
-            int rowIdx = bestGlobalAlignmentTextOffset, colIdx = patternLen - 1, matrixIdx;
+            // Perform traceback and compute nEdits
+            int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
             int actionCount = 1;
             int nMatches = 0, nMismatches = 0, nGaps = 0;
@@ -992,7 +992,7 @@ got_answer:
 
             *o_nEdits = nMismatches + nGaps;
 
-            *o_nEdits = (*o_nEdits <= w) ? *o_nEdits : -1; // return -1 if we have more edits than threshold w
+            // *o_nEdits = (*o_nEdits <= w) ? *o_nEdits : -1; // return -1 if we have more edits than threshold w
 
             *matchProbability *= lv_perfectMatchProbability[nMatches];
 

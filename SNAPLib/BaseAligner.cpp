@@ -269,7 +269,7 @@ Arguments:
 
 
 #ifdef  _DEBUG
-bool _DumpAlignments = false;
+bool _DumpAlignments = true;
 #endif  // _DEBUG
 
     bool
@@ -1025,7 +1025,7 @@ Return Value:
                                         readToScore->getQuality() + tailStart,
                                         readLen - tailStart,
                                         scoreLimitForThisElement,
-                                        seedLen,
+                                        readLen,
                                         NULL,
                                         &basesClippedAfter,
                                         &score1,
@@ -1038,12 +1038,14 @@ Return Value:
                                         readToScore->getQuality() + tailStart,
                                         readLen - tailStart,
                                         scoreLimitForThisElement,
-                                        seedLen,
+                                        readLen,
                                         NULL,
                                         &basesClippedAfter,
                                         &score1,
                                         &matchProb1);
                                 }
+
+                                agScore1 += (seedLen - readLen);
                             }
 
                             if (score1 != ScoreAboveLimit) {
@@ -1060,7 +1062,7 @@ Return Value:
                                             read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
                                             seedOffset,
                                             limitLeft,
-                                            seedLen,
+                                            readLen,
                                             &genomeLocationOffset,
                                             &basesClippedBefore,
                                             &score2,
@@ -1073,14 +1075,14 @@ Return Value:
                                             read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset,
                                             seedOffset,
                                             limitLeft,
-                                            seedLen,
+                                            readLen,
                                             &genomeLocationOffset,
                                             &basesClippedBefore,
                                             &score2,
                                             &matchProb2);
                                     }
 
-                                    agScore2 -= (seedLen);
+                                    agScore2 -= (readLen);
 
                                     if (score2 == ScoreAboveLimit) {
                                         score = ScoreAboveLimit;
