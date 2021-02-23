@@ -258,7 +258,7 @@ public:
         struct Contig {
             Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false), originalContigNumber(-1) {}
             GenomeLocation     beginningLocation;
-            GenomeDistance     length;
+            GenomeDistance     length;                  // This includes the padding
             unsigned           nameLength;
             int                originalContigNumber;    // Where was this contig in the FASTA file?  We reorder them because of ALTs, but then undo that at sort time.
             char              *name;

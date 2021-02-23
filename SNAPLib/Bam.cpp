@@ -981,7 +981,7 @@ BAMFormat::writeHeader(
 			memcpy(refseq->name(), contig->name, len);
 			//GenomeLocation start = contig->beginningLocation;
             //GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1 )->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
-            refseq->l_ref() = (int)(contig->length);
+            refseq->l_ref() = (int)(contig->length - context.genome->getChromosomePadding());
 			refseq = refseq->next();
 			_ASSERT((char*) refseq - header == cursor);
 		}
@@ -1094,8 +1094,7 @@ BAMFormat::writePairs(
                             }
                         }
                     }
-                }
-                else {
+                } else {
                     cigarOps[whichRead] = computeCigarOps(context.genome, lv, (char*)cigarBuf[whichRead], cigarBufSize * sizeof(_uint32),
                         clippedData[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], (unsigned)extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead],
                         read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),

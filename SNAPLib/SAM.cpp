@@ -1249,7 +1249,7 @@ SAMFormat::writeHeader(
             const Genome::Contig* contig = &contigs[contigNumbersByOriginalOrder[i]];
             //GenomeLocation start = contig->beginningLocation;
             //GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1)->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
-            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%llu\n", contig->name, contig->length);
+            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%llu%s\n", contig->name, contig->length - context.genome->getChromosomePadding(), contig->isALT ? "\tAH:*":"");
 
             if (bytesConsumed >= headerBufferSize) {
                 // todo: increase buffer size (or change to write in batch
@@ -1264,190 +1264,6 @@ SAMFormat::writeHeader(
     *headerActualSize = bytesConsumed;
     return true;
 }
-    
-#if 0
-    bool
-SAMFormat::createSAMLine(
-    const Genome * genome,
-    LandauVishkinWithCigar * lv,
-    // output data
-    char* data,
-    char* quality,
-    GenomeDistance dataSize,
-    const char*& contigName,
-    int& contigIndex,
-    int& flags,
-    GenomeDistance& positionInContig,
-    int& mapQuality,
-    const char*& matecontigName,
-    int& mateContigIndex,
-    GenomeDistance& matePositionInContig,
-    _int64& templateLength,
-    unsigned& fullLength,
-    const char*& clippedData,
-    unsigned& clippedLength,
-    unsigned& basesClippedBefore,
-    unsigned& basesClippedAfter,
-    // input data
-    size_t& qnameLen,
-    Read * read,
-    AlignmentResult result, 
-    GenomeLocation genomeLocation,
-    Direction direction,
-    bool secondaryAlignment,
-    bool supplementaryAlignment,
-    bool useM,
-    bool hasMate,
-    bool firstInPair,
-    bool alignedAsPair,
-    Read * mate, 
-    AlignmentResult mateResult,
-    GenomeLocation mateLocation,
-    Direction mateDirection,
-    GenomeDistance *extraBasesClippedBefore)
-{
-    contigName = "*";
-    positionInContig = 0;
-    const char *cigar = "*";
-    templateLength = 0;
-
-    if (secondaryAlignment) {
-        flags |= SAM_SECONDARY;
-    }
-
-    if (supplementaryAlignment) {
-        flags |= SAM_SUPPLEMENTARY;
-    }
-    
-    if (0 == qnameLen) {
-         qnameLen = read->getIdLength();
-    }
-
-    //
-    // If the aligner said it didn't find anything, treat it as such.  Sometimes it will emit the
-    // best match that it found, even if it's not within the maximum edit distance limit (but will
-    // then say NotFound).  Here, we force that to be SAM_UNMAPPED.
-    //
-    if (NotFound == result) {
-        genomeLocation = InvalidGenomeLocation;
-    }
-
-    if (InvalidGenomeLocation == genomeLocation) {
-        //
-        // If it's unmapped, then always emit it in the forward direction.  This is necessary because we don't even include
-        // the SAM_REVERSE_COMPLEMENT flag for unmapped reads, so there's no way to tell that we reversed it.
-        //
-        direction = FORWARD;
-    }
-
-    // Write the data and quality strings. If the read is reverse complemented, these need to
-    // be backwards from the original read. Also, both need to be unclipped.
-    clippedLength = read->getDataLength();
-    fullLength = read->getUnclippedLength();
-    if (fullLength > dataSize) {
-        return false;
-    }
-
-    if (direction == RC) {
-      for (unsigned i = 0; i < fullLength; i++) {
-        data[fullLength - 1 - i] = COMPLEMENT[read->getUnclippedData()[i]];
-        quality[fullLength - 1 - i] = read->getUnclippedQuality()[i];
-      }
-      clippedData = &data[fullLength - clippedLength - read->getFrontClippedLength()];
-      basesClippedBefore = fullLength - clippedLength - read->getFrontClippedLength();
-      basesClippedAfter = read->getFrontClippedLength();
-    } else {
-      memcpy(data, read->getUnclippedData(), read->getUnclippedLength());
-      memcpy(quality, read->getUnclippedQuality(), read->getUnclippedLength());
-      clippedData = read->getData();
-      basesClippedBefore = read->getFrontClippedLength();
-      basesClippedAfter = fullLength - clippedLength - basesClippedBefore;
-    }
-
-    int editDistance = -1;
-    if (genomeLocation != InvalidGenomeLocation) {
-        if (direction == RC) {
-            flags |= SAM_REVERSE_COMPLEMENT;
-        }
-        const Genome::Contig *contig = genome->getContigForRead(genomeLocation, read->getDataLength(), extraBasesClippedBefore);
-        _ASSERT(NULL != contig && contig->length > genome->getChromosomePadding());
-        genomeLocation += *extraBasesClippedBefore;
-
-        contigName = contig->name;
-        contigIndex = (int)(contig - genome->getContigs());
-        positionInContig = genomeLocation - contig->beginningLocation + 1; // SAM is 1-based
-        mapQuality = max(0, min(70, mapQuality));       // FIXME: manifest constant.
-    } else {
-        flags |= SAM_UNMAPPED;
-        mapQuality = 0;
-        *extraBasesClippedBefore = 0;
-    }
-
-    if (hasMate) {
-        flags |= SAM_MULTI_SEGMENT;
-        flags |= (firstInPair ? SAM_FIRST_SEGMENT : SAM_LAST_SEGMENT);
-        if (mateLocation != InvalidGenomeLocation) {
-            GenomeDistance mateExtraBasesClippedBefore;
-            const Genome::Contig *mateContig = genome->getContigForRead(mateLocation, mate->getDataLength(), &mateExtraBasesClippedBefore);
-            mateLocation += mateExtraBasesClippedBefore;
-            matecontigName = mateContig->name;
-            mateContigIndex = (int)(mateContig - genome->getContigs());
-            matePositionInContig = mateLocation - mateContig->beginningLocation + 1;
-
-            if (mateDirection == RC) {
-                flags |= SAM_NEXT_REVERSED;
-            }
-
-            if (genomeLocation == InvalidGenomeLocation) {
-                //
-                // The SAM spec says that for paired reads where exactly one end is unmapped that the unmapped
-                // half should just have RNAME and POS copied from the mate.
-                //
-                contigName = matecontigName;
-                contigIndex = mateContigIndex;
-                matecontigName = "=";
-                positionInContig = matePositionInContig;
-            }
-
-        } else {
-            flags |= SAM_NEXT_UNMAPPED;
-            //
-            // The mate's unmapped, so point it at us.
-            //
-            matecontigName = "=";
-            mateContigIndex = contigIndex;
-            matePositionInContig = positionInContig;
-        }
-
-        if (genomeLocation != InvalidGenomeLocation && mateLocation != InvalidGenomeLocation) {
-            if (alignedAsPair) {
-                flags |= SAM_ALL_ALIGNED;
-            }
-            // Also compute the length of the whole paired-end string whose ends we saw. This is slightly
-            // tricky because (a) we may have clipped some bases before/after each end and (b) we need to
-            // give a signed result based on whether our read is first or second in the pair.
-            GenomeLocation myStart = genomeLocation - basesClippedBefore;
-            GenomeLocation myEnd = genomeLocation + clippedLength + basesClippedAfter;
-            _int64 mateBasesClippedBefore = mate->getFrontClippedLength();
-            _int64 mateBasesClippedAfter = mate->getUnclippedLength() - mate->getDataLength() - mateBasesClippedBefore;
-            GenomeLocation mateStart = mateLocation - (mateDirection == RC ? mateBasesClippedAfter : mateBasesClippedBefore);
-            GenomeLocation mateEnd = mateLocation + mate->getDataLength() + (mateDirection == FORWARD ? mateBasesClippedAfter : mateBasesClippedBefore);
-			if (contigName == matecontigName) { // pointer (not value) comparison, but that's OK.
-				if (myStart < mateStart) {
-					templateLength = mateEnd - myStart;
-				} else {
-					templateLength = -(myEnd - mateStart);
-				}
- 			} // otherwise leave TLEN as zero.
-        }
-
-        if (contigName == matecontigName) {
-            matecontigName = "=";     // SAM Spec says to do this when they're equal (and not *, which won't happen because this is a pointer, not string, compare)
-        }
-    }
-    return true;
-}
-#endif // 0
 
     void
 SAMFormat::fillMateInfo(
@@ -1482,7 +1298,7 @@ SAMFormat::fillMateInfo(
         const Genome::Contig *mateContig = genome->getContigForRead(mateLocation, mate->getDataLength(), &mateExtraBasesClippedBefore);
         mateLocation += mateExtraBasesClippedBefore;
         matecontigName = mateContig->name;
-        mateContigIndex = (int)(mateContig - genome->getContigs());
+        mateContigIndex = mateContig->originalContigNumber;
         matePositionInContig = mateLocation - mateContig->beginningLocation + 1;
 
         if (mateDirection == RC) {
@@ -1693,7 +1509,7 @@ SAMFormat::createSAMLine(
         genomeLocation += *extraBasesClippedBefore;
 
         contigName = contig->name;
-        contigIndex = (int)(contig - genome->getContigs());
+        contigIndex = contig->originalContigNumber;
         positionInContig = genomeLocation - contig->beginningLocation + 1; // SAM is 1-based
         mapQuality = max(0, min(70, mapQuality));       // FIXME: manifest constant.
     } else {
