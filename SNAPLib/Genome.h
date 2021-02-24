@@ -151,7 +151,27 @@ public:
     int     contigNumFromFASTA;
 
     bool operator==(OriginalContigNum& peer) {
-        return peer.contigNumFromFASTA == contigNumFromFASTA;
+        return contigNumFromFASTA == peer.contigNumFromFASTA;
+    }
+
+    bool operator!=(OriginalContigNum& peer) {
+        return contigNumFromFASTA != peer.contigNumFromFASTA;
+    }
+
+    bool operator<(OriginalContigNum& peer) {
+        return contigNumFromFASTA < peer.contigNumFromFASTA;
+    }
+
+    bool operator<=(OriginalContigNum& peer) {
+        return contigNumFromFASTA <= peer.contigNumFromFASTA;
+    }
+
+    bool operator>(OriginalContigNum& peer) {
+        return contigNumFromFASTA > peer.contigNumFromFASTA;
+    }
+
+    bool operator>=(OriginalContigNum& peer) {
+        return contigNumFromFASTA >= peer.contigNumFromFASTA;
     }
 };
 
