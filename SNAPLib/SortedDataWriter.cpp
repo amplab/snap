@@ -177,7 +177,7 @@ public:
 #ifndef VALIDATE_SORT
 	void addBlock(size_t start, size_t bytes, DataReader *reader = NULL);
 #else
-    void addBlock(size_t start, size_t bytes, GenomeLocation minLocation, GenomeLocation maxLocation);
+    void addBlock(size_t start, size_t bytes, GenomeLocationOrderedByOriginalContigs minLocation, GenomeLocationOrderedByOriginalContigs maxLocation);
 #endif
 
 private:
@@ -990,8 +990,8 @@ SortedDataFilter::onNextBatch(
     }
 	int first = offset == 0;
 #ifdef VALIDATE_SORT
-	GenomeLocation minLocation = locations.size() > first ? locations[first].location : 0;
-    GenomeLocation maxLocation = locations.size() > first ? locations[locations.size() - 1].location : UINT32_MAX;
+    GenomeLocationOrderedByOriginalContigs minLocation = locations.size() > first ? locations[first].location : 0;
+    GenomeLocationOrderedByOriginalContigs maxLocation = GenomeLocationOrderedByOriginalContigs(locations.size() > first ? locations[locations.size() - 1].location : UINT32_MAX, genome);
     parent->addBlock(offset + header, bytes - header, minLocation, maxLocation);
 #else
     parent->addBlock(offset + header, bytes - header, reader);
@@ -1032,8 +1032,8 @@ SortedDataFilterSupplier::addBlock(
     size_t start,
     size_t bytes
 #ifdef VALIDATE_SORT
-	, GenomeLocation minLocation
-	, GenomeLocation maxLocation
+	, GenomeLocationOrderedByOriginalContigs minLocation
+	, GenomeLocationOrderedByOriginalContigs maxLocation
 #endif
     , DataReader *reader
 	)
@@ -1115,7 +1115,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
     while (queue.size() > 0) {
 #if VALIDATE_SORT
         GenomeLocation check;
-        queue.peek(&check);
+        queue.peek(&GenomeLocationOrderedByOriginalContigs(check, genome));
         _ASSERT(check >= current);
 #endif
         GenomeLocation secondLocation;

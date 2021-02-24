@@ -137,6 +137,45 @@ inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
     _ASSERT(genomeLocation.location <= 0xffffffff && genomeLocation.location >= 0);
     return (unsigned)genomeLocation.location;
 }
+
+//
+// A wrapper for contig nums in the order of the orginal FASTA.
+// It's done this way to make its type different from internal contig nums.
+//
+class OriginalContigNum {
+public:
+    OriginalContigNum(int contigNumFromFASTA_) {
+        contigNumFromFASTA = contigNumFromFASTA_;
+    }
+
+    int     contigNumFromFASTA;
+
+    bool operator==(OriginalContigNum& peer) {
+        return peer.contigNumFromFASTA == contigNumFromFASTA;
+    }
+};
+
+int OriginalContigNumToInt(OriginalContigNum originalContigNum) {
+    return originalContigNum.contigNumFromFASTA;
+}
+
+//
+// A wrapper for contig nums in the order of our index (i.e., with ALTs later than others).
+// It's done this way to make its type different from original contig nums.
+//
+class InternalContigNum {
+public:
+    InternalContigNum(int contigNumFromIndex_)
+    {
+        contigNumFromIndex = contigNumFromIndex_;
+    }
+
+    int     contigNumFromIndex;
+};
+
+int InternalContigNumToInt(InternalContigNum internalContigNum) {
+    return internalContigNum.contigNumFromIndex;
+}
 #else   // _DEBUG
 typedef _int64 GenomeLocation;
 
@@ -346,6 +385,14 @@ public:
 
     inline bool operator>=(GenomeLocationOrderedByOriginalContigs& peer)
     {
+        if (location == InvalidGenomeLocation) {
+            return true;
+        }
+
+        if (peer.location == InvalidGenomeLocation) {
+            return false;
+        }
+
         if (genome->isGenomeLocationALT(location) == genome->isGenomeLocationALT(peer.location))
         {
             return location >= peer.location;
@@ -356,6 +403,18 @@ public:
 
     inline bool operator>(GenomeLocationOrderedByOriginalContigs& peer)
     {
+        if (location == peer.location) {
+            return false;
+        }
+
+        if (location == InvalidGenomeLocation) {
+            return true;
+        }
+
+        if (peer.location == InvalidGenomeLocation) {
+            return false;
+        }
+
         if (genome->isGenomeLocationALT(location) == genome->isGenomeLocationALT(peer.location))
         {
             return location > peer.location;
@@ -366,6 +425,18 @@ public:
 
     inline bool operator<(GenomeLocationOrderedByOriginalContigs& peer)
     {
+        if (location == peer.location) {
+            return false;
+        }
+
+        if (location == InvalidGenomeLocation) {
+            return false;
+        }
+
+        if (peer.location == InvalidGenomeLocation) {
+            return true;
+        }
+
         if (genome->isGenomeLocationALT(location) == genome->isGenomeLocationALT(peer.location))
         {
             return location < peer.location;
@@ -376,6 +447,18 @@ public:
 
     inline bool operator<=(GenomeLocationOrderedByOriginalContigs& peer)
     {
+        if (location == peer.location) {
+            return true;
+        }
+
+        if (location == InvalidGenomeLocation) {
+            return false;
+        }
+
+        if (peer.location == InvalidGenomeLocation) {
+            return true;
+        }
+
         if (genome->isGenomeLocationALT(location) == genome->isGenomeLocationALT(peer.location))
         {
             return location <= peer.location;
