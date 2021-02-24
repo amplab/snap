@@ -57,8 +57,8 @@ struct SortBlock
 #ifdef VALIDATE_SORT
     SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL), minLocation(0), maxLocation(0) {}
 #else
-    SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL), dataReaderIsBuffer(false), data(NULL) {}
-    SortBlock(DataReader* bufferDataReader) : start(0), bytes(0), location(0), length(0), reader(bufferDataReader), dataReaderIsBuffer(bufferDataReader != NULL) {}
+    SortBlock() : start(0), bytes(0), /*location(0),BJB */ length(0), reader(NULL), dataReaderIsBuffer(false), data(NULL) {}
+    SortBlock(DataReader* bufferDataReader) : start(0), bytes(0), /*location(0), BJB*/ length(0), reader(bufferDataReader), dataReaderIsBuffer(bufferDataReader != NULL), data(NULL) {}
 #endif
 	SortBlock(const SortBlock& other) { *this = other; }
     void operator=(const SortBlock& other);
@@ -70,7 +70,8 @@ struct SortBlock
 #endif
     // for mergesort phase
     DataReader* reader;
-    GenomeLocation    location; // genome location of current read
+    //GenomeLocation    location; // genome location of current read
+    ContigAndPos    contigAndPos;   // the sort key
     char*       data; // read data in read buffer
     GenomeDistance    length; // length in bytes
     bool dataReaderIsBuffer;
@@ -82,7 +83,7 @@ SortBlock::operator=(
 {
     start = other.start;
     bytes = other.bytes;
-    location = other.location;
+    //BJBlocation = other.location;
     length = other.length;
     reader = other.reader;
     dataReaderIsBuffer = other.dataReaderIsBuffer;
@@ -1092,7 +1093,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
     // merge temp blocks into output
     _int64 total = 0;
     // get initial merge sort data
-    typedef PriorityQueue<GenomeLocationOrderedByOriginalContigs, _int64> BlockQueue;
+    typedef PriorityQueue<ContigAndPos, _int64> BlockQueue;
     BlockQueue queue;
     for (SortBlockVector::iterator b = blocksForThisThread->begin(); b != blocksForThisThread->end(); b++) {
         _int64 bytes;
@@ -1107,10 +1108,16 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
             }
             readWaitTime += timeInMillis() - start;
         }
-        format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
-        queue.add((_uint32)(b - blocksForThisThread->begin()), GenomeLocationOrderedByOriginalContigs(b->location, genome));
+
+        OriginalContigNum originalContigNum;
+        int pos;
+        format->getSortInfo(genome, b->data, bytes, /*BJB&b->location*/ NULL, &b->length, &originalContigNum, &pos);
+        b->contigAndPos = ContigAndPos(originalContigNum, pos);
+        queue.add((_uint32)(b - blocksForThisThread->begin()), b->contigAndPos);
     }
-    GenomeLocation current = 0; // current location for validation
+
+    ContigAndPos current; // current location for validation
+
     int lastRefID = -1, lastPos = 0;
     while (queue.size() > 0) {
 #if VALIDATE_SORT
@@ -1118,10 +1125,10 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
         queue.peek(&GenomeLocationOrderedByOriginalContigs(check, genome));
         _ASSERT(check >= current);
 #endif
-        GenomeLocation secondLocation;
+        ContigAndPos secondLocation;
         _int64 smallestIndex = queue.pop();
-        _int64 secondIndex = queue.size() > 0 ? queue.peek(&GenomeLocationOrderedByOriginalContigs(secondLocation, genome)) : -1;
-        GenomeLocation limit = secondIndex != -1 ? secondLocation : InvalidGenomeLocation;
+        _int64 secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
+        ContigAndPos limit = secondIndex != -1 ? secondLocation : ContigAndPos(INT32_MAX,0);
         SortBlock* b = &((*blocksForThisThread)[smallestIndex]);
         char* writeBuffer;
         size_t writeBytes;
@@ -1129,7 +1136,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
         const int NBLOCKS = 20;
         SortBlock oldBlocks[NBLOCKS];
         int oldBlockIndex = 0;
-        while (b->location <= limit) {
+        while (b->contigAndPos <= limit) {
 #if VALIDATE_SORT
             _ASSERT(b->location >= b->minLocation && b->location <= b->maxLocation);
 #endif
@@ -1165,8 +1172,8 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
             oldBlocks[oldBlockIndex] = *b;
             oldBlockIndex = (oldBlockIndex + 1) % NBLOCKS;
             b->reader->advance(b->length);
-            _ASSERT(b->location >= current);
-            current = b->location;
+            _ASSERT(b->contigAndPos >= current);
+            current = b->contigAndPos;
             _int64 readBytes;
             if (!b->reader->getData(&b->data, &readBytes)) {
                 _int64 start = timeInMillis();
@@ -1179,12 +1186,15 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
                     break;
                 }
             }
-            GenomeLocation previous = b->location;
-            format->getSortInfo(genome, b->data, readBytes, &b->location, &b->length);
-            _ASSERT(b->length <= readBytes && b->location >= previous);
+            ContigAndPos previous = b->contigAndPos;
+            OriginalContigNum originalContigNum;
+            int pos;
+            format->getSortInfo(genome, b->data, readBytes, /*BJB&b->location*/ NULL, &b->length, &originalContigNum, &pos);
+            b->contigAndPos = ContigAndPos(originalContigNum, pos);
+            _ASSERT(b->length <= readBytes && b->contigAndPos >= previous);
         }
         if (b->reader != NULL) {
-            queue.add(smallestIndex, GenomeLocationOrderedByOriginalContigs(b->location, genome));
+            queue.add(smallestIndex, b->contigAndPos);
         }
     }
 

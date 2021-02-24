@@ -122,7 +122,7 @@ protected:
             size_t *lineLength, size_t fieldLengths[]);
 
         static size_t parseContigName(const Genome* genome, char* contigName,
-            size_t contigNameBufferSize, GenomeLocation * o_locationOfContig, int* o_indexOfContig,
+            size_t contigNameBufferSize, GenomeLocation * o_locationOfContig, InternalContigNum* o_indexOfContig,
             char* field[], size_t fieldLength[], unsigned rfield = RNAME);  // Returns 0 on success, needed contigNameBufferSize otherwise.
 
         static GenomeLocation parseLocation(GenomeLocation locationOfContig, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
@@ -162,7 +162,7 @@ class SAMFormat : public FileFormat
 public:
     SAMFormat(bool i_useM) : useM(i_useM) {}
 
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID, int* o_pos) const;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, OriginalContigNum* o_refID, int* o_pos) const;
 
     virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const
     { FileFormat::setupReaderContext(options, readerContext, false); }
@@ -252,12 +252,12 @@ public:
             char* quality,
             GenomeDistance dataSize,
             const char*& contigName,
-            int& contigIndex,
+            OriginalContigNum *contigIndex,
             int& flags,
             GenomeDistance& positionInContig,
             int& mapQuality,
             const char*& mateContigName,
-            int& mateContigIndex,
+            OriginalContigNum *mateContigIndex,
             GenomeDistance& matePositionInContig,
             _int64& templateLength,
             unsigned& fullLength,
@@ -291,8 +291,8 @@ public:
 
     static void
         fillMateInfo(const Genome * genome, int& flags, Read * read, GenomeLocation genomeLocation, Direction direction, const char*& contigName,
-            int& contigIndex, GenomeDistance& positionInContig, _int64& templateLength, unsigned basesClippedBefore, bool firstInPair, bool alignedAsPair,
-            Read * mate, GenomeLocation mateLocation, Direction mateDirection, const char*& matecontigName, int& mateContigIndex, GenomeDistance& matePositionInContig,
+            OriginalContigNum *contigIndex, GenomeDistance& positionInContig, _int64& templateLength, unsigned basesClippedBefore, bool firstInPair, bool alignedAsPair,
+            Read * mate, GenomeLocation mateLocation, Direction mateDirection, const char*& matecontigName, OriginalContigNum *mateContigIndex, GenomeDistance& matePositionInContig,
             unsigned mateBasesClippedBefore, int refSpanFromCigar, int mateRefSpanFromCigar);
 
     static void computeCigar(CigarFormat cigarFormat, const Genome * genome, LandauVishkinWithCigar * lv,

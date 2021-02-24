@@ -148,34 +148,43 @@ public:
         contigNumFromFASTA = contigNumFromFASTA_;
     }
 
-    int     contigNumFromFASTA;
+    OriginalContigNum() {
+        contigNumFromFASTA = -1;
+    }
 
-    bool operator==(OriginalContigNum& peer) {
+    bool operator==(const OriginalContigNum& peer) const {
         return contigNumFromFASTA == peer.contigNumFromFASTA;
     }
 
-    bool operator!=(OriginalContigNum& peer) {
+    bool operator!=(const OriginalContigNum& peer) const {
         return contigNumFromFASTA != peer.contigNumFromFASTA;
     }
 
-    bool operator<(OriginalContigNum& peer) {
+    bool operator<(const OriginalContigNum& peer) const {
         return contigNumFromFASTA < peer.contigNumFromFASTA;
     }
 
-    bool operator<=(OriginalContigNum& peer) {
+    bool operator<=(const OriginalContigNum& peer) const {
         return contigNumFromFASTA <= peer.contigNumFromFASTA;
     }
 
-    bool operator>(OriginalContigNum& peer) {
+    bool operator>(const OriginalContigNum& peer) const {
         return contigNumFromFASTA > peer.contigNumFromFASTA;
     }
 
-    bool operator>=(OriginalContigNum& peer) {
+    bool operator>=(const OriginalContigNum& peer) const {
         return contigNumFromFASTA >= peer.contigNumFromFASTA;
     }
+
+private:
+
+    int     contigNumFromFASTA;
+
+    friend int OriginalContigNumToInt(const OriginalContigNum originalContigNum);
+
 };
 
-int OriginalContigNumToInt(OriginalContigNum originalContigNum) {
+inline int OriginalContigNumToInt(const OriginalContigNum originalContigNum) {
     return originalContigNum.contigNumFromFASTA;
 }
 
@@ -190,12 +199,45 @@ public:
         contigNumFromIndex = contigNumFromIndex_;
     }
 
+    InternalContigNum() {
+        contigNumFromIndex = -1;
+    }
+
+    bool operator==(const InternalContigNum& peer) const {
+        return contigNumFromIndex == peer.contigNumFromIndex;
+    }
+
+    bool operator!=(const InternalContigNum& peer) const {
+        return contigNumFromIndex != peer.contigNumFromIndex;
+    }
+
+    bool operator<(const InternalContigNum& peer) const {
+        return contigNumFromIndex < peer.contigNumFromIndex;
+    }
+
+    bool operator<=(const InternalContigNum& peer) const {
+        return contigNumFromIndex <= peer.contigNumFromIndex;
+    }
+
+    bool operator>(const InternalContigNum& peer) const {
+        return contigNumFromIndex > peer.contigNumFromIndex;
+    }
+
+    bool operator>=(const InternalContigNum& peer) const {
+        return contigNumFromIndex >= peer.contigNumFromIndex;
+    }
+
+private:
+
     int     contigNumFromIndex;
+    friend int InternalContigNumToInt(const InternalContigNum internalContigNum);
+
 };
 
-int InternalContigNumToInt(InternalContigNum internalContigNum) {
+inline int InternalContigNumToInt(const InternalContigNum internalContigNum) {
     return internalContigNum.contigNumFromIndex;
 }
+
 #else   // _DEBUG
 typedef _int64 GenomeLocation;
 
@@ -208,6 +250,11 @@ inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
     _ASSERT(genomeLocation <= 0xffffffff && genomeLocation >= 0);    // One might wonder about the value of an _ASSERT in code that's only non-_DEBUG.  Think of it as an uppity comment.  :-)
     return (unsigned)genomeLocation;
 }
+
+typedef int InternalContigNum;
+typedef int OriginalContigNum;
+inline int OriginalContigNumToInt(const OriginalContigNum originalContigNum) { return originalContigNum; }
+inline int InternalContigNumToInt(const InternalContigNum internalContigNum) { return internalContigNum; }
 
 #endif // _DEBUG
 
@@ -307,7 +354,7 @@ public:
 
         inline GenomeDistance getCountOfBases() const {return nBases;}
 
-        bool getLocationOfContig(const char *contigName, GenomeLocation *location, int* index = NULL) const;
+        bool getLocationOfContig(const char *contigName, GenomeLocation *location, InternalContigNum* index = NULL) const;
 
         inline void prefetchData(GenomeLocation genomeLocation) const {
             _mm_prefetch(bases + GenomeLocationAsInt64(genomeLocation), _MM_HINT_T2);
@@ -315,19 +362,28 @@ public:
         }
 
         struct Contig {
-            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false), originalContigNumber(-1) {}
+            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false), originalContigNumber(OriginalContigNum(-1)), internalContigNumber(InternalContigNum(-1)) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;                  // This includes the padding
             unsigned           nameLength;
-            int                originalContigNumber;    // Where was this contig in the FASTA file?  We reorder them because of ALTs, but then undo that at sort time.
+            InternalContigNum  internalContigNumber;    // The contig number in the order in the index; this corresponds to 
+            OriginalContigNum  originalContigNumber;    // Where was this contig in the FASTA file?  We reorder them because of ALTs, but then undo that at sort time.
             char              *name;
 			bool			   isALT;
         };
 
-        inline const Contig *getContigs() const { return contigs; }
+        //inline const Contig *getContigs() const { return contigs; }
+
+        inline const Contig* getContigByInternalNumber(InternalContigNum internalContigNum) const {
+            return &contigs[InternalContigNumToInt(internalContigNum)];
+        }
+
+        inline const Contig* getContigByOriginalContigNumber(OriginalContigNum originalContigNum) const {
+            return getContigByInternalNumber(contigNumberByOriginalOrder[OriginalContigNumToInt(originalContigNum)]);
+        }
 
         // This maps the original contig number to the index of the reordered contig, i.e., the index in contigs[].  It's the inverse mapping of contigs[i].originalContigNumber
-        inline const int* getContigNumbersByOriginalOrder() const { return contigNumberByOriginalOrder; }    
+        inline const InternalContigNum* getContigNumbersByOriginalOrder() const { return contigNumberByOriginalOrder; }    
 
         inline int getNumContigs() const { return nContigs; }
 
@@ -375,8 +431,8 @@ private:
         Contig      *contigs;    // This is always in order (it's not possible to express it otherwise in FASTA).
 
 
-        Contig      *contigsByName;
-        int         *contigNumberByOriginalOrder;
+        Contig              *contigsByName;
+        InternalContigNum   *contigNumberByOriginalOrder;
  
         static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map);
 
@@ -496,6 +552,63 @@ public:
     {
         return location != peer.location;
     }
+};
+
+class ContigAndPos {
+public:
+    ContigAndPos(OriginalContigNum originalContigNum_, int pos_) {
+        originalContigNum = originalContigNum_;
+        pos = pos_;
+    }
+
+    ContigAndPos() {
+        originalContigNum = INT32_MAX;
+        pos = 0;
+    }
+
+    inline bool operator==(const ContigAndPos& peer) const {
+        return originalContigNum == peer.originalContigNum && pos == peer.pos;
+    }
+
+    inline bool operator!=(const ContigAndPos& peer) const {
+        return originalContigNum != peer.originalContigNum || pos != peer.pos;
+    }
+
+    inline bool operator>=(const ContigAndPos& peer) const {
+        if (originalContigNum == peer.originalContigNum) {
+            return pos >= peer.pos;
+        }
+
+        return originalContigNum > peer.originalContigNum;
+    }
+
+    inline bool operator>(const ContigAndPos& peer) const {
+        if (originalContigNum == peer.originalContigNum) {
+            return pos > peer.pos;
+        }
+
+        return originalContigNum > peer.originalContigNum;
+    }
+
+    inline bool operator<=(const ContigAndPos& peer) const {
+        if (originalContigNum == peer.originalContigNum) {
+            return pos <= peer.pos;
+        }
+
+        return originalContigNum < peer.originalContigNum;
+    }
+
+    inline bool operator<(const ContigAndPos& peer) const {
+        if (originalContigNum == peer.originalContigNum) {
+            return pos < peer.pos;
+        }
+
+        return originalContigNum < peer.originalContigNum;
+    }
+
+private:
+    OriginalContigNum originalContigNum;
+    int pos;
 };
 
 GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB);

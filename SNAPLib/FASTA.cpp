@@ -378,24 +378,3 @@ ReadFASTAGenome(
     delete [] lineBuffer;
     return genome;
 }
-
-//
-// TODO: Reduce code duplication with the mutator.
-//
-bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
-{
-    int nContigs = genome->getNumContigs();
-    const Genome::Contig *contigs = genome->getContigs();
-    for (int i = 0; i < nContigs; ++i) {
-        const Genome::Contig &contig = contigs[i];
-        GenomeLocation start = contig.beginningLocation;
-        GenomeLocation end = i + 1 < nContigs ? contigs[i + 1].beginningLocation : genome->getCountOfBases();
-        GenomeDistance size = end - start;
-        const char *bases = genome->getSubstring(start, size);
-
-        fprintf(fasta, ">%s%s\n", prefix, contig.name);
-        fwrite(bases, 1, size, fasta);
-        fputc('\n', fasta);
-    }
-    return !ferror(fasta);
-}

@@ -756,7 +756,7 @@ SAMReader::parseContigName(
     char* contigName,
     size_t contigNameBufferSize,
     GenomeLocation* o_locationOfContig,
-	int* o_indexOfContig,
+    InternalContigNum* o_indexOfContig,
     char* field[],
     size_t fieldLength[],
 	unsigned rfield)
@@ -997,7 +997,7 @@ SAMFormat::getSortInfo(
     _int64 bytes,
 	GenomeLocation* o_location,
 	GenomeDistance* o_readBytes,
-	int* o_refID,
+	OriginalContigNum* o_refID,
 	int* o_pos) const
 {
     char* fields[SAMReader::nSAMFields];
@@ -1013,9 +1013,11 @@ SAMFormat::getSortInfo(
 			if (o_location != NULL) {
 				*o_location = UINT32_MAX;
 			}
+
 			if (o_refID != NULL) {
-				*o_refID = -1;
+				*o_refID = OriginalContigNum(INT32_MAX);    // So that it sorts to the end
 			}
+
 			if (o_pos != NULL) {
 				*o_pos = 0;
 			}
@@ -1025,19 +1027,25 @@ SAMFormat::getSortInfo(
             char *contigName = contigNameBuffer;
 			GenomeLocation locationOfContig;
             size_t neededSize;
-            if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, o_refID, fields, lengths, SAMReader::RNEXT))) {
+            InternalContigNum internalContigNum;
+            if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, &internalContigNum, fields, lengths, SAMReader::RNEXT))) {
                 //
                 // Need a bigger buffer.
                 //
                 contigName = new char[neededSize];
-                if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, o_refID, fields, lengths, SAMReader::RNEXT)) {
+                if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, &internalContigNum, fields, lengths, SAMReader::RNEXT)) {
                     WriteErrorMessage("SAMFormat::getSortInfo: reallocated buffer size is still too small.\n"); // This really shouldn't happen
                     soft_exit(1);
                 }
             }
+
 			if (o_location != NULL) {
 				*o_location = SAMReader::parseLocation(locationOfContig, fields, lengths, SAMReader::RNEXT, SAMReader::PNEXT);
 			}
+
+            if (o_refID != NULL) {
+                *o_refID = genome->getContigByInternalNumber(internalContigNum)->originalContigNumber;
+            }
 
             if (contigName != contigNameBuffer) {
                 delete[] contigName;
@@ -1049,16 +1057,23 @@ SAMFormat::getSortInfo(
         char *contigName = contigNameBuffer;
         size_t neededSize;
         GenomeLocation locationOfContig;
-        if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, o_refID, fields, lengths))) {
+        InternalContigNum internalContigNum;
+        if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, &internalContigNum, fields, lengths))) {
             contigName = new char[neededSize];
-            if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, o_refID, fields, lengths)) {
+            if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, &internalContigNum, fields, lengths)) {
                 WriteErrorMessage("SAMFormat::getSortInfo(2): reallocated buffer size is still too small.\n");
                 soft_exit(1);
             }
         }
+
 		if (o_location != NULL) {
 	        *o_location = SAMReader::parseLocation(locationOfContig, fields, lengths);
 		}
+
+        if (o_refID != NULL) {
+            *o_refID = genome->getContigByInternalNumber(internalContigNum)->originalContigNumber;
+        }
+
         if (contigName != contigNameBuffer) {
             delete[] contigName;
         }
@@ -1239,16 +1254,12 @@ SAMFormat::writeHeader(
 #ifndef SKIP_SQ_LINES
     if ((context.header == NULL || ! context.headerMatchesIndex) && context.genome != NULL && !omitSQLines) {
         // Write an @SQ line for each chromosome / contig in the genome
-        const Genome::Contig *contigs = context.genome->getContigs();
         int numContigs = context.genome->getNumContigs();
         GenomeDistance genomeLen = context.genome->getCountOfBases();
         size_t originalBytesConsumed = bytesConsumed;
-        const int* contigNumbersByOriginalOrder = context.genome->getContigNumbersByOriginalOrder();
 
         for (int i = 0; i < numContigs; i++) {
-            const Genome::Contig* contig = &contigs[contigNumbersByOriginalOrder[i]];
-            //GenomeLocation start = contig->beginningLocation;
-            //GenomeLocation end = ((contigNumbersByOriginalOrder[i] + 1 < numContigs) ? (contig +1)->beginningLocation : genomeLen) - context.genome->getChromosomePadding();
+            const Genome::Contig* contig = context.genome->getContigByOriginalContigNumber(OriginalContigNum(i));
             bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%llu%s\n", contig->name, contig->length - context.genome->getChromosomePadding(), contig->isALT ? "\tAH:*":"");
 
             if (bytesConsumed >= headerBufferSize) {
@@ -1273,7 +1284,7 @@ SAMFormat::fillMateInfo(
     GenomeLocation genomeLocation,
     Direction direction,
     const char*& contigName,
-    int& contigIndex,
+    OriginalContigNum *contigIndex,
     GenomeDistance& positionInContig,
     _int64& templateLength,
     unsigned basesClippedBefore,
@@ -1283,7 +1294,7 @@ SAMFormat::fillMateInfo(
     GenomeLocation mateLocation,
     Direction mateDirection,
     const char*& matecontigName,
-    int& mateContigIndex,
+    OriginalContigNum *mateContigIndex,
     GenomeDistance& matePositionInContig,
     unsigned mateBasesClippedBefore,
     int myRefSpanFromCigar,
@@ -1298,7 +1309,7 @@ SAMFormat::fillMateInfo(
         const Genome::Contig *mateContig = genome->getContigForRead(mateLocation, mate->getDataLength(), &mateExtraBasesClippedBefore);
         mateLocation += mateExtraBasesClippedBefore;
         matecontigName = mateContig->name;
-        mateContigIndex = mateContig->originalContigNumber;
+        *mateContigIndex = mateContig->originalContigNumber;
         matePositionInContig = mateLocation - mateContig->beginningLocation + 1;
 
         if (mateDirection == RC) {
@@ -1311,7 +1322,7 @@ SAMFormat::fillMateInfo(
             // half should just have RNAME and POS copied from the mate.
             //
             contigName = matecontigName;
-            contigIndex = mateContigIndex;
+            *contigIndex = *mateContigIndex;
             matecontigName = "=";
             positionInContig = matePositionInContig;
         }
@@ -1322,7 +1333,7 @@ SAMFormat::fillMateInfo(
         // The mate's unmapped, so point it at us.
         //
         matecontigName = "=";
-        mateContigIndex = contigIndex;
+        *mateContigIndex = *contigIndex;
         matePositionInContig = positionInContig;
     }
 
@@ -1343,43 +1354,37 @@ SAMFormat::fillMateInfo(
         GenomeLocation mateStart = mateLocation - mateBasesClippedBefore - mateExtraBasesClippedBefore;
         GenomeLocation mateEnd = mateLocation + mateRefSpanFromCigar;
 
+        *contigIndex = contig->originalContigNumber;
+
         if (myStart < mateStart) {
             if (direction == FORWARD) {
                 if (mateDirection == RC) {
                     templateLength = mateEnd - myStart; // FR
-                }
-                else {
+                } else {
                     templateLength = mateStart - myStart; // FF
                 }
-            }
-            else {
+            } else {
                 if (mateDirection == FORWARD) {
                     templateLength = mateStart - myEnd; // RF
-                }
-                else {
+                } else {
                     templateLength = mateEnd - myEnd; // RR
                 }
             }
-        }
-        else {
+        } else {
             if (direction == RC) {
                 if (mateDirection == FORWARD) {
                     templateLength = -(myEnd - mateStart);
-                }
-                else {
+                } else {
                     templateLength = -(myEnd - mateEnd);
                 }
-            }
-            else {
+            } else {
                 if (mateDirection == FORWARD) {
                     templateLength = -(myStart - mateStart);
-                }
-                else {
+                } else {
                     templateLength = -(myStart - mateEnd);
                 }
             }
         }
-
     }
 
     if (contigName == matecontigName) {
@@ -1395,12 +1400,12 @@ SAMFormat::createSAMLine(
     char* quality,
     GenomeDistance dataSize,
     const char*& contigName,
-    int& contigIndex,
+    OriginalContigNum *contigIndex,
     int& flags,
     GenomeDistance& positionInContig,
     int& mapQuality,
     const char*& matecontigName,
-    int& mateContigIndex,
+    OriginalContigNum* mateContigIndex,
     GenomeDistance& matePositionInContig,
     _int64& templateLength,
     unsigned& fullLength,
@@ -1433,7 +1438,7 @@ SAMFormat::createSAMLine(
     int mateBpClippedAfter)
 {
     contigName = "*";
-    contigIndex = -1;
+    *contigIndex = OriginalContigNum(-1);
     positionInContig = 0;
     const char *cigar = "*";
     templateLength = 0;
@@ -1509,7 +1514,7 @@ SAMFormat::createSAMLine(
         genomeLocation += *extraBasesClippedBefore;
 
         contigName = contig->name;
-        contigIndex = contig->originalContigNumber;
+        *contigIndex = contig->originalContigNumber;
         positionInContig = genomeLocation - contig->beginningLocation + 1; // SAM is 1-based
         mapQuality = max(0, min(70, mapQuality));       // FIXME: manifest constant.
     } else {
@@ -1552,10 +1557,10 @@ SAMFormat::writePairs(
 
     int flags[2] = {0, 0};
     const char *contigName[2] = {"*", "*"};
-    int contigIndex[2] = {-1, -1};
+    OriginalContigNum contigIndex[2] = { OriginalContigNum(-1), OriginalContigNum(-1)};
     GenomeDistance positionInContig[2] = {0, 0};
     const char *mateContigName[2] = {"*", "*"};
-    int mateContigIndex[2] = {-1, -1};
+    OriginalContigNum mateContigIndex[2] = { OriginalContigNum(-1), OriginalContigNum(-1)};
     GenomeDistance matePositionInContig[2] = {0, 0};
     const char *cigar[2] = {"*", "*"};
     _int64 templateLength[2] = {0, 0};
@@ -1581,8 +1586,8 @@ SAMFormat::writePairs(
         int addFrontClipping;
         do {
             addFrontClipping = 0;
-            if (!createSAMLine(context.genome, data[whichRead], quality[whichRead], MAX_READ, contigName[whichRead], contigIndex[whichRead],
-                flags[whichRead], positionInContig[whichRead], result->mapq[whichRead], contigName[1 - whichRead], contigIndex[1 - whichRead],
+            if (!createSAMLine(context.genome, data[whichRead], quality[whichRead], MAX_READ, contigName[whichRead], &contigIndex[whichRead],
+                flags[whichRead], positionInContig[whichRead], result->mapq[whichRead], contigName[1 - whichRead], &contigIndex[1 - whichRead],
                 positionInContig[1 - whichRead], templateLength[whichRead],
                 fullLength[whichRead], clippedData[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], basesClippedAfter[whichRead],
                 basesClippedBefore[1 - whichRead], basesClippedAfter[1 - whichRead], qnameLen[whichRead], reads[whichRead], 
@@ -1664,9 +1669,9 @@ SAMFormat::writePairs(
         int whichRead = writeOrder[firstOrSecond];
         bool firstInPair = writeOrder[firstOrSecond] == 0;
         fillMateInfo(context.genome, flags[whichRead], reads[whichRead], locations[whichRead], result->direction[whichRead], 
-            contigName[whichRead], contigIndex[whichRead], positionInContig[whichRead], templateLength[whichRead], basesClippedBefore[whichRead],
+            contigName[whichRead], &contigIndex[whichRead], positionInContig[whichRead], templateLength[whichRead], basesClippedBefore[whichRead],
             firstInPair, result->alignedAsPair, reads[1 - whichRead], locations[1 - whichRead], result->direction[1 - whichRead],
-            mateContigName[whichRead], mateContigIndex[whichRead], matePositionInContig[whichRead], basesClippedBefore[1 - whichRead],
+            mateContigName[whichRead], &mateContigIndex[whichRead], matePositionInContig[whichRead], basesClippedBefore[1 - whichRead],
             refSpanFromCigar[whichRead], refSpanFromCigar[1 - whichRead]);
     }
 
@@ -1855,11 +1860,11 @@ SAMFormat::writeRead(
 
     int flags = 0;
     const char *contigName = "*";
-    int contigIndex = -1;
+    OriginalContigNum contigIndex = OriginalContigNum(-1);
     GenomeDistance positionInContig = 0;
     const char *cigar = "*";
     const char *matecontigName = "*";
-    int mateContigIndex = -1;
+    OriginalContigNum mateContigIndex = OriginalContigNum(-1);
     GenomeDistance matePositionInContig = 0;
     _int64 templateLength = 0;
     int refSpanFromCigar = 0;
@@ -1877,8 +1882,8 @@ SAMFormat::writeRead(
 
     *o_addFrontClipping = 0;
 
-	if (!createSAMLine(context.genome, data, quality, MAX_READ, contigName, contigIndex,
-        flags, positionInContig, mapQuality, matecontigName, mateContigIndex, matePositionInContig, templateLength,
+	if (!createSAMLine(context.genome, data, quality, MAX_READ, contigName, &contigIndex,
+        flags, positionInContig, mapQuality, matecontigName, &mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter, mateBasesClippedBefore, mateBasesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection, 
@@ -2045,11 +2050,11 @@ SAMFormat::writeRead(
 
     int flags = 0;
     const char *contigName = "*";
-    int contigIndex = -1;
+    OriginalContigNum contigIndex = -1;
     GenomeDistance positionInContig = 0;
     const char *cigar = "*";
     const char *matecontigName = "*";
-    int mateContigIndex = -1;
+    OriginalContigNum mateContigIndex = -1;
     GenomeDistance matePositionInContig = 0;
     _int64 templateLength = 0;
     int refSpanFromCigar = 0;
@@ -2067,8 +2072,8 @@ SAMFormat::writeRead(
 
     *o_addFrontClipping = 0;
 
-    if (!createSAMLine(context.genome, data, quality, MAX_READ, contigName, contigIndex,
-        flags, positionInContig, mapQuality, matecontigName, mateContigIndex, matePositionInContig, templateLength,
+    if (!createSAMLine(context.genome, data, quality, MAX_READ, contigName, &contigIndex,
+        flags, positionInContig, mapQuality, matecontigName, &mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter, mateBasesClippedBefore, mateBasesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection,

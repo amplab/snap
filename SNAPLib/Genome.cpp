@@ -49,7 +49,7 @@ Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned 
 
     nContigs = 0;
     contigs = (Contig *)BigAlloc(sizeof(Contig) * maxContigs);
-    contigNumberByOriginalOrder = (int*)BigAlloc(sizeof(int) * maxContigs);
+    contigNumberByOriginalOrder = (InternalContigNum *)BigAlloc(sizeof(InternalContigNum) * maxContigs);
     contigsByName = NULL;
 }
 
@@ -173,7 +173,7 @@ Genome::saveToFile(const char *fileName) const
              if (*curChar == ' '){ *curChar = '_'; }
         }
 
-        fprintf(saveFile, "%lld %x %d %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), contigs[i].originalContigNumber, contigs[i].name);
+        fprintf(saveFile, "%lld %x %d %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), OriginalContigNumToInt(contigs[i].originalContigNumber), contigs[i].name);
     }
 
 	//
@@ -208,17 +208,17 @@ Genome::setUpContigNumbersByOriginalOrder()
     // This assumes it's already allocated.
     //
 
-    memset(contigNumberByOriginalOrder, -1, sizeof(int) * nContigs);
+    memset(contigNumberByOriginalOrder, -1, sizeof(InternalContigNum) * nContigs);
 
     for (int i = 0; i < nContigs; i++) {
-        int originalContigNumber = contigs[i].originalContigNumber;
+        OriginalContigNum originalContigNumber = contigs[i].originalContigNumber;
 
-        if (originalContigNumber < 0 || originalContigNumber >= nContigs || contigNumberByOriginalOrder[originalContigNumber] != -1) {
+        if (OriginalContigNumToInt(originalContigNumber) < 0 || OriginalContigNumToInt(originalContigNumber) >= nContigs || InternalContigNumToInt(contigNumberByOriginalOrder[OriginalContigNumToInt(originalContigNumber)]) != -1) {
             WriteErrorMessage("Something's wrong with the original contig numbers in the genome.  If rebuilding the index doesn't help, please submit a bug report\n");
             soft_exit(1);
         }
 
-        contigNumberByOriginalOrder[originalContigNumber] = i;
+        contigNumberByOriginalOrder[OriginalContigNumToInt(originalContigNumber)] = InternalContigNum(i);
     } // for each contig
 } // setUpContigNumbersByOriginalOrder
 
@@ -253,7 +253,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
     genome->nBases = nBases;
     genome->nContigs = genome->maxContigs = nContigs;
     genome->contigs = (Contig *)BigAlloc(sizeof(Contig) * nContigs);
-    genome->contigNumberByOriginalOrder = (int*)BigAlloc(sizeof(int) * nContigs);
+    genome->contigNumberByOriginalOrder = (InternalContigNum *)BigAlloc(sizeof(InternalContigNum) * nContigs);
 
     genome->minLocation = minLocation;
     if (GenomeLocationAsInt64(minLocation) >= nBases) {
@@ -309,7 +309,8 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
 	    n++; // increment n so we start copying at the position after the space
 
 		genome->contigs[i].isALT = (flags & GENOME_FLAG_CONTIG_IS_ALT) != 0;
-        genome->contigs[i].originalContigNumber = originalContigNumber;
+        genome->contigs[i].internalContigNumber = InternalContigNum(i);
+        genome->contigs[i].originalContigNumber = OriginalContigNum(originalContigNumber);
 
 	    contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
         genome->contigs[i].name = new char[contigSize + 1];
@@ -447,7 +448,7 @@ Genome::getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *
 
 
     bool
-Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, int * index) const
+Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, InternalContigNum * index) const
 {
     if (contigsByName) {
         int low = 0;
@@ -460,7 +461,7 @@ Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, in
                     *location = contigsByName[mid].beginningLocation;
                 }
                 if (index != NULL) {
-                    *index = mid;
+                    *index = InternalContigNumToInt(mid);
                 }
                 return true;
             } else if (c < 0) {
@@ -471,13 +472,14 @@ Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, in
         }
         return false;
     }
+
     for (int i = 0; i < nContigs; i++) {
         if (!strcmp(contigName,contigs[i].name)) {
             if (NULL != location) {
                 *location = contigs[i].beginningLocation;
             }
 			if (index != NULL) {
-				*index = i;
+				*index = InternalContigNumToInt(i);
 			}
             return true;
         }
