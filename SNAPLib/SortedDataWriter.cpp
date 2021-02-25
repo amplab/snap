@@ -37,15 +37,16 @@ using std::max;
 #pragma pack(push, 4)
 struct SortEntry
 {
-    SortEntry() : offset(0), length(0), location(0) {}
-    SortEntry(size_t i_offset, GenomeDistance i_length, GenomeLocation i_location)
-        : offset(i_offset), length(i_length), location(i_location) {}
+    SortEntry() : offset(0), length(0) {}
+    SortEntry(size_t i_offset, GenomeDistance i_length,ContigAndPos i_contigAndPos)
+        : offset(i_offset), length(i_length), contigAndPos(i_contigAndPos) {}
     size_t                      offset; // offset in file
-    GenomeDistance              length; // number of bytes
-    GenomeLocation              location; // location in genome
+    _int64                      length; // number of bytes
+    //GenomeLocation              location; // location in genome
+    ContigAndPos                contigAndPos;
     static bool comparator(const SortEntry& e1, const SortEntry& e2)
     {
-        return e1.location < e2.location;
+        return e1.contigAndPos < e2.contigAndPos;
     }
 };
 #pragma pack(pop)
@@ -174,6 +175,10 @@ public:
 
     void setHeaderSize(size_t bytes)
     { headerSize = bytes; }
+
+    inline const Genome* getGenome() {
+        return genome;
+    }
 
 #ifndef VALIDATE_SORT
 	void addBlock(size_t start, size_t bytes, DataReader *reader = NULL);
@@ -909,7 +914,24 @@ SortedDataFilter::onAdvance(
     GenomeDistance bytes,
     GenomeLocation location)
 {
-    SortEntry entry(batchOffset, bytes, location);
+
+    OriginalContigNum originalContigNum;
+    int pos;
+
+    if (location == 0) {
+        originalContigNum = OriginalContigNum(0);
+        pos = 0;
+    } else if (location == InvalidGenomeLocation) {
+        originalContigNum = OriginalContigNum(-1);
+        pos = 0;
+    } else {
+        const Genome::Contig* contig = parent->getGenome()->getContigAtLocation(location);
+        originalContigNum = contig->originalContigNumber;
+        pos = (int)(location - contig->beginningLocation + 1);
+    }
+
+    SortEntry entry(batchOffset, bytes, ContigAndPos(originalContigNum, pos));
+
 #ifdef VALIDATE_SORT
 		if (memcmp(data, "BAM", 3) != 0 && memcmp(data, "@HD", 3) != 0) { // skip header block
             GenomeLocation loc;
@@ -1113,10 +1135,11 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
         int pos;
         format->getSortInfo(genome, b->data, bytes, /*BJB&b->location*/ NULL, &b->length, &originalContigNum, &pos);
         b->contigAndPos = ContigAndPos(originalContigNum, pos);
+
         queue.add((_uint32)(b - blocksForThisThread->begin()), b->contigAndPos);
     }
 
-    ContigAndPos current; // current location for validation
+    ContigAndPos current = ContigAndPos(0,0); // current location for validation.  Starts at minimum value.
 
     int lastRefID = -1, lastPos = 0;
     while (queue.size() > 0) {
@@ -1128,7 +1151,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
         ContigAndPos secondLocation;
         _int64 smallestIndex = queue.pop();
         _int64 secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
-        ContigAndPos limit = secondIndex != -1 ? secondLocation : ContigAndPos(INT32_MAX,0);
+        ContigAndPos limit = secondIndex != -1 ? secondLocation : ContigAndPos(-1,0);
         SortBlock* b = &((*blocksForThisThread)[smallestIndex]);
         char* writeBuffer;
         size_t writeBytes;
@@ -1189,6 +1212,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
             ContigAndPos previous = b->contigAndPos;
             OriginalContigNum originalContigNum;
             int pos;
+
             format->getSortInfo(genome, b->data, readBytes, /*BJB&b->location*/ NULL, &b->length, &originalContigNum, &pos);
             b->contigAndPos = ContigAndPos(originalContigNum, pos);
             _ASSERT(b->length <= readBytes && b->contigAndPos >= previous);

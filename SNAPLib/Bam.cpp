@@ -1135,9 +1135,9 @@ BAMFormat::writePairs(
                     }
                     printf("\n");
                 }
-            }
+            } // If it's mapped
 		} while (addFrontClipping != 0);
-	}
+	} // for each read in the pair
 
     // Fill mate information
     for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {
@@ -1146,6 +1146,7 @@ BAMFormat::writePairs(
         for (unsigned i = 0; i < fullLength[whichRead]; i++) {
             quality[whichRead][i] -= '!';
         }
+
         SAMFormat::fillMateInfo(context.genome, flags[whichRead], reads[whichRead], locations[whichRead], result->direction[whichRead], 
             contigName[whichRead], &contigIndex[whichRead], positionInContig[whichRead], templateLength[whichRead], basesClippedBefore[whichRead],
             firstInPair, result->alignedAsPair, reads[1 - whichRead], locations[1 - whichRead], result->direction[1 - whichRead],
