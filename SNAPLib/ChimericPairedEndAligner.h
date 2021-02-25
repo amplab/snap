@@ -85,7 +85,8 @@ public:
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         _int64                 maxLVCandidatesForAffineGapBufferSize,
         _int64                *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap
+        PairedAlignmentResult *lvCandidatesForAffineGap,
+        int                   maxK
 	);
 
     void *operator new(size_t size) {return BigAlloc(size);}
@@ -118,6 +119,7 @@ private:
     bool emitALTAlignments;
 
     unsigned maxKSingleEnd;
+    unsigned maxKPairedEnd;
 
     int extraSearchDepth;
     int minScoreRealignment;

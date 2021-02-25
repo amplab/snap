@@ -237,7 +237,7 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     maxSeedsSingleEnd(DEFAULT_MAX_HITS_FOR_UNDERLYING_SINGLE_END_ALIGNER),
     minScoreRealignment(3),
     minScoreGapRealignmentALT(3),
-    minAGScoreImprovement(15)
+    minAGScoreImprovement(24)
 {
 }
 
@@ -504,10 +504,10 @@ void PairedAlignerContext::runIterationThread()
 
     int maxReadSize = MAX_READ_LENGTH;
     size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
-                                                                numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
+                                                                numSeedsFromCommandLine, seedCoverage, MAX_K, extraSearchDepth, maxCandidatePoolSize,
                                                                 maxSecondaryAlignmentsPerContig);
 
-    memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), maxSeedsSingleEnd, seedCoverage, maxDist,
+    memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), maxSeedsSingleEnd, seedCoverage, MAX_K,
         extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
     _int64 maxPairedSecondaryHits;
@@ -668,7 +668,7 @@ void PairedAlignerContext::runIterationThread()
         PairedAlignmentResult firstALTResult;
 
         while (!aligner->align(reads[0], reads[1], results, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
-            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults, maxPairedLVHitsForAffineGap, &nLVCandidatesForAffineGap, lvCandidatesForAffineGap)) {
+            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults, maxPairedLVHitsForAffineGap, &nLVCandidatesForAffineGap, lvCandidatesForAffineGap, maxDist)) {
 
             _ASSERT(nSecondaryResults > maxPairedSecondaryHits || nSingleSecondaryResults[0] > maxSingleSecondaryHits || nLVCandidatesForAffineGap > maxPairedLVHitsForAffineGap);
 
