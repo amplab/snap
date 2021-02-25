@@ -152,28 +152,33 @@ public:
         contigNumFromFASTA = -1;
     }
 
+    //
+    // We use unsigned comparisons because we want -1, which is unaligned,
+    // to be bigger than any ordinary contig.  We have to use -1 because
+    // it gets written into BAM files and the BAM spec requires it.
+    //
     bool operator==(const OriginalContigNum& peer) const {
-        return contigNumFromFASTA == peer.contigNumFromFASTA;
+        return (unsigned)contigNumFromFASTA == (unsigned)peer.contigNumFromFASTA;
     }
 
     bool operator!=(const OriginalContigNum& peer) const {
-        return contigNumFromFASTA != peer.contigNumFromFASTA;
+        return (unsigned)contigNumFromFASTA != (unsigned)peer.contigNumFromFASTA;
     }
 
     bool operator<(const OriginalContigNum& peer) const {
-        return contigNumFromFASTA < peer.contigNumFromFASTA;
+        return (unsigned)contigNumFromFASTA < (unsigned)peer.contigNumFromFASTA;
     }
 
     bool operator<=(const OriginalContigNum& peer) const {
-        return contigNumFromFASTA <= peer.contigNumFromFASTA;
+        return (unsigned)contigNumFromFASTA <= (unsigned)peer.contigNumFromFASTA;
     }
 
     bool operator>(const OriginalContigNum& peer) const {
-        return contigNumFromFASTA > peer.contigNumFromFASTA;
+        return (unsigned)contigNumFromFASTA > (unsigned)peer.contigNumFromFASTA;
     }
 
     bool operator>=(const OriginalContigNum& peer) const {
-        return contigNumFromFASTA >= peer.contigNumFromFASTA;
+        return (unsigned)contigNumFromFASTA >= (unsigned)peer.contigNumFromFASTA;
     }
 
 private:
@@ -252,7 +257,7 @@ inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
 }
 
 typedef int InternalContigNum;
-typedef int OriginalContigNum;
+typedef unsigned OriginalContigNum; // Unsigned so that -1 is big rather than small.  See comment in the _DEBUG version for details.
 inline int OriginalContigNumToInt(const OriginalContigNum originalContigNum) { return originalContigNum; }
 inline int InternalContigNumToInt(const InternalContigNum internalContigNum) { return internalContigNum; }
 
@@ -562,7 +567,7 @@ public:
     }
 
     ContigAndPos() {
-        originalContigNum = INT32_MAX;
+        originalContigNum = -1;
         pos = 0;
     }
 
@@ -605,6 +610,9 @@ public:
 
         return originalContigNum < peer.originalContigNum;
     }
+
+    inline OriginalContigNum getContig() { return originalContigNum; }
+    inline int getPos() { return pos; }
 
 private:
     OriginalContigNum originalContigNum;

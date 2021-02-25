@@ -22,7 +22,7 @@ Revision History:
 
 --*/
 
-#define     TIME_HISTOGRAM  0
+#define     TIME_HISTOGRAM  1
 
 #pragma once
 #include "stdafx.h"

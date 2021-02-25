@@ -163,6 +163,9 @@ void RunDaemonMode(int argc, const char **argv)
 void ProcessTopLevelCommands(int argc, const char **argv)
 {
 	fprintf(stderr, "Welcome to SNAP version %s.\n\n", SNAP_VERSION);       // Can't use WriteStatusMessage, because we haven't parsed args yet to determine if -hdp is specified.  Just stick with stderr.
+#if TIME_HISTOGRAM
+	fprintf(stderr, "TIME_HISTOGRAM is compiled in.\n");
+#endif // TIME_HISTOGRAM
 
 	InitializeSeedSequencers();
 

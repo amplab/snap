@@ -1061,8 +1061,8 @@ BAMFormat::writePairs(
             }
 
             if (locations[whichRead] != InvalidGenomeLocation) {
-                // Call affine gap either when we used affine gap scoring, or when read as NM > 2
-                if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 2)) {
+                // Call affine gap either when we used affine gap scoring, or when read as NM > 0, to left align indels
+                if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 0)) {
                     cigarOps[whichRead] = computeCigarOps(context.genome, ag, (char*)cigarBuf[whichRead], cigarBufSize * sizeof(_uint32),
                         clippedData[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], (unsigned)extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead],
                         read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
@@ -1135,9 +1135,9 @@ BAMFormat::writePairs(
                     }
                     printf("\n");
                 }
-            }
+            } // If it's mapped
 		} while (addFrontClipping != 0);
-	}
+	} // for each read in the pair
 
     // Fill mate information
     for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {
@@ -1146,6 +1146,7 @@ BAMFormat::writePairs(
         for (unsigned i = 0; i < fullLength[whichRead]; i++) {
             quality[whichRead][i] -= '!';
         }
+
         SAMFormat::fillMateInfo(context.genome, flags[whichRead], reads[whichRead], locations[whichRead], result->direction[whichRead], 
             contigName[whichRead], &contigIndex[whichRead], positionInContig[whichRead], templateLength[whichRead], basesClippedBefore[whichRead],
             firstInPair, result->alignedAsPair, reads[1 - whichRead], locations[1 - whichRead], result->direction[1 - whichRead],

@@ -1521,6 +1521,8 @@ SAMFormat::createSAMLine(
         flags |= SAM_UNMAPPED;
         mapQuality = 0;
         *extraBasesClippedBefore = 0;
+        *contigIndex = OriginalContigNum(-1);
+        positionInContig = 0;
     }
 
     return true;
