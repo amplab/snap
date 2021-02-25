@@ -47,7 +47,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         double              seedCoverage,
 		unsigned            minWeightToCheck,
         bool                forceSpacing_,
-        unsigned            extraSearchDepth,
+        unsigned            extraSearchDepth_,
         bool                noUkkonen,
         bool                noOrderedEvaluation,
 		bool				noTruncation,
@@ -68,7 +68,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         int                 minAGScoreImprovement_,
         BigAllocator        *allocator)
 		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), emitALTAlignments(emitALTAlignments_), 
-           maxKSingleEnd(maxK / 2),
+           maxKSingleEnd(maxK / 2), maxKPairedEnd(maxK), extraSearchDepth(extraSearchDepth_),
            minScoreRealignment(minScoreRealignment_), minScoreGapRealignmentALT(minScoreGapRealignmentALT_), minAGScoreImprovement(minAGScoreImprovement_)
 {
     // Create single-end aligners.
@@ -134,7 +134,8 @@ bool ChimericPairedEndAligner::align(
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         _int64				  maxLVCandidatesForAffineGapBufferSize,
         _int64				  *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap
+        PairedAlignmentResult *lvCandidatesForAffineGap,
+        int                   maxK
 	)
 {
 	result->status[0] = result->status[1] = NotFound;
@@ -177,7 +178,7 @@ bool ChimericPairedEndAligner::align(
         bool fitInSecondaryBuffer = 
 		underlyingPairedEndAligner->align(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
             singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, 
-            singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap);
+            singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap, maxKPairedEnd);
 
         if (*nLVCandidatesForAffineGap > maxLVCandidatesForAffineGapBufferSize) {
             *nSecondaryResults = *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
@@ -190,6 +191,28 @@ bool ChimericPairedEndAligner::align(
             *nLVCandidatesForAffineGap = 0;
             *nSecondaryResults = secondaryResultBufferSize + 1; // So the caller knows it's the paired secondary buffer that overflowed
             return false;
+        }
+
+        //
+        // Atleast one of read/mate is unmapped. Double maxK and check if both read/mate can be mapped near each other
+        //
+        if ((result->status[0] == NotFound) || (result->status[1] == NotFound)) {
+            fitInSecondaryBuffer = underlyingPairedEndAligner->align(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
+                singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead,
+                singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap, MAX_K - extraSearchDepth - 1);
+
+            if (*nLVCandidatesForAffineGap > maxLVCandidatesForAffineGapBufferSize) {
+                *nSecondaryResults = *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
+                *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1; // So the caller knows it's the paired LV candidate buffer that overflowed
+                return false;
+            }
+
+            if (!fitInSecondaryBuffer) {
+                *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
+                *nLVCandidatesForAffineGap = 0;
+                *nSecondaryResults = secondaryResultBufferSize + 1; // So the caller knows it's the paired secondary buffer that overflowed
+                return false;
+            }
         }
 
 		_int64 end = timeInNanos();
@@ -210,6 +233,10 @@ bool ChimericPairedEndAligner::align(
         sumPairScore = result->score[0] + result->score[1];
         sumPairScoreAlt = firstALTResult->score[0] + firstALTResult->score[1];
 
+        // Hack to match other aligners. MAPQ <= 3 in SNAP is considered MAPQ 0 in other aligners  
+        result->mapq[0] = result->mapq[0] <= 3 ? 0 : result->mapq[0];
+        result->mapq[1] = result->mapq[1] <= 3 ? 0 : result->mapq[1];
+
         // If we have already seen a good ALT pair, don't separate them with by running the single end aligner
         bool seenBetterAltResult = (firstALTResult->status[0] != NotFound)
                                    && (firstALTResult->status[1] != NotFound)
@@ -229,7 +256,7 @@ bool ChimericPairedEndAligner::align(
 
     int scoreLimitLeft = maxKSingleEnd;
     if (compareWithSingleEndAlignment) {
-        scoreLimitLeft = sumPairScore - 3;
+        scoreLimitLeft = sumPairScore;
         if (result->status[0] != NotFound && result->status[1] != NotFound) {
             result->agForcedSingleAlignerCall = true;   // Only set this if we wouldn't have done it anyway.
         }

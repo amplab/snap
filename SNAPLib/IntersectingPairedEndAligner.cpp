@@ -72,7 +72,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
     } else {
         maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / index->getSeedLength());
     }
-    allocateDynamicMemory(allocator, maxReadSize, maxBigHits, maxSeedsToUse, maxK, extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
+    allocateDynamicMemory(allocator, maxReadSize, maxBigHits, maxSeedsToUse, MAX_K, extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
     rcTranslationTable['A'] = 'T';
     rcTranslationTable['G'] = 'C';
@@ -177,9 +177,11 @@ IntersectingPairedEndAligner::align(
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         _int64				  maxLVCandidatesForAffineGapBufferSize,
         _int64				  *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap // Landau-Vishkin candidates that need to be rescored using affine gap
+        PairedAlignmentResult *lvCandidatesForAffineGap, // Landau-Vishkin candidates that need to be rescored using affine gap
+        int                   maxK_
 	)
 {
+    maxK = maxK_;
     if (!useAffineGap) {
         //
         // Version with no affine gap scoring
@@ -1691,7 +1693,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 readToScore->getQuality() + tailStart,
                 readLen - tailStart,
                 scoreLimit,
-                seedLen,
+                readLen,
                 NULL,
                 basesClippedAfter,
                 &score1,
@@ -1704,12 +1706,14 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 readToScore->getQuality() + tailStart,
                 readLen - tailStart,
                 scoreLimit,
-                seedLen,
+                readLen,
                 NULL,
                 basesClippedAfter,
                 &score1,
                 &matchProb1);
         }
+
+        agScore1 += (seedLen - readLen);
     }
     if (score1 != ScoreAboveLimit) {
         if (seedOffset != 0) {
@@ -1725,7 +1729,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
 	                seedOffset,
 	                limitLeft,
-	                seedLen, // FIXME: Assumes the rest of the read matches perfectly
+	                readLen, // FIXME: Assumes the rest of the read matches perfectly
 	                genomeLocationOffset,
 	                basesClippedBefore,
 	                &score2,
@@ -1738,14 +1742,14 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
 	                seedOffset,
 	                limitLeft,
-	                seedLen,
+	                readLen,
 	                genomeLocationOffset,
 	                basesClippedBefore,
 	                &score2,
 	                &matchProb2);
             }
 
-            agScore2 -= (seedLen);
+            agScore2 -= (readLen);
 
             if (score2 == ScoreAboveLimit) {
 	            *score = ScoreAboveLimit;
@@ -1762,7 +1766,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 
     if (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit) {
         *score = score1 + score2;
-        _ASSERT(*score <= scoreLimit);
+        // _ASSERT(*score <= scoreLimit);
         // Map probabilities for substrings can be multiplied, but make sure to count seed too
         *matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
 
