@@ -166,7 +166,6 @@ void ProcessTopLevelCommands(int argc, const char **argv)
 #if TIME_HISTOGRAM
 	fprintf(stderr, "TIME_HISTOGRAM is compiled in.\n");
 #endif // TIME_HISTOGRAM
-
 	InitializeSeedSequencers();
 
 	if (argc < 2) {
@@ -179,6 +178,11 @@ void ProcessTopLevelCommands(int argc, const char **argv)
 	} else {
 		ProcessNonDaemonCommands(argc, argv);
 	}
+
+#if TIME_HISTOGRAM
+fclose(BJBSlowFASTQFile[0]);
+fclose(BJBSlowFASTQFile[1]);
+#endif
 }
 
 NamedPipe *CommandPipe = NULL;
