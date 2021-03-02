@@ -34,6 +34,7 @@ Revision History:
 #include "BaseAligner.h"
 #include "CommandProcessor.h"
 
+
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
     bool forPairedEnd)

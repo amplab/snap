@@ -1133,7 +1133,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
 
         OriginalContigNum originalContigNum;
         int pos;
-        format->getSortInfo(genome, b->data, bytes, /*BJB&b->location*/ NULL, &b->length, &originalContigNum, &pos);
+        format->getSortInfo(genome, b->data, bytes, NULL, &b->length, &originalContigNum, &pos);
         b->contigAndPos = ContigAndPos(originalContigNum, pos);
 
         queue.add((_uint32)(b - blocksForThisThread->begin()), b->contigAndPos);
@@ -1213,7 +1213,7 @@ SortedDataFilterSupplier::mergeSortThread(SortBlockVector* blocksForThisThread, 
             OriginalContigNum originalContigNum;
             int pos;
 
-            format->getSortInfo(genome, b->data, readBytes, /*BJB&b->location*/ NULL, &b->length, &originalContigNum, &pos);
+            format->getSortInfo(genome, b->data, readBytes, NULL, &b->length, &originalContigNum, &pos);
             b->contigAndPos = ContigAndPos(originalContigNum, pos);
             _ASSERT(b->length <= readBytes && b->contigAndPos >= previous);
         }
