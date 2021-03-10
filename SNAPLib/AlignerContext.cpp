@@ -286,6 +286,7 @@ AlignerContext::initialize()
 
     maxHits_ = options->maxHits;
     maxDist_ = options->maxDist;
+    maxDistForIndels_ = options->maxDistForIndels;
     extraSearchDepth = options->extraSearchDepth;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
@@ -337,6 +338,7 @@ AlignerContext::beginIteration()
     totalThreads = options->numThreads;
     bindToProcessors = options->bindToProcessors;
     maxDist = maxDist_;
+    maxDistForIndels = maxDistForIndels_;
     maxHits = maxHits_;
     numSeedsFromCommandLine = options->numSeedsFromCommandLine;
     seedCoverage = options->seedCoverage;

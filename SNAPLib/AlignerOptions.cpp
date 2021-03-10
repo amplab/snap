@@ -100,12 +100,14 @@ AlignerOptions::AlignerOptions(
     maxScoreGapToPreferNonALTAlignment(16)
 {
     if (forPairedEnd) {
-        maxDist                 = 27;
+        maxDist                 = 12;
+        maxDistForIndels        = 35;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
         maxHits                 = 300;
      } else {
-        maxDist                 = 27;
+        maxDist                 = 10;
+        maxDistForIndels        = 35;
         numSeedsFromCommandLine = 25;
         maxHits                 = 300;
 		seedCoverage			= 0;
@@ -129,7 +131,8 @@ AlignerOptions::usage()
             "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
             "       explicit type specifier (see below).  Use a dash with an explicit type specifier to write to\n"
             "       stdout, so for example -o -sam - would write SAM output to stdout\n"
-            "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
+            "  -d   maximum edit distance allowed per read or pair absent indels (default: %d)\n"
+            "  -i   maximum distance allowed per read for indels (default: %d)\n"
             "  -n   number of seeds to use per read\n"
             "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default uses -n)\n"
             "  -h   maximum hits to consider per seed (default: %d)\n"
@@ -240,6 +243,7 @@ AlignerOptions::usage()
 		,
             commandLine,
             maxDist,
+            maxDistForIndels,
             maxHits,
 			minWeightToCheck,
             MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
@@ -305,6 +309,13 @@ AlignerOptions::usage()
         if (strcmp(argv[n], "-d") == 0) {
             if (n + 1 < argc) {
                 maxDist = atoi(argv[n + 1]);
+                n++;
+                return true;
+            }
+        }
+        if (strcmp(argv[n], "-i") == 0) {
+            if (n + 1 < argc) {
+                maxDistForIndels = atoi(argv[n + 1]);
                 n++;
                 return true;
             }

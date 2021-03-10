@@ -43,7 +43,7 @@ using namespace std;
 
 static const int DEFAULT_SEED_SIZE = 27;
 static const double DEFAULT_SLACK = 0.3;
-static const unsigned DEFAULT_PADDING = 1000;
+static const unsigned DEFAULT_PADDING = 2000;
 
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
@@ -67,7 +67,7 @@ static void usage()
         " -bSpace-          Indicates that space and tab characters should be included in chromosome names.\n"
         " -p                Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
         "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
-        "                   read you'll process.  Default is %d.  Specify the amount of padding directly after -p without a space.\n"
+        "                   read you'll process or gap between paired-end reads.  Default is %d.  Specify the amount of padding directly after -p without a space.\n"
         " -H                Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
         "                   Specify the histogram file name directly after -H without leaving a space.\n"
         " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"

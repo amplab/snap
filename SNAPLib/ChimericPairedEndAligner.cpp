@@ -193,28 +193,6 @@ bool ChimericPairedEndAligner::align(
             return false;
         }
 
-        //
-        // Atleast one of read/mate is unmapped. Double maxK and check if both read/mate can be mapped near each other
-        //
-        if ((result->status[0] == NotFound) || (result->status[1] == NotFound)) {
-            fitInSecondaryBuffer = underlyingPairedEndAligner->align(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
-                singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead,
-                singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap, MAX_K - extraSearchDepth - 1);
-
-            if (*nLVCandidatesForAffineGap > maxLVCandidatesForAffineGapBufferSize) {
-                *nSecondaryResults = *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
-                *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1; // So the caller knows it's the paired LV candidate buffer that overflowed
-                return false;
-            }
-
-            if (!fitInSecondaryBuffer) {
-                *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
-                *nLVCandidatesForAffineGap = 0;
-                *nSecondaryResults = secondaryResultBufferSize + 1; // So the caller knows it's the paired secondary buffer that overflowed
-                return false;
-            }
-        }
-
 		_int64 end = timeInNanos();
 
 		result->nanosInAlignTogether = end - start;

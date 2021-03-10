@@ -43,6 +43,7 @@ public:
         unsigned      maxReadSize_,
         unsigned      maxHits_,
         unsigned      maxK_,
+        unsigned      maxKForIndels_,
         unsigned      maxSeedsFromCommandLine_,
         double        seedCoverage_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
@@ -183,6 +184,7 @@ private:
     unsigned        maxBigHits;
     int             extraSearchDepth;
     int             maxK;
+    int             maxKForIndels;
     unsigned        numSeedsFromCommandLine;
     double          seedCoverage;
     static const unsigned MAX_MAX_SEEDS = 30;
@@ -198,6 +200,8 @@ private:
     bool            ignoreAlignmentAdjustmentsForOm;
 	bool			altAwareness;
     int             maxScoreGapToPreferNonAltAlignment;
+    int             minBigIndelSize;    // We only see indels of this size or bigger if they're hinted by seed hits.
+
 
     // Affine gap scoring parameters
     int             matchReward;
@@ -498,6 +502,12 @@ private:
         unsigned                seedOffset;
         int                     genomeOffset;
         bool                    usedAffineGapScoring;
+        //
+        // We keep track of possible big indels by looking at the seeding to see cases where seeds align differently to the beginning and end of the read
+        // When we think there might be an indel that's bigger than the current max edit distance for a possible alignment, we increase it so we find
+        // the indel (if it's really there; seeds aligning with an offset doesn't necessarily mean a real indel).
+        //
+        GenomeDistance          largestBigIndelDetected;
         int                     basesClippedBefore;
         int                     basesClippedAfter;
         int                     agScore;
@@ -516,6 +526,7 @@ private:
             basesClippedAfter = 0;
             agScore = 0;
             lvIndels = 0;
+            largestBigIndelDetected = 0;
         }
 
         static const int LocationNotYetScored = -2;
@@ -532,6 +543,7 @@ private:
         unsigned                bestPossibleScore;
 
         bool                    usedAffineGapScoring;
+        int                     largestBigIndelDetected;
         int                     basesClippedBefore;
         int                     basesClippedAfter;
         int                     agScore;
@@ -555,6 +567,7 @@ private:
             agScore = 0;
             lvIndels = 0;
             matchProbability = 1.0;
+            largestBigIndelDetected = 0;
          }
     }; // ScoringCandidate
 
@@ -670,9 +683,10 @@ private:
         int bestPairScore;
         int bestPairAGScore;
 
+
         Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {RC, FORWARD} };
     }; // ScoreSet
 
-    inline int computeScoreLimit(bool nonALTAlignment, const ScoreSet* scoresForAllAlignments, const ScoreSet* scoresForNonAltAlignments);
+    inline int computeScoreLimit(bool nonALTAlignment, const ScoreSet* scoresForAllAlignments, const ScoreSet* scoresForNonAltAlignments, GenomeDistance maxBigIndelSeen);
 
 }; // IntersectingPairedEndAligner

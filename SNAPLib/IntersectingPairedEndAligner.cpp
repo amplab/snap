@@ -38,6 +38,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      maxReadSize_,
         unsigned      maxHits_,
         unsigned      maxK_,
+        unsigned      maxKForIndels_,
         unsigned      numSeedsFromCommandLine_,
         double        seedCoverage_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
@@ -58,7 +59,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      subPenalty_,
         unsigned      gapOpenPenalty_,
         unsigned      gapExtendPenalty_) :
-    index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
+    index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxKForIndels(maxKForIndels_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
     extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), useAffineGap(useAffineGap_),
     maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), altAwareness(altAwareness_),
@@ -541,7 +542,7 @@ bool
             // Loop invariant: lastGenomeLocationForReadWithFewerHits is the highest genome offset that has not been considered.
             // lastGenomeLocationForReadWithMoreHits is also the highest genome offset on that side that has not been
             // considered (or is InvalidGenomeLocation), but higher ones within the appropriate range might already be in scoringMateCandidates.
-            // We go once through this loop for each
+            // We go once through this loop for each.  Because the index is ordered high to low, we also go in that direction.
             //
 
             if (lastGenomeLocationForReadWithMoreHits > lastGenomeLocationForReadWithFewerHits + maxSpacing) {
@@ -595,6 +596,7 @@ bool
                     WriteErrorMessage("Ran out of scoring candidate pool entries.  Perhaps trying with a larger value of -mcp will help.\n");
                     soft_exit(1);
                 }
+
                 scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]].init(
                                 lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits, lastSeedOffsetForReadWithMoreHits);
 
@@ -687,6 +689,74 @@ bool
         } // forever (the loop that does the intersection walk)
     } // For each set pair
 
+    //
+    // Phase 2a: mark any scoring candidates that are near enough to one another to be indels so that we can increase the score limit
+    // when considering them.
+    //
+    for (int whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
+        //
+        // For every candidate, we're trying to find the candidate that's the farthest away from it in genome
+        // space that's still within maxDistForIndels and then mark that distance in the candidate.  We do that
+        // by keeping two indices into the array, a bottom and top (relative to the array; the actual genome
+        // locations go the other way).  Each pass through the loop we move one or the other.  We move up top if
+        // bottom is one less or they're within maxDistForIndels of one another.  Otherwise we move up bottom.
+        //
+        int bottom = 0;
+        int top = 1;
+        while (top < lowestFreeScoringMateCandidate[whichSetPair]) {
+            _ASSERT(bottom < top);
+            _ASSERT(scoringMateCandidates[whichSetPair][bottom].readWithMoreHitsGenomeLocation > scoringMateCandidates[whichSetPair][top].readWithMoreHitsGenomeLocation);  // Remember, they're in backward order.
+            GenomeDistance spread = DistanceBetweenGenomeLocations(scoringMateCandidates[whichSetPair][bottom].readWithMoreHitsGenomeLocation, scoringMateCandidates[whichSetPair][top].readWithMoreHitsGenomeLocation);
+            if (spread < maxKForIndels) {
+                scoringMateCandidates[whichSetPair][bottom].largestBigIndelDetected = __max(spread, scoringMateCandidates[whichSetPair][bottom].largestBigIndelDetected);
+                scoringMateCandidates[whichSetPair][top].largestBigIndelDetected = __max(spread, scoringMateCandidates[whichSetPair][top].largestBigIndelDetected);
+                top++;
+            } else if (bottom < top - 1) {
+                //
+                // Move up bottom since it will still be less than top.
+                //
+                bottom++;
+            } else {
+                //
+                // They're next to each other and still too far apart.  Move up both.
+                //
+                bottom++;
+                top++;
+            }
+        } // While we're still considering candidates in one set pair.
+    } // for each set pair
+
+    //
+    // Now do the fewer end candidates.  This works the same way as the loop above (except they're not segregated by set pair).
+    //
+    { // a scope for us to declare locals in.
+        int bottom = 0;
+        int top = 1;
+
+        while (top < lowestFreeScoringCandidatePoolEntry) {
+            _ASSERT(bottom < top);
+
+            if (scoringCandidatePool[bottom].whichSetPair != scoringCandidatePool[top].whichSetPair) {
+                bottom = top;
+                top = top + 1;
+                continue;
+            }
+
+            _ASSERT(scoringCandidatePool[bottom].readWithFewerHitsGenomeLocation > scoringCandidatePool[top].readWithFewerHitsGenomeLocation); // They're in backward order
+
+            GenomeDistance spread = DistanceBetweenGenomeLocations(scoringCandidatePool[bottom].readWithFewerHitsGenomeLocation, scoringCandidatePool[top].readWithFewerHitsGenomeLocation);
+            if (spread < maxKForIndels) {
+                scoringCandidatePool[bottom].largestBigIndelDetected = __max(spread, scoringCandidatePool[bottom].largestBigIndelDetected);
+                scoringCandidatePool[top].largestBigIndelDetected = __max(spread, scoringCandidatePool[top].largestBigIndelDetected);
+                top++;
+            } else if (bottom < top - 1) {
+                bottom++;
+            } else {
+                bottom++;
+                top++;
+            }
+        } // While we're still looking.
+    } // Scope for fewer candidate possible indel detection.  
 
     //
     // Phase 3: score and merge the candidates we've found using Laundau-Vishkin (edit distance, not affine gap).
@@ -721,7 +791,7 @@ bool
 
         bool nonALTAlignment = (!altAwareness) || !genome->isGenomeLocationALT(candidate->readWithFewerHitsGenomeLocation);
 
-        int scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
+        int scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments, candidate->largestBigIndelDetected);
 
         if (currentBestPossibleScoreList > scoreLimit) {
             //
@@ -764,6 +834,8 @@ bool
             for (;;) {
 
                 ScoringMateCandidate *mate = &scoringMateCandidates[candidate->whichSetPair][mateIndex];
+                scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments, mate->largestBigIndelDetected);
+
                 _ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
                 if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && mate->bestPossibleScore <= scoreLimit - fewerEndScore) {
                     //
@@ -955,7 +1027,7 @@ bool
 #endif // INSTRUMENTATION_FOR_PAPER
 
 
-                            scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
+                            // scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
                             
                             if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore) {
                                 
@@ -1392,7 +1464,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     int maxKForSameAlignment = gapOpenPenalty / (subPenalty - gapExtendPenalty);
     int bestPairScore = result->score[0] + result->score[1];
     int scoreLimit, scoreLimitALT;
-    scoreLimit = scoreLimitALT = maxK + extraSearchDepth;
+    scoreLimit = scoreLimitALT = maxKForIndels + extraSearchDepth;  // XXX maxKForIndels is too much!
     int genomeOffset[NUM_READS_PER_PAIR] = { 0, 0 };
     bool skipAffineGap[NUM_READS_PER_PAIR] = { false, false };
 
@@ -1590,7 +1662,7 @@ IntersectingPairedEndAligner::alignAffineGap(
                         //
                         // Update scoreLimit so that we only look for alignments extraSearchDepth worse than the best
                         //
-                        scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
+                        scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments, 0);
                     } // lvResult->score[1] != ScoreAboveLimit
                 } // lvResult->score[0] != ScoreAboveLimit
             } // If we want to score this candidate with affine gap
@@ -2340,18 +2412,18 @@ void IntersectingPairedEndAligner::ScoreSet::fillInResult(PairedAlignmentResult*
 
 const unsigned IntersectingPairedEndAligner::maxMergeDistance = 31;
 
-int IntersectingPairedEndAligner::computeScoreLimit(bool nonALTAlignment, const ScoreSet * scoresForAllAlignments, const ScoreSet * scoresForNonAltAlignments)
+int IntersectingPairedEndAligner::computeScoreLimit(bool nonALTAlignment, const ScoreSet * scoresForAllAlignments, const ScoreSet * scoresForNonAltAlignments, GenomeDistance maxBigIndelSeen)
 {
     if (nonALTAlignment) {
         //
         // For a non-ALT alignment to matter, it must be no worse than maxScoreGapToPreferNonAltAlignment of the best ALT alignment and at least as good as the best non-ALT alignment.
         //
-        return extraSearchDepth + min(maxK, min(scoresForAllAlignments->bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments->bestPairScore));
+        return extraSearchDepth + min(maxK + maxBigIndelSeen, min(scoresForAllAlignments->bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments->bestPairScore));
     } else {
         //
         // For an ALT alignment to matter, it has to be at least maxScoreGapToPreferNonAltAlignment better than the best non-ALT alignment, and better than the best ALT alignment.
         //
-        return extraSearchDepth + min(maxK, min(scoresForAllAlignments->bestPairScore, scoresForNonAltAlignments->bestPairScore - maxScoreGapToPreferNonAltAlignment));
+        return extraSearchDepth + min(maxK + maxBigIndelSeen, min(scoresForAllAlignments->bestPairScore, scoresForNonAltAlignments->bestPairScore - maxScoreGapToPreferNonAltAlignment));
     }
 }
 
