@@ -105,6 +105,7 @@ namespace QNDCompareVCFs
             var nCalledInOnly = new int[nStreams];
             var nLines = 0;
             int nMissingTrueVariant = 0;
+            int min_qual = 30;  // Ignore calls with lower qual than this.
 
             for (int i = 0; i < nStreams; i++)
             {
@@ -132,12 +133,18 @@ namespace QNDCompareVCFs
 
                 var fields = nextLines[i].Split('\t');
                 lastLocation[i] = new Location(fields[CHROM], Convert.ToInt32(fields[POS]));
-                lastQual[i] = Convert.ToDouble(fields[QUAL]);
+                if (fields[QUAL] == ".")
+                {
+                    lastQual[i] = min_qual;
+                }
+                else
+                {
+                    lastQual[i] = Convert.ToDouble(fields[QUAL]);
+                }
 
                 nCalledInOnly[i] = 0;
             } // for each input stream
 
-            int min_qual = 30;  // Ignore calls with lower qual than this.
 
             Console.Write("Comparing " + args[0] + " and " + args[1]);
             if (nStreams == 3)
@@ -164,7 +171,13 @@ namespace QNDCompareVCFs
                     }
 
                     lastLocation[i] = new Location(fields[i][0], Convert.ToInt32(fields[i][1]));
-                    lastQual[i] = Convert.ToDouble(fields[i][5]);
+                    if (fields[i][5] == ".")
+                    {
+                        lastQual[i] = min_qual;
+                    } else
+                    {
+                        lastQual[i] = Convert.ToDouble(fields[i][5]);
+                    }
 
                 }
 

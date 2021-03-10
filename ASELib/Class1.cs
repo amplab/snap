@@ -1,11 +1,13 @@
 ﻿using MathNet.Numerics;
 using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.Serialization;
@@ -8116,7 +8118,7 @@ namespace ASELib
             StreamWriter underlyingWriter;
             string unfinishedLine = "";
             List<string> queuedLines = new List<string>();
-        }
+        } // RandomizingStreamWriter
 
         public class SelectedVariant
         {
@@ -15969,6 +15971,90 @@ namespace ASELib
             }
         }
 #endif // false
+
+        //
+        // This is a only partially functional VCF Line.  It's a painful format to parse.
+        //
+        public class VCFLine
+        {
+            public readonly string chrom;
+            public readonly int pos;
+            public readonly List<string> id;
+            public readonly string Ref;
+            public readonly string alt;
+            public readonly string qual;
+            public readonly string filter;
+
+            VCFLine(string chrom_, int pos_, List<string> id_, string ref_, string alt_, string qual_, string filter_)
+            {
+                chrom = chrom_;
+                pos = pos_;
+                id = id_;
+                Ref = ref_;
+                alt = alt_;
+                qual = qual_;
+                filter = filter_;
+            } // ctor
+
+            public static VCFLine GetNextVCFLine(StreamReader inputFile)
+            {
+                string line;
+
+                //
+                // Get the next non-header line
+                //
+                while (null != (line = inputFile.ReadLine()) && line.StartsWith("#"))
+                {
+                    // Intentionally empty loop body
+                }
+
+                if (null == line)
+                {
+                    return null;
+                }
+
+                var fields = line.Split('\t');
+                if (fields.Count() < 8)
+                {
+                    throw new Exception("VCFLine.GetNextVCFLine: line with too few fields " + line);
+                }
+
+                var idFields = fields[2].Split(';').ToList();
+
+                return new VCFLine(fields[0], Convert.ToInt32(fields[1]), idFields, fields[3], fields[4], fields[5], fields[6]);
+
+            } // GetNextVCFLine
+
+            static public bool operator==(VCFLine a, VCFLine b)
+            {
+                return a.chrom == b.chrom && a.pos == b.pos;
+            }
+
+            static public bool operator!=(VCFLine a, VCFLine b)
+            {
+                return !(a == b);
+            }
+
+            static public bool operator>(VCFLine a, VCFLine b)
+            {
+                return a.chrom.CompareTo(b.chrom) > 0  || a.chrom == b.chrom && a.pos > b.pos;
+            }
+
+            static public bool operator<(VCFLine a, VCFLine b)
+            {
+                return a.chrom.CompareTo(b.chrom) < 0 || a.chrom == b.chrom && a.pos < b.pos;
+            }
+
+            static public bool operator>=(VCFLine a, VCFLine b)
+            {
+                return a > b || a == b;
+            }
+
+            static public bool operator<=(VCFLine a, VCFLine b)
+            {
+                return a < b || a == b;
+            }
+        } // VCFLine
 
         public static void WriteMatrixWithPercentages(StreamWriter outputFile, string title, int[,] matrix, bool normalize)
         {
