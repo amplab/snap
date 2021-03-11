@@ -60,12 +60,12 @@ namespace AnalyzeConcordanceVCFs
             while (mostRecentLines.Any(_ => _ != null))
             {
                 var refLine = mostRecentLines.Where(_ => _ != null).Min();
-                var lineIndicesAtRef = Enumerable.Range(0, nInputFiles - 1).Where(_ => mostRecentLines[_] != null && mostRecentLines[_] == refLine);
+                var lineIndicesAtRef = Enumerable.Range(0, nInputFiles).Where(_ => mostRecentLines[_] != null && mostRecentLines[_] == refLine);
 
                 if (mostRecentLines.Any(_ => _ == null || _ != refLine))
                 {
-                    Console.Write("Locus " + refLine.locus() + " is missing from these input files: ");
-                    foreach (int missingInputFileIndex in Enumerable.Range(0,nInputFiles - 1).Where(_ => mostRecentLines[_] == null || mostRecentLines[_] != refLine))
+                    Console.Write("Locus " + refLine.locus() + "(" + refLine.callType + ") is missing from these input files: ");
+                    foreach (int missingInputFileIndex in Enumerable.Range(0,nInputFiles).Where(_ => mostRecentLines[_] == null || mostRecentLines[_] != refLine))
                     {
                         Console.Write(inputFileNames[missingInputFileIndex] + ", ");
                     }
@@ -74,7 +74,7 @@ namespace AnalyzeConcordanceVCFs
 
                 if (mostRecentLines.Where(_ => _ == refLine).Any(_ => _.callType != refLine.callType))
                 {
-                    Console.Write("Not all calls for " + refLine.locus() + " have the same call type (file, callType): ");
+                    Console.Write("Not all calls for " + refLine.locus() + "(" + refLine.variantType + ") have the same call type (file, callType): ");
                     foreach (int lineIndex in lineIndicesAtRef)
                     {
                         Console.Write("(" + lineIndex + ":" + mostRecentLines[lineIndex].callType + ") ");
