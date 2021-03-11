@@ -16099,6 +16099,11 @@ namespace ASELib
             {
                 return chrom + ":" + pos;
             }
+
+            public int insertLength()    // negative for a deletion
+            {
+                return alt.Length - Ref.Length;
+            }
         } // VCFLine
 
         public static void WriteMatrixWithPercentages(StreamWriter outputFile, string title, int[,] matrix, bool normalize)

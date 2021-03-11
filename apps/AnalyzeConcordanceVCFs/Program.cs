@@ -55,8 +55,6 @@ namespace AnalyzeConcordanceVCFs
                 }
             } // for each input file name
 
-
-
             while (mostRecentLines.Any(_ => _ != null))
             {
                 var refLine = mostRecentLines.Where(_ => _ != null).Min();
@@ -64,7 +62,7 @@ namespace AnalyzeConcordanceVCFs
 
                 if (mostRecentLines.Any(_ => _ == null || _ != refLine))
                 {
-                    Console.Write("Locus " + refLine.locus() + " is missing from these input files: ");
+                    Console.Write("Locus " + refLine.locus() + " (" + refLine.callType + "," + refLine.insertLength() + ") is missing from these input files: ");
                     foreach (int missingInputFileIndex in Enumerable.Range(0,nInputFiles - 1).Where(_ => mostRecentLines[_] == null || mostRecentLines[_] != refLine))
                     {
                         Console.Write(inputFileNames[missingInputFileIndex] + ", ");
@@ -74,10 +72,10 @@ namespace AnalyzeConcordanceVCFs
 
                 if (mostRecentLines.Where(_ => _ == refLine).Any(_ => _.callType != refLine.callType))
                 {
-                    Console.Write("Not all calls for " + refLine.locus() + " have the same call type (file, callType): ");
+                    Console.Write("Not all calls for " + refLine.locus() + " have the same call type (file, callType, insert len): ");
                     foreach (int lineIndex in lineIndicesAtRef)
                     {
-                        Console.Write("(" + lineIndex + ":" + mostRecentLines[lineIndex].callType + ") ");
+                        Console.Write("(" + lineIndex + ":" + mostRecentLines[lineIndex].callType + "," + mostRecentLines[lineIndex].insertLength() +  ") ");
                     }
                     Console.WriteLine();
                 }
