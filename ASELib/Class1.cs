@@ -15974,13 +15974,13 @@ namespace ASELib
         }
 #endif // false
 
-        public enum CallType { TP, FP, FN, UnknownRegion }; // TN doesn't get measured (and is kind of ridiculous anyway). UnknownRegion means not in the BED file
+        public enum CallType { TP, FP, FN, Weird, UnknownRegion }; // TN doesn't get measured (and is kind of ridiculous anyway). UnknownRegion means not in the BED file
 
         //
         // This is a only partially functional VCF Line.  It's a painful format to parse.  This is for the VCF files that come
         // out of hap.py
         //
-        public class ConcordanceVCFLine
+        public class ConcordanceVCFLine : IComparable<ConcordanceVCFLine>
         {
             public readonly string rawLine;
             public readonly string chrom;
@@ -16028,7 +16028,7 @@ namespace ASELib
                 }
                 else
                 {
-                    throw new Exception("Unknown call type " + line);
+                    callType = CallType.Weird;  // This is probably a hom/het call difference
                 }
 
                 if (line.Contains("SNP"))
@@ -16067,6 +16067,8 @@ namespace ASELib
 
             static public bool operator==(ConcordanceVCFLine a, ConcordanceVCFLine b)
             {
+                if (((object)a == null) != ((object)b == null)) return false;
+                if ((object)a == null && (object)b == null) return true;
                 return a.chrom == b.chrom && a.pos == b.pos;
             }
 
@@ -16103,6 +16105,21 @@ namespace ASELib
             public int insertLength()    // negative for a deletion
             {
                 return alt.Length - Ref.Length;
+            }
+
+            public int CompareTo(ConcordanceVCFLine peer)
+            {
+                if (this == peer)
+                {
+                    return 0;
+                }
+
+                if (this < peer)
+                {
+                    return -1;
+                }
+
+                return 1;
             }
         } // VCFLine
 

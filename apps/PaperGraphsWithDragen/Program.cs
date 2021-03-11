@@ -49,6 +49,8 @@ namespace PaperGraphsWithDragen
         } // Sample
         static void Main(string[] args)
         {
+            SetAlignerStrings();
+
             string concordanceDirectory = @"d:\temp\concordance-dragenVC\";
             string timingDirectory = @"d:\temp\timings\";
 
@@ -57,6 +59,9 @@ namespace PaperGraphsWithDragen
             {
                 samples.Add("hg00" + i, new Sample("hg00" + i));
             }
+
+            samples.Add("ERR194146", new Sample("ERR194146"));
+            samples.Add("ERR194147", new Sample("ERR194147"));
 
             foreach (var sample in samples.Select(_ => _.Value))
             {
@@ -97,8 +102,100 @@ namespace PaperGraphsWithDragen
                 } // aligner
             } // sample
 
-            var outputFile = ASETools.CreateAppendingStreamWriterWithRetry(@"d:\temp\DragenVCConcordanceAndTimings.txt");
+            var outputFile = ASETools.CreateStreamWriterWithRetry(@"d:\temp\DragenVCConcordanceAndTimings.txt");
 
+            outputFile.WriteLine("\tMean F1\t\t\t\t\t\tIndel F1\t\t\t\t\t\t\tSNV F1\t\t\t\t\t\t\tIndel Recall\t\t\t\t\t\t\tIndel Precision\t\t\t\t\t\t\tSNV Recall\t\t\t\t\t\t\tSNV Precision");
+            for (int i = 0; i < 7; i++)
+            {
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+                    outputFile.Write("\t" + alignerName[aligner]);
+                }
+                outputFile.Write("\t");
+            }
+            outputFile.WriteLine();
+
+            foreach (var sample in samples.Select(_ => _.Value))
+            {
+                outputFile.Write(sample.name);
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+                    outputFile.Write("\t");
+                    if (sample.concordance.ContainsKey(aligner))
+                    {
+                        outputFile.Write(sample.concordance[aligner].Mean_F1_Score());
+                    }
+                } // aligner
+
+                outputFile.Write("\t" + sample.name);
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+                    outputFile.Write("\t");
+                    if (sample.concordance.ContainsKey(aligner))
+                    {
+                        outputFile.Write(sample.concordance[aligner].results[ASETools.VariantType.Indel].F1_score);
+                    }
+                } // aligner
+
+                outputFile.Write("\t" + sample.name);
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+                    outputFile.Write("\t");
+                    if (sample.concordance.ContainsKey(aligner))
+                    {
+                        outputFile.Write(sample.concordance[aligner].results[ASETools.VariantType.SNV].F1_score);
+                    }
+                } // aligner
+
+                outputFile.Write("\t" + sample.name);
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+                    outputFile.Write("\t");
+                    if (sample.concordance.ContainsKey(aligner))
+                    {
+                        outputFile.Write(sample.concordance[aligner].results[ASETools.VariantType.Indel].recall);
+                    }
+                } // aligner
+
+                outputFile.Write("\t" + sample.name);
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+                    outputFile.Write("\t");
+                    if (sample.concordance.ContainsKey(aligner))
+                    {
+                        outputFile.Write(sample.concordance[aligner].results[ASETools.VariantType.Indel].precision);
+                    }
+                } // aligner
+
+                outputFile.Write("\t" + sample.name);
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+                    outputFile.Write("\t");
+                    if (sample.concordance.ContainsKey(aligner))
+                    {
+                        outputFile.Write(sample.concordance[aligner].results[ASETools.VariantType.SNV].recall);
+                    }
+                } // aligner
+
+                outputFile.Write("\t" + sample.name);
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+                    outputFile.Write("\t");
+                    if (sample.concordance.ContainsKey(aligner))
+                    {
+                        outputFile.Write(sample.concordance[aligner].results[ASETools.VariantType.SNV].precision);
+                    }
+                } // aligner
+
+                outputFile.WriteLine();
+            } // sample
 
             outputFile.Close();
 
