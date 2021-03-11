@@ -70,6 +70,7 @@ namespace ASELib
             //#if useGEM
             alignerName.Add(Aligner.GEM, "GEM");
             //#endif // useGEM
+            alignerName.Add(Aligner.Dragen, "Dragen");
 
             foreach (var alignerA in EnumUtil.GetValues<Aligner>())
             {
@@ -4018,6 +4019,7 @@ namespace ASELib
             GEM,
             //#endif // useGEM
             Novoalign,
+            Dragen,
         };
 
         public enum EndCount
@@ -15972,31 +15974,77 @@ namespace ASELib
         }
 #endif // false
 
+        public enum CallType { TP, FP, FN, UnknownRegion }; // TN doesn't get measured (and is kind of ridiculous anyway). UnknownRegion means not in the BED file
+
         //
-        // This is a only partially functional VCF Line.  It's a painful format to parse.
+        // This is a only partially functional VCF Line.  It's a painful format to parse.  This is for the VCF files that come
+        // out of hap.py
         //
-        public class VCFLine
+        public class ConcordanceVCFLine
         {
+            public readonly string rawLine;
             public readonly string chrom;
             public readonly int pos;
-            public readonly List<string> id;
             public readonly string Ref;
             public readonly string alt;
-            public readonly string qual;
-            public readonly string filter;
+            public readonly VariantType variantType;
 
-            VCFLine(string chrom_, int pos_, List<string> id_, string ref_, string alt_, string qual_, string filter_)
+            public readonly bool confidentRegion;
+
+
+            public readonly CallType callType;
+
+            public ConcordanceVCFLine(string line)
             {
-                chrom = chrom_;
-                pos = pos_;
-                id = id_;
-                Ref = ref_;
-                alt = alt_;
-                qual = qual_;
-                filter = filter_;
+                rawLine = line;
+
+                var fields = line.Split('\t');
+                if (fields.Count() != 11 || fields[2] != "." || fields[5] != "." || fields[6] != ".")
+                {
+                    throw new Exception("ConcordanceVCFLine: wrong format: " + line);
+                }
+
+                chrom = fields[0];
+                pos = Convert.ToInt32(fields[1]);
+                Ref = fields[3];
+                alt = fields[4];
+
+                confidentRegion = fields[7].Contains("Regions=CONF");
+
+                if (!confidentRegion)
+                {
+                    callType = CallType.UnknownRegion;
+                } 
+                else if (fields[9].Contains(":TP:") && fields[10].Contains(":TP:"))
+                {
+                    callType = CallType.TP;
+                } 
+                else if (fields[9].Contains("NOCALL") && fields[10].Contains(":FP:"))
+                {
+                    callType = CallType.FP;
+                } 
+                else if (fields[9].Contains(":FN:") && fields[10].Contains("NOCALL")) {
+                    callType = CallType.FN;
+                }
+                else
+                {
+                    throw new Exception("Unknown call type " + line);
+                }
+
+                if (line.Contains("SNP"))
+                {
+                    variantType = VariantType.SNV;
+                } else if (line.Contains("INDEL"))
+                {
+                    variantType = VariantType.Indel;
+                } else
+                {
+                    throw new Exception("Unknown variant type " + line);
+                }
+
             } // ctor
 
-            public static VCFLine GetNextVCFLine(StreamReader inputFile)
+            public static ConcordanceVCFLine GetNextVCFLine(StreamReader inputFile)
             {
                 string line;
 
@@ -16013,46 +16061,43 @@ namespace ASELib
                     return null;
                 }
 
-                var fields = line.Split('\t');
-                if (fields.Count() < 8)
-                {
-                    throw new Exception("VCFLine.GetNextVCFLine: line with too few fields " + line);
-                }
-
-                var idFields = fields[2].Split(';').ToList();
-
-                return new VCFLine(fields[0], Convert.ToInt32(fields[1]), idFields, fields[3], fields[4], fields[5], fields[6]);
+                return new ConcordanceVCFLine(line);
 
             } // GetNextVCFLine
 
-            static public bool operator==(VCFLine a, VCFLine b)
+            static public bool operator==(ConcordanceVCFLine a, ConcordanceVCFLine b)
             {
                 return a.chrom == b.chrom && a.pos == b.pos;
             }
 
-            static public bool operator!=(VCFLine a, VCFLine b)
+            static public bool operator!=(ConcordanceVCFLine a, ConcordanceVCFLine b)
             {
                 return !(a == b);
             }
 
-            static public bool operator>(VCFLine a, VCFLine b)
+            static public bool operator>(ConcordanceVCFLine a, ConcordanceVCFLine b)
             {
                 return a.chrom.CompareTo(b.chrom) > 0  || a.chrom == b.chrom && a.pos > b.pos;
             }
 
-            static public bool operator<(VCFLine a, VCFLine b)
+            static public bool operator<(ConcordanceVCFLine a, ConcordanceVCFLine b)
             {
                 return a.chrom.CompareTo(b.chrom) < 0 || a.chrom == b.chrom && a.pos < b.pos;
             }
 
-            static public bool operator>=(VCFLine a, VCFLine b)
+            static public bool operator>=(ConcordanceVCFLine a, ConcordanceVCFLine b)
             {
                 return a > b || a == b;
             }
 
-            static public bool operator<=(VCFLine a, VCFLine b)
+            static public bool operator<=(ConcordanceVCFLine a, ConcordanceVCFLine b)
             {
                 return a < b || a == b;
+            }
+
+            public string locus()
+            {
+                return chrom + ":" + pos;
             }
         } // VCFLine
 

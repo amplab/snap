@@ -75,12 +75,14 @@ namespace PaperGraphs
 
                     var secondStageFilename = timingsDirectory + dataSet + "." + ASETools.alignerName[aligner] + "_second_stage_timings.txt";
 
+                    ASETools.RunTiming timings = null;
+                    ASETools.ConcordanceResults concordance = null;
+                    var replicas = new List<ASETools.RunTiming>();
+
                     if (File.Exists(timingFilename) || splitTimingsFilenames.All(_ => File.Exists(_) && File.Exists(secondStageFilename))) {
                         nWithTimings++;
 
-                        var replicas = new List<ASETools.RunTiming>();
 
-                        ASETools.RunTiming timings;
                         if (aligner == ASETools.Aligner.SNAP)
                         {
                             timings = ASETools.RunTiming.LoadFromSNAPFile(timingFilename);
@@ -95,15 +97,7 @@ namespace PaperGraphs
                             }
                         }
 
-                        var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + ".concordance.tar";
-                        //Console.WriteLine(concordanceFilename);
-                        ASETools.ConcordanceResults concordance = null;
 
-                        if (File.Exists(concordanceFilename))
-                        {
-                            nWithConcordance++;
-                            concordance = new ASETools.ConcordanceResults(concordanceFilename);
-                        }
 
                         foreach (var replicaFilename in Directory.GetFiles(timingsDirectory, dataSet + "." + ASETools.alignerName[aligner].ToLower() + "_timings_*.txt"))
                         {
@@ -114,12 +108,18 @@ namespace PaperGraphs
                             }
                         }
 
-                        resultsByDataSetAndAligner[dataSet].Add(aligner, new Result(timings, concordance, replicas));
-                    } else
-                    {
-                        resultsByDataSetAndAligner[dataSet].Add(aligner, new Result(null, null, null));
                     }
 
+                    var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + ".concordance.tar";
+                    //Console.WriteLine(concordanceFilename);
+
+                    if (File.Exists(concordanceFilename))
+                    {
+                        nWithConcordance++;
+                        concordance = new ASETools.ConcordanceResults(concordanceFilename);
+                    }
+
+                    resultsByDataSetAndAligner[dataSet].Add(aligner, new Result(timings, concordance, replicas));
 
                 } // aligner
             } // dataSet
@@ -135,7 +135,10 @@ namespace PaperGraphs
             //
             // Write the first header line
             //
-            outputFile.WriteLine("\tSNV Recall\t\t\t\t\tSNV Precision\t\t\t\t\tIndel Recall\t\t\t\t\tIndel Precision\t\t\t\t\tSNV F1\t\t\t\t\tIndel F1\t\t\t\t\tMean F1");
+            string oneTabPerAligner = "";
+            foreach (var aligner in ASETools.allAligners) oneTabPerAligner += "\t";
+
+            outputFile.WriteLine("\tMean F1" + oneTabPerAligner + "SNV F1" + oneTabPerAligner + "Indel F1" + oneTabPerAligner + "SNV Precision" + oneTabPerAligner + "SNV Recall" + oneTabPerAligner + "Indel Precision" + oneTabPerAligner + "Indel Recall");
 
             for (int i = 0; i < 7; i++)
             {
@@ -156,37 +159,7 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].recall, nDigits));
-                    }
-                } // aligner
-
-                foreach (var aligner in ASETools.allAligners)
-                {
-                    outputFile.Write("\t");
-                    var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
-                    if (concordance != null)
-                    {
-                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].precision, nDigits));
-                    }
-                } // aligner
-
-                foreach (var aligner in ASETools.allAligners)
-                {
-                    outputFile.Write("\t");
-                    var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
-                    if (concordance != null)
-                    {
-                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].recall, nDigits));
-                    }
-                } // aligner
-
-                foreach (var aligner in ASETools.allAligners)
-                {
-                    outputFile.Write("\t");
-                    var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
-                    if (concordance != null)
-                    {
-                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].precision, nDigits));
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.Mean_F1_Score(), nDigits));
                     }
                 } // aligner
 
@@ -209,6 +182,16 @@ namespace PaperGraphs
                         outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].F1_score, nDigits));
                     }
                 } // aligner
+                
+                foreach (var aligner in ASETools.allAligners)
+                {
+                    outputFile.Write("\t");
+                    var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
+                    if (concordance != null)
+                    {
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].precision, nDigits));
+                    }
+                } // aligner
 
                 foreach (var aligner in ASETools.allAligners)
                 {
@@ -216,7 +199,27 @@ namespace PaperGraphs
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
                     {
-                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.Mean_F1_Score(), nDigits));
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.SNV].recall, nDigits));
+                    }
+                } // aligner
+
+                foreach (var aligner in ASETools.allAligners)
+                {
+                    outputFile.Write("\t");
+                    var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
+                    if (concordance != null)
+                    {
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].precision, nDigits));
+                    }
+                } // aligner
+
+                foreach (var aligner in ASETools.allAligners)
+                {
+                    outputFile.Write("\t");
+                    var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
+                    if (concordance != null)
+                    {
+                        outputFile.Write(ASETools.DoubleRounded(resultsByDataSetAndAligner[dataSet][aligner].concordance.results[ASETools.VariantType.Indel].recall, nDigits));
                     }
                 } // aligner
 
@@ -225,7 +228,7 @@ namespace PaperGraphs
 
             outputFile.WriteLine();
 
-            outputFile.WriteLine("\tSNV\t\t\t\t\tIndel\t\t\t\t\tMean");
+            outputFile.WriteLine("\tSNV" + oneTabPerAligner + "Indel" + oneTabPerAligner + "Mean");
             outputFile.Write("9s");
 
             // 9s (= -1Log1(1-F1 score))
@@ -285,7 +288,7 @@ namespace PaperGraphs
 
             outputFile.WriteLine();
 
-            outputFile.WriteLine("\tLoad & Align\t\t\t\t\tLoad & Align error bar\t\t\t\t\tWhole Pipeline");
+            outputFile.WriteLine("\tLoad & Align" + oneTabPerAligner + "Load & Align error bar" + oneTabPerAligner + "Whole Pipeline");
             outputFile.Write("Run Time");
             for (int i = 0; i < 3; i++)
             {
@@ -363,7 +366,7 @@ namespace PaperGraphs
 
             outputFile.WriteLine();
 
-            outputFile.WriteLine("\tLoad & Align\t\t\t\t\tWhole Pipeline");
+            outputFile.WriteLine("\tLoad & Align" + oneTabPerAligner + "Whole Pipeline");
             outputFile.Write("Normalized run time");
             for (int i = 0; i < 2; i++)
             {
