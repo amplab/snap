@@ -123,6 +123,25 @@ public:
         PairedAlignmentResult *lvCandidatesForAffineGap
     );
 
+    bool alignHamming(
+        Read* read0,
+        Read* read1,
+        PairedAlignmentResult* result,
+        PairedAlignmentResult* firstALTResult,
+        int                    maxEditDistanceForSecondaryResults,
+        _int64                 secondaryResultBufferSize,
+        _int64* nSecondaryResults,
+        PairedAlignmentResult* secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        _int64                 singleSecondaryBufferSize,
+        _int64                 maxSecondaryResultsToReturn,
+        _int64* nSingleEndSecondaryResultsForFirstRead,
+        _int64* nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult* singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64                 maxLVCandidatesForAffineGapBufferSize,
+        _int64* nLVCandidatesForAffineGap,
+        PairedAlignmentResult* lvCandidatesForAffineGap
+    );
+
     bool alignAffineGap(
         Read                  *read0,
         Read                  *read1,
@@ -425,7 +444,8 @@ private:
             int                 *basesClippedBefore = NULL,
             int                 *basesClippedAfter = NULL,
             int                 *agScore = NULL,
-            int                 *totalIndelsLV = NULL
+            int                 *totalIndelsLV = NULL,
+            bool                *usedGaplessClipping = NULL
     );
 
 	void scoreLocationWithAffineGap(
@@ -441,6 +461,22 @@ private:
             int                 *basesClippedAfter,
             int                 *agScore
 	);
+
+    void scoreLocationWithHammingDistance(
+        unsigned             whichRead,
+        Direction            direction,
+        GenomeLocation       genomeLocation,
+        unsigned             seedOffset,
+        int                  scoreLimit,
+        int* score,
+        double* matchProbability,
+        int* genomeLocationOffset,   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
+        bool* usedAffineGapScoring = NULL,
+        int* basesClippedBefore = NULL,
+        int* basesClippedAfter = NULL,
+        int* agScore = NULL,
+        bool* usedGaplessClipping = NULL
+    );
 
     //
     // These are used to keep track of places where we should merge together candidate locations for MAPQ purposes, because they're sufficiently
@@ -498,6 +534,7 @@ private:
         unsigned                seedOffset;
         int                     genomeOffset;
         bool                    usedAffineGapScoring;
+        bool                    usedGaplessClipping;
         int                     basesClippedBefore;
         int                     basesClippedAfter;
         int                     agScore;
@@ -512,6 +549,7 @@ private:
             matchProbability = 0;
             genomeOffset = 0;
             usedAffineGapScoring = false;
+            usedGaplessClipping = false;
             basesClippedBefore = 0;
             basesClippedAfter = 0;
             agScore = 0;
@@ -532,6 +570,7 @@ private:
         unsigned                bestPossibleScore;
 
         bool                    usedAffineGapScoring;
+        bool                    usedGaplessClipping;
         int                     basesClippedBefore;
         int                     basesClippedAfter;
         int                     agScore;
@@ -550,6 +589,7 @@ private:
             scoreListNext = scoreListNext_;
             mergeAnchor = NULL;
             usedAffineGapScoring = false;
+            usedGaplessClipping = false;
             basesClippedBefore = 0;
             basesClippedAfter = 0;
             agScore = 0;
@@ -615,6 +655,7 @@ private:
                 bestResultSeedOffset[i] = 0;
                 bestResultLVIndels[i] = 0;
                 bestResultMatchProbability[i] = 0.0;
+                bestResultUsedGaplessClipping[i] = false;
             }
 
             probabilityOfBestPair = 0;
@@ -636,6 +677,7 @@ private:
                 bestResultSeedOffset[i] = result->seedOffset[i];
                 bestResultLVIndels[i] = result->lvIndels[i];
                 bestResultMatchProbability[i] = result->matchProbability[i];
+                bestResultUsedGaplessClipping[i] = result->usedGaplessClipping[i];
             }
             probabilityOfBestPair = result->matchProbability[0] * result->matchProbability[1];
             probabilityOfAllPairs = result->probabilityAllPairs;
@@ -664,6 +706,7 @@ private:
         int bestResultSeedOffset[NUM_READS_PER_PAIR];
         int bestResultLVIndels[NUM_READS_PER_PAIR];
         double bestResultMatchProbability[NUM_READS_PER_PAIR];
+        bool bestResultUsedGaplessClipping[NUM_READS_PER_PAIR];
 
         double probabilityOfBestPair;
         double probabilityOfAllPairs;

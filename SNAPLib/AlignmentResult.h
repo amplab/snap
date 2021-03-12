@@ -106,6 +106,7 @@ struct PairedAlignmentResult {
     double matchProbability[NUM_READS_PER_PAIR];
     double probabilityAllPairs;
     unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
+    bool usedGaplessClipping[NUM_READS_PER_PAIR];
 
     bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
     bool agForcedSingleAlignerCall;             // Did we call the single aligner only because affine gap asked us to?  

@@ -122,6 +122,127 @@ public:
         }
     }
 
+    //
+    // Compute Hamming distance between text and pattern. Poorly matching sections of pattern are clipped out
+    // TODO: Make faster version
+    // 
+    int computeGaplessScore(
+        const char* text,
+        int textLen,
+        const char* pattern,
+        const char* qualityString,
+        int patternLen,
+        int scoreInit,
+        int scoreLimit,
+        int* o_nEdits = NULL,
+        int* o_textOffset = NULL,
+        int* o_patternOffset = NULL,
+        double* matchProbability = NULL,
+        int* o_nEditsGapless = NULL)
+    {
+        _ASSERT(textLen <= MAX_READ_LENGTH + MAX_K);
+        _ASSERT(patternLen <= textLen);
+
+        int localTextOffset, localPatternOffset;
+        if (NULL == o_textOffset) {
+            //
+            // If the user doesn't want textOffset, just use a stack local to avoid
+            // having to check it all the time.
+            //
+            o_textOffset = &localTextOffset;
+        }
+
+        if (NULL == o_patternOffset) {
+            o_patternOffset = &localPatternOffset;
+        }
+
+        double localMatchProbability;
+        if (NULL == matchProbability) {
+            //
+            // If the user doesn't want matchProbability, just use a stack local to avoid
+            // having to check it all the time.
+            //
+            matchProbability = &localMatchProbability;
+        }
+
+        int localnEdits;
+        if (NULL == o_nEdits) {
+            //
+            // If the user doesn't want matchProbability, just use a stack local to avoid
+            // having to check it all the time.
+            //
+            o_nEdits = &localnEdits;
+        }
+
+        int localnEditsGapless;
+        if (NULL == o_nEditsGapless) {
+            //
+            // If the user doesn't want matchProbability, just use a stack local to avoid
+            // having to check it all the time.
+            //
+            o_nEditsGapless = &localnEditsGapless;
+        }
+
+        if (scoreLimit < 0 || NULL == text) {
+            *o_nEdits = ScoreAboveLimit;
+            *o_nEditsGapless = ScoreAboveLimit;
+            return ScoreAboveLimit;
+        }
+
+        //
+        // Start with perfect match probability and work our way down.
+        //
+        *matchProbability = 1.0;
+
+        if (TEXT_DIRECTION == -1) {
+            text--; // so now it points at the "first" character of t, not after it.
+        }
+
+        int gapLessScore = scoreInit;
+        int maxScore = scoreInit;
+        for (int i = 0; i < patternLen; i++) {
+            const char* p = pattern + i;
+            const char* t = text + i * TEXT_DIRECTION;
+            gapLessScore += (*p == *t) ? matchReward : subPenalty;
+
+            // Keep track of maximum score and corresponding length of pattern matched
+            if (gapLessScore > maxScore) {
+                maxScore = gapLessScore;
+                *o_patternOffset = i;
+            }
+
+        } // patternLen
+
+        // We were able to extend the seed. Now compute matchProbability for the portion that was extended
+        if (maxScore > scoreInit) {
+            *o_nEdits = 0;
+            int nMatches = 0;
+            for (int i = 0; i <= *o_patternOffset; i++) {
+                const char* p = pattern + i;
+                const char* t = text + i * TEXT_DIRECTION;
+                if (*p != *t) {
+                    *o_nEdits += 1;
+                    *matchProbability *= lv_phredToProbability[qualityString[i]];
+                } else {
+                    nMatches++;
+                }
+            }
+            *matchProbability *= lv_perfectMatchProbability[nMatches];
+            *o_patternOffset += 1;
+            *o_patternOffset = patternLen - *o_patternOffset;
+            *o_textOffset = *o_patternOffset;
+            *o_nEditsGapless = (*o_nEdits <= scoreLimit) ? *o_nEdits : -1;
+            *o_nEdits += *o_patternOffset; // Add gaps at the end
+            *matchProbability *= lv_indelProbabilities[*o_patternOffset];
+            return maxScore;
+        }
+        else { // We could not find a longer gapless alignment beyond seedLen
+            *o_nEdits = ScoreAboveLimit;
+            *o_nEditsGapless = ScoreAboveLimit;
+            return ScoreAboveLimit;
+        }
+    }
+    
     int computeScoreBanded(
         const char* text,
         int textLen,
