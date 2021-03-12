@@ -301,7 +301,7 @@ bool ChimericPairedEndAligner::align(
             *(resultCount[r]) = singleEndSecondaryResultsThisTime;
 
             if (compareWithSingleEndAlignment) {
-                if (singleResult[r].score != ScoreAboveLimit) {
+                if (singleResult[r].score != ScoreAboveLimit && singleResult[r].score != BaseAligner::UnusedScoreValue) {
                     scoreLimitLeft -= singleResult[r].score;
                 } else {
                     scoreLimitLeft = ScoreAboveLimit;
