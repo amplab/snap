@@ -710,6 +710,13 @@ bool
             if (spread < maxKForIndels) {
                 scoringMateCandidates[whichSetPair][bottom].largestBigIndelDetected = __max(spread, scoringMateCandidates[whichSetPair][bottom].largestBigIndelDetected);
                 scoringMateCandidates[whichSetPair][top].largestBigIndelDetected = __max(spread, scoringMateCandidates[whichSetPair][top].largestBigIndelDetected);
+#if _DEBUG
+                if (_DumpAlignments) {
+                    fprintf(stderr,"Set largest big indel detected to %d, %d for set pair %d mate candidates %d and %d\n", 
+                            scoringMateCandidates[whichSetPair][bottom].largestBigIndelDetected, scoringMateCandidates[whichSetPair][top].largestBigIndelDetected,
+                            whichSetPair, bottom, top);
+                }
+#endif // DEBUG
                 top++;
             } else if (bottom < top - 1) {
                 //
@@ -748,6 +755,12 @@ bool
             if (spread < maxKForIndels) {
                 scoringCandidatePool[bottom].largestBigIndelDetected = __max(spread, scoringCandidatePool[bottom].largestBigIndelDetected);
                 scoringCandidatePool[top].largestBigIndelDetected = __max(spread, scoringCandidatePool[top].largestBigIndelDetected);
+#if _DEBUG
+                if (_DumpAlignments) {
+                    fprintf(stderr, "Set largest big indel to %d, %d for fewer end candidates %d and %d\n",
+                            scoringCandidatePool[bottom].largestBigIndelDetected, scoringCandidatePool[top].largestBigIndelDetected, bottom, top);
+                }
+#endif // DEBUG
                 top++;
             } else if (bottom < top - 1) {
                 bottom++;
@@ -1483,6 +1496,14 @@ IntersectingPairedEndAligner::alignAffineGap(
             scoreLocationWithAffineGap(r, result->direction[r], result->origLocation[r],
 	            result->seedOffset[r], scoreLimit, &result->score[r], &result->matchProbability[r],
 	            &genomeOffset[r], &result->basesClippedBefore[r], &result->basesClippedAfter[r], &result->agScore[r]);
+#if _DEBUG
+            if (_DumpAlignments) {
+                fprintf(stderr, "Affine gap scored read %d at %s:%llu result %d\n", 
+                        r, genome->getContigAtLocation(result->origLocation[r])->name, result->origLocation[r] - genome->getContigAtLocation(result->origLocation[r])->beginningLocation,
+                        result->agScore[r]
+                        );
+            }
+#endif  // _DEBUG
 
             if (result->score[r] != ScoreAboveLimit) {
                 result->location[r] = result->origLocation[r] + genomeOffset[r];
