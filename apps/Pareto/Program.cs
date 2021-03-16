@@ -164,15 +164,15 @@ namespace Pareto
 
                 case ParetoRunType.DandI:
                     {
-                        int[] dValues = { 15, 17, 19, 21, 23, 25, 27, 29 };
-                        int[] iValues = { 27, 30, 35, 40, 45, 50, 55, 60 };
+                        int[] dValues = { 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30 };
+                        int[] iValues = { 25, 30, 35, 40, 45, 50, 55, 60 };
 
                         foreach (var d in dValues)
                         {
                             foreach (var i in iValues)
                             {
-                                var timingFilename = timingDirectory + runName + ".snap.d" + d + ".i" + i + ".s22_timings.txt";
-                                var concordanceFilename = concordanceDirectory + runName + ".snap.d" + d + ".i" + i + ".s22.concordance.tar";
+                                var timingFilename = timingDirectory + runName + ".snap-soft-clip.d" + d + ".i" + i + ".s22_timings.txt";
+                                var concordanceFilename = concordanceDirectory + runName + ".snap-soft-clip.d" + d + ".i" + i + ".s22.concordance.tar";
 
                                 if (File.Exists(timingFilename))
                                 {
