@@ -1977,7 +1977,7 @@ IntersectingPairedEndAligner::alignHamming(
                                 scoresForNonAltAlignments.updateProbabilityOfAllPairs(oldPairProbability);
                             }
 
-                            if (pairProbability > scoresForAllAlignments.probabilityOfBestPair && maxEditDistanceForSecondaryResults != -1 && maxEditDistanceForSecondaryResults >= scoresForAllAlignments.bestPairScore - pairScore) {
+                            if (pairProbability > scoresForAllAlignments.probabilityOfBestPair && maxEditDistanceForSecondaryResults != -1 && (pairScore <= scoresForAllAlignments.bestPairScore) && (maxEditDistanceForSecondaryResults >= scoresForAllAlignments.bestPairScore - pairScore)) {
                                 //
                                 // Move the old best to be a secondary alignment.  This won't happen on the first time we get a valid alignment,
                                 // because bestPairScore is initialized to be very large.
@@ -2013,7 +2013,7 @@ IntersectingPairedEndAligner::alignHamming(
 
                             } // If we're saving the old best score as a secondary result
 
-                            if (!mergeReplacement && (pairProbability > scoresForAllAlignments.probabilityOfBestPair) && (maxLVCandidatesForAffineGapBufferSize > 0) && (extraSearchDepth >= scoresForAllAlignments.bestPairScore - pairScore)) {
+                            if (!mergeReplacement && (pairProbability > scoresForAllAlignments.probabilityOfBestPair) && (maxLVCandidatesForAffineGapBufferSize > 0) && (pairScore <= scoresForAllAlignments.bestPairScore) && (extraSearchDepth >= scoresForAllAlignments.bestPairScore - pairScore)) {
                                 //
                                 // This is close enough that scoring it with affine gap scoring might make it be the best result.  Save it for possible consideration in pase 4.
                                 //
