@@ -349,8 +349,10 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
             n += 1;
             return true;
         }
+    } else if (strcmp(argv[n], "-eh") == 0) {
+        enableHammingScoringBaseAligner = true;
+        return true;
     }
-
 
     return AlignerOptions::parse(argv, argc, n, done);
 } // PairedAlignerOptions::parse
