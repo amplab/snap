@@ -50,6 +50,7 @@ struct SingleAlignmentResult {
 	AlignmentResult status;
 
     GenomeLocation  location;	// Aligned genome location.
+    GenomeLocation  origLocation;   // Location before seed was aligned
     Direction       direction;	// Did we match the reverse complement? 
     int             score;		// score of each end if matched
     int             scorePriorToClipping;   // Score prior to soft clipping generated when a read aligns off the end of a contig
@@ -64,6 +65,11 @@ struct SingleAlignmentResult {
     int             agScore;
 
     bool            supplementary;
+
+    int             seedOffset;
+    double          matchProbability;
+    double          probabilityAllCandidates;
+    unsigned        popularSeedsSkipped;
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine

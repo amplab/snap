@@ -175,9 +175,13 @@ IntersectingPairedEndAligner::align(
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        _int64				  maxLVCandidatesForAffineGapBufferSize,
+        _int64                maxLVCandidatesForAffineGapBufferSize,
         _int64				  *nLVCandidatesForAffineGap,
         PairedAlignmentResult *lvCandidatesForAffineGap, // Landau-Vishkin candidates that need to be rescored using affine gap
+        _int64				  maxSingleCandidatesForAffineGapBufferSize,
+        _int64                *nSingleCandidatesForAffineGapFirstRead,
+        _int64                *nSingleCandidatesForAffineGapSecondRead,
+        SingleAlignmentResult *singleCandidatesForAffineGap,
         int                   maxK_
 	)
 {
@@ -1814,7 +1818,7 @@ IntersectingPairedEndAligner::alignHamming(
         //
         ScoringCandidate* candidate = scoringCandidates[currentBestPossibleScoreList];
 
-        int fewerEndScore;
+        int fewerEndScore, fewerEndScoreGapless;
         double fewerEndMatchProbability;
         int fewerEndGenomeLocationOffset;
 
@@ -1832,7 +1836,7 @@ IntersectingPairedEndAligner::alignHamming(
 
         scoreLocationWithHammingDistance(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsGenomeLocation,
             candidate->seedOffset, scoreLimit, &fewerEndScore, &fewerEndMatchProbability, &fewerEndGenomeLocationOffset, &candidate->usedAffineGapScoring,
-            &candidate->basesClippedBefore, &candidate->basesClippedAfter, &candidate->agScore, &candidate->usedGaplessClipping);
+            &candidate->basesClippedBefore, &candidate->basesClippedAfter, &candidate->agScore, &candidate->usedGaplessClipping, &fewerEndScoreGapless);
 
         candidate->matchProbability = fewerEndMatchProbability;
 
@@ -1875,10 +1879,11 @@ IntersectingPairedEndAligner::alignHamming(
                     // This is because the reported score can be very large after clipping
                     //   
                     int mateScoreLimit = candidate->usedGaplessClipping ? scoreLimit : scoreLimit - fewerEndScore;
+                    int mateScoreGapless;
                     if (mate->score == ScoringMateCandidate::LocationNotYetScored || (mate->score == ScoreAboveLimit && mate->scoreLimit < scoreLimit - fewerEndScore) || (candidate->usedGaplessClipping)) {
                         scoreLocationWithHammingDistance(readWithMoreHits, setPairDirection[candidate->whichSetPair][readWithMoreHits], GenomeLocationAsInt64(mate->readWithMoreHitsGenomeLocation),
                             mate->seedOffset, mateScoreLimit, &mate->score, &mate->matchProbability,
-                            &mate->genomeOffset, &mate->usedAffineGapScoring, &mate->basesClippedBefore, &mate->basesClippedAfter, &mate->agScore, &mate->usedGaplessClipping);
+                            &mate->genomeOffset, &mate->usedAffineGapScoring, &mate->basesClippedBefore, &mate->basesClippedAfter, &mate->agScore, &mate->usedGaplessClipping, &mateScoreGapless);
 #ifdef _DEBUG
                         if (_DumpAlignments) {
                             printf("Hamming: Scored mate candidate %d, set pair %d, read %d, location %s:%llu, seed offset %d, score limit %d, score %d, offset %d, agScore %d, matchProb %e\n",
@@ -2053,7 +2058,7 @@ IntersectingPairedEndAligner::alignHamming(
 
                             scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
 
-                            if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore) {
+                            if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && (pairScore >= scoresForAllAlignments.bestPairScore) && (maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore)) {
 
                                 //
                                 // A secondary result to save.
@@ -2098,7 +2103,7 @@ IntersectingPairedEndAligner::alignHamming(
                             }
 
 
-                            if ((!updatedBestScore) && maxLVCandidatesForAffineGapBufferSize > 0 && (extraSearchDepth >= pairScore - scoresForAllAlignments.bestPairScore)) {
+                            if ((!updatedBestScore) && maxLVCandidatesForAffineGapBufferSize > 0 && (pairScore >= scoresForAllAlignments.bestPairScore) && (extraSearchDepth >= pairScore - scoresForAllAlignments.bestPairScore)) {
 
                                 if (*nLVCandidatesForAffineGap >= maxLVCandidatesForAffineGapBufferSize) {
                                     *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1;
@@ -2672,6 +2677,13 @@ IntersectingPairedEndAligner::alignAffineGap(
                         int pairAGScore = lvResult->agScore[0] + lvResult->agScore[1];
 
                         //
+                        // Do not lower MAPQ if we get the same alignment again
+                        //
+                        if (result->location[0] == lvResult->location[0] && result->location[1] == lvResult->location[1]) {
+                            continue;
+                        }
+
+                        //
                         // Update match probabilities for read pair and best hit if better
                         //
                         scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbability);
@@ -2983,7 +2995,8 @@ IntersectingPairedEndAligner::scoreLocationWithHammingDistance(
     int*                 basesClippedBefore,
     int*                 basesClippedAfter,
     int*                 agScore,
-    bool*                usedGaplessClipping)
+    bool*                usedGaplessClipping,
+    int*                 scoreGapless)
 {
 
     if (noUkkonen) {
@@ -3040,7 +3053,7 @@ IntersectingPairedEndAligner::scoreLocationWithHammingDistance(
         int limitLeft = scoreLimit - score1Gapless;
         if (seedOffset != 0) {
             agScore2 = reverseAffineGap->computeGaplessScore(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
-                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, readLen, limitLeft, &score2, genomeLocationOffset, NULL, &matchProb2, &score1Gapless);
+                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, readLen, limitLeft, &score2, genomeLocationOffset, NULL, &matchProb2, &score2Gapless);
 
             agScore2 -= (readLen);
 
@@ -3057,12 +3070,14 @@ IntersectingPairedEndAligner::scoreLocationWithHammingDistance(
         // Map probabilities for substrings can be multiplied, but make sure to count seed too
         *matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
         *agScore = agScore1 + agScore2;
+        *scoreGapless = score1Gapless + score2Gapless;
         *usedGaplessClipping = true;
     }
     else {
         *score = ScoreAboveLimit;
         *agScore = ScoreAboveLimit;
         *matchProbability = 0.0;
+        *scoreGapless = ScoreAboveLimit;
     }
 }
 

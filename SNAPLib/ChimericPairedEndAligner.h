@@ -57,7 +57,8 @@ public:
         unsigned            gapExtendPenalty = 1,
         int                 minScoreRealignment_ = 3,
         int                 minScoreGapRealignmentALT_ = 3,
-        int                 minAGScoreImprovement_ = 15,
+        int                 minAGScoreImprovement_ = 24,
+        bool                enableHammingScoringBaseAligner = false,
         BigAllocator        *allocator = NULL);
     
     virtual ~ChimericPairedEndAligner();
@@ -83,10 +84,14 @@ public:
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        _int64                 maxLVCandidatesForAffineGapBufferSize,
-        _int64                *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap,
-        int                   maxK
+        _int64                 maxPairedCandidatesForAffineGapBufferSize,
+        _int64                *nPairedCandidatesForAffineGap,
+        PairedAlignmentResult *pairedCandidatesForAffineGap,
+        _int64                 maxSingleCandidatesForAffineGapBufferSize,
+        _int64                *nSingleCandidatesForAffineGapFirstRead,
+        _int64                *nSingleCandidatesForAffineGapSecondRead,
+        SingleAlignmentResult *singleCandidatesForAffineGap,
+        int                    maxK
 	);
 
     void *operator new(size_t size) {return BigAlloc(size);}
@@ -125,5 +130,7 @@ private:
     int minScoreRealignment;
     int minScoreGapRealignmentALT;
     int minAGScoreImprovement;
+
+    bool enableHammingScoringBaseAligner;
 
 };

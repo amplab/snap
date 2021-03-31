@@ -1177,6 +1177,11 @@ public:
         CigarFormat format = COMPACT_CIGAR_STRING,
         int* o_cigarBufUsed = NULL, int *o_netDel = NULL, int *o_tailIns = NULL);
 
+    int computeGlobalScoreBanded(const char* text, int textLen, const char* pattern, int patternLen, int w,
+        char* cigarBuf, int cigarBufLen, bool useM,
+        CigarFormat format = COMPACT_CIGAR_STRING,
+        int* o_cigarBufUsed = NULL, int* o_netDel = NULL, int* o_tailIns = NULL);
+
     int computeGlobalScoreNormalized(const char* text, int textLen,
         const char* pattern, int patternLen,
         int k,

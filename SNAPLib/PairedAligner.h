@@ -81,6 +81,7 @@ protected:
     int                 minScoreRealignment;
     int                 minScoreGapRealignmentALT;
     int                 minAGScoreImprovement;
+    bool                enableHammingScoringBaseAligner;
 
     GenomeDistance pairedEndSpacing[DEFAULT_BATCH_SIZE_IS_ESTIMATION];      // Spacing between reads aligned as FR pairs
     static int compareBySpacing(const void *first_, const void *second_);
@@ -109,4 +110,5 @@ struct PairedAlignerOptions : public AlignerOptions
     int         minScoreRealignment;
     int         minScoreGapRealignmentALT;
     int         minAGScoreImprovement;
+    bool        enableHammingScoringBaseAligner;
 };

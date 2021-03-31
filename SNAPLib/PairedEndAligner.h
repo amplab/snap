@@ -53,10 +53,14 @@ public:
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        _int64                 maxLVCandidatesForAffineGapBufferSize,
-        _int64                *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap,
-        int                   maxK
+        _int64                 maxPairedCandidatesForAffineGapBufferSize,
+        _int64                *nPairedCandidatesForAffineGap,
+        PairedAlignmentResult *pairedCandidatesForAffineGap,
+        _int64                 maxSingleCandidatesForAffineGapBufferSize,
+        _int64                *nSingleCandidatesForAffineGapFirstRead,
+        _int64                *nSingleCandidatesForAffineGapSecondRead,
+        SingleAlignmentResult *singleCandidatesForAffineGap,
+        int                    maxK
     ) = 0; // return value is false iff there wasn't enough space in the secondary buffers
 
     virtual void setLandauVishkin(
