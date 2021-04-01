@@ -237,7 +237,8 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     maxSeedsSingleEnd(DEFAULT_MAX_HITS_FOR_UNDERLYING_SINGLE_END_ALIGNER),
     minScoreRealignment(3),
     minScoreGapRealignmentALT(3),
-    minAGScoreImprovement(24)
+    minAGScoreImprovement(24),
+    enableHammingScoringBaseAligner(false)
 {
 }
 
@@ -380,6 +381,7 @@ bool PairedAlignerContext::initialize()
     minScoreRealignment = options2->minScoreRealignment;
     minScoreGapRealignmentALT = options2->minScoreGapRealignmentALT;
     minAGScoreImprovement = options2->minAGScoreImprovement;
+    enableHammingScoringBaseAligner = options2->enableHammingScoringBaseAligner;
 
 	return true;
 }
