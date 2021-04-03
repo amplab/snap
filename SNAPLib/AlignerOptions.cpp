@@ -97,7 +97,9 @@ AlignerOptions::AlignerOptions(
     emitInternalScore(false),
 	altAwareness(true),
     emitALTAlignments(false),
-    maxScoreGapToPreferNonALTAlignment(64)
+    maxScoreGapToPreferNonALTAlignment(64),
+    useSoftClipping(true),
+    flattenMAPQAtOrBelow(3)
 {
     if (forPairedEnd) {
         maxDist                 = 12;
@@ -240,6 +242,12 @@ AlignerOptions::usage()
             "       flag set and MAPQ computed across all potential mappings, both primary and ALT\n"
             "  -asg Maximum score gap to prefer a non-ALT alignment.  If the best non-ALT alignment is more than this much worse than the best ALT alignment\n"
             "       emit the ALT alignment as the primary result rather than as a supplementary result. (default: %u)\n"
+            "  -fmb Force MAPQ below this value to zero.  By the strict definition of MAPQ a read with two equally good alignments should have MAPQ 3\n"
+            "       Other aligners, however, will score these alignments at MAPQ 0 and some variant callers depend on that behavior.  Setting this will\n"
+            "       force any MAPQ value at or below the parameter value to zero.  (default:%d)\n"
+            "   -SC When a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.  Whether this is a good idea\n"
+            "       depends on the downstream tools that will consume the alignments; if they're not careful, it could result in false positives.  This is the default\n"
+            "  -SC- Turn off soft clipping (see the -SC flag for a description).\n"
 		,
             commandLine,
             maxDist,
@@ -254,7 +262,8 @@ AlignerOptions::usage()
             subPenalty,
             gapOpenPenalty,
             gapExtendPenalty,
-            maxScoreGapToPreferNonALTAlignment
+            maxScoreGapToPreferNonALTAlignment,
+            flattenMAPQAtOrBelow
         );
 
     if (extra != NULL) {
@@ -312,15 +321,13 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        if (strcmp(argv[n], "-i") == 0) {
+        } else if (strcmp(argv[n], "-i") == 0) {
             if (n + 1 < argc) {
                 maxDistForIndels = atoi(argv[n + 1]);
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-n") == 0) {
+        } else if (strcmp(argv[n], "-n") == 0) {
             if (n + 1 < argc) {
                 if (seedCountSpecified) {
                     WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
@@ -331,8 +338,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-sc") == 0) {
+        } else if (strcmp(argv[n], "-sc") == 0) {
             if (n + 1 < argc) {
                 if (seedCountSpecified) {
                     WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
@@ -344,8 +350,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-ms") == 0) {
+        } else if (strcmp(argv[n], "-ms") == 0) {
             if (n + 1 < argc) {
                 minWeightToCheck = (unsigned)atoi(argv[n + 1]);
                 if (minWeightToCheck > 1000) {
@@ -362,16 +367,24 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-c") == 0) { // conf diff is deprecated, but we just ignore it rather than throwing an error.
+        } else if (strcmp(argv[n], "-c") == 0) { // conf diff is deprecated, but we just ignore it rather than throwing an error.
             if (n + 1 < argc) {
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-a") == 0) { // adaptive conf diff is deprecated, but we just ignore it rather than throwing an error.
+        } else if (strcmp(argv[n], "-a") == 0) { // adaptive conf diff is deprecated, but we just ignore it rather than throwing an error.
             if (n + 1 < argc) {
                 n++;
+                return true;
+            }
+        } else if (strcmp(argv[n], "-SC") == 0) {
+            useSoftClipping = true;
+        } else if (strcmp(argv[n], "-SC-") == 0) {
+                useSoftClipping = false;
+        } else if (strcmp(argv[n], "-fmb") == 0) { 
+            if (n + 1 < argc) {
+                n++;
+                flattenMAPQAtOrBelow = atoi(argv[n + 1]);
                 return true;
             }
         } else if (strcmp(argv[n], "-t") == 0) {
@@ -386,8 +399,7 @@ AlignerOptions::usage()
  
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-o") == 0) {
+        } else if (strcmp(argv[n], "-o") == 0) {
             int argsConsumed;
             if (!SNAPFile::generateFromCommandLine(argv + n + 1, argc - n - 1, &argsConsumed, &outputFile, false, false)) {
                 WriteErrorMessage("Must have a file specifier after -o\n");
@@ -466,8 +478,7 @@ AlignerOptions::usage()
             strcpy(internalScoreTag, argv[n + 1]);
             n++;
             return true;
-        }
-        else if (strcmp(argv[n], "-F") == 0) {
+        } else if (strcmp(argv[n], "-F") == 0) {
             if (n + 1 < argc) {
                 n++;
                 if (strcmp(argv[n], "a") == 0) {
@@ -476,39 +487,33 @@ AlignerOptions::usage()
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterMultipleHits | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "s") == 0) {
+                } else if (strcmp(argv[n], "s") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "u") == 0) {
+                } else if (strcmp(argv[n], "u") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E  option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterUnaligned | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "l") == 0) {
+                } else if (strcmp(argv[n], "l") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E  option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterMultipleHits | FilterUnaligned;
-                }
-                else if (strcmp(argv[n], "b") == 0) {
+                } else if (strcmp(argv[n], "b") == 0) {
                     // ignore paired-end option(s)
-                }
-                else {
+                } else {
                     WriteErrorMessage("Unknown option type after -F: %s\n", argv[n]);
                     return false;
                 }
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-E") == 0) {
+        } else if (strcmp(argv[n], "-E") == 0) {
             if (n + 1 < argc) {
                 if (0 != filterFlags) {
                     WriteErrorMessage("You can have only one -F and/or -E switch (excepting -F b)\n");

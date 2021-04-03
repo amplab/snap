@@ -51,6 +51,8 @@ public:
 		unsigned			minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
         int                 maxScoreGapToPreferNonAltAlignment,
+        int                 flattenMAPQAtOrBelow_,
+        bool                useSoftClipping_,
         unsigned            matchReward = 1,
         unsigned            subPenalty = 4,
         unsigned            gapOpenPenalty = 6,
@@ -117,6 +119,7 @@ private:
 	unsigned	minReadLength;
 
     bool emitALTAlignments;
+    bool useSoftClipping;
 
     unsigned maxKSingleEnd;
     unsigned maxKPairedEnd;
@@ -125,5 +128,6 @@ private:
     int minScoreRealignment;
     int minScoreGapRealignmentALT;
     int minAGScoreImprovement;
+    int flattenMAPQAtOrBelow;
 
 };

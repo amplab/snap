@@ -41,7 +41,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      maxKForIndels_,
         unsigned      numSeedsFromCommandLine_,
         double        seedCoverage_,
-        unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
+        int           minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned      maxBigHits_,
         unsigned      extraSearchDepth_,
@@ -58,12 +58,13 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      matchReward_,
         unsigned      subPenalty_,
         unsigned      gapOpenPenalty_,
-        unsigned      gapExtendPenalty_) :
+        unsigned      gapExtendPenalty_,
+        bool          useSoftClip_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxKForIndels(maxKForIndels_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
     extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), useAffineGap(useAffineGap_),
     maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), altAwareness(altAwareness_),
-    maxScoreGapToPreferNonAltAlignment(maxScoreGapToPreferNonAltAlignment_), matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_)
+    maxScoreGapToPreferNonAltAlignment(maxScoreGapToPreferNonAltAlignment_), matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), useSoftClip(useSoftClip_)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -212,7 +213,7 @@ IntersectingPairedEndAligner::align(
         // Try to align unaligned read/mate using a Hamming distance based scoring scheme that clips poorly matching start or ends
         // of read/mate.
         //
-        if (result->status[0] == NotFound || result->status[1] == NotFound) {
+        if (useSoftClip && (result->status[0] == NotFound || result->status[1] == NotFound)) {
             fitInSecondaryBuffer = alignHamming(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize,
                 nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead,
                 singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap);
@@ -870,7 +871,10 @@ bool
                 scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments, mate->largestBigIndelDetected);
 
                 _ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
-                if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && ((mate->bestPossibleScore <= scoreLimit - fewerEndScore))) {
+                //
+                // Exclude it if it's strictly smaller than minSpacing; hence, minSpacing -1.
+                //
+                if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing -1) && ((mate->bestPossibleScore <= scoreLimit - fewerEndScore))) {
                     //
                     // It's within the range and not necessarily too poor of a match.  Consider it.
                     //
@@ -1945,7 +1949,10 @@ IntersectingPairedEndAligner::alignHamming(
 
                 ScoringMateCandidate* mate = &scoringMateCandidates[candidate->whichSetPair][mateIndex];
                 _ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
-                if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && ((mate->bestPossibleScore <= scoreLimit - fewerEndScore) || (candidate->usedGaplessClipping))) {
+                //
+                // Exclude it if it's strictly smaller than minSpacing; hence, minSpacing -1.
+                //
+                if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing - 1) && ((mate->bestPossibleScore <= scoreLimit - fewerEndScore) || (candidate->usedGaplessClipping))) {
                     //
                     // It's within the range and not necessarily too poor of a match.  Consider it.
                     //
@@ -3134,7 +3141,7 @@ IntersectingPairedEndAligner::scoreLocationWithHammingDistance(
         int limitLeft = scoreLimit - score1Gapless;
         if (seedOffset != 0) {
             agScore2 = reverseAffineGap->computeGaplessScore(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
-                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, readLen, limitLeft, &score2, genomeLocationOffset, NULL, &matchProb2, &score1Gapless);
+                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, readLen, limitLeft, &score2, genomeLocationOffset, NULL, &matchProb2, &score2Gapless);
 
             agScore2 -= (readLen);
 
@@ -3631,22 +3638,22 @@ void IntersectingPairedEndAligner::ScoreSet::fillInResult(PairedAlignmentResult*
     result->probabilityAllPairs = probabilityOfAllPairs;
 } // fillInResult
 
-const unsigned IntersectingPairedEndAligner::maxMergeDistance = 31;
-
 int IntersectingPairedEndAligner::computeScoreLimit(bool nonALTAlignment, const ScoreSet * scoresForAllAlignments, const ScoreSet * scoresForNonAltAlignments, GenomeDistance maxBigIndelSeen)
 {
     if (nonALTAlignment) {
         //
         // For a non-ALT alignment to matter, it must be no worse than maxScoreGapToPreferNonAltAlignment of the best ALT alignment and at least as good as the best non-ALT alignment.
         //
-        return extraSearchDepth + min(maxK + maxBigIndelSeen, min(scoresForAllAlignments->bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments->bestPairScore));
+        return min(MAX_K - 1, extraSearchDepth + min(maxK + maxBigIndelSeen, min(scoresForAllAlignments->bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments->bestPairScore)));
     } else {
         //
         // For an ALT alignment to matter, it has to be at least maxScoreGapToPreferNonAltAlignment better than the best non-ALT alignment, and better than the best ALT alignment.
         //
-        return extraSearchDepth + min(maxK + maxBigIndelSeen, min(scoresForAllAlignments->bestPairScore, scoresForNonAltAlignments->bestPairScore - maxScoreGapToPreferNonAltAlignment));
+        return min(MAX_K-1, extraSearchDepth + min(maxK + maxBigIndelSeen, min(scoresForAllAlignments->bestPairScore, scoresForNonAltAlignments->bestPairScore - maxScoreGapToPreferNonAltAlignment)));
     }
 }
+
+const unsigned IntersectingPairedEndAligner::maxMergeDistance = 31;
 
 #if INSTRUMENTATION_FOR_PAPER
     int

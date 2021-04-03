@@ -113,12 +113,14 @@ struct AlignerOptions : public AbstractOptions
     int                 maxSecondaryAlignmentAdditionalEditDistance;
 	int					maxSecondaryAlignments;
     int                 maxSecondaryAlignmentsPerContig;
+    int                 flattenMAPQAtOrBelow;
     bool                preserveClipping;
     float               expansionFactor;
     bool                noUkkonen;
     bool                noOrderedEvaluation;
 	bool				noTruncation;
     bool                useAffineGap;
+    bool                useSoftClipping;
     unsigned            matchReward;
     unsigned            subPenalty;
     unsigned            gapOpenPenalty;

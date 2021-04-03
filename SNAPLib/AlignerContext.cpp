@@ -480,7 +480,6 @@ char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen
     void
 AlignerContext::printStats()
 {
-
     WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)%s%s\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
         (stats->filtered > 0) ? "Filtered               " : "",
         (stats->extraAlignments) ? "Extra Alignments  " : "",

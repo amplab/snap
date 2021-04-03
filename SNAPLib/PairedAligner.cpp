@@ -376,6 +376,8 @@ bool PairedAlignerContext::initialize()
     minScoreRealignment = options2->minScoreRealignment;
     minScoreGapRealignmentALT = options2->minScoreGapRealignmentALT;
     minAGScoreImprovement = options2->minAGScoreImprovement;
+    useSoftClipping = options->useSoftClipping;
+    flattenMAPQAtOrBelow = options->flattenMAPQAtOrBelow;
 
 	return true;
 }
@@ -543,7 +545,7 @@ void PairedAlignerContext::runIterationThread()
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, maxDistForIndels, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
-                                                                useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment,
+                                                                useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment, useSoftClipping,
                                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
@@ -567,6 +569,8 @@ void PairedAlignerContext::runIterationThread()
 		minReadLength,
         maxSecondaryAlignmentsPerContig,
         maxScoreGapToPreferNonALTAlignment,
+        flattenMAPQAtOrBelow,
+        useSoftClipping,
         matchReward,
         subPenalty,
         gapOpenPenalty,

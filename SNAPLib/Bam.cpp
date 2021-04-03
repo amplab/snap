@@ -35,6 +35,11 @@ Environment:
 #include "GzipDataWriter.h"
 #include "Error.h"
 
+#if _DEBUG
+extern bool _DumpAlignments;
+#endif // _DEBUG
+
+
 using std::max;
 using std::min;
 using util::strnchr;
@@ -1121,23 +1126,10 @@ BAMFormat::writePairs(
                         }
                     }
                 }
-
-                // Uncomment for debug
-                if (editDistance[whichRead] == -1) {
-                    const char* read_data = read->getUnclippedData();
-                    const char* readId = read->getId();
-                    for (unsigned i = 0; i < read->getIdLength(); ++i) {
-                        printf("%c", readId[i]);
-                    }
-                    printf(",");
-                    for (unsigned i = 0; i < read->getUnclippedLength(); ++i) {
-                        printf("%c", read_data[i]);
-                    }
-                    printf("\n");
-                }
             } // If it's mapped
 		} while (addFrontClipping != 0);
 	} // for each read in the pair
+
 
     // Fill mate information
     for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {

@@ -46,7 +46,7 @@ public:
         unsigned      maxKForIndels_,
         unsigned      maxSeedsFromCommandLine_,
         double        seedCoverage_,
-        unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
+        int           minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned      maxBigHits_,
         unsigned      extraSearchDepth_,
@@ -63,7 +63,8 @@ public:
         unsigned      matchReward_,
         unsigned      subPenalty_,
         unsigned      gapOpenPenalty_,
-        unsigned      gapExtendPenalty);
+        unsigned      gapExtendPenalty,
+        bool          useSoftClip_);
 
      void setLandauVishkin(
         LandauVishkin<1> *landauVishkin_,
@@ -207,7 +208,7 @@ private:
     unsigned        numSeedsFromCommandLine;
     double          seedCoverage;
     static const unsigned MAX_MAX_SEEDS = 30;
-    unsigned        minSpacing;
+    int             minSpacing;
     unsigned        maxSpacing;
     unsigned        seedLen;
     bool            doesGenomeIndexHave64BitLocations;
@@ -218,6 +219,7 @@ private:
     bool            useAffineGap;
     bool            ignoreAlignmentAdjustmentsForOm;
 	bool			altAwareness;
+    bool            useSoftClip;
     int             maxScoreGapToPreferNonAltAlignment;
     int             minBigIndelSize;    // We only see indels of this size or bigger if they're hinted by seed hits.
 
@@ -230,8 +232,8 @@ private:
 
     AlignmentAdjuster   alignmentAdjuster;
 
-	static const unsigned        maxMergeDistance;
-	
+    static const unsigned        maxMergeDistance;
+
 	//
 	// It's a template, because we 
     // have different sizes of genome locations depending on the hash table format.  So, GL must be unsigned or GenomeLocation

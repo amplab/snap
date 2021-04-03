@@ -77,10 +77,12 @@ protected:
     bool                ignoreMismatchedIDs;
     bool                quicklyDropUnpairedReads;
     bool                inferSpacing;
+    bool                useSoftClipping;
     int                 maxSeedsSingleEnd;
     int                 minScoreRealignment;
     int                 minScoreGapRealignmentALT;
     int                 minAGScoreImprovement;
+    int                 flattenMAPQAtOrBelow;
 
     GenomeDistance pairedEndSpacing[DEFAULT_BATCH_SIZE_IS_ESTIMATION];      // Spacing between reads aligned as FR pairs
     static int compareBySpacing(const void *first_, const void *second_);

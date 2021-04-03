@@ -59,6 +59,8 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
 	    unsigned            minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
         int                 maxScoreGapToPreferNonAltAlignment,
+        int                 flattenMAPQAtOrBelow_,
+        bool                useSoftClipping_,
         unsigned            matchReward,
         unsigned            subPenalty,
         unsigned            gapOpenPenalty,
@@ -69,7 +71,8 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         BigAllocator        *allocator)
 		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), emitALTAlignments(emitALTAlignments_), 
            maxKSingleEnd(maxK / 2), maxKPairedEnd(maxK), extraSearchDepth(extraSearchDepth_),
-           minScoreRealignment(minScoreRealignment_), minScoreGapRealignmentALT(minScoreGapRealignmentALT_), minAGScoreImprovement(minAGScoreImprovement_)
+           minScoreRealignment(minScoreRealignment_), minScoreGapRealignmentALT(minScoreGapRealignmentALT_), minAGScoreImprovement(minAGScoreImprovement_), useSoftClipping(useSoftClipping_),
+           flattenMAPQAtOrBelow(flattenMAPQAtOrBelow_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK / 2  /* allocate half to each end instead of letting it float like when they're aligned together */, maxReadSize,
@@ -211,9 +214,11 @@ bool ChimericPairedEndAligner::align(
         sumPairScore = result->score[0] + result->score[1];
         sumPairScoreAlt = firstALTResult->score[0] + firstALTResult->score[1];
 
-        // Hack to match other aligners. MAPQ <= 3 in SNAP is considered MAPQ 0 in other aligners  
-        result->mapq[0] = result->mapq[0] <= 3 ? 0 : result->mapq[0];
-        result->mapq[1] = result->mapq[1] <= 3 ? 0 : result->mapq[1];
+        //
+        // If the command line requests zeroing out low mapqs, do it now.  There's one other place we need to check below.
+        //
+        result->mapq[0] = result->mapq[0] <= flattenMAPQAtOrBelow ? 0 : result->mapq[0];
+        result->mapq[1] = result->mapq[1] <= flattenMAPQAtOrBelow ? 0 : result->mapq[1];
 
         // If we have already seen a good ALT pair, don't separate them with by running the single end aligner
         bool seenBetterAltResult = (firstALTResult->status[0] != NotFound)
@@ -275,6 +280,7 @@ bool ChimericPairedEndAligner::align(
             result->clippingForReadAdjustment[r] = 0;
 
             firstALTResult->status[r] = NotFound;   // Don't need to fill in the rest, this suppresses writing it
+            chooseSingleEndMapq = false;
         } else {
             if (compareWithSingleEndAlignment) {
                 // Single-end alignments are not good enough to be considered
@@ -320,8 +326,15 @@ bool ChimericPairedEndAligner::align(
             // If the single-end aligner returns a lower MAPQ choose that for the result
             //
             result->mapq[r] = __min(result->mapq[r], singleResult[r].mapq);
-        }
-    }
+
+            //
+            // If the command line requests zeroing out low mapqs, do it now.  There's one other place we need to check below.
+            //  
+            if (result->mapq[r] <= flattenMAPQAtOrBelow) {
+                result->mapq[r] = 0;
+            } // if we flatten
+        } // for each read
+    } // choose single end mapq
 
 
     if (!compareWithSingleEndAlignment || (singleEndAGScore >= pairAGScore + minAGScoreImprovement)) {
