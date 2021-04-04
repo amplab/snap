@@ -103,6 +103,10 @@ public:
         _int64                 maxLVCandidatesForAffineGapBufferSize,
         _int64                *nLVCandidatesForAffineGap,
         PairedAlignmentResult *lvCandidatesForAffineGap, // Landau-Vishkin candidates that need to be rescored using affine gap
+        _int64                maxSingleCandidatesForAffineGapBufferSize,
+        _int64                *nSingleCandidatesForAffineGapFirstRead,
+        _int64                *nSingleCandidatesForAffineGapSecondRead,
+        SingleAlignmentResult *singleCandidatesForAffineGap,
         int                   maxK_
 	);
 
@@ -481,7 +485,8 @@ private:
         int* basesClippedBefore = NULL,
         int* basesClippedAfter = NULL,
         int* agScore = NULL,
-        bool* usedGaplessClipping = NULL
+        bool* usedGaplessClipping = NULL,
+        int* scoreGapless = NULL
     );
 
     //
