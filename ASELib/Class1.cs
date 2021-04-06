@@ -9634,6 +9634,58 @@ namespace ASELib
 
             } // SAMLine
 
+            //
+            // This compares qnames, but instead of using lexocographic order, it splits the name into : separated
+            // fields and for any fields that have only digits in them it uses numeric order instead.  This seems to
+            // be what samtools does with its name sort.
+            //
+            public int CompareTo(string peerQname)
+            {
+                var fields = qname.Split(':');
+                var peerFields = peerQname.Split(':');
+
+                if (fields.Count() != peerFields.Count())
+                {
+                    return qname.CompareTo(peerQname);
+                }
+
+                for (int i = 0; i < fields.Count(); i++)
+                {
+                    var isANumber = fields[i].ToArray().All(_ => '0' <= _ && '9' >= _);
+                    var peerIsANumber = peerFields[i].ToArray().All(_ => '0' <= _ && '9' >= _);
+
+                    if (!isANumber || !peerIsANumber)
+                    {
+                        var result = fields[i].CompareTo(peerFields[i]);
+                        if (result != 0)
+                        {
+                            return result;
+                        }
+                    } else
+                    {
+                        var value = Convert.ToInt64(fields[i]);
+                        var peerValue = Convert.ToInt64(peerFields[i]);
+
+                        if (value < peerValue)
+                        {
+                            return -1;
+                        } 
+                        else if (value > peerValue)
+                        {
+                            return 1;
+                        }
+                    } // number
+
+                } // for each field
+
+                return 0;
+            }
+
+            public int CompareTo(SAMLine peer)
+            {
+                return CompareTo(peer.qname);
+            }
+
             public bool isUnmapped()
             {
                 return (flag & Unmapped) == Unmapped;
@@ -16099,7 +16151,7 @@ namespace ASELib
 
             public string locus()
             {
-                return chrom + ":" + pos;
+                return chrom + ":" + NumberWithCommas(pos);
             }
 
             public int insertLength()    // negative for a deletion
@@ -17667,6 +17719,61 @@ namespace ASELib
         {
             return Math.Round(value, decimalDigits).ToString("F" + decimalDigits);
         }
+
+        //
+        // Start in the file stream at offset (relative to the beginning of the file) and find the line the starts at or after that offset
+        // and return it.  Assumes the file is ASCII.  Returns null on EOF.
+        //
+        public static string ReadNextLineStartingAt(FileStream inputFile, long offset)
+        {
+
+            byte[] nextByte = new byte[1];
+
+            if (offset == 0)
+            {
+                //
+                // We're at the beginning of the file, so no need to look for the beginning of the line
+                //
+                inputFile.Seek(0, SeekOrigin.Begin);
+            } else
+            {
+                //
+                // Back up a character in case we're already at the beginning of a line,
+                // and read until we read the line terminator.
+                inputFile.Seek(offset - 1, SeekOrigin.Begin);
+ 
+                do
+                {
+                    if (0 == inputFile.Read(nextByte, 0, 1))
+                    {
+                        return null;
+                    }
+                } while (Convert.ToChar(nextByte[0]) != '\n'); 
+            }
+
+            if (0 == inputFile.Read(nextByte, 0, 1))
+            {
+                // EOF
+                return null;
+            }
+
+            string result = Convert.ToChar(nextByte[0]).ToString();
+
+            while (0 != inputFile.Read(nextByte, 0, 1) && Convert.ToChar(nextByte[0]) != '\n')
+            {
+                result += Convert.ToChar(nextByte[0]);
+            }
+
+            if (result.EndsWith("\r"))
+            {
+                //
+                // This is CRLF text and we have the CR included in the result.  Trim it.
+                //
+                result = result.Substring(0, result.Length - 1);
+            }
+
+            return result;
+        } // ReadNextLineStartingAt
 
     } // ASETools
 
