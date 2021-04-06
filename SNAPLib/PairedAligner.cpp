@@ -555,8 +555,8 @@ void PairedAlignerContext::runIterationThread()
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, maxDistForIndels, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
-                                                                useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment, useSoftClipping,
-                                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
+                                                                useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment,
+                                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, useSoftClipping);
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
