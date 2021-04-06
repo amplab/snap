@@ -81,9 +81,22 @@ public:
         _int64                   secondaryResultBufferSize,
         _int64                  *nSecondaryResults,
         _int64                   maxSecondaryResults,         // The most secondary results to return; always return the best ones
-        SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+        SingleAlignmentResult   *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+        _int64                   maxCandidatesForAffineGapBufferSize,
+        _int64                  *nCandidatesForAffineGap,
+        SingleAlignmentResult   *candidatesForAffineGap, // Alignment candidates that need to be rescored using affine gap
+        bool                     useHamming  = false           // run Hamming distance based scoring instead of Landau-Vishkin
     );      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
 
+
+        bool
+    alignAffineGap(
+        Read* read,
+        SingleAlignmentResult* result,
+        SingleAlignmentResult* firstALTResult,
+        _int64 nCandidatesForAffineGap,
+        SingleAlignmentResult* candidatesForAffineGap // Alignment candidates that need to be rescored using affine gap
+    );
         
     //
     // Statistics gathering.
@@ -190,6 +203,8 @@ private:
 
         unsigned        score;
         int             seedOffset;
+        double          matchProbability;
+        GenomeLocation  origGenomeLocation;
     };
 
     static const unsigned hashTableElementSize = maxMergeDist;   // The code depends on this, don't change it
@@ -225,7 +240,8 @@ private:
         unsigned             lowestPossibleScore;
         unsigned             bestScore;
         int                  bestAGScore;
-        GenomeLocation       bestScoreGenomeLocation;
+        GenomeLocation       bestScoreGenomeLocation; // adjusted location after scoring
+        GenomeLocation       bestScoreOrigGenomeLocation; // location before scoring
         Direction            direction;
         bool                 allExtantCandidatesScored;
         double               matchProbabilityForBestScore;
@@ -233,6 +249,7 @@ private:
         int                  basesClippedBefore;
         int                  basesClippedAfter;
         int                  agScore;
+        int                  seedOffset;
 
         Candidate            candidates[hashTableElementSize];
     };
@@ -240,14 +257,18 @@ private:
     struct ScoreSet {
         ScoreSet();
         void init();
+        void init(SingleAlignmentResult* result);
 
         int bestScore;
         GenomeLocation bestScoreGenomeLocation;
+        GenomeLocation bestScoreOrigGenomeLocation; // location before scoring
         Direction bestScoreDirection;
         bool bestScoreUsedAffineGapScoring;
         int bestScoreBasesClippedBefore;
         int bestScoreBasesClippedAfter;
         int bestScoreAGScore;
+        int bestScoreSeedOffset;
+        double bestScoreMatchProbability;
 
 
         double probabilityOfAllCandidates;
@@ -255,8 +276,16 @@ private:
 
         void updateProbabilitiesForNearbyMatch(double probabilityOfMatchBeingReplaced);   // For the "nearby match" code
         void updateProbabilitiesForNewMatch(double newProbability, double matchProbabilityOfNearbyMatch);
+        inline void updateProbabilityOfAllMatches(double oldProbability) {
+            probabilityOfAllCandidates = __max(0, probabilityOfAllCandidates - oldProbability);
+        }
+        inline void updateProbabilityOfBestMatch(double newProbability) {
+            probabilityOfBestCandidate = newProbability;
+            probabilityOfAllCandidates += newProbability;
+        }
         void updateBestScore(
-            GenomeLocation genomeLocation, 
+            GenomeLocation genomeLocation,
+            GenomeLocation origGenomeLocation,
             unsigned score, 
             bool useAffineGap, 
             int agScore, 
@@ -265,10 +294,30 @@ private:
             BaseAligner::HashTableElement *elementToScore, 
             SingleAlignmentResult *secondaryResults, 
             _int64* nSecondaryResults, 
-            _int64 secondaryResultBufferSize, 
+            _int64 secondaryResultBufferSize,
             bool anyNearbyCandidatesAlreadyScored,
             int maxEditDistanceForSecondaryResults, 
-            bool *overflowedSecondaryBuffer);
+            bool *overflowedSecondaryBuffer,
+            _int64 maxCandidatesForAffineGapBufferSize,
+            _int64* nCandidatesForAffineGap,
+            SingleAlignmentResult* candidatesForAffineGap,
+            unsigned extraSearchDepth);
+
+        void updateBestScore(SingleAlignmentResult* result) {
+            probabilityOfAllCandidates += result->matchProbability;
+            if (result->agScore > bestScoreAGScore || (result->agScore == bestScoreAGScore && result->matchProbability > bestScoreMatchProbability)) {
+                bestScore = result->score;
+                bestScoreAGScore = result->agScore;
+                bestScoreMatchProbability = result->matchProbability;
+                bestScoreGenomeLocation = result->location;
+                bestScoreOrigGenomeLocation = result->origLocation;
+                bestScoreDirection = result->direction;
+                bestScoreUsedAffineGapScoring = result->usedAffineGapScoring;
+                bestScoreBasesClippedBefore = result->basesClippedBefore;
+                bestScoreBasesClippedAfter = result->basesClippedAfter;
+                bestScoreSeedOffset = result->seedOffset;
+            }
+        }
 
         void fillInSingleAlignmentResult(SingleAlignmentResult* result, int popularSeedsSkipped);
     };
@@ -347,18 +396,25 @@ private:
         _int64                   secondaryResultBufferSize,
         _int64                  *nSecondaryResults,
         SingleAlignmentResult   *secondaryResults,
-        bool                    *overflowedSecondaryResultsBuffer);
+        bool                    *overflowedSecondaryResultsBuffer,
+        _int64                   maxCandidatesForAffineGapBufferSize,
+        _int64                  *nCandidatesForAffineGap,
+        SingleAlignmentResult   *candidatesForAffineGap,
+        bool                     useHamming = false);
 
-        bool
-    scoreAffineGap(
-        bool                     forceResult,
-        Read                    *read[NUM_DIRECTIONS],
-        SingleAlignmentResult   *primaryResult,
-        int                      maxEditDistanceForSecondaryResults,
-        _int64                   secondaryResultBufferSize,
-        _int64                  *nSecondaryResults,
-        SingleAlignmentResult   *secondaryResults,
-        bool                    *overflowedSecondaryResultsBuffer);
+    void scoreLocationWithAffineGap(
+        Read*                read[NUM_DIRECTIONS],
+        Direction            direction,
+        GenomeLocation       genomeLocation,
+        unsigned             seedOffset,
+        int                  scoreLimit,
+        int                 *score,
+        double              *matchProbability,
+        int                 *genomeLocationOffset,
+        int                 *basesClippedBefore,
+        int                 *basesClippedAfter,
+        int                 *agScore
+    );
 
     void clearCandidates();
 

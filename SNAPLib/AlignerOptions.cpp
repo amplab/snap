@@ -102,13 +102,13 @@ AlignerOptions::AlignerOptions(
     flattenMAPQAtOrBelow(3)
 {
     if (forPairedEnd) {
-        maxDist                 = 12;
+        maxDist                 = 27;
         maxDistForIndels        = 35;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
         maxHits                 = 300;
      } else {
-        maxDist                 = 10;
+        maxDist                 = 27;
         maxDistForIndels        = 35;
         numSeedsFromCommandLine = 25;
         maxHits                 = 300;
@@ -379,8 +379,10 @@ AlignerOptions::usage()
             }
         } else if (strcmp(argv[n], "-SC") == 0) {
             useSoftClipping = true;
+            return true;
         } else if (strcmp(argv[n], "-SC-") == 0) {
-                useSoftClipping = false;
+            useSoftClipping = false;
+            return true;
         } else if (strcmp(argv[n], "-fmb") == 0) { 
             if (n + 1 < argc) {
                 n++;

@@ -1603,7 +1603,7 @@ SAMFormat::writePairs(
             if (locations[whichRead] != InvalidGenomeLocation) {
                 if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 0)) {
                     cigar[whichRead] = computeCigarString(context.genome, ag, cigarBuf[whichRead], cigarBufSize, cigarBufWithClipping[whichRead], cigarBufWithClippingSize,
-                        clippedData[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead], 
+                        clippedData[whichRead], clippedLength[whichRead], result->score[whichRead], basesClippedBefore[whichRead], extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead],
                         read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), locations[whichRead], result->direction[whichRead], useM,
                         &editDistance[whichRead], &addFrontClipping, &refSpanFromCigar[whichRead]);
 
@@ -2027,6 +2027,7 @@ SAMFormat::writeRead(
     bool secondaryAlignment,
     bool supplementaryAlignment,
     int * o_addFrontClipping,
+    int score,
     int internalScore,
     bool emitInternalScore,
     char *internalScoreTag,
@@ -2086,7 +2087,7 @@ SAMFormat::writeRead(
 
     if (genomeLocation != InvalidGenomeLocation) {
         cigar = computeCigarString(context.genome, ag, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize,
-            clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
+            clippedData, clippedLength, score, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
             read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM,
             &editDistance, o_addFrontClipping, &refSpanFromCigar);
         // Uncomment for debug
@@ -2345,6 +2346,7 @@ SAMFormat::computeCigar(
     int cigarBufLen,
     const char * data,
     GenomeDistance dataLength,
+    int score,
     unsigned basesClippedBefore,
     GenomeDistance extraBasesClippedBefore,
     unsigned basesClippedAfter,
@@ -2400,7 +2402,7 @@ SAMFormat::computeCigar(
         (int)(dataLength - *o_extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
         data,
         (int)(dataLength - *o_extraBasesClippedAfter),
-        MAX_K - 1,
+        score,
         cigarBuf,
         cigarBufLen,
         useM,
@@ -2436,7 +2438,7 @@ SAMFormat::computeCigar(
             (int)(dataLength - *o_extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
             data,
             (int)(dataLength - *o_extraBasesClippedAfter),
-            MAX_K - 1,
+            score,
             cigarBuf,
             cigarBufLen,
             useM,
@@ -2538,32 +2540,33 @@ SAMFormat::computeCigarString(
 // will only be valid until computeCigarString is called again.
     const char *
 SAMFormat::computeCigarString(
-        const Genome *              genome,
-        AffineGapVectorizedWithCigar *ag,
-        char *                      cigarBuf,
-        int                         cigarBufLen,
-        char *                      cigarBufWithClipping,
-        int                         cigarBufWithClippingLen,
-        const char *                data,
-        GenomeDistance              dataLength,
-        unsigned                    basesClippedBefore,
-        GenomeDistance              extraBasesClippedBefore,
-        unsigned                    basesClippedAfter,
-        unsigned                    frontHardClipping,
-        unsigned                    backHardClipping,
-        GenomeLocation              genomeLocation,
-        Direction                   direction,
-        bool						useM,
-        int *                       o_editDistance,
-        int *                       o_addFrontClipping,
-        int *                       o_refSpan
-    )
+    const Genome *              genome,
+    AffineGapVectorizedWithCigar *ag,
+    char *                      cigarBuf,
+    int                         cigarBufLen,
+    char *                      cigarBufWithClipping,
+    int                         cigarBufWithClippingLen,
+    const char *                data,
+    GenomeDistance              dataLength,
+    int                         score,
+    unsigned                    basesClippedBefore,
+    GenomeDistance              extraBasesClippedBefore,
+    unsigned                    basesClippedAfter,
+    unsigned                    frontHardClipping,
+    unsigned                    backHardClipping,
+    GenomeLocation              genomeLocation,
+    Direction                   direction,
+    bool						useM,
+    int *                       o_editDistance,
+    int *                       o_addFrontClipping,
+    int *                       o_refSpan
+)
 {
     GenomeDistance extraBasesClippedAfter;
     int cigarBufUsed;
     int backClippingMissedByLV = 0;
 
-    computeCigar(COMPACT_CIGAR_STRING, genome, ag, cigarBuf, cigarBufLen, data, dataLength, basesClippedBefore,
+    computeCigar(COMPACT_CIGAR_STRING, genome, ag, cigarBuf, cigarBufLen, data, dataLength, score, basesClippedBefore,
         extraBasesClippedBefore, basesClippedAfter, &extraBasesClippedAfter, genomeLocation, useM,
         o_editDistance, &cigarBufUsed, o_addFrontClipping, &backClippingMissedByLV);
 

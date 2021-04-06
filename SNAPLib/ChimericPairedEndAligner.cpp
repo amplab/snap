@@ -68,11 +68,12 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         int                 minScoreRealignment_,
         int                 minScoreGapRealignmentALT_,
         int                 minAGScoreImprovement_,
+        bool                enableHammingScoringBaseAligner_,
         BigAllocator        *allocator)
 		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), emitALTAlignments(emitALTAlignments_), 
            maxKSingleEnd(maxK / 2), maxKPairedEnd(maxK), extraSearchDepth(extraSearchDepth_),
            minScoreRealignment(minScoreRealignment_), minScoreGapRealignmentALT(minScoreGapRealignmentALT_), minAGScoreImprovement(minAGScoreImprovement_), useSoftClipping(useSoftClipping_),
-           flattenMAPQAtOrBelow(flattenMAPQAtOrBelow_)
+           flattenMAPQAtOrBelow(flattenMAPQAtOrBelow_), enableHammingScoringBaseAligner(enableHammingScoringBaseAligner_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK / 2  /* allocate half to each end instead of letting it float like when they're aligned together */, maxReadSize,
@@ -135,10 +136,14 @@ bool ChimericPairedEndAligner::align(
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        _int64				  maxLVCandidatesForAffineGapBufferSize,
-        _int64				  *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap,
-        int                   maxK
+        _int64                 maxPairedCandidatesForAffineGapBufferSize,
+        _int64                *nPairedCandidatesForAffineGap,
+        PairedAlignmentResult *pairedCandidatesForAffineGap,
+        _int64                 maxSingleCandidatesForAffineGapBufferSize,
+        _int64                *nSingleCandidatesForAffineGapFirstRead,
+        _int64                *nSingleCandidatesForAffineGapSecondRead,
+        SingleAlignmentResult *singleCandidatesForAffineGap,
+        int                    maxK
 	)
 {
 	result->status[0] = result->status[1] = NotFound;
@@ -154,7 +159,9 @@ bool ChimericPairedEndAligner::align(
 
     firstALTResult->status[0] = firstALTResult->status[1] = NotFound;
 
-    *nLVCandidatesForAffineGap = 0;
+    *nPairedCandidatesForAffineGap = 0;
+    *nSingleCandidatesForAffineGapFirstRead = 0;
+    *nSingleCandidatesForAffineGapSecondRead = 0;
 
 	if (read0->getDataLength() < minReadLength && read1->getDataLength() < minReadLength) {
         TRACE("Reads are both too short -- returning");
@@ -181,17 +188,18 @@ bool ChimericPairedEndAligner::align(
         bool fitInSecondaryBuffer = 
 		underlyingPairedEndAligner->align(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
             singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, 
-            singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap, maxKPairedEnd);
+            singleEndSecondaryResults, maxPairedCandidatesForAffineGapBufferSize, nPairedCandidatesForAffineGap, pairedCandidatesForAffineGap, maxSingleCandidatesForAffineGapBufferSize,
+            nSingleCandidatesForAffineGapFirstRead, nSingleCandidatesForAffineGapSecondRead, singleCandidatesForAffineGap, maxKPairedEnd);
 
-        if (*nLVCandidatesForAffineGap > maxLVCandidatesForAffineGapBufferSize) {
+        if (*nPairedCandidatesForAffineGap > maxPairedCandidatesForAffineGapBufferSize) {
             *nSecondaryResults = *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
-            *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1; // So the caller knows it's the paired LV candidate buffer that overflowed
+            *nPairedCandidatesForAffineGap = maxPairedCandidatesForAffineGapBufferSize + 1; // So the caller knows it's the paired LV candidate buffer that overflowed
             return false;
         }
 
         if (!fitInSecondaryBuffer) {
             *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
-            *nLVCandidatesForAffineGap = 0;
+            *nPairedCandidatesForAffineGap = 0;
             *nSecondaryResults = secondaryResultBufferSize + 1; // So the caller knows it's the paired secondary buffer that overflowed
             return false;
         }
@@ -251,6 +259,7 @@ bool ChimericPairedEndAligner::align(
     //
     Read *read[NUM_READS_PER_PAIR] = {read0, read1};
     _int64 *resultCount[2] = {nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead};
+    _int64 *affineCandidates[2] = { nSingleCandidatesForAffineGapFirstRead, nSingleCandidatesForAffineGapSecondRead };
 
     SingleAlignmentResult singleResult[NUM_READS_PER_PAIR];
     SingleAlignmentResult firstSingleALTResult[NUM_READS_PER_PAIR];
@@ -258,6 +267,7 @@ bool ChimericPairedEndAligner::align(
     bool chooseSingleEndMapq = true;
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
         _int64 singleEndSecondaryResultsThisTime = 0;
+        _int64 singleEndAffineCandidatesThisTime = 0;
 
         if (compareWithSingleEndAlignment) {
             pairAGScore += result->agScore[r];
@@ -295,22 +305,71 @@ bool ChimericPairedEndAligner::align(
             bool fitInSecondaryBuffer =
                 singleAligner->AlignRead(read[r], &singleResult[r], &firstSingleALTResult[r], maxEditDistanceForSecondaryResults,
                     singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
-                    maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
+                    maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead,
+                    maxSingleCandidatesForAffineGapBufferSize - *nSingleCandidatesForAffineGapFirstRead, &singleEndAffineCandidatesThisTime,
+                    singleCandidatesForAffineGap + *nSingleCandidatesForAffineGapFirstRead);
+
+            if (singleEndAffineCandidatesThisTime > (maxSingleCandidatesForAffineGapBufferSize - *nSingleCandidatesForAffineGapFirstRead)) {
+                *nSecondaryResults = *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
+                *nSingleCandidatesForAffineGapFirstRead = maxSingleCandidatesForAffineGapBufferSize + 1; // So the caller knows it's the single end candidate buffer that overflowed
+                return false;
+            }
 
             if (!fitInSecondaryBuffer) {
                 *nSecondaryResults = 0;
                 *nSingleEndSecondaryResultsForFirstRead = singleSecondaryBufferSize + 1;
                 *nSingleEndSecondaryResultsForSecondRead = 0;
+                *nSingleCandidatesForAffineGapFirstRead = 0;
                 return false;
             }
 
+            bool usedHammingScoreingBaseAligner = false;
+            if (useSoftClipping && enableHammingScoringBaseAligner) {
+                //
+                // Try Hamming distance scoring to align any unmapped reads
+                //
+                if (singleResult[r].status == NotFound && result->status[r] == NotFound) {
+                    
+                    usedHammingScoreingBaseAligner = true;
+
+                    singleAligner->AlignRead(read[r], &singleResult[r], &firstSingleALTResult[r], maxEditDistanceForSecondaryResults,
+                        singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
+                        maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead,
+                        maxSingleCandidatesForAffineGapBufferSize - *nSingleCandidatesForAffineGapFirstRead, &singleEndAffineCandidatesThisTime,
+                        singleCandidatesForAffineGap + *nSingleCandidatesForAffineGapFirstRead, true);
+
+                    if (singleEndAffineCandidatesThisTime > (maxSingleCandidatesForAffineGapBufferSize - *nSingleCandidatesForAffineGapFirstRead)) {
+                        *nSecondaryResults = *nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
+                        *nSingleCandidatesForAffineGapFirstRead = maxSingleCandidatesForAffineGapBufferSize + 1; // So the caller knows it's the single end candidate buffer that overflowed
+                        return false;
+                    }
+
+                    if (!fitInSecondaryBuffer) {
+                        *nSecondaryResults = 0;
+                        *nSingleEndSecondaryResultsForFirstRead = singleSecondaryBufferSize + 1;
+                        *nSingleEndSecondaryResultsForSecondRead = 0;
+                        *nSingleCandidatesForAffineGapFirstRead = 0;
+                        return false;
+                    }
+
+                    singleAligner->alignAffineGap(read[r], &singleResult[r], &firstSingleALTResult[r], 
+                        singleEndAffineCandidatesThisTime, singleCandidatesForAffineGap + *nSingleCandidatesForAffineGapFirstRead);
+                }
+            }
+
             *(resultCount[r]) = singleEndSecondaryResultsThisTime;
+            *(affineCandidates[r]) = singleEndAffineCandidatesThisTime;
 
             if (compareWithSingleEndAlignment) {
-                if (singleResult[r].score != ScoreAboveLimit && singleResult[r].score != BaseAligner::UnusedScoreValue) {
-                    scoreLimitLeft -= singleResult[r].score;
-                } else {
-                    scoreLimitLeft = ScoreAboveLimit;
+                //
+                // Do not lower scoreLimit for mate if we used Hamming scoring for the base aligner
+                //
+                if (!usedHammingScoreingBaseAligner) {
+                    if (singleResult[r].score != ScoreAboveLimit && singleResult[r].score != BaseAligner::UnusedScoreValue) {
+                        scoreLimitLeft -= singleResult[r].score;
+                    } else {
+                        scoreLimitLeft = ScoreAboveLimit;
+                    }
                 }
                 singleEndAGScore += singleResult[r].agScore;
                 if (result->agScore[r] >= singleResult[r].agScore) {
@@ -355,6 +414,7 @@ bool ChimericPairedEndAligner::align(
             } else {
                 result->status[r] = singleResult[r].status;
                 result->mapq[r] = singleResult[r].mapq / 3;   // Heavy quality penalty for chimeric reads
+                result->mapq[r] = result->mapq[r] <= 3 ? 0 : result->mapq[r];
                 result->direction[r] = singleResult[r].direction;
                 result->location[r] = singleResult[r].location;
                 result->score[r] = singleResult[r].score;
