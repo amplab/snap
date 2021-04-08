@@ -1986,7 +1986,7 @@ BAMFormat::computeCigarOps(
     } else if (*o_editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
-            WriteErrorMessage("WARNING: computeGlobalScore returned -1; this shouldn't happen\n");
+            WriteErrorMessage("WARNING: computeGlobalScore returned -1; this shouldn't happen. Read %.*s\n", dataLength, data);
             warningPrinted = true;
         }
         return 0;

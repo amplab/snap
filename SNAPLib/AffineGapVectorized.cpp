@@ -802,7 +802,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
 
     int n_res = 0; // Number of (action, count) pairs
 
-    if (score > scoreInit) {
+    if (score > 0) {
         int rowIdx = textUsed;
         int colIdx = patternLen - 1, matrixIdx = 0;
         BacktraceActionType action = M, prevAction = X;
@@ -991,7 +991,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text,
     if (patternLen >= (3 * (2 * k + 1))) {
         score = computeGlobalScoreBanded(text, (int)textLen, pattern, (int)patternLen, k, MAX_READ_LENGTH, bamBuf, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
-        if (score > k) {
+        if (score < 0 || score > k) {
             score = computeGlobalScore(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
                 useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
         }
