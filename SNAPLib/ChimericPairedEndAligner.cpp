@@ -51,7 +51,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         bool                noUkkonen,
         bool                noOrderedEvaluation,
 		bool				noTruncation,
-        bool                useAffineGap,
+        bool                useAffineGap_,
         bool                ignoreAlignmentAdjustmentsForOm,
 		bool				altAwareness,
         bool                emitALTAlignments_,
@@ -73,7 +73,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
 		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), emitALTAlignments(emitALTAlignments_), 
            maxKSingleEnd(maxK / 2), maxKPairedEnd(maxK), extraSearchDepth(extraSearchDepth_),
            minScoreRealignment(minScoreRealignment_), minScoreGapRealignmentALT(minScoreGapRealignmentALT_), minAGScoreImprovement(minAGScoreImprovement_), useSoftClipping(useSoftClipping_),
-           flattenMAPQAtOrBelow(flattenMAPQAtOrBelow_), enableHammingScoringBaseAligner(enableHammingScoringBaseAligner_)
+           flattenMAPQAtOrBelow(flattenMAPQAtOrBelow_), enableHammingScoringBaseAligner(enableHammingScoringBaseAligner_), useAffineGap(useAffineGap_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK / 2  /* allocate half to each end instead of letting it float like when they're aligned together */, maxReadSize,
@@ -352,6 +352,7 @@ bool ChimericPairedEndAligner::align(
                         return false;
                     }
 
+                    _ASSERT(useAffineGap);
                     singleAligner->alignAffineGap(read[r], &singleResult[r], &firstSingleALTResult[r], 
                         singleEndAffineCandidatesThisTime, singleCandidatesForAffineGap + *nSingleCandidatesForAffineGapFirstRead);
                 }

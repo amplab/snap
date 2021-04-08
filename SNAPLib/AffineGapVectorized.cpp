@@ -524,6 +524,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
     const char* pattern,
     int patternLen,
     int w,
+    int scoreInit,
     char* cigarBuf,
     int cigarBufLen,
     bool useM,
@@ -603,27 +604,24 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
     //
     // Initialize scores of first row
     //
-    uint16_t scoreFirstRow[VEC_SIZE] = {};
+    int16_t scoreFirstRow[VEC_SIZE] = { 0 };
     for (int segIdx = 0; segIdx < numSeg; segIdx++) {
         for (int vecIdx = 0; vecIdx < numVec; vecIdx++) {
             for (int elemIdx = 0; elemIdx < VEC_SIZE; elemIdx++) {
                 int patternIdx = (segIdx * segLen) + (elemIdx * numVec) + vecIdx;
                 if (patternIdx < patternLen) {
-                    scoreFirstRow[elemIdx] = -(gapOpenPenalty + patternIdx * gapExtendPenalty);
-                }
-                else {
-                    scoreFirstRow[elemIdx] = INT16_MIN;
+                    scoreFirstRow[elemIdx] =  __max(0, scoreInit - (gapOpenPenalty + patternIdx * gapExtendPenalty));
                 }
             }
             _ASSERT(VEC_SIZE == 8);  // FIXME: Initialization below works only when VEC_SIZE = 8
             _mm_store_si128(H + (segIdx * numVec) + vecIdx, _mm_setr_epi16(scoreFirstRow[0], scoreFirstRow[1], scoreFirstRow[2], scoreFirstRow[3],
                 scoreFirstRow[4], scoreFirstRow[5], scoreFirstRow[6], scoreFirstRow[7]));
-            _mm_store_si128(Hminus1 + (segIdx * numVec) + vecIdx, v_intmin);
-            _mm_store_si128(E + (segIdx * numVec) + vecIdx, v_intmin);
+            _mm_store_si128(Hminus1 + (segIdx * numVec) + vecIdx, v_zero);
+            _mm_store_si128(E + (segIdx * numVec) + vecIdx, v_zero);
         }
     }
 
-    int score = INT16_MIN, nEdits = -1; // Final alignment score and edit distance to be returned. 
+    int score = scoreInit, nEdits = -1; // Final alignment score and edit distance to be returned. 
     int textUsed = -1;
 
     __m128i* Hptr = H;
@@ -638,7 +636,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
         __m128i* qRowProfile = qProfile + BASE_VALUE[*t] * numSeg * numVec;
 
         // Registers to hold intermediate scores for each row
-        __m128i m, h, temp, e = v_intmin, f = v_intmin, max = v_intmin, X = v_intmin;
+        __m128i m, h, temp, e = v_zero, f = v_zero, max = v_zero, X = v_zero;
 
         int maxScoreRow = 0;
         int localAlignmentPatternOffset = -1;
@@ -658,9 +656,9 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
 
             __m128i v_hInit;
             if (j == 0) {
-                int hInit = 0;
+                int hInit = scoreInit;
                 if (i > 0) {
-                    hInit = -(gapOpenPenalty + (i - 1) * gapExtendPenalty);
+                    hInit = scoreInit - (gapOpenPenalty + (i - 1) * gapExtendPenalty);
                 }
                 v_hInit = _mm_set1_epi16(hInit);
             }
@@ -732,7 +730,6 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
 
                 // Extract the last f vector
                 f = _mm_slli_si128(f, 2);
-                f = blend_sse(f, v_intmin, v_mask);
 
                 for (int v = 0; (v < numVec) && (j * segLen + v) <= bandEnd; v++) {
 
@@ -805,7 +802,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
 
     int n_res = 0; // Number of (action, count) pairs
 
-    if (score > INT16_MIN) {
+    if (score > scoreInit) {
         int rowIdx = textUsed;
         int colIdx = patternLen - 1, matrixIdx = 0;
         BacktraceActionType action = M, prevAction = X;
@@ -968,7 +965,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
         // nEdits = (nEdits <= w) ? nEdits : -1; // return -1 if we have more edits than threshold w
         return nEdits;
 
-    } // score > INT16_MIN
+    } // score > scoreInit
     else {
         // Could not align strings with at most K edits
         *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
@@ -992,12 +989,17 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text,
     int bamBufUsed;
     int score;
     if (patternLen >= (3 * (2 * k + 1))) {
-        score = computeGlobalScoreBanded(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
+        score = computeGlobalScoreBanded(text, (int)textLen, pattern, (int)patternLen, k, MAX_READ_LENGTH, bamBuf, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
+        if (score > k) {
+            score = computeGlobalScore(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
+                useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
+        }
     } else {
         score = computeGlobalScore(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
     }
+
     if (score < 0) {
         return score;
     }

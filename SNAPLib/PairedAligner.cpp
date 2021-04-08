@@ -594,9 +594,15 @@ void PairedAlignerContext::runIterationThread()
     allocator->checkCanaries();
 
     PairedAlignmentResult *results = (PairedAlignmentResult *)allocator->allocate((1 + maxPairedSecondaryHits) * sizeof(*results)); // 1 + is for the primary result
-    PairedAlignmentResult *pairedCandidatesForAffineGap = (PairedAlignmentResult *)allocator->allocate(maxPairedCandidatesForAffineGap * sizeof(*pairedCandidatesForAffineGap));
     SingleAlignmentResult *singleSecondaryResults = (SingleAlignmentResult *)allocator->allocate(maxSingleSecondaryHits * sizeof(*singleSecondaryResults));
-    SingleAlignmentResult* singleCandidatesForAffineGap = (SingleAlignmentResult*)allocator->allocate(maxSingleCandidatesForAffineGap * sizeof(*singleCandidatesForAffineGap));
+
+    PairedAlignmentResult* pairedCandidatesForAffineGap = NULL;
+    SingleAlignmentResult* singleCandidatesForAffineGap = NULL;
+
+    if (useAffineGap) {
+        pairedCandidatesForAffineGap = (PairedAlignmentResult*)allocator->allocate(maxPairedCandidatesForAffineGap * sizeof(*pairedCandidatesForAffineGap));
+        singleCandidatesForAffineGap = (SingleAlignmentResult*)allocator->allocate(maxSingleCandidatesForAffineGap * sizeof(*singleCandidatesForAffineGap));
+    }
 
     ReadWriter *readWriter = this->readWriter;
 
@@ -715,6 +721,7 @@ void PairedAlignerContext::runIterationThread()
             }
 
             if (nPairedCandidatesForAffineGap > maxPairedCandidatesForAffineGap) {
+                _ASSERT(useAffineGap);
                 if (reallocatedPairedCandidatesForAffineGapBuffer) {
                     BigDealloc(pairedCandidatesForAffineGap);
                     pairedCandidatesForAffineGap = NULL;
@@ -726,6 +733,7 @@ void PairedAlignerContext::runIterationThread()
             }
 
             if (nSingleCandidatesForAffineGap[0] > maxSingleCandidatesForAffineGap) {
+                _ASSERT(useAffineGap);
                 if (reallocatedSingleCandidatesForAffineGapBuffer) {
                     BigDealloc(singleCandidatesForAffineGap);
                     singleCandidatesForAffineGap = NULL;

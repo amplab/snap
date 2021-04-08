@@ -2695,14 +2695,14 @@ IntersectingPairedEndAligner::alignAffineGap(
     // In the beginning we only have the best alignment result in the score set.
     // It is important to initialize the score set here and not before affine gap scoring, since only affine gap does clipping of alignments
     //
-    bool nonALTBestAlignment = (!altAwareness) || !genome->isGenomeLocationALT(result->location[0]);
-    if (firstALTResult->status[0] != NotFound) { // best result is an ALT result
-        scoresForAllAlignments.init(firstALTResult);
+    bool nonALTAlignment = (!altAwareness) || !genome->isGenomeLocationALT(result->location[0]);
+    scoresForAllAlignments.init(result);
+    bool altBestAlignment = false;
+    if (firstALTResult->status[0] != NotFound) {
+        altBestAlignment = scoresForAllAlignments.updateBestHitIfNeeded(firstALTResult->score[0] + firstALTResult->score[1],
+            firstALTResult->agScore[0] + firstALTResult->agScore[1], firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1], firstALTResult);
     }
-    else {
-        scoresForAllAlignments.init(result);
-    }
-    if (nonALTBestAlignment) {
+    if (nonALTAlignment) {
         scoresForNonAltAlignments.init(result);
     }
 
@@ -2711,7 +2711,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     //
     if (!skipAffineGap[0] || !skipAffineGap[1]) {
         double newPairProbability = result->matchProbability[0] * result->matchProbability[1];
-        if (firstALTResult->status[0] != NotFound) { // best result is an ALT result
+        if (altBestAlignment) { // best result is an ALT result
             double newPairProbabilityALT = firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1];
             scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResultALT);
             scoresForAllAlignments.updateProbabilityOfBestPair(newPairProbabilityALT);
@@ -2720,7 +2720,7 @@ IntersectingPairedEndAligner::alignAffineGap(
             scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResult);
             scoresForAllAlignments.updateProbabilityOfBestPair(newPairProbability);
         }
-        if (nonALTBestAlignment) {
+        if (nonALTAlignment) {
             scoresForNonAltAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResult);
             scoresForNonAltAlignments.updateProbabilityOfBestPair(newPairProbability);
         }

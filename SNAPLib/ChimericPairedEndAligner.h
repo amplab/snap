@@ -136,5 +136,6 @@ private:
     int flattenMAPQAtOrBelow;
 
     bool enableHammingScoringBaseAligner;
+    bool useAffineGap;
 
 };

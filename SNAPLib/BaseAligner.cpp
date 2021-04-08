@@ -1448,7 +1448,7 @@ Return Value:
                     return false;
                 }
 
-                if (*nCandidatesForAffineGap >= maxCandidatesForAffineGapBufferSize) {
+                if (NULL != candidatesForAffineGap && *nCandidatesForAffineGap >= maxCandidatesForAffineGapBufferSize) {
                     *nCandidatesForAffineGap = maxCandidatesForAffineGapBufferSize + 1;
                     return false;
                 }
@@ -1644,14 +1644,13 @@ BaseAligner::alignAffineGap(
     // In the beginning we only have the best alignment result in the score set.
     // It is important to initialize the score set here and not before affine gap scoring, since only affine gap does clipping of alignments
     //
-    bool nonALTBestAlignment = (!altAwareness) || !genome->isGenomeLocationALT(result->location);
-    if (firstALTResult->status != NotFound) { // best result is an ALT result
-        scoresForAllAlignments.init(firstALTResult);
+    bool nonALTAlignment = (!altAwareness) || !genome->isGenomeLocationALT(result->location);
+    scoresForAllAlignments.init(result);
+    bool altBestAlignment = false;
+    if (firstALTResult->status != NotFound) {
+        altBestAlignment = scoresForAllAlignments.updateBestScore(firstALTResult);
     }
-    else {
-        scoresForAllAlignments.init(result);
-    }
-    if (nonALTBestAlignment) {
+    if (nonALTAlignment) {
         scoresForNonAltAlignments.init(result);
     }
 
@@ -1660,7 +1659,7 @@ BaseAligner::alignAffineGap(
     //
     if (!skipAffineGap) {
         double newProbability = result->matchProbability;
-        if (firstALTResult->status != NotFound) { // best result is an ALT result
+        if (altBestAlignment) { // best result is an ALT result
             double newProbabilityALT = firstALTResult->matchProbability;
             scoresForAllAlignments.updateProbabilityOfAllMatches(oldProbabilityBestResultALT);
             scoresForAllAlignments.updateProbabilityOfBestMatch(newProbabilityALT);
@@ -1669,7 +1668,7 @@ BaseAligner::alignAffineGap(
             scoresForAllAlignments.updateProbabilityOfAllMatches(oldProbabilityBestResult);
             scoresForAllAlignments.updateProbabilityOfBestMatch(newProbability);
         }
-        if (nonALTBestAlignment) {
+        if (nonALTAlignment) {
             scoresForNonAltAlignments.updateProbabilityOfAllMatches(oldProbabilityBestResult);
             scoresForNonAltAlignments.updateProbabilityOfBestMatch(newProbability);
         }

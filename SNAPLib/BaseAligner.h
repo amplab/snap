@@ -303,7 +303,7 @@ private:
             SingleAlignmentResult* candidatesForAffineGap,
             unsigned extraSearchDepth);
 
-        void updateBestScore(SingleAlignmentResult* result) {
+        bool updateBestScore(SingleAlignmentResult* result) {
             probabilityOfAllCandidates += result->matchProbability;
             if (result->agScore > bestScoreAGScore || (result->agScore == bestScoreAGScore && result->matchProbability > bestScoreMatchProbability)) {
                 bestScore = result->score;
@@ -316,6 +316,9 @@ private:
                 bestScoreBasesClippedBefore = result->basesClippedBefore;
                 bestScoreBasesClippedAfter = result->basesClippedAfter;
                 bestScoreSeedOffset = result->seedOffset;
+                return true;
+            } else {
+                return false;
             }
         }
 
