@@ -67,6 +67,8 @@ public:
         unsigned        i_subPenalty = 4,
         unsigned        i_gapOpenPenalty = 6,
         unsigned        i_gapExtendPenalty = 1,
+        unsigned        i_fivePrimeEndBonus = 10,
+        unsigned        i_threePrimeEndBonus = 5,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);
 

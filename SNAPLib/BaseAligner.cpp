@@ -71,6 +71,8 @@ BaseAligner::BaseAligner(
     unsigned             i_subPenalty,
     unsigned             i_gapOpenPenalty,
     unsigned             i_gapExtendPenalty,
+    unsigned             i_fivePrimeEndBonus,
+    unsigned             i_threePrimeEndBonus,
     AlignerStats   *i_stats,
     BigAllocator   *allocator) :
         genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
@@ -162,13 +164,13 @@ Arguments:
     if (allocator) {
         // affineGap = new (allocator) AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
         // reverseAffineGap = new (allocator) AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        affineGap = new (allocator) AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        reverseAffineGap = new (allocator) AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        affineGap = new (allocator) AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty, i_fivePrimeEndBonus, i_threePrimeEndBonus);
+        reverseAffineGap = new (allocator) AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty, i_fivePrimeEndBonus, i_threePrimeEndBonus);
     } else {
         // affineGap = new AffineGap<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
         // reverseAffineGap = new AffineGap<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
-        affineGap = new AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty); // This is a bad idea, it'll result in false sharing in the single-end aligner.  Use BigAlloc().
-        reverseAffineGap = new AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        affineGap = new AffineGapVectorized<>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty, i_fivePrimeEndBonus, i_threePrimeEndBonus); // This is a bad idea, it'll result in false sharing in the single-end aligner.  Use BigAlloc().
+        reverseAffineGap = new AffineGapVectorized<-1>(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty, i_fivePrimeEndBonus, i_threePrimeEndBonus);
     }
 
     unsigned maxSeedsToUse;
@@ -830,6 +832,7 @@ BaseAligner::scoreLocationWithAffineGap(
                 readLen - tailStart,
                 scoreLimit,
                 readLen,
+                direction,
                 NULL,
                 basesClippedAfter,
                 &score1,
@@ -843,6 +846,7 @@ BaseAligner::scoreLocationWithAffineGap(
                 readLen - tailStart,
                 scoreLimit,
                 readLen,
+                direction,
                 NULL,
                 basesClippedAfter,
                 &score1,
@@ -865,7 +869,8 @@ BaseAligner::scoreLocationWithAffineGap(
                     reads[OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
                     seedOffset,
                     limitLeft,
-                    readLen, // FIXME: Assumes the rest of the read matches perfectly
+                    readLen,
+                    direction,
                     genomeLocationOffset,
                     basesClippedBefore,
                     &score2,
@@ -879,6 +884,7 @@ BaseAligner::scoreLocationWithAffineGap(
                     seedOffset,
                     limitLeft,
                     readLen,
+                    direction,
                     genomeLocationOffset,
                     basesClippedBefore,
                     &score2,
@@ -1225,6 +1231,7 @@ Return Value:
                                         readLen - tailStart,
                                         scoreLimitForThisElement,
                                         readLen,
+                                        elementToScore->direction,
                                         NULL,
                                         &basesClippedAfter,
                                         &score1,
@@ -1238,6 +1245,7 @@ Return Value:
                                         readLen - tailStart,
                                         scoreLimitForThisElement,
                                         readLen,
+                                        elementToScore->direction,
                                         NULL,
                                         &basesClippedAfter,
                                         &score1,
@@ -1262,6 +1270,7 @@ Return Value:
                                             seedOffset,
                                             limitLeft,
                                             readLen,
+                                            elementToScore->direction,
                                             &genomeLocationOffset,
                                             &basesClippedBefore,
                                             &score2,
@@ -1275,6 +1284,7 @@ Return Value:
                                             seedOffset,
                                             limitLeft,
                                             readLen,
+                                            elementToScore->direction,
                                             &genomeLocationOffset,
                                             &basesClippedBefore,
                                             &score2,

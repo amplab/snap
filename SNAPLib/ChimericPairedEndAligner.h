@@ -57,6 +57,8 @@ public:
         unsigned            subPenalty = 4,
         unsigned            gapOpenPenalty = 6,
         unsigned            gapExtendPenalty = 1,
+        unsigned            fivePrimeEndBonus = 10,
+        unsigned            threePrimeEndBonus = 5,
         int                 minScoreRealignment_ = 3,
         int                 minScoreGapRealignmentALT_ = 3,
         int                 minAGScoreImprovement_ = 24,

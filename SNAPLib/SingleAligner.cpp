@@ -142,6 +142,8 @@ SingleAlignerContext::runIterationThread()
             subPenalty,
             gapOpenPenalty,
             gapExtendPenalty,
+            fivePrimeEndBonus,
+            threePrimeEndBonus,
             stats,
             allocator);
 

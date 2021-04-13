@@ -585,6 +585,8 @@ void PairedAlignerContext::runIterationThread()
         subPenalty,
         gapOpenPenalty,
         gapExtendPenalty,
+        fivePrimeEndBonus,
+        threePrimeEndBonus,
         minScoreRealignment,
         minScoreGapRealignmentALT,
         minAGScoreImprovement,

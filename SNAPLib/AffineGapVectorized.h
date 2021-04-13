@@ -78,16 +78,18 @@ template<int TEXT_DIRECTION = 1> class AffineGapVectorized {
 public:
     AffineGapVectorized()
     {
-        init(1, 4, 6, 1);
+        init(1, 4, 6, 1, 10, 5);
     }
 
     AffineGapVectorized(
         int i_matchReward,
         int i_subPenalty,
         int i_gapOpenPenalty,
-        int i_gapExtendPenalty)
+        int i_gapExtendPenalty,
+        int i_fivePrimeEndBonus,
+        int i_threePrimeEndBonus)
     {
-        init(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        init(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty, i_fivePrimeEndBonus, i_threePrimeEndBonus);
     }
 
     static size_t getBigAllocatorReservation() { return sizeof(AffineGapVectorized<TEXT_DIRECTION>); }
@@ -100,12 +102,16 @@ public:
         int i_matchReward,
         int i_subPenalty,
         int i_gapOpenPenalty,
-        int i_gapExtendPenalty)
+        int i_gapExtendPenalty,
+        int i_fivePrimeEndBonus,
+        int i_threePrimeEndBonus)
     {
         matchReward = i_matchReward;
         subPenalty = -i_subPenalty;
         gapOpenPenalty = i_gapOpenPenalty + i_gapExtendPenalty; // First gap costs (gapOpen + gapExtend)
         gapExtendPenalty = i_gapExtendPenalty;
+        fivePrimeEndBonus = i_fivePrimeEndBonus;
+        threePrimeEndBonus = i_threePrimeEndBonus;
 
         //
         // Initialize nucleotide <-> nucleotide transition matrix
@@ -251,6 +257,7 @@ public:
         int patternLen,
         int w,
         int scoreInit,
+        bool isRC,
         int *o_textOffset = NULL,
         int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
@@ -363,6 +370,24 @@ public:
         __m128i v_gapExtend = _mm_set1_epi16(gapExtendPenalty);
         __m128i v_scoreInit = _mm_set1_epi16(scoreInit);
         __m128i v_mask = _mm_cmpgt_epi16(_mm_set_epi16(0, 0, 0, 0, 0, 0, 0, 1), v_zero);
+
+        int endBonus;
+        if (!isRC) {
+            if (TEXT_DIRECTION == -1) {
+                endBonus = fivePrimeEndBonus;
+            }
+            else {
+                endBonus = threePrimeEndBonus;
+            }
+        }
+        else {
+            if (TEXT_DIRECTION == -1) {
+                endBonus = threePrimeEndBonus;
+            }
+            else {
+                endBonus = fivePrimeEndBonus;
+            }
+        }
 
         //
         // Initialize scores of first row
@@ -611,7 +636,7 @@ got_answer:
         } // end text
 
         // Choose between local and global alignment for patternOffset
-        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) { // FIXME: Change 5 to a clipping penalty
             // Local alignment preferred
             *o_patternOffset = bestLocalAlignmentPatternOffset;
             *o_textOffset = bestLocalAlignmentTextOffset;
@@ -719,6 +744,7 @@ got_answer:
         int patternLen,
         int w,
         int scoreInit,
+        bool isRC,
         int *o_textOffset = NULL,
         int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
@@ -836,6 +862,24 @@ got_answer:
         __m128i v_gapExtend = _mm_set1_epi16(gapExtendPenalty);
         __m128i v_scoreInit = _mm_set1_epi16(scoreInit);
         __m128i v_mask = _mm_cmpgt_epi16(_mm_set_epi16(0, 0, 0, 0, 0, 0, 0, 1), v_zero);
+
+        int endBonus;
+        if (!isRC) {
+            if (TEXT_DIRECTION == -1) {
+                endBonus = fivePrimeEndBonus;
+            }
+            else {
+                endBonus = threePrimeEndBonus;
+            }
+        }
+        else {
+            if (TEXT_DIRECTION == -1) {
+                endBonus = threePrimeEndBonus;
+            }
+            else {
+                endBonus = fivePrimeEndBonus;
+            }
+        }
 
         //
         // Initialize scores of first row
@@ -1031,7 +1075,7 @@ got_answer:
         } // end text
 
         // Choose between local and global alignment for patternOffset
-        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) { // FIXME: Change 5 to a clipping penalty
             // Local alignment preferred
             *o_patternOffset = bestLocalAlignmentPatternOffset;
             *o_textOffset = bestLocalAlignmentTextOffset;
@@ -1150,6 +1194,8 @@ private:
     int subPenalty;
     int gapOpenPenalty;
     int gapExtendPenalty;
+    int fivePrimeEndBonus;
+    int threePrimeEndBonus;
 
     __m128i qProfile[MAX_ALPHABET_SIZE * MAX_VEC_SEGMENTS];
     __m128i H[MAX_VEC_SEGMENTS];

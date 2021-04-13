@@ -65,6 +65,8 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         unsigned            subPenalty,
         unsigned            gapOpenPenalty,
         unsigned            gapExtendPenalty,
+        unsigned            fivePrimeEndBonus,
+        unsigned            threePrimeEndBonus,
         int                 minScoreRealignment_,
         int                 minScoreGapRealignmentALT_,
         int                 minAGScoreImprovement_,
@@ -81,13 +83,13 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
                                                 noUkkonen, noOrderedEvaluation, noTruncation, useAffineGap, 
                                                 ignoreAlignmentAdjustmentsForOm, altAwareness, emitALTAlignments, maxScoreGapToPreferNonAltAlignment,
                                                 maxSecondaryAlignmentsPerContig, &lv, &reverseLV,
-                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty,
+                                                matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, fivePrimeEndBonus, threePrimeEndBonus,
                                                 NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 
-    ag.init(matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
-    reverseAG.init(matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
+    ag.init(matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, fivePrimeEndBonus, threePrimeEndBonus);
+    reverseAG.init(matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, fivePrimeEndBonus, threePrimeEndBonus);
 
     underlyingPairedEndAligner->setAffineGap(&ag, &reverseAG);
 

@@ -79,6 +79,8 @@ AlignerOptions::AlignerOptions(
     subPenalty(4),
     gapOpenPenalty(6),
     gapExtendPenalty(1),
+    fivePrimeEndBonus(10),
+    threePrimeEndBonus(5),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(true),
@@ -235,6 +237,8 @@ AlignerOptions::usage()
             "           cost for substitution -gs (default: %u)\n"
             "           cost for opening a gap -go (default: %u)\n"
             "           cost for extending a gap -ge (default: %u)\n"
+            "           bonus for alignment reaching 5' end of read -g5 (default: %u)\n"
+            "           bonus for alignment reaching 3' end of read -g3 (default: %u)\n"
             "  -A-  Disable ALT awareness.  The default is to try to map reads to the primary assembly and only to choose ALT alignments when they're much better,\n"
             "       and to compute MAPQ for non-ALT alignments using only non-ALT hits. This flag disables that behavior and results in ALT-oblivious behavior.\n"
             "  -ea  Emit ALT alignments.  When the aligner is ALT aware (i.e., -A- isn't specified) if it finds an ALT alignment that would have been\n"
@@ -262,6 +266,8 @@ AlignerOptions::usage()
             subPenalty,
             gapOpenPenalty,
             gapExtendPenalty,
+            fivePrimeEndBonus,
+            threePrimeEndBonus,
             maxScoreGapToPreferNonALTAlignment,
             flattenMAPQAtOrBelow
         );
@@ -723,6 +729,30 @@ AlignerOptions::usage()
             gapExtendPenalty = atoi(argv[n]);
             if (gapExtendPenalty <= 0) {
                 WriteErrorMessage("-ge must be greater than zero");
+                return false;
+            }
+            return true;
+        } else if (strcmp(argv[n], "-g5") == 0) {
+            if (n + 1 >= argc) {
+                WriteErrorMessage("-g5 requires an additional value\n");
+                return false;
+            }
+            n++;
+            fivePrimeEndBonus = atoi(argv[n]);
+            if (fivePrimeEndBonus <= 0) {
+                WriteErrorMessage("-g5 must be greater than zero");
+                return false;
+            }
+            return true;
+        } else if (strcmp(argv[n], "-g3") == 0) {
+            if (n + 1 >= argc) {
+                WriteErrorMessage("-g3 requires an additional value\n");
+                return false;
+            }
+            n++;
+            threePrimeEndBonus = atoi(argv[n]);
+            if (threePrimeEndBonus <= 0) {
+                WriteErrorMessage("-g3 must be greater than zero");
                 return false;
             }
             return true;

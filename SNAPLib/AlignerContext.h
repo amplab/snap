@@ -128,6 +128,8 @@ public:
     unsigned                             subPenalty;
     unsigned                             gapOpenPenalty;
     unsigned                             gapExtendPenalty;
+    unsigned                             fivePrimeEndBonus;
+    unsigned                             threePrimeEndBonus;
     unsigned                             minAGScore;
 
 
