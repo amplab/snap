@@ -1305,7 +1305,9 @@ Return Value:
                         }
                     }
 
-                    if ((score1 != ScoreAboveLimit && score2 != ScoreAboveLimit) || (useHamming && score1Gapless != ScoreAboveLimit && score2Gapless != ScoreAboveLimit)) {
+                    bool foundAlignment = useHamming ? (score1Gapless != ScoreAboveLimit && score2Gapless != ScoreAboveLimit) : (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit);
+
+                    if (foundAlignment) {
                         score = score1 + score2;
                         scoreGapless = score1Gapless + score2Gapless;
                         // Map probabilities for substrings can be multiplied, but make sure to count seed too
@@ -1446,12 +1448,26 @@ Return Value:
                                                 secondaryResults, nSecondaryResults, secondaryResultBufferSize,
                                                 anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer,
                                                 maxCandidatesForAffineGapBufferSize, nCandidatesForAffineGap, candidatesForAffineGap, extraSearchDepth);
+                    
+                    if (genomeLocationIsNonALT) {
+                        scoresForNonAltAlignments.updateBestScore(genomeLocation, origGenomeLocation, score, usedAffineGapScoring, agScore, matchProbability, lvScoresAfterBestFound, elementToScore,
+                            secondaryResults, nSecondaryResults, secondaryResultBufferSize,
+                            anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer,
+                            maxCandidatesForAffineGapBufferSize, nCandidatesForAffineGap, candidatesForAffineGap, extraSearchDepth);
+                    }
                 }
                 else {
                     scoresForAllAlignments.updateBestScore(genomeLocation, origGenomeLocation, score, usedAffineGapScoring, agScore, matchProbability, lvScoresAfterBestFound, elementToScore,
                         secondaryResults, nSecondaryResults, secondaryResultBufferSize,
                         anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer,
                         0, NULL, NULL, extraSearchDepth);
+
+                    if (genomeLocationIsNonALT) {
+                        scoresForNonAltAlignments.updateBestScore(genomeLocation, origGenomeLocation, score, usedAffineGapScoring, agScore, matchProbability, lvScoresAfterBestFound, elementToScore,
+                            secondaryResults, nSecondaryResults, secondaryResultBufferSize,
+                            anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer,
+                            0, NULL, NULL, extraSearchDepth);
+                    }
                 }
 
                 if (*overflowedSecondaryBuffer) {
@@ -2525,12 +2541,12 @@ BaseAligner::finalizeSecondaryResults(
 BaseAligner::scoreLimit(bool forALT) 
 {
     if (noUkkonen) {
-        return maxK + extraSearchDepth; // We're testing the value of truncating our searches by not doing so.
+        return __min(MAX_K - 1, maxK + extraSearchDepth); // We're testing the value of truncating our searches by not doing so.
     }
 
     if (forALT) {
-        return __min(maxK + extraSearchDepth, __min(scoresForAllAlignments.bestScore + extraSearchDepth, scoresForNonAltAlignments.bestScore - maxScoreGapToPreferNonAltAlignment));
+        return __min(MAX_K - 1, extraSearchDepth + __min(maxK, __min(scoresForAllAlignments.bestScore, scoresForNonAltAlignments.bestScore - maxScoreGapToPreferNonAltAlignment)));
     }
 
-    return __min(maxK + extraSearchDepth, __min(scoresForAllAlignments.bestScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments.bestScore + extraSearchDepth));
+    return __min(MAX_K - 1, extraSearchDepth + __min(maxK, __min(scoresForAllAlignments.bestScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments.bestScore)));
 } // BaseAligner::scoreLimit

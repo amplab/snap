@@ -1,3 +1,7 @@
+//
+// DP formulation based on https://figshare.com/articles/preprint/Notes_on_pairwise_alignment_with_dynamic_programming/5223973
+//
+
 #pragma once
 
 #include "Compat.h"
