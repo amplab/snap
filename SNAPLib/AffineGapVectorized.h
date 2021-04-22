@@ -645,6 +645,36 @@ got_answer:
             *o_patternOffset = bestLocalAlignmentPatternOffset;
             *o_textOffset = bestLocalAlignmentTextOffset;
             score = bestLocalAlignmentScore;
+
+            int patternOffsetAdj = *o_patternOffset;
+
+            //
+            // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
+            //
+            while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
+                patternOffsetAdj += 1;
+            }
+
+            if (patternOffsetAdj == patternLen - 1) {
+                *o_patternOffset = patternOffsetAdj;
+            }
+            else {
+                int tmpOffset = patternOffsetAdj + 1;
+                int countRemHighQualityBases = 0;
+                int remPatternLen = patternLen - tmpOffset;
+
+                while (tmpOffset != patternLen - 1) {
+                    if (qualityString[tmpOffset] >= 65) {
+                        countRemHighQualityBases++;
+                    }
+                    tmpOffset++;
+                }
+
+                _ASSERT(remPatternLen != 0);
+                if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                    *o_patternOffset = patternOffsetAdj;
+                }
+            }
         }
         else {
             // Global alignment preferred
@@ -1084,6 +1114,36 @@ got_answer:
             *o_patternOffset = bestLocalAlignmentPatternOffset;
             *o_textOffset = bestLocalAlignmentTextOffset;
             score = bestLocalAlignmentScore;
+
+            int patternOffsetAdj = *o_patternOffset;
+
+            //
+            // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
+            //
+            while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
+                patternOffsetAdj += 1;
+            }
+
+            if (patternOffsetAdj == patternLen - 1) {
+                *o_patternOffset = patternOffsetAdj;
+            }
+            else {
+                int tmpOffset = patternOffsetAdj + 1;
+                int countRemHighQualityBases = 0;
+                int remPatternLen = patternLen - tmpOffset;
+
+                while (tmpOffset != patternLen - 1) {
+                    if (qualityString[tmpOffset] >= 65) {
+                        countRemHighQualityBases++;
+                    }
+                    tmpOffset++;
+                }
+
+                _ASSERT(remPatternLen != 0);
+                if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                    *o_patternOffset = patternOffsetAdj;
+                }
+            }
         }
         else {
             // Global alignment preferred
