@@ -17775,6 +17775,137 @@ namespace ASELib
             return result;
         } // ReadNextLineStartingAt
 
+        public static List<string> FindSAMLinesInNameSortedSAMFile(FileStream inputFile, string qnameToMatch)
+        {
+            long min = 0;
+            long max = inputFile.Length;
+
+            var retVal = new List<string>();
+
+            while (true)
+            {
+                long probe = (min + max) / 2;
+
+                var line = ReadNextLineStartingAt(inputFile, probe);
+
+                bool tooSmall;
+
+                if (line == null)
+                {
+                    //
+                    // EOF
+                    //
+                    tooSmall = false;
+                }
+                else if (line.StartsWith("@"))
+                {
+                    //
+                    // header line is less than any read
+                    //
+                    tooSmall = true;
+                }
+                else
+                {
+                    var samLine = new SAMLine(line);
+
+                    if (samLine.qname != qnameToMatch)
+                    {
+                        tooSmall = samLine.CompareTo(qnameToMatch) < 0;
+                    }
+                    else
+                    {
+                        //
+                        // We don't know if this is the first occurrence of this line.  Start backing up until we find
+                        // one that's not it (or hit beginning of file).
+                        //
+                        long currentOffset = Math.Max(probe - 1024, 0);
+
+                        while (currentOffset > 0)
+                        {
+                            line = ASETools.ReadNextLineStartingAt(inputFile, currentOffset);
+                            if (line == null)
+                            {
+                                throw new Exception("ASETools.FindSAMLinesInNameSortedSAMFile(_," + qnameToMatch + "): Unexpected EOF???  Is this file not name sorted or otherwise corrupt?");
+                            }
+
+                            if (line.StartsWith("@"))
+                            {
+                                break;
+                            }
+
+                            samLine = new ASETools.SAMLine(line);
+                            if (samLine.qname != qnameToMatch)
+                            {
+                                break;
+                            }
+
+                            currentOffset = Math.Max(currentOffset - 1024, 0);
+                        } // while we're not at the begining of the file and haven't found a line that doesn't match the qnameToMatch
+
+                        //
+                        // Now read until we find a line that does match, since we might have backed up too much.
+                        //
+                        while (line.StartsWith("@") || (samLine = new ASETools.SAMLine(line)).qname != qnameToMatch)
+                        {
+                            currentOffset += line.Length + 1;   // ??? is this right for crlf text?
+                            line = ASETools.ReadNextLineStartingAt(inputFile, currentOffset);
+                        }
+
+                        //
+                        // Now read and copy out all matching lines.
+                        //
+                        while (samLine.qname == qnameToMatch)
+                        {
+                            retVal.Add(line);
+
+                            currentOffset += line.Length + 1;   // ??? is this right for crlf text?
+                            line = ASETools.ReadNextLineStartingAt(inputFile, currentOffset);
+
+                            if (line == null)
+                            {
+                                break;
+                            }
+
+                            samLine = new ASETools.SAMLine(line);
+                        } // while the qnames match
+
+                        return retVal;
+                    } // matching qname
+                } // read a good line
+
+                if (min >= max)
+                {
+                    return retVal;
+                }
+
+                if (max - min == 1)
+                {
+                    //
+                    // This handles the case where they stop converging because of roundoff in integer division.
+                    //
+                    if (tooSmall)
+                    {
+                        min = max;
+                    }
+                    else
+                    {
+                        max = min;
+                    }
+                }
+                else if (tooSmall)
+                {
+                    min = probe;
+                }
+                else
+                {
+                    max = probe;
+                }
+            } // while min <= max
+            
+            // NOTREACHED
+
+        } // FindSAMLinesInNameSortedSAMFile
+
     } // ASETools
 
     //
