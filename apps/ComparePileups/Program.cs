@@ -21,7 +21,7 @@ namespace ComparePileups
 
             public ASETools.SAMLine getMatchingRead(ASETools.SAMLine query)
             {
-                var matchingReads = readsMappingLocus.Where(_ => _.qname == query.qname && _.seq == query.seq).ToList();
+                var matchingReads = readsMappingLocus.Where(_ => _.qname == query.qname && _.seqIfMappedForward == query.seqIfMappedForward).ToList();
                 if (matchingReads.Count() == 0)
                 {
                     return null;
@@ -105,7 +105,7 @@ namespace ComparePileups
             //
             // Find the reads mapped by both files.  This does *not* mean they're mapped to the same pos; just that they both cover the locus in question.
             //
-            var readsMappedByBothFiles = inputFiles[0].readsMappingLocus.Where(read0 => inputFiles[1].readsMappingLocus.Any(read1 => read1.qname == read0.qname && read0.seq == read1.seq)).ToList();   // Check seq to make sure it's not a mate
+            var readsMappedByBothFiles = inputFiles[0].readsMappingLocus.Where(read0 => inputFiles[1].readsMappingLocus.Any(read1 => read1.qname == read0.qname && read0.seqIfMappedForward == read1.seqIfMappedForward)).ToList();   // Check seqIfMappedForward to make sure it's not a mate
             var readsOnlyIn = new List<ASETools.SAMLine>[2];
 
             Console.WriteLine(readsMappedByBothFiles.Count() + " reads map the locus in both files.");
@@ -115,24 +115,37 @@ namespace ComparePileups
             //
             for (int i = 0; i < 2; i++)
             {
-                readsOnlyIn[i] = inputFiles[i].readsMappingLocus.Where(readI => readsMappedByBothFiles.All(readOther => readI.qname != readOther.qname || readI.seq != readOther.seq)).ToList();
+                readsOnlyIn[i] = inputFiles[i].readsMappingLocus.Where(readI => readsMappedByBothFiles.All(readOther => readI.qname != readOther.qname || readI.seqIfMappedForward != readOther.seqIfMappedForward)).ToList();
 
                 if (readsOnlyIn[i].Count() != 0)
                 {
+                    Console.WriteLine();
                     Console.WriteLine("Reads mapping " + locus + " only in " + inputFiles[i].bamFilename + ":");
 
                     foreach (var readOnlyInI in readsOnlyIn[i])
                     {
                         if (inputFiles[1 - i].nameSortedSamFile != null)
                         {
-                            var readInOtherFile = inputFiles[1 - i].getMatchingRead(readOnlyInI);
+                            var readsInOtherFile = ASETools.FindSAMLinesInNameSortedSAMFile(inputFiles[1 - i].nameSortedSamFile, readOnlyInI.qname).Select(_ => new ASETools.SAMLine(_)).Where(_ => _.seqIfMappedForward == readOnlyInI.seqIfMappedForward).ToList();
+                            if (readsInOtherFile.Count() == 0)
+                            {
+                                Console.WriteLine("Read " + readOnlyInI.qname + " is missing from " + inputFiles[1 - i].nameSortedSamFilename);
+                                continue;
+                            } 
+                            else if (readsInOtherFile.Count() > 1)
+                            {
+                                Console.WriteLine("Read " + readOnlyInI.qname + " occurs more than once in " + inputFiles[1 - i].nameSortedSamFilename + ", choosing one.");
+                            }
+
+                            var readInOtherFile = readsInOtherFile[0];
  
                             if (readInOtherFile.isUnmapped())
                             {
                                 Console.WriteLine(readOnlyInI.qname + " is unmapped in the other file");
                             } else 
                             {
-                                Console.WriteLine(readOnlyInI.qname + " in the other file is mapped to " + readInOtherFile.rname + ":" + readInOtherFile.pos);
+                                Console.WriteLine(readOnlyInI.qname + " which is mapped at MAPQ " + readOnlyInI.mapq + ", NM " + readOnlyInI.NM() + 
+                                    " in the other file is mapped to " + readInOtherFile.rname + ":" + readInOtherFile.pos + " at mapq " + readInOtherFile.mapq + " and NM " + readInOtherFile.NM());
                             }
                         } 
                         else
@@ -143,6 +156,7 @@ namespace ComparePileups
                     }
                 } else
                 {
+                    Console.WriteLine();
                     Console.WriteLine("File " + inputFiles[i].bamFilename + " has no reads mapping " + locus + " that aren't also mapping it in the other input file.");
                 }
             } // each input file
@@ -156,7 +170,7 @@ namespace ComparePileups
 
             foreach (var readIn0 in readsMappedByBothFiles)
             {
-                var mateRead = inputFiles[1].readsMappingLocus.Where(_ => _.qname == readIn0.qname && _.seq == readIn0.seq).ToList()[0];
+                var mateRead = inputFiles[1].readsMappingLocus.Where(_ => _.qname == readIn0.qname && _.seqIfMappedForward == readIn0.seqIfMappedForward).ToList()[0];
 
                 var differentPOS = mateRead.pos != readIn0.pos;
                 var differentCIGAR = mateRead.cigar != readIn0.cigar;
@@ -180,12 +194,14 @@ namespace ComparePileups
                 }
             }
 
+            Console.WriteLine();
             Console.WriteLine("Of the reads that map the location from both input files, " + differInPOS.Count() + " differ in mapped location, " + 
                 differInCIGAR.Count() + " have different CIGAR strings, " + differInMAPQ.Count() + " differ in MAPQ, and " + identicalReads.Count() + " are identical");
             Console.WriteLine();
 
             if (differInPOS.Count() != 0)
             {
+                Console.WriteLine();
                 Console.WriteLine("Reads that differ in mapped location: ");
                 foreach (var read0 in differInPOS)
                 {
@@ -197,6 +213,7 @@ namespace ComparePileups
 
             if (differInCIGAR.Count() != 0)
             {
+                Console.WriteLine();
                 Console.WriteLine("Reads that differ in CIGAR string:");
 
                 foreach (var read0 in differInCIGAR)
@@ -210,6 +227,7 @@ namespace ComparePileups
 
             if (differInMAPQ.Count() != 0)
             {
+                Console.WriteLine();
                 Console.WriteLine("Reads that differ in MAPQ:");
 
                 foreach (var read0 in differInMAPQ)
@@ -220,7 +238,6 @@ namespace ComparePileups
 
                 Console.WriteLine();
             }
-
 
         } // Main
     } // Program

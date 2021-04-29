@@ -9632,6 +9632,32 @@ namespace ASELib
                 } // catch */
 
                 basesOfReferenceMapped = currentPos - pos;
+
+                if (isRC())
+                {
+                    seqIfMappedForward = "";
+                    for (int i = seq.Length - 1; i >= 0; i--)
+                    {
+                        switch (seq[i])
+                        {
+                            case 'A': seqIfMappedForward += "T";
+                                break;
+                            case 'C': seqIfMappedForward += "G";
+                                break;
+                            case 'G': seqIfMappedForward += "C";
+                                break;
+                            case 'T': seqIfMappedForward += "A";
+                                break;
+                            default:
+                                seqIfMappedForward += "N";
+                                break;
+                        }
+                    }
+                } // it it's RC
+                else
+                {
+                    seqIfMappedForward = seq;
+                }
             } // SAMLine
 
             //
@@ -9764,6 +9790,7 @@ namespace ASELib
             public readonly int pnext;
             public readonly int tlen;
             public readonly string seq;
+            public readonly string seqIfMappedForward;      // This is seq if this read is mapped forward, RC(seq) otherwise
             public readonly string qual;
             public readonly int nonclippedBases;
             public readonly int basesOfReferenceMapped; // This is different than nonclippedBases because of indels
