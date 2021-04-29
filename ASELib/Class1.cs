@@ -9631,7 +9631,7 @@ namespace ASELib
                     throw e;
                 } // catch */
 
-
+                basesOfReferenceMapped = currentPos - pos;
             } // SAMLine
 
             //
@@ -9766,6 +9766,7 @@ namespace ASELib
             public readonly string seq;
             public readonly string qual;
             public readonly int nonclippedBases;
+            public readonly int basesOfReferenceMapped; // This is different than nonclippedBases because of indels
             public readonly string[] optionalFields;
 
             public const int MultipleSegments = 0x1;    // i.e., paired
