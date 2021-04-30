@@ -9705,7 +9705,7 @@ namespace ASELib
                 } // for each field
 
                 return 0;
-            }
+            } // CompareTo
 
             public int CompareTo(SAMLine peer)
             {
@@ -9779,6 +9779,11 @@ namespace ASELib
 
                 return Convert.ToInt32(NMField[0].Substring(5));
             } // NM
+
+            public string posWithCommas()
+            {
+                return NumberWithCommas(pos);
+            }
 
             public readonly string qname;
             public readonly int flag;

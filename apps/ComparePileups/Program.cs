@@ -34,6 +34,31 @@ namespace ComparePileups
                     return matchingReads[0];
                 }
             } // getMatchingRead
+
+            public ASETools.SAMLine getMate(ASETools.SAMLine query)
+            {
+                if (nameSortedSamFile == null)
+                {
+                    return null;
+                }
+
+                var matchingReads = ASETools.FindSAMLinesInNameSortedSAMFile(nameSortedSamFile, query.qname).
+                                        Select(_ => new ASETools.SAMLine(_)).Where(_ => _.qname == query.qname && _.seqIfMappedForward != query.seqIfMappedForward).ToList();
+
+                if (matchingReads.Count() == 0)
+                {
+                    return null;
+                }
+                else if (matchingReads.Count() == 1)
+                {
+                    return matchingReads[0];
+                }
+                else
+                {
+                    Console.WriteLine("!!!input file " + bamFilename + " has more than one read possible mate for " + query.qname);
+                    return matchingReads[0];
+                }
+            }
         } // BAMAndSAMPair
         static void Main(string[] args)
         {
@@ -126,28 +151,89 @@ namespace ComparePileups
                     {
                         if (inputFiles[1 - i].nameSortedSamFile != null)
                         {
+                            var mate = inputFiles[i].getMate(readOnlyInI);
+
+                            string mateInfo = "";
+
+                            if (mate != null)
+                            {
+                                if (mate.isUnmapped())
+                                {
+                                    mateInfo = " with mate unmapped";
+                                }
+                                else
+                                {
+                                    mateInfo = " mate at " + mate.rname + ":" + mate.posWithCommas() + ", GIGAR " + mate.cigar;
+
+                                    if (mate.rname == readOnlyInI.rname)
+                                    {
+                                        mateInfo += " distance " + Math.Abs(mate.pos - readOnlyInI.pos);
+                                    }
+
+                                    if (mate.NMKnown())
+                                    {
+                                        mateInfo += " NM " + mate.NM();
+                                    }
+                                } // if the mate was mapped
+                            } // if we found a mate
+
+                            string NMInfo = "";
+                            if (readOnlyInI.NMKnown())
+                            {
+                                NMInfo = " NM " + readOnlyInI.NM();
+                            }
+
                             var readsInOtherFile = ASETools.FindSAMLinesInNameSortedSAMFile(inputFiles[1 - i].nameSortedSamFile, readOnlyInI.qname).Select(_ => new ASETools.SAMLine(_)).Where(_ => _.seqIfMappedForward == readOnlyInI.seqIfMappedForward).ToList();
                             if (readsInOtherFile.Count() == 0)
                             {
-                                Console.WriteLine("Read " + readOnlyInI.qname + " is missing from " + inputFiles[1 - i].nameSortedSamFilename);
+                                Console.WriteLine("Read " + readOnlyInI.qname + NMInfo + mateInfo + " is missing from " + inputFiles[1 - i].nameSortedSamFilename);
                                 continue;
-                            } 
+                            }
                             else if (readsInOtherFile.Count() > 1)
                             {
-                                Console.WriteLine("Read " + readOnlyInI.qname + " occurs more than once in " + inputFiles[1 - i].nameSortedSamFilename + ", choosing one.");
+                                Console.WriteLine("Read " + readOnlyInI.qname + NMInfo + mateInfo + " occurs more than once in " + inputFiles[1 - i].nameSortedSamFilename + ", choosing one.");
                             }
 
                             var readInOtherFile = readsInOtherFile[0];
- 
+
                             if (readInOtherFile.isUnmapped())
                             {
-                                Console.WriteLine(readOnlyInI.qname + " is unmapped in the other file");
-                            } else 
-                            {
-                                Console.WriteLine(readOnlyInI.qname + " which is mapped at MAPQ " + readOnlyInI.mapq + ", NM " + readOnlyInI.NM() + 
-                                    " in the other file is mapped to " + readInOtherFile.rname + ":" + readInOtherFile.pos + " at mapq " + readInOtherFile.mapq + " and NM " + readInOtherFile.NM());
+                                Console.WriteLine(readOnlyInI.qname + NMInfo + mateInfo + " is unmapped in the other file");
                             }
-                        } 
+                            else
+                            {
+                                Console.Write(readOnlyInI.qname + " @ " + readOnlyInI.rname + ":" + readOnlyInI.posWithCommas() + " MAPQ " + readOnlyInI.mapq + ", CIGAR " + readOnlyInI.cigar + NMInfo + mateInfo  +
+                                    " in the other file @ " + readInOtherFile.rname + ":" + readInOtherFile.posWithCommas() + " at MAPQ " + readInOtherFile.mapq + ", CIGAR " + readInOtherFile.cigar);
+
+                                if (readInOtherFile.NMKnown())
+                                {
+                                    Console.Write(", NM " + readInOtherFile.NM());
+                                }
+                            }
+
+                            var otherFileMate = inputFiles[1 - i].getMate(readInOtherFile);
+                            if (otherFileMate != null)
+                            {
+                                if (otherFileMate.isUnmapped())
+                                {
+                                    Console.Write("With mate unmapped.");
+                                }
+                                else
+                                {
+                                    Console.Write(" with mate @ " + otherFileMate.rname + ":" + otherFileMate.posWithCommas() + ", MAPQ " + otherFileMate.mapq + ", CIGAR " + mate.cigar);
+
+                                    if (otherFileMate.rname == readInOtherFile.rname)
+                                    {
+                                        Console.Write(" (distance " + Math.Abs(otherFileMate.pos - readInOtherFile.pos) + ")");
+                                    }
+                                    if (otherFileMate.NMKnown())
+                                    {
+                                        Console.Write(", NM " + otherFileMate.NM());
+                                    }
+                                }
+                            } // if we found the other file mate
+                            Console.WriteLine();
+                        }
                         else
                         {
                             // no name sorted sam file for the other input, just report the read name
