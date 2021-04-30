@@ -430,6 +430,33 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
             *o_tailIns = res.count[0];
         }
 
+        // Flip order of insertions followed by substitutions in CIGAR string
+        for (int i = n_res - 1; i >= min_i; --i) {
+            if (res.action[i] == M) {
+                rowIdx += res.count[i];
+                colIdx += res.count[i];
+            }
+            else if (res.action[i] == D) {
+                rowIdx += res.count[i];
+            }
+            else {
+                if (i > 0 && rowIdx < textUsed && colIdx < patternLen - 1) {
+                    if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx])) {
+                        if ((i + 1 <= n_res - 1) && res.action[i + 1] == M) {
+                            res.count[i + 1] += 1;
+                            rowIdx++;
+                            colIdx++;
+                        }
+                        if (res.action[i - 1] == M) {
+                            res.count[i - 1] -= 1;
+                        }
+                    }
+                }
+                colIdx += res.count[i];
+            }
+        }
+
+        rowIdx = 0; colIdx = 0;
         for (int i = n_res - 1; i >= min_i; --i) { // Reverse local result to obtain CIGAR in correct order
             if (useM) {
                 // Compute edit distance NM:i flag
@@ -885,6 +912,33 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
             *o_tailIns = res.count[0];
         }
 
+        // Flip order of insertions followed by substitutions in CIGAR string
+        for (int i = n_res - 1; i >= min_i; --i) {
+            if (res.action[i] == M) {
+                rowIdx += res.count[i];
+                colIdx += res.count[i];
+            }
+            else if (res.action[i] == D) {
+                rowIdx += res.count[i];
+            }
+            else {
+                if (i > 0 && rowIdx < textUsed && colIdx < patternLen - 1) {
+                    if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx])) {
+                        if ((i + 1 <= n_res - 1) && res.action[i + 1] == M) {
+                            res.count[i + 1] += 1;
+                            rowIdx++;
+                            colIdx++;
+                        }
+                        if (res.action[i - 1] == M) {
+                            res.count[i - 1] -= 1;
+                        }
+                    }
+                }
+                colIdx += res.count[i];
+            }
+        }
+
+        rowIdx = 0; colIdx = 0;
         for (int i = n_res - 1; i >= min_i; --i) { // Reverse local result to obtain CIGAR in correct order
             if (useM) {
                 // Compute edit distance NM:i flag
