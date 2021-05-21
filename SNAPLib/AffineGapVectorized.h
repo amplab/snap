@@ -646,7 +646,27 @@ got_answer:
             *o_textOffset = bestLocalAlignmentTextOffset;
             score = bestLocalAlignmentScore;
 
-            int patternOffsetAdj = *o_patternOffset;
+            //
+            // Check if we can match more bases near the end of the soft-clipped read by deleting a character from the reference.
+            // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
+            //
+            int patternOffsetAdj = *o_patternOffset - 1;
+            int textOffsetAdj = *o_textOffset;
+            int countEndMatches = 0;
+
+            while ((patternOffsetAdj + 1 != patternLen) && pattern[patternOffsetAdj + 1] == *(text + (textOffsetAdj + 1) * TEXT_DIRECTION)) {
+                countEndMatches++;
+                patternOffsetAdj++;
+                textOffsetAdj++;
+            }
+
+            if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with deletion. FIXME: check if 3 is enough!
+                *o_patternOffset = patternOffsetAdj;
+                *o_textOffset = textOffsetAdj;
+            }
+
+            patternOffsetAdj = *o_patternOffset;
+            textOffsetAdj = *o_textOffset;
 
             //
             // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
@@ -658,7 +678,7 @@ got_answer:
             if (patternOffsetAdj == patternLen - 1) {
                 *o_patternOffset = patternOffsetAdj;
             }
-            else {
+            else if (patternOffsetAdj != *o_patternOffset) {
                 int tmpOffset = patternOffsetAdj + 1;
                 int countRemHighQualityBases = 0;
                 int remPatternLen = patternLen - tmpOffset;
@@ -1115,7 +1135,27 @@ got_answer:
             *o_textOffset = bestLocalAlignmentTextOffset;
             score = bestLocalAlignmentScore;
 
-            int patternOffsetAdj = *o_patternOffset;
+            //
+            // Check if we can match more bases near the end of the soft-clipped read by deleting a character from the reference.
+            // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
+            //
+            int patternOffsetAdj = *o_patternOffset - 1;
+            int textOffsetAdj = *o_textOffset;
+            int countEndMatches = 0;
+
+            while ((patternOffsetAdj + 1 != patternLen) && pattern[patternOffsetAdj + 1] == *(text + (textOffsetAdj + 1) * TEXT_DIRECTION)) {
+                countEndMatches++;
+                patternOffsetAdj++;
+                textOffsetAdj++;
+            }
+
+            if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with deletion. FIXME: check if 3 is enough!
+                *o_patternOffset = patternOffsetAdj;
+                *o_textOffset = textOffsetAdj;
+            }
+
+            patternOffsetAdj = *o_patternOffset;
+            textOffsetAdj = *o_textOffset;
 
             //
             // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
@@ -1127,7 +1167,7 @@ got_answer:
             if (patternOffsetAdj == patternLen - 1) {
                 *o_patternOffset = patternOffsetAdj;
             }
-            else {
+            else if (patternOffsetAdj != *o_patternOffset) {
                 int tmpOffset = patternOffsetAdj + 1;
                 int countRemHighQualityBases = 0;
                 int remPatternLen = patternLen - tmpOffset;
