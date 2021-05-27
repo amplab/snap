@@ -80,7 +80,7 @@ AlignerOptions::AlignerOptions(
     gapOpenPenalty(6),
     gapExtendPenalty(1),
     fivePrimeEndBonus(10),
-    threePrimeEndBonus(5),
+    threePrimeEndBonus(7),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(true),

@@ -782,6 +782,8 @@ got_answer:
 
             *o_textOffset = patternLen - *o_textOffset;
             *o_patternOffset = patternLen - *o_patternOffset;
+
+            *matchProbability *= lv_indelProbabilities[*o_patternOffset];
             
             return score;
         }
@@ -1270,6 +1272,8 @@ got_answer:
 
             *o_textOffset = patternLen - *o_textOffset;
             *o_patternOffset = patternLen - *o_patternOffset;
+
+            *matchProbability *= lv_indelProbabilities[*o_patternOffset];
             
             return score;
         }
