@@ -663,36 +663,56 @@ got_answer:
             if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with deletion. FIXME: check if 3 is enough!
                 *o_patternOffset = patternOffsetAdj;
                 *o_textOffset = textOffsetAdj;
-            }
+            } else {
+                //
+                // Check if we can match more bases near the end of the soft-clipped read by inserting a character to the pattern.
+                // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
+                //
+                patternOffsetAdj = *o_patternOffset + 1;
+                textOffsetAdj = *o_textOffset;
+                countEndMatches = 0;
 
-            patternOffsetAdj = *o_patternOffset;
-            textOffsetAdj = *o_textOffset;
-
-            //
-            // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
-            //
-            while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
-                patternOffsetAdj += 1;
-            }
-
-            if (patternOffsetAdj == patternLen - 1) {
-                *o_patternOffset = patternOffsetAdj;
-            }
-            else if (patternOffsetAdj != *o_patternOffset) {
-                int tmpOffset = patternOffsetAdj + 1;
-                int countRemHighQualityBases = 0;
-                int remPatternLen = patternLen - tmpOffset;
-
-                while (tmpOffset != patternLen - 1) {
-                    if (qualityString[tmpOffset] >= 65) {
-                        countRemHighQualityBases++;
-                    }
-                    tmpOffset++;
+                while ((patternOffsetAdj < patternLen) && pattern[patternOffsetAdj] == *(text + (textOffsetAdj)*TEXT_DIRECTION)) {
+                    countEndMatches++;
+                    patternOffsetAdj++;
+                    textOffsetAdj++;
                 }
 
-                _ASSERT(remPatternLen != 0);
-                if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with insertion. FIXME: check if 3 is enough!
+                    *o_patternOffset = patternOffsetAdj - 1;
+                    *o_textOffset = textOffsetAdj - 1;
+                }
+            }
+
+            if (*o_patternOffset == bestLocalAlignmentPatternOffset && *o_textOffset == bestLocalAlignmentTextOffset) {
+                patternOffsetAdj = *o_patternOffset;
+                textOffsetAdj = *o_textOffset;
+                //
+                // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
+                //
+                while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
+                    patternOffsetAdj += 1;
+                }
+
+                if (patternOffsetAdj == patternLen - 1) {
                     *o_patternOffset = patternOffsetAdj;
+                }
+                else if (patternOffsetAdj >= *o_patternOffset + 2) { // a 1bp sub is preferred over a 1bp ins with the current scoring scheme
+                    int tmpOffset = patternOffsetAdj + 1;
+                    int countRemHighQualityBases = 0;
+                    int remPatternLen = patternLen - tmpOffset;
+
+                    while (tmpOffset != patternLen - 1) {
+                        if (qualityString[tmpOffset] >= 65) {
+                            countRemHighQualityBases++;
+                        }
+                        tmpOffset++;
+                    }
+
+                    _ASSERT(remPatternLen != 0);
+                    if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                        *o_patternOffset = patternOffsetAdj;
+                    }
                 }
             }
         }
@@ -1155,35 +1175,56 @@ got_answer:
                 *o_patternOffset = patternOffsetAdj;
                 *o_textOffset = textOffsetAdj;
             }
+            else {
+                //
+                // Check if we can match more bases near the end of the soft-clipped read by inserting a character to the pattern.
+                // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
+                //
+                patternOffsetAdj = *o_patternOffset + 1;
+                textOffsetAdj = *o_textOffset;
+                countEndMatches = 0;
 
-            patternOffsetAdj = *o_patternOffset;
-            textOffsetAdj = *o_textOffset;
-
-            //
-            // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
-            //
-            while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
-                patternOffsetAdj += 1;
-            }
-
-            if (patternOffsetAdj == patternLen - 1) {
-                *o_patternOffset = patternOffsetAdj;
-            }
-            else if (patternOffsetAdj != *o_patternOffset) {
-                int tmpOffset = patternOffsetAdj + 1;
-                int countRemHighQualityBases = 0;
-                int remPatternLen = patternLen - tmpOffset;
-
-                while (tmpOffset != patternLen - 1) {
-                    if (qualityString[tmpOffset] >= 65) {
-                        countRemHighQualityBases++;
-                    }
-                    tmpOffset++;
+                while ((patternOffsetAdj < patternLen) && pattern[patternOffsetAdj] == *(text + (textOffsetAdj)*TEXT_DIRECTION)) {
+                    countEndMatches++;
+                    patternOffsetAdj++;
+                    textOffsetAdj++;
                 }
 
-                _ASSERT(remPatternLen != 0);
-                if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with insertion. FIXME: check if 3 is enough!
+                    *o_patternOffset = patternOffsetAdj - 1;
+                    *o_textOffset = textOffsetAdj - 1;
+                }
+            }
+
+            if (*o_patternOffset == bestLocalAlignmentPatternOffset && *o_textOffset == bestLocalAlignmentTextOffset) {
+                patternOffsetAdj = *o_patternOffset;
+                textOffsetAdj = *o_textOffset;
+                //
+                // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
+                //
+                while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
+                    patternOffsetAdj += 1;
+                }
+
+                if (patternOffsetAdj == patternLen - 1) {
                     *o_patternOffset = patternOffsetAdj;
+                }
+                else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                    int tmpOffset = patternOffsetAdj + 1;
+                    int countRemHighQualityBases = 0;
+                    int remPatternLen = patternLen - tmpOffset;
+
+                    while (tmpOffset != patternLen - 1) {
+                        if (qualityString[tmpOffset] >= 65) {
+                            countRemHighQualityBases++;
+                        }
+                        tmpOffset++;
+                    }
+
+                    _ASSERT(remPatternLen != 0);
+                    if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                        *o_patternOffset = patternOffsetAdj;
+                    }
                 }
             }
         }
