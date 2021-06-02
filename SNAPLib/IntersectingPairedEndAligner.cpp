@@ -3664,6 +3664,7 @@ void IntersectingPairedEndAligner::ScoreSet::fillInResult(PairedAlignmentResult*
         result->seedOffset[whichRead] = bestResultSeedOffset[whichRead];
         result->lvIndels[whichRead] = bestResultLVIndels[whichRead];
         result->matchProbability[whichRead] = bestResultMatchProbability[whichRead];
+        result->popularSeedsSkipped[whichRead] = popularSeedsSkipped[whichRead];
     } // for each read in the pair
     result->probabilityAllPairs = probabilityOfAllPairs;
 } // fillInResult
