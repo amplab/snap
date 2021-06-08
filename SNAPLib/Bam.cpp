@@ -856,7 +856,7 @@ private:
 
     static int computeCigarOps(const Genome * genome, AffineGapVectorizedWithCigar * ag,
         char * cigarBuf, int cigarBufLen,
-        const char * data, unsigned dataLength, int score, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
+        const char * data, const char * quality, unsigned dataLength, int score, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned frontHardClipping, unsigned backHardClipping,
         GenomeLocation genomeLocation, bool isRC, bool useM, int * o_editDistance, int * o_addFrontClipping,
         int * o_refSpan);
@@ -1035,6 +1035,7 @@ BAMFormat::writePairs(
     char quality[2][MAX_READ];
 
     const char* clippedData[2];
+    const char* clippedQuality[2];
     unsigned fullLength[2];
     unsigned clippedLength[2];
     unsigned basesClippedBefore[2];
@@ -1055,7 +1056,7 @@ BAMFormat::writePairs(
             if (!SAMFormat::createSAMLine(context.genome, data[whichRead], quality[whichRead], MAX_READ, contigName[whichRead], &contigIndex[whichRead],
                     flags[whichRead], positionInContig[whichRead], result->mapq[whichRead], contigName[1 - whichRead], &contigIndex[1 - whichRead],
                     positionInContig[1 - whichRead], templateLength[whichRead],
-                    fullLength[whichRead], clippedData[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], basesClippedAfter[whichRead],
+                    fullLength[whichRead], clippedData[whichRead], clippedQuality[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], basesClippedAfter[whichRead],
                     basesClippedBefore[1 - whichRead], basesClippedAfter[1 - whichRead], qnameLen[whichRead], reads[whichRead], 
                     result->status[whichRead], locations[whichRead], result->direction[whichRead], isSecondary, result->supplementary[whichRead], useM,
                     true, firstInPair, result->alignedAsPair, reads[1 - whichRead], result->status[1 - whichRead], locations[1 - whichRead], result->direction[1 - whichRead], 
@@ -1069,7 +1070,7 @@ BAMFormat::writePairs(
                 // Call affine gap either when we used affine gap scoring, or when read as NM > 0, to left align indels
                 if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 0)) {
                     cigarOps[whichRead] = computeCigarOps(context.genome, ag, (char*)cigarBuf[whichRead], cigarBufSize * sizeof(_uint32),
-                        clippedData[whichRead], clippedLength[whichRead], result->score[whichRead], basesClippedBefore[whichRead], (unsigned)extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead],
+                        clippedData[whichRead], clippedQuality[whichRead], clippedLength[whichRead], result->score[whichRead], basesClippedBefore[whichRead], (unsigned)extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead],
                         read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                         locations[whichRead], result->direction[whichRead] == RC, useM, &editDistance[whichRead], &addFrontClipping, &refSpanFromCigar[whichRead]);
                     if (addFrontClipping != 0) {
@@ -1391,6 +1392,7 @@ BAMFormat::writeRead(
     char quality[MAX_READ];
 
     const char* clippedData;
+    const char* clippedQuality;
     unsigned fullLength;
     unsigned clippedLength;
     unsigned basesClippedBefore, mateBasesClippedBefore;
@@ -1404,7 +1406,7 @@ BAMFormat::writeRead(
         // outputs:
         data, quality, MAX_READ, contigName, &contigIndex,
         flags, positionInContig, mapQuality, mateContigName, &mateContigIndex, matePositionInContig, templateLength,
-        fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter, mateBasesClippedBefore, mateBasesClippedAfter,
+        fullLength, clippedData, clippedQuality, clippedLength, basesClippedBefore, basesClippedAfter, mateBasesClippedBefore, mateBasesClippedAfter,
         // inputs:
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection,
@@ -1638,6 +1640,7 @@ BAMFormat::writeRead(
     char quality[MAX_READ];
 
     const char* clippedData;
+    const char* clippedQuality;
     unsigned fullLength;
     unsigned clippedLength;
     unsigned basesClippedBefore, mateBasesClippedBefore;
@@ -1651,7 +1654,7 @@ BAMFormat::writeRead(
         // outputs:
         data, quality, MAX_READ, contigName, &contigIndex,
         flags, positionInContig, mapQuality, mateContigName, &mateContigIndex, matePositionInContig, templateLength,
-        fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter, mateBasesClippedBefore, mateBasesClippedAfter,
+        fullLength, clippedData, clippedQuality, clippedLength, basesClippedBefore, basesClippedAfter, mateBasesClippedBefore, mateBasesClippedAfter,
         // inputs:
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection,
@@ -1661,7 +1664,7 @@ BAMFormat::writeRead(
     }
     if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(context.genome, ag, (char*)cigarBuf, cigarBufSize * sizeof(_uint32),
-            clippedData, clippedLength, score, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter,
+            clippedData, clippedQuality, clippedLength, score, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter,
             read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
             genomeLocation, direction == RC, useM, &editDistance, o_addFrontClipping, &refSpanFromCigar);
         // Uncomment for debug
@@ -1951,6 +1954,7 @@ BAMFormat::computeCigarOps(
     char *                      cigarBuf,
     int                         cigarBufLen,
     const char *                data,
+    const char *                quality,
     unsigned                    dataLength,
     int                         score,
     unsigned                    basesClippedBefore,
@@ -1973,7 +1977,7 @@ BAMFormat::computeCigarOps(
     unsigned clippingWordsBefore = ((basesClippedBefore + extraBasesClippedBefore > 0) ? 1 : 0) + ((frontHardClipping > 0) ? 1 : 0);
     unsigned clippingWordsAfter = ((basesClippedAfter + extraBasesClippedAfter > 0) ? 1 : 0) + ((backHardClipping > 0) ? 1 : 0);
 
-    SAMFormat::computeCigar(BAM_CIGAR_OPS, genome, ag, cigarBuf + 4 * clippingWordsBefore, cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter), data, dataLength, score, basesClippedBefore, extraBasesClippedBefore,
+    SAMFormat::computeCigar(BAM_CIGAR_OPS, genome, ag, cigarBuf + 4 * clippingWordsBefore, cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter), data, quality, dataLength, score, basesClippedBefore, extraBasesClippedBefore,
         basesClippedAfter, &extraBasesClippedAfter, genomeLocation, useM, o_editDistance, &used,  o_addFrontClipping, &backClippingMissedByLV);
 
     if (*o_addFrontClipping != 0) {

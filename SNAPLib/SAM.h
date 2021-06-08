@@ -262,6 +262,7 @@ public:
             _int64& templateLength,
             unsigned& fullLength,
             const char*& clippedData,
+            const char*& clippedQuality,
             unsigned& clippedLength,
             unsigned& basesClippedBefore,
             unsigned& basesClippedAfter,
@@ -303,7 +304,7 @@ public:
 
     static void computeCigar(CigarFormat cigarFormat, const Genome * genome, AffineGapVectorizedWithCigar * ag,
         char * cigarBuf, int cigarBufLen,
-        const char * data, GenomeDistance dataLength, int score, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
+        const char * data, const char * quality, GenomeDistance dataLength, int score, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
         GenomeDistance *o_extraBasesClippedAfter,
         GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping, int *o_backClippingMissedByLV);
 
@@ -316,7 +317,7 @@ private:
 
     static const char * computeCigarString(const Genome * genome, AffineGapVectorizedWithCigar * ag,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
-        const char * data, GenomeDistance dataLength, int score, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
+        const char * data, const char * quality, GenomeDistance dataLength, int score, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned frontHardClipped, unsigned backHardClipped,
         GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping, int * o_refSpan);
 

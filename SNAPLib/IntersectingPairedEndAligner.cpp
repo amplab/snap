@@ -2610,15 +2610,6 @@ IntersectingPairedEndAligner::alignAffineGap(
                 result->status[r] = NotFound;
             }
 
-#if _DEBUG
-            if (_DumpAlignments) {
-                fprintf(stderr, "Affine gap scored read %d at %s:%llu score %d, agScore %d\n",
-                    r, genome->getContigAtLocation(result->location[r])->name, result->location[r] - genome->getContigAtLocation(result->location[r])->beginningLocation,
-                    result->score[r], result->agScore[r]
-                );
-            }
-#endif  // _DEBUG
-
             //
             // Use affine gap scoring for ALT result if it was computed in Phase 3
             //
@@ -2750,7 +2741,9 @@ IntersectingPairedEndAligner::alignAffineGap(
             //
             // Use the maximum scoreLimit if we expect the read could have alignments with large indels
             //
-            if ((lvPairScore > bestPairScore + extraSearchDepth) && (lvPairIndels > 1)) {
+            if (lvResult->usedGaplessClipping[0] || lvResult->usedGaplessClipping[1]) {
+                scoreLimit = MAX_K - 1;
+            } else if ((lvPairScore > bestPairScore + extraSearchDepth) && (lvPairIndels > 1)) {
                 scoreLimit = maxK + extraSearchDepth;
             }
 
@@ -2845,6 +2838,17 @@ IntersectingPairedEndAligner::alignAffineGap(
             firstALTResult->status[whichRead] = NotFound;
         }
     }
+
+#if _DEBUG
+    if (_DumpAlignments) {
+        for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+            fprintf(stderr, "Affine gap scored read %d at %s:%llu score %d, agScore %d, mapq %d\n",
+                r, genome->getContigAtLocation(result->location[r])->name, result->location[r] - genome->getContigAtLocation(result->location[r])->beginningLocation,
+                result->score[r], result->agScore[r], result->mapq[r]
+            );
+        }
+    }
+#endif  // _DEBUG
 
     return true;
 }

@@ -1367,18 +1367,18 @@ public:
 
     // Compute the affine gap score between two strings and write the CIGAR string in cigarBuf.
     // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
-    int computeGlobalScore(const char* text, int textLen, const char* pattern, int patternLen, int w,
+    int computeGlobalScore(const char* text, int textLen, const char* pattern, const char* quality, int patternLen, int w,
         char* cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format = COMPACT_CIGAR_STRING,
         int* o_cigarBufUsed = NULL, int *o_netDel = NULL, int *o_tailIns = NULL);
 
-    int computeGlobalScoreBanded(const char* text, int textLen, const char* pattern, int patternLen, int w, int scoreInit,
+    int computeGlobalScoreBanded(const char* text, int textLen, const char* pattern, const char* quality, int patternLen, int w, int scoreInit,
         char* cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format = COMPACT_CIGAR_STRING,
         int* o_cigarBufUsed = NULL, int* o_netDel = NULL, int* o_tailIns = NULL);
 
     int computeGlobalScoreNormalized(const char* text, int textLen,
-        const char* pattern, int patternLen,
+        const char* pattern, const char* quality, int patternLen,
         int k,
         char *cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format, int* o_cigarBufUsed,

@@ -129,7 +129,7 @@ AffineGapVectorizedWithCigar::writeCigar(char** o_buf, int* o_buflen, int count,
     } // switch
 }
 
-int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textLen, const char* pattern, int patternLen, int w,
+int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textLen, const char* pattern, const char* quality, int patternLen, int w,
     char* cigarBuf, int cigarBufLen, bool useM,
     CigarFormat format,
     int* o_cigarBufUsed, int *o_netDel, int *o_tailIns)
@@ -441,7 +441,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
             }
             else {
                 if (i > 0 && rowIdx < textUsed && colIdx < patternLen - 1) {
-                    if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx])) {
+                    if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx]) && (quality[colIdx] < 65)) { // only insert high quality bases if possible
                         if ((i + 1 <= n_res - 1) && res.action[i + 1] == M) {
                             res.count[i + 1] += 1;
                             rowIdx++;
@@ -549,6 +549,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
     const char* text,
     int textLen,
     const char* pattern,
+    const char* quality,
     int patternLen,
     int w,
     int scoreInit,
@@ -923,7 +924,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
             }
             else {
                 if (i > 0 && rowIdx < textUsed && colIdx < patternLen - 1) {
-                    if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx])) {
+                    if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx]) && (quality[colIdx] < 65)) { // only insert high quality bases (>= 65) if possible
                         if ((i + 1 <= n_res - 1) && res.action[i + 1] == M) {
                             res.count[i + 1] += 1;
                             rowIdx++;
@@ -1028,7 +1029,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
 }
 
 int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text, int textLen,
-    const char* pattern, int patternLen,
+    const char* pattern, const char* quality, int patternLen,
     int k,
     char *cigarBuf, int cigarBufLen, bool useM,
     CigarFormat format, int* o_cigarBufUsed,
@@ -1043,14 +1044,14 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text,
     int bamBufUsed;
     int score;
     if (patternLen >= (3 * (2 * k + 1))) {
-        score = computeGlobalScoreBanded(text, (int)textLen, pattern, (int)patternLen, k, MAX_READ_LENGTH, bamBuf, bamBufLen,
+        score = computeGlobalScoreBanded(text, (int)textLen, pattern, quality, (int)patternLen, k, MAX_READ_LENGTH, bamBuf, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
         if (score < 0 || score > k) {
-            score = computeGlobalScore(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
+            score = computeGlobalScore(text, (int)textLen, pattern, quality, (int)patternLen, k, bamBuf, bamBufLen,
                 useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
         }
     } else {
-        score = computeGlobalScore(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
+        score = computeGlobalScore(text, (int)textLen, pattern, quality, (int)patternLen, k, bamBuf, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
     }
 
