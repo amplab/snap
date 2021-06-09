@@ -220,6 +220,8 @@ public:
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
         const Genome* genome, bool killIfTooSlowbool, bool emitInternalScore, char *internalScoreTag,
         bool ignoreAlignmentAdjustmentsForOm);
+
+    virtual ~ReadWriterSupplier() {}
 };
 
 #define READ_GROUP_FROM_AUX     ((const char*) -1)

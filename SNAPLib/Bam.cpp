@@ -900,32 +900,45 @@ BAMFormat::getWriterSupplier(
     AlignerOptions* options,
     const Genome* genome) const
 {
+    //
+    // This leaks stuff like it's going out of style.  I'm only fixing the big leaks, things like strings and locks
+    // don't really matter, but I'm marking the ones I notice and don't fix with a "leaked" comment.  This only happens
+    // when running multiple alignments, either through the comma syntax or in daemon mode.
+    //
+
     DataWriterSupplier* dataSupplier;
     GzipWriterFilterSupplier* gzipSupplier =
-        DataWriterSupplier::gzip(true, BAM_BLOCK, max(1, options->numThreads - 1), false, options->sortOutput);
+        DataWriterSupplier::gzip(true, BAM_BLOCK, max(1, options->numThreads - 1), false, options->sortOutput); // leaked
         // (leave a thread free for main, and let OS map threads to cores to allow system IO etc.)
+
+    FileEncoder* gzipEncoder = NULL;
     if (options->sortOutput) {
-        char *tempFileName = DataWriterSupplier::generateSortIntermediateFilePathName(options);
+        char *tempFileName = DataWriterSupplier::generateSortIntermediateFilePathName(options); // leaked
         // todo: make markDuplicates optional?
+
         DataWriter::FilterSupplier* filters = gzipSupplier;
         if (!options->noIndex) {
             size_t len = strlen(options->outputFile.fileName);
-            char* indexFileName = (char*)malloc(5 + len);
+            char* indexFileName = (char*)malloc(5 + len); // leaked
             strcpy(indexFileName, options->outputFile.fileName);
             strcpy(indexFileName + len, ".bai");
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
         }
+
         if (! options->noDuplicateMarking) {
             filters = DataWriterSupplier::bamMarkDuplicates(genome)->compose(filters);
         }
+
+        gzipEncoder = FileEncoder::gzip(gzipSupplier, options->numThreads, options->bindToProcessors);
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName,
             options->sortMemory * (1ULL << 30),
             options->numThreads, options->outputFile.fileName, filters, options->writeBufferSize,
             options->emitInternalScore, options->internalScoreTag,
-            FileEncoder::gzip(gzipSupplier, options->numThreads, options->bindToProcessors));
+            gzipEncoder);
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag, gzipSupplier);
     }
+
     return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow, options->emitInternalScore, options->internalScoreTag, options->ignoreAlignmentAdjustmentsForOm);
 }
 
@@ -2456,7 +2469,7 @@ public:
 
     ~BAMDupMarkFilter()
     {
-#ifdef USE_DEVTEAM_OPTIONS
+#if 0
         if (mates.size() > 0) {
             WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", mates.size());
             for (MateMap::iterator i = mates.begin(); i != mates.end(); i = mates.next(i)) {
@@ -3023,6 +3036,8 @@ public:
     BAMDupMarkSupplier(const Genome* i_genome) :
         FilterSupplier(DataWriter::ReadFilter), genome(i_genome) {}
 
+    virtual ~BAMDupMarkSupplier() {}
+
     virtual DataWriter::Filter* getFilter()
     { return new BAMDupMarkFilter(genome); }
 
@@ -3068,6 +3083,8 @@ public:
         refs = genome ? new RefInfo[genome->getNumContigs()] : NULL;
         readCounts[0] = readCounts[1] = 0;
     }
+
+    virtual ~BAMIndexSupplier() {}
 
     virtual DataWriter::Filter* getFilter()
     { return new BAMIndexFilter(this); }

@@ -173,6 +173,8 @@ public:
     static DataSupplier* WindowsOverlapped;
 #endif
 
+    static DataSupplier* AsyncFile;
+
     // default raw data supplier for platform
     static DataSupplier* Default;
     static DataSupplier* GzipDefault;

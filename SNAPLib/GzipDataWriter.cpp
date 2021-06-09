@@ -92,6 +92,8 @@ class GzipWriterFilter : public DataWriter::Filter
 public:
     GzipWriterFilter(GzipWriterFilterSupplier* i_supplier);
 
+    ~GzipWriterFilter();
+
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL);
@@ -342,6 +344,18 @@ GzipWriterFilter::GzipWriterFilter(GzipWriterFilterSupplier* i_supplier)
     : DataWriter::Filter(DataWriter::ResizeFilter), supplier(i_supplier), manager(NULL), worker(NULL)
 {}
 
+GzipWriterFilter::~GzipWriterFilter()
+{
+    if (manager != NULL) {
+        delete manager;
+        manager = NULL;
+    }
+
+    if (worker != NULL) {
+        delete worker;
+        worker = NULL;
+    }
+} // ~GzipWriterFilter
 
     void
 GzipWriterFilter::onAdvance(
