@@ -1708,7 +1708,7 @@ BaseAligner::alignAffineGap(
         //
         // Reset score limit
         //
-        scoreLimitForCandidate = min(maxK, bestScore) + extraSearchDepth;
+        scoreLimitForCandidate = __min(maxK, bestScore) + extraSearchDepth;
 
         //
         // We sort all promising alignment candidates and score them with affine gap starting with the best one

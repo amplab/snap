@@ -3679,12 +3679,12 @@ int IntersectingPairedEndAligner::computeScoreLimit(bool nonALTAlignment, const 
         //
         // For a non-ALT alignment to matter, it must be no worse than maxScoreGapToPreferNonAltAlignment of the best ALT alignment and at least as good as the best non-ALT alignment.
         //
-        return min(MAX_K - 1, extraSearchDepth + min(maxK + maxBigIndelSeen, min(scoresForAllAlignments->bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments->bestPairScore)));
+        return __min(MAX_K - 1, extraSearchDepth + __min(maxK + maxBigIndelSeen, __min(scoresForAllAlignments->bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments->bestPairScore)));
     } else {
         //
         // For an ALT alignment to matter, it has to be at least maxScoreGapToPreferNonAltAlignment better than the best non-ALT alignment, and better than the best ALT alignment.
         //
-        return min(MAX_K-1, extraSearchDepth + min(maxK + maxBigIndelSeen, min(scoresForAllAlignments->bestPairScore, scoresForNonAltAlignments->bestPairScore - maxScoreGapToPreferNonAltAlignment)));
+        return __min(MAX_K-1, extraSearchDepth + __min(maxK + maxBigIndelSeen, __min(scoresForAllAlignments->bestPairScore, scoresForNonAltAlignments->bestPairScore - maxScoreGapToPreferNonAltAlignment)));
     }
 }
 
