@@ -1281,7 +1281,7 @@ public:
 
     bool waitWithTimeout(_int64 timeoutInMillis) {
         struct timespec wakeTime;
-#ifdef __LINUX__
+#if defined(__linux__)
         clock_gettime(CLOCK_REALTIME, &wakeTime);
         wakeTime.tv_nsec += timeoutInMillis * 1000000;
 #elif defined(__MACH__)

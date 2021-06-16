@@ -1442,7 +1442,7 @@ AsyncFileDataReader::reinit(
     // Kick off IO, wait for the first buffer to be read
     //
     startIo();
-    bufferReaders[nextBufferForConsumer]->waitForCompletion();
+    waitForBuffer(nextBufferForConsumer);
 
     ReleaseExclusiveLock(&lock);
 } // AsyncFileDataReader::reinit
