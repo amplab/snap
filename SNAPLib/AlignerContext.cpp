@@ -79,6 +79,7 @@ AlignerContext::~AlignerContext()
     if (NULL != perfFile) {
         fclose(perfFile);
     }
+    delete stats;
 }
 
 
@@ -396,13 +397,15 @@ AlignerContext::finishIteration()
             g_index->dropIndex();
 
         }
-        writerSupplier->close();
+
+        writerSupplier->close();  // This is where the sort happens
         delete writerSupplier;
         writerSupplier = NULL;
 
         if (options->dropIndexBeforeSort) {
             //
-            // Since we dropped the index part of the index, now we need to delete it completely.
+            // Since we dropped the index part of the index, now we need to delete it completely.  We can't do it earlier because
+            // sort needs the contigs from the genome.
             //
             delete g_index;
             g_index = NULL;

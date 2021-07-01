@@ -35,7 +35,7 @@ Revision History:
 #include "Error.h"
 #include "Compat.h"
 
-const char *SNAP_VERSION = "1.0.3 (affine branch)";
+const char *SNAP_VERSION = "1.0.4 (affine branch)";
 
 static void usage()
 {

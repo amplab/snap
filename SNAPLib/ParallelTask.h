@@ -255,6 +255,8 @@ public:
 
     virtual ParallelWorker* createWorker() = 0;
 
+    virtual ~ParallelWorkerManager() {}
+
     virtual void beginStep() {}
 
     virtual void finishStep() {}

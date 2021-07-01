@@ -398,6 +398,8 @@ public:
     // free resources; must have destroyed all readers & writers first
     virtual bool close() = 0;
 
+    virtual _int64 getSize() = 0;
+
     // abstract class for asynchronous writes
     class Writer
     {

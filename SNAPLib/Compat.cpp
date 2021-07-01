@@ -31,6 +31,8 @@ Revision History:
 #include <err.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #endif
 #include "exit.h"
 #ifdef PROFILE_WAIT
@@ -487,6 +489,8 @@ public:
 
     virtual bool close();
 
+    virtual _int64 getSize();
+
     class Writer : public AsyncFile::Writer
     {
     public:
@@ -546,6 +550,7 @@ public:
         WindowsAsyncFile*   file;
         bool                reading;
         OVERLAPPED          lap;
+        size_t*             out_bytes_read;
     }; // Reader
 
     virtual AsyncFile::Reader* getReader();
@@ -581,6 +586,19 @@ WindowsAsyncFile::open(
         return NULL;
     }
     return new WindowsAsyncFile(hFile);
+}
+
+    _int64
+WindowsAsyncFile::getSize()
+{
+        LARGE_INTEGER liSize;
+
+        if (!GetFileSizeEx(hFile, &liSize)) {
+            WriteErrorMessage("WindowsAsyncFile: GetFileSizeEx() failed, %d\n", GetLastError());
+            soft_exit(1);
+        }
+
+        return liSize.QuadPart;
 }
 
 WindowsAsyncFile::WindowsAsyncFile(
@@ -813,14 +831,17 @@ WindowsAsyncFile::Reader::beginRead(
     if (! waitForCompletion()) {
         return false;
     }
+    out_bytes_read = bytesRead;
     lap.OffsetHigh = (DWORD) (offset >> (8 * sizeof(DWORD)));
     lap.Offset = (DWORD) offset;
-    if (!ReadFile(file->hFile, buffer,(DWORD) length, (LPDWORD) bytesRead, &lap)) {
+    DWORD nBytesRead;
+    if (!ReadFile(file->hFile, buffer,(DWORD) length, &nBytesRead, &lap)) {
         if (ERROR_IO_PENDING != GetLastError()) {
             WriteErrorMessage("WindowsSAMWriter: WriteFile failed, %d\n",GetLastError());
             return false;
         }
     }
+    *out_bytes_read = nBytesRead;
     reading = true;
     return true;
 }
@@ -833,6 +854,8 @@ WindowsAsyncFile::Reader::waitForCompletion()
         if (!GetOverlappedResult(file->hFile,&lap,&nBytesTransferred,TRUE)) {
             return false;
         }
+        *out_bytes_read = nBytesTransferred;
+        out_bytes_read = NULL;
         reading = false;
     }
     return true;
@@ -1258,7 +1281,7 @@ public:
 
     bool waitWithTimeout(_int64 timeoutInMillis) {
         struct timespec wakeTime;
-#ifdef __LINUX__
+#if defined(__linux__)
         clock_gettime(CLOCK_REALTIME, &wakeTime);
         wakeTime.tv_nsec += timeoutInMillis * 1000000;
 #elif defined(__MACH__)
@@ -1619,6 +1642,8 @@ public:
 
     virtual bool close();
 
+    _int64 getSize();
+
     class Writer : public AsyncFile::Writer
     {
     public:
@@ -1664,6 +1689,18 @@ public:
 private:
     int         fd;
 };
+
+    _int64
+PosixAsyncFile::getSize()
+{
+    struct stat statBuffer;
+    if (-1 == fstat(fd, &statBuffer)) {
+        WriteErrorMessage("PosixAsyncFile: fstat failed, %d\n", errno);
+        return -1;
+    }
+
+    return statBuffer.st_size;
+}
 
     PosixAsyncFile*
 PosixAsyncFile::open(

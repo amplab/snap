@@ -166,6 +166,7 @@ public:
     virtual ~SortedDataFilterSupplier()
     {
         DestroyExclusiveLock(&lock);
+        delete encoder;
     }
 
     virtual DataWriter::Filter* getFilter();

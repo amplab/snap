@@ -199,8 +199,6 @@ Arguments:
         reversedRead[FORWARD] = (char *)BigAlloc(sizeof(char) * maxReadSize * 4 + 2 * MAX_K); // Times 4 to also hold RC version and genome data (+2MAX_K is for genome data)
     }
 
-    rcReadData = (char *)BigAlloc(sizeof(char) * maxReadSize);
-
     // treat everything but ACTG like N
     for (unsigned i = 0; i < 256; i++) {
         nTable[i] = 1;
@@ -1985,7 +1983,7 @@ Return Value:
 
     if (hadBigAllocator) {
         //
-        // Since these got allocated with the alloator rather than new, we want to call
+        // Since these got allocated with the allocator rather than new, we want to call
         // their destructors without freeing their memory (which is the responsibility of
         // the owner of the allocator).
         //
@@ -2049,6 +2047,9 @@ Return Value:
 
         BigDealloc(hashTableElementPool);
         hashTableElementPool = NULL;
+
+        BigDealloc(hitCountByExtraSearchDepth);
+        hitCountByExtraSearchDepth = NULL;
 
         if (NULL != hitsPerContigCounts) {
             BigDealloc(hitsPerContigCounts);
