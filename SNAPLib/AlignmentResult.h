@@ -63,6 +63,7 @@ struct SingleAlignmentResult {
     int             basesClippedBefore;
     int             basesClippedAfter;
     int             agScore;
+    bool            preferIndel; // insert INDELs in our alignment when reads align to homopolymer regions. Done by reducing gap open penalty in homopolymer regions
 
     bool            supplementary;
 
@@ -106,6 +107,7 @@ struct PairedAlignmentResult {
     int basesClippedBefore[NUM_READS_PER_PAIR];
     int basesClippedAfter[NUM_READS_PER_PAIR];
     int agScore[NUM_READS_PER_PAIR];
+    bool preferIndel[NUM_READS_PER_PAIR];
     bool supplementary[NUM_READS_PER_PAIR];
     int seedOffset[NUM_READS_PER_PAIR];
     int lvIndels[NUM_READS_PER_PAIR];

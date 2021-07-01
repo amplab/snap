@@ -265,7 +265,8 @@ public:
         int *o_textOffset = NULL,
         int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
-        double *matchProbability = NULL)
+        double *matchProbability = NULL,
+        bool* o_preferIndel = NULL)
     {
 
 #ifdef TRACE_AG
@@ -323,6 +324,11 @@ public:
         if (w < 0) {
             *o_nEdits = ScoreAboveLimit;
             return -1;
+        }
+
+        bool localPreferIndel;
+        if (NULL == o_preferIndel) {
+            o_preferIndel = &localPreferIndel;
         }
 
         //
@@ -663,7 +669,8 @@ got_answer:
             if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with deletion. FIXME: check if 3 is enough!
                 *o_patternOffset = patternOffsetAdj;
                 *o_textOffset = textOffsetAdj;
-            } else {
+            }
+            else {
                 //
                 // Check if we can match more bases near the end of the soft-clipped read by inserting a character to the pattern.
                 // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
@@ -679,6 +686,11 @@ got_answer:
                 }
 
                 if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with insertion. FIXME: check if 3 is enough!
+                    *o_patternOffset = patternOffsetAdj - 1;
+                    *o_textOffset = textOffsetAdj - 1;
+                }
+                else if (countEndMatches >= 1) {
+                    *o_preferIndel = true;
                     *o_patternOffset = patternOffsetAdj - 1;
                     *o_textOffset = textOffsetAdj - 1;
                 }
@@ -824,7 +836,8 @@ got_answer:
         int *o_textOffset = NULL,
         int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
-        double *matchProbability = NULL)
+        double *matchProbability = NULL,
+        bool *o_preferIndel = NULL)
     {
 
 #ifdef TRACE_AG
@@ -877,6 +890,11 @@ got_answer:
             // having to check it all the time.
             //
             o_nEdits = &localnEdits;
+        }
+
+        bool localPreferIndel;
+        if (NULL == o_preferIndel) {
+            o_preferIndel = &localPreferIndel;
         }
 
         if (w < 0) {
@@ -1194,6 +1212,11 @@ got_answer:
                     *o_patternOffset = patternOffsetAdj - 1;
                     *o_textOffset = textOffsetAdj - 1;
                 }
+                else if (countEndMatches >= 1) {
+                    *o_preferIndel = true;
+                    *o_patternOffset = patternOffsetAdj - 1;
+                    *o_textOffset = textOffsetAdj - 1;
+                }
             }
 
             if (*o_patternOffset == bestLocalAlignmentPatternOffset && *o_textOffset == bestLocalAlignmentTextOffset) {
@@ -1386,6 +1409,26 @@ public:
 
     bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format);
 
+    void setGapOpenPenalty(int gapOpenPenalty_) {
+        gapOpenPenalty = gapOpenPenalty_;
+    }
+
+    void setGapExtendPenalty(int gapExtendPenalty_) {
+        gapExtendPenalty = gapExtendPenalty_;
+    }
+
+    int getGapOpenPenalty() {
+        return gapOpenPenalty;
+    }
+
+    int getGapExtendPenalty() {
+        return gapExtendPenalty;
+    }
+
+    int getSubPenalty() {
+        return subPenalty;
+    }
+
 private:
 
     //
@@ -1398,6 +1441,7 @@ private:
     //
     int matchReward;
     int subPenalty;
+    int defaultGapOpenPenalty;
     int gapOpenPenalty;
     int gapExtendPenalty;
     int minScoreParam;

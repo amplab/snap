@@ -840,7 +840,7 @@ public:
         const ReaderContext& context, AffineGapVectorizedWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool supplementaryAlignment, int * o_addFrontClipping,
-        int score, int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
+        int score, int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0, bool preferIndel = false,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false, int mateBpClippedBefore = 0, int mateBpClippedAfter = 0) const;
@@ -1082,10 +1082,19 @@ BAMFormat::writePairs(
             if (locations[whichRead] != InvalidGenomeLocation) {
                 // Call affine gap either when we used affine gap scoring, or when read as NM > 0, to left align indels
                 if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 0)) {
+
+                    int oldGapOpenPenalty = ag->getGapOpenPenalty(); // default 7
+                    if (result->preferIndel[whichRead]) {
+                        int gapExtendPenalty = ag->getGapExtendPenalty(); // default 1
+                        int subPenalty = ag->getSubPenalty(); // default = -4
+                        ag->setGapOpenPenalty(-subPenalty - gapExtendPenalty - 1); // make gap open penalty = 2
+                    }
                     cigarOps[whichRead] = computeCigarOps(context.genome, ag, (char*)cigarBuf[whichRead], cigarBufSize * sizeof(_uint32),
                         clippedData[whichRead], clippedQuality[whichRead], clippedLength[whichRead], result->score[whichRead], basesClippedBefore[whichRead], (unsigned)extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead],
                         read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                         locations[whichRead], result->direction[whichRead] == RC, useM, &editDistance[whichRead], &addFrontClipping, &refSpanFromCigar[whichRead]);
+                    ag->setGapOpenPenalty(oldGapOpenPenalty);
+
                     if (addFrontClipping != 0) {
                         *secondReadLocationChanged = firstOrSecond == 1;
                         const Genome::Contig *originalContig = context.genome->getContigAtLocation(locations[whichRead]);
@@ -1625,6 +1634,7 @@ BAMFormat::writeRead(
     char *internalScoreTag,
     int bpClippedBefore,
     int bpClippedAfter,
+    bool preferIndel,
     bool hasMate,
     bool firstInPair,
     Read * mate,
@@ -1676,10 +1686,17 @@ BAMFormat::writeRead(
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
+        int oldGapOpenPenalty = ag->getGapOpenPenalty(); // default 7
+        if (preferIndel) {
+            int gapExtendPenalty = ag->getGapExtendPenalty(); // default 1
+            int subPenalty = ag->getSubPenalty(); // default = -4
+            ag->setGapOpenPenalty(-subPenalty - gapExtendPenalty - 1); // make gap open penalty = 2
+        }
         cigarOps = computeCigarOps(context.genome, ag, (char*)cigarBuf, cigarBufSize * sizeof(_uint32),
             clippedData, clippedQuality, clippedLength, score, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter,
             read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
             genomeLocation, direction == RC, useM, &editDistance, o_addFrontClipping, &refSpanFromCigar);
+        ag->setGapOpenPenalty(oldGapOpenPenalty);
         // Uncomment for debug
         if (editDistance == -1) {
             const char* read_data = read->getUnclippedData();
