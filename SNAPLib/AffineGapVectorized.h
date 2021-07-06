@@ -640,7 +640,7 @@ got_answer:
         } // end text
 
         // Choose between local and global alignment for patternOffset
-        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) { // FIXME: Change 5 to a clipping penalty
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) {
             // Local alignment preferred
             *o_patternOffset = bestLocalAlignmentPatternOffset;
             *o_textOffset = bestLocalAlignmentTextOffset;
@@ -672,7 +672,7 @@ got_answer:
                 textOffsetAdj = *o_textOffset;
                 countEndMatches = 0;
 
-                while ((patternOffsetAdj < patternLen) && pattern[patternOffsetAdj] == *(text + (textOffsetAdj)*TEXT_DIRECTION)) {
+                while ((patternOffsetAdj < patternLen) && pattern[patternOffsetAdj] == *(text + (textOffsetAdj)*TEXT_DIRECTION) && (qualityString[patternOffsetAdj] >= 65)) {
                     countEndMatches++;
                     patternOffsetAdj++;
                     textOffsetAdj++;
@@ -1151,7 +1151,7 @@ got_answer:
         } // end text
 
         // Choose between local and global alignment for patternOffset
-        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) { // FIXME: Change 5 to a clipping penalty
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) {
             // Local alignment preferred
             *o_patternOffset = bestLocalAlignmentPatternOffset;
             *o_textOffset = bestLocalAlignmentTextOffset;
@@ -1184,7 +1184,7 @@ got_answer:
                 textOffsetAdj = *o_textOffset;
                 countEndMatches = 0;
 
-                while ((patternOffsetAdj < patternLen) && pattern[patternOffsetAdj] == *(text + (textOffsetAdj)*TEXT_DIRECTION)) {
+                while ((patternOffsetAdj < patternLen) && pattern[patternOffsetAdj] == *(text + (textOffsetAdj)*TEXT_DIRECTION) && (qualityString[patternOffsetAdj] >= 65)) {
                     countEndMatches++;
                     patternOffsetAdj++;
                     textOffsetAdj++;
