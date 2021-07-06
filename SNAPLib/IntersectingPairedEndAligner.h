@@ -469,8 +469,7 @@ private:
             int                 *genomeLocationOffset,
             int                 *basesClippedBefore,
             int                 *basesClippedAfter,
-            int                 *agScore,
-            bool                *preferIndel
+            int                 *agScore
 	);
 
     void scoreLocationWithHammingDistance(
@@ -677,7 +676,6 @@ private:
                 bestResultLVIndels[i] = 0;
                 bestResultMatchProbability[i] = 0.0;
                 bestResultUsedGaplessClipping[i] = false;
-                bestResultPreferIndel[i] = false;
             }
 
             probabilityOfBestPair = 0;
@@ -700,7 +698,6 @@ private:
                 bestResultLVIndels[i] = result->lvIndels[i];
                 bestResultMatchProbability[i] = result->matchProbability[i];
                 bestResultUsedGaplessClipping[i] = result->usedGaplessClipping[i];
-                bestResultPreferIndel[i] = result->preferIndel[i];
             }
             probabilityOfBestPair = result->matchProbability[0] * result->matchProbability[1];
             probabilityOfAllPairs = result->probabilityAllPairs;
@@ -730,7 +727,6 @@ private:
         int bestResultLVIndels[NUM_READS_PER_PAIR];
         double bestResultMatchProbability[NUM_READS_PER_PAIR];
         bool bestResultUsedGaplessClipping[NUM_READS_PER_PAIR];
-        bool bestResultPreferIndel[NUM_READS_PER_PAIR];
 
         double probabilityOfBestPair;
         double probabilityOfAllPairs;

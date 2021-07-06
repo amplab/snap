@@ -285,7 +285,6 @@ bool
     result->basesClippedAfter[0] = result->basesClippedAfter[1] = 0;
     result->agScore[0] = result->agScore[1] = 0;
     result->usedGaplessClipping[0] = result->usedGaplessClipping[1] = false;
-    result->preferIndel[0] = result->preferIndel[1] = false;
 
     *nSecondaryResults = 0;
     *nSingleEndSecondaryResultsForFirstRead = 0;
@@ -1463,7 +1462,6 @@ IntersectingPairedEndAligner::alignHamming(
     result->basesClippedAfter[0] = result->basesClippedAfter[1] = 0;
     result->agScore[0] = result->agScore[1] = 0;
     result->usedGaplessClipping[0] = result->usedGaplessClipping[1] = false;
-    result->preferIndel[0] = result->preferIndel[1] = false;
 
     *nSecondaryResults = 0;
     *nSingleEndSecondaryResultsForFirstRead = 0;
@@ -2603,7 +2601,7 @@ IntersectingPairedEndAligner::alignAffineGap(
             result->usedAffineGapScoring[r] = true;
             scoreLocationWithAffineGap(r, result->direction[r], result->origLocation[r],
 	            result->seedOffset[r], scoreLimit, &result->score[r], &result->matchProbability[r],
-	            &genomeOffset[r], &result->basesClippedBefore[r], &result->basesClippedAfter[r], &result->agScore[r], &result->preferIndel[r]);
+	            &genomeOffset[r], &result->basesClippedBefore[r], &result->basesClippedAfter[r], &result->agScore[r]);
 
             if (result->score[r] != ScoreAboveLimit) {
                 result->location[r] = result->origLocation[r] + genomeOffset[r];
@@ -2620,7 +2618,7 @@ IntersectingPairedEndAligner::alignAffineGap(
                     firstALTResult->usedAffineGapScoring[r] = true;
                     scoreLocationWithAffineGap(r, firstALTResult->direction[r], firstALTResult->origLocation[r],
                         firstALTResult->seedOffset[r], scoreLimitALT, &firstALTResult->score[r], &firstALTResult->matchProbability[r],
-                        &genomeOffset[r], &firstALTResult->basesClippedBefore[r], &firstALTResult->basesClippedAfter[r], &firstALTResult->agScore[r], &firstALTResult->preferIndel[r]);
+                        &genomeOffset[r], &firstALTResult->basesClippedBefore[r], &firstALTResult->basesClippedAfter[r], &firstALTResult->agScore[r]);
 
                     if (firstALTResult->score[r] != ScoreAboveLimit) {
                         firstALTResult->location[r] = firstALTResult->origLocation[r] + genomeOffset[r];
@@ -2761,7 +2759,7 @@ IntersectingPairedEndAligner::alignAffineGap(
                     lvResult->usedAffineGapScoring[0] = true;
                     scoreLocationWithAffineGap(0, lvResult->direction[0], lvResult->origLocation[0],
 	                    lvResult->seedOffset[0], scoreLimit, &lvResult->score[0], &lvResult->matchProbability[0],
-	                    &genomeOffset[0], &lvResult->basesClippedBefore[0], &lvResult->basesClippedAfter[0], &lvResult->agScore[0], &lvResult->preferIndel[0]);
+	                    &genomeOffset[0], &lvResult->basesClippedBefore[0], &lvResult->basesClippedAfter[0], &lvResult->agScore[0]);
                 }
 
                 if ((lvResult->score[0] != ScoreAboveLimit) && (lvResult->score[0] <= MAX_K - 1)) {
@@ -2774,7 +2772,7 @@ IntersectingPairedEndAligner::alignAffineGap(
                         lvResult->usedAffineGapScoring[1] = true;
                         scoreLocationWithAffineGap(1, lvResult->direction[1], lvResult->origLocation[1],
 	                        lvResult->seedOffset[1], scoreLimit - lvResult->score[0], &lvResult->score[1], &lvResult->matchProbability[1],
-	                        &genomeOffset[1], &lvResult->basesClippedBefore[1], &lvResult->basesClippedAfter[1], &lvResult->agScore[1], &lvResult->preferIndel[1]);
+	                        &genomeOffset[1], &lvResult->basesClippedBefore[1], &lvResult->basesClippedAfter[1], &lvResult->agScore[1]);
                     } // if !skipAffineGap[1]
 
                     if ((lvResult->score[1] != ScoreAboveLimit) && (lvResult->score[1] <= MAX_K - 1)) {
@@ -2867,8 +2865,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	int                 *genomeLocationOffset,
 	int                 *basesClippedBefore,
 	int                 *basesClippedAfter,
-	int                 *agScore,
-    bool                *preferIndel
+	int                 *agScore
 	)
 {
     Read *readToScore = reads[whichRead][direction];
@@ -2888,7 +2885,6 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 
     *basesClippedBefore = 0;
     *basesClippedAfter = 0;
-    *preferIndel = false;
 
     double matchProb1 = 1.0, matchProb2 = 1.0;
     int score1 = 0, score2 = 0; // edit distance
@@ -2897,7 +2893,6 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
     int seedLen = index->getSeedLength();
     int tailStart = seedOffset + seedLen;
     int agScore1 = seedLen, agScore2 = 0; // affine gap scores
-    bool preferIndel1 = false, preferIndel2 = false;
 
     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));    // that the seed actually matches
 
@@ -2925,8 +2920,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 NULL,
                 basesClippedAfter,
                 &score1,
-                &matchProb1,
-                &preferIndel1);
+                &matchProb1);
         }
         else {
             agScore1 = affineGap->computeScore(data + tailStart,
@@ -2940,8 +2934,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 NULL,
                 basesClippedAfter,
                 &score1,
-                &matchProb1,
-                &preferIndel1);
+                &matchProb1);
         }
 
         agScore1 += (seedLen - readLen);
@@ -2965,8 +2958,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                genomeLocationOffset,
 	                basesClippedBefore,
 	                &score2,
-	                &matchProb2,
-                    &preferIndel2);
+	                &matchProb2);
             }
             else {
                 agScore2 = reverseAffineGap->computeScore(data + seedOffset,
@@ -2980,8 +2972,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                genomeLocationOffset,
 	                basesClippedBefore,
 	                &score2,
-	                &matchProb2,
-                    &preferIndel2);
+	                &matchProb2);
             }
 
             agScore2 -= (readLen);
@@ -3006,7 +2997,6 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
         *matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
 
         *agScore = agScore1 + agScore2;
-        *preferIndel = preferIndel1 || preferIndel2;
     }
     else {
         *score = ScoreAboveLimit;
@@ -3651,7 +3641,6 @@ bool IntersectingPairedEndAligner::ScoreSet::updateBestHitIfNeeded(int pairScore
             bestResultSeedOffset[r] = newResult->seedOffset[r];
             bestResultMatchProbability[r] = newResult->matchProbability[r];
             bestResultLVIndels[r] = newResult->lvIndels[r];
-            bestResultPreferIndel[r] = newResult->preferIndel[r];
         }
         return true;
     }
@@ -3680,7 +3669,6 @@ void IntersectingPairedEndAligner::ScoreSet::fillInResult(PairedAlignmentResult*
         result->lvIndels[whichRead] = bestResultLVIndels[whichRead];
         result->matchProbability[whichRead] = bestResultMatchProbability[whichRead];
         result->popularSeedsSkipped[whichRead] = popularSeedsSkipped[whichRead];
-        result->preferIndel[whichRead] = bestResultPreferIndel[whichRead];
     } // for each read in the pair
     result->probabilityAllPairs = probabilityOfAllPairs;
 } // fillInResult

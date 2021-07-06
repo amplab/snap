@@ -19,7 +19,6 @@ AffineGapVectorizedWithCigar::AffineGapVectorizedWithCigar(
     int i_gapExtendPenalty) :
     matchReward(i_matchReward),
     subPenalty(-i_subPenalty),
-    defaultGapOpenPenalty(i_gapOpenPenalty + i_gapExtendPenalty),
     gapOpenPenalty(i_gapOpenPenalty + i_gapExtendPenalty),
     gapExtendPenalty(i_gapExtendPenalty)
 {
@@ -43,7 +42,6 @@ AffineGapVectorizedWithCigar::AffineGapVectorizedWithCigar(
 AffineGapVectorizedWithCigar::AffineGapVectorizedWithCigar() :
     matchReward(1),
     subPenalty(-4),
-    defaultGapOpenPenalty(7),
     gapOpenPenalty(7),
     gapExtendPenalty(1)
 {
@@ -1049,7 +1047,6 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text,
         score = computeGlobalScoreBanded(text, (int)textLen, pattern, quality, (int)patternLen, k, MAX_READ_LENGTH, bamBuf, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
         if (score < 0 || score > k) {
-            gapOpenPenalty = defaultGapOpenPenalty; // reset gap open penalty and try again, otherwise we may have substitutions replaced by indels.
             score = computeGlobalScore(text, (int)textLen, pattern, quality, (int)patternLen, k, bamBuf, bamBufLen,
                 useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
         }
