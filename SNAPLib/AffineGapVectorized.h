@@ -690,28 +690,35 @@ got_answer:
                 //
                 // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
                 //
+                int countInsertions = 0;
                 while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
                     patternOffsetAdj += 1;
+                    countInsertions++;
                 }
 
-                if (patternOffsetAdj == patternLen - 1) {
-                    *o_patternOffset = patternOffsetAdj;
-                }
-                else if (patternOffsetAdj >= *o_patternOffset + 2) { // a 1bp sub is preferred over a 1bp ins with the current scoring scheme
-                    int tmpOffset = patternOffsetAdj + 1;
-                    int countRemHighQualityBases = 0;
-                    int remPatternLen = patternLen - tmpOffset;
-
-                    while (tmpOffset != patternLen - 1) {
-                        if (qualityString[tmpOffset] >= 65) {
-                            countRemHighQualityBases++;
-                        }
-                        tmpOffset++;
-                    }
-
-                    _ASSERT(remPatternLen != 0);
-                    if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                //
+                // Sometimes it is better just to clip, rather than relying too much on base quality scores. For now, we only allow fewer than 10 high quality bases to be inserted
+                //
+                if (countInsertions <= 10) { // FIXME: make 10 a parameter
+                    if (patternOffsetAdj == patternLen - 1) {
                         *o_patternOffset = patternOffsetAdj;
+                    }
+                    else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                        int tmpOffset = patternOffsetAdj + 1;
+                        int countRemHighQualityBases = 0;
+                        int remPatternLen = patternLen - tmpOffset;
+
+                        while (tmpOffset != patternLen - 1) {
+                            if (qualityString[tmpOffset] >= 65) {
+                                countRemHighQualityBases++;
+                            }
+                            tmpOffset++;
+                        }
+
+                        _ASSERT(remPatternLen != 0);
+                        if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                            *o_patternOffset = patternOffsetAdj;
+                        }
                     }
                 }
             }
@@ -1151,6 +1158,7 @@ got_answer:
         } // end text
 
         // Choose between local and global alignment for patternOffset
+
         if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) {
             // Local alignment preferred
             *o_patternOffset = bestLocalAlignmentPatternOffset;
@@ -1202,28 +1210,35 @@ got_answer:
                 //
                 // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
                 //
+                int countInsertions = 0;
                 while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
                     patternOffsetAdj += 1;
+                    countInsertions++;
                 }
 
-                if (patternOffsetAdj == patternLen - 1) {
-                    *o_patternOffset = patternOffsetAdj;
-                }
-                else if (patternOffsetAdj >= *o_patternOffset + 2) {
-                    int tmpOffset = patternOffsetAdj + 1;
-                    int countRemHighQualityBases = 0;
-                    int remPatternLen = patternLen - tmpOffset;
-
-                    while (tmpOffset != patternLen - 1) {
-                        if (qualityString[tmpOffset] >= 65) {
-                            countRemHighQualityBases++;
-                        }
-                        tmpOffset++;
-                    }
-
-                    _ASSERT(remPatternLen != 0);
-                    if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                // 
+                // Sometimes it is better just to clip, rather than relying too much on base quality scores. For now, we only allow fewer than 10 high quality bases to be inserted
+                //
+                if (countInsertions <= 10) { // FIXME: make 10 a parameter
+                    if (patternOffsetAdj == patternLen - 1) {
                         *o_patternOffset = patternOffsetAdj;
+                    }
+                    else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                        int tmpOffset = patternOffsetAdj + 1;
+                        int countRemHighQualityBases = 0;
+                        int remPatternLen = patternLen - tmpOffset;
+
+                        while (tmpOffset != patternLen - 1) {
+                            if (qualityString[tmpOffset] >= 65) {
+                                countRemHighQualityBases++;
+                            }
+                            tmpOffset++;
+                        }
+
+                        _ASSERT(remPatternLen != 0);
+                        if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                            *o_patternOffset = patternOffsetAdj;
+                        }
                     }
                 }
             }
