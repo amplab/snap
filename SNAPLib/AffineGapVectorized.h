@@ -654,7 +654,7 @@ got_answer:
             int textOffsetAdj = *o_textOffset;
             int countEndMatches = 0;
 
-            while ((patternOffsetAdj + 1 != patternLen) && pattern[patternOffsetAdj + 1] == *(text + (textOffsetAdj + 1) * TEXT_DIRECTION)) {
+            while ((patternOffsetAdj + 1 != patternLen) && pattern[patternOffsetAdj + 1] == *(text + (textOffsetAdj + 1) * TEXT_DIRECTION) && (qualityString[patternOffsetAdj + 1] >= 65)) {
                 countEndMatches++;
                 patternOffsetAdj++;
                 textOffsetAdj++;
@@ -1173,7 +1173,7 @@ got_answer:
             int textOffsetAdj = *o_textOffset;
             int countEndMatches = 0;
 
-            while ((patternOffsetAdj + 1 != patternLen) && pattern[patternOffsetAdj + 1] == *(text + (textOffsetAdj + 1) * TEXT_DIRECTION)) {
+            while ((patternOffsetAdj + 1 != patternLen) && pattern[patternOffsetAdj + 1] == *(text + (textOffsetAdj + 1) * TEXT_DIRECTION) && (qualityString[patternOffsetAdj + 1] >= 65)) {
                 countEndMatches++;
                 patternOffsetAdj++;
                 textOffsetAdj++;
