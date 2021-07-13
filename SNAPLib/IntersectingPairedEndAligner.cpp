@@ -2892,7 +2892,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
     int readLen = readToScore->getDataLength();
     int seedLen = index->getSeedLength();
     int tailStart = seedOffset + seedLen;
-    int agScore1 = seedLen, agScore2 = 0; // affine gap scores
+    int agScore1 = seedLen * 4, agScore2 = 0; // affine gap scores
 
     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));    // that the seed actually matches
 
@@ -2915,7 +2915,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 readToScore->getQuality() + tailStart,
                 readLen - tailStart,
                 scoreLimit,
-                readLen,
+                readLen * 4,
                 direction,
                 NULL,
                 basesClippedAfter,
@@ -2929,7 +2929,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 readToScore->getQuality() + tailStart,
                 readLen - tailStart,
                 scoreLimit,
-                readLen,
+                readLen * 4,
                 direction,
                 NULL,
                 basesClippedAfter,
@@ -2937,7 +2937,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 &matchProb1);
         }
 
-        agScore1 += (seedLen - readLen);
+        agScore1 += (seedLen - readLen) * 4;
     }
     if (score1 != ScoreAboveLimit) {
         if (seedOffset != 0) {
@@ -2953,7 +2953,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
 	                seedOffset,
 	                limitLeft,
-	                readLen,
+	                readLen * 4,
                     direction,
 	                genomeLocationOffset,
 	                basesClippedBefore,
@@ -2967,7 +2967,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
 	                seedOffset,
 	                limitLeft,
-	                readLen,
+	                readLen * 4,
                     direction,
 	                genomeLocationOffset,
 	                basesClippedBefore,
@@ -2975,7 +2975,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                &matchProb2);
             }
 
-            agScore2 -= (readLen);
+            agScore2 -= (readLen * 4);
 
             if (score2 == ScoreAboveLimit) {
 	            *score = ScoreAboveLimit;

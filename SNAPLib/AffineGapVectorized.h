@@ -82,7 +82,7 @@ template<int TEXT_DIRECTION = 1> class AffineGapVectorized {
 public:
     AffineGapVectorized()
     {
-        init(1, 4, 6, 1, 10, 5);
+        init(4, 16, 24, 4, 40, 20);
     }
 
     AffineGapVectorized(
@@ -123,12 +123,18 @@ public:
         int i, j, k = 0;
         for (i = 0; i < (MAX_ALPHABET_SIZE - 1); i++) {
             for (j = 0; j < (MAX_ALPHABET_SIZE - 1); j++) {
-                ntTransitionMatrix[k++] = (i == j) ? matchReward : subPenalty;
+                ntTransitionMatrix[k] = (i == j) ? matchReward : subPenalty;
+                ntTransitionMatrixLQ[k] = (i == j) ? matchReward / 2 : 3 * subPenalty / 4;
+                k++;
             }
-            ntTransitionMatrix[k++] = -1; // FIXME: What penalty to use for N ?
+            ntTransitionMatrix[k] = -1; // FIXME: What penalty to use for N ?
+            ntTransitionMatrixLQ[k] = -1;
+            k++;
         }
         for (i = 0; i < MAX_ALPHABET_SIZE; i++) {
-            ntTransitionMatrix[k++] = -1;
+            ntTransitionMatrix[k] = -1;
+            ntTransitionMatrixLQ[k] = -1;
+            k++;
         }
     }
 
@@ -351,7 +357,12 @@ public:
                         int idx = i * segLen + k;
                         if (idx < patternLen) {
                             uint8_t bp = BASE_VALUE[pattern[idx]];
-                            queryResult[patternIdx] = ntTransitionMatrix[a * MAX_ALPHABET_SIZE + bp];
+                            if (qualityString[idx] >= 65) {
+                                queryResult[patternIdx] = ntTransitionMatrix[a * MAX_ALPHABET_SIZE + bp];
+                            }
+                            else {
+                                queryResult[patternIdx] = ntTransitionMatrixLQ[a * MAX_ALPHABET_SIZE + bp];
+                            }
                         }
                         else {
                             queryResult[patternIdx] = INT16_MIN;
@@ -923,7 +934,12 @@ got_answer:
                 for (int k = j; k < paddedPatternLen; k += numVec) {
                     if (k < patternLen) {
                         uint8_t bp = BASE_VALUE[pattern[k]];
-                        queryResult[patternIdx] = ntTransitionMatrix[i * MAX_ALPHABET_SIZE + bp];
+                        if (qualityString[k] >= 65) {
+                            queryResult[patternIdx] = ntTransitionMatrix[i * MAX_ALPHABET_SIZE + bp];
+                        }
+                        else {
+                            queryResult[patternIdx] = ntTransitionMatrixLQ[i * MAX_ALPHABET_SIZE + bp];
+                        }
                     }
                     else {
                         queryResult[patternIdx] = INT16_MIN;
@@ -1350,6 +1366,9 @@ private:
     // Scores for each nucleotide <-> nucleotide transition
     //
     int ntTransitionMatrix[MAX_ALPHABET_SIZE * MAX_ALPHABET_SIZE];
+
+    // Same as above but uses lower match reward for matches from low quality bases (< 48, i.e., < phred 15)
+    int ntTransitionMatrixLQ[MAX_ALPHABET_SIZE * MAX_ALPHABET_SIZE];
 
     //
     // Affine gap scoring parameters
