@@ -269,7 +269,7 @@ Arguments:
 
 
 #ifdef  _DEBUG
-bool _DumpAlignments = true;
+bool _DumpAlignments = false;
 #endif  // _DEBUG
 
     bool
@@ -804,7 +804,7 @@ BaseAligner::scoreLocationWithAffineGap(
     // First, do the forward direction from where the seed aligns to past of it
     int readLen = readToScore->getDataLength();
     int tailStart = seedOffset + seedLen;
-    int agScore1 = seedLen * 4, agScore2 = 0; // affine gap scores
+    int agScore1 = seedLen, agScore2 = 0; // affine gap scores
 
     _ASSERT(!memcmp(data + seedOffset, readToScore->getData() + seedOffset, seedLen));    // that the seed actually matches
 
@@ -829,7 +829,7 @@ BaseAligner::scoreLocationWithAffineGap(
                 readToScore->getQuality() + tailStart,
                 readLen - tailStart,
                 scoreLimit,
-                readLen * 4,
+                readLen,
                 direction,
                 NULL,
                 basesClippedAfter,
@@ -843,7 +843,7 @@ BaseAligner::scoreLocationWithAffineGap(
                 readToScore->getQuality() + tailStart,
                 readLen - tailStart,
                 scoreLimit,
-                readLen * 4,
+                readLen,
                 direction,
                 NULL,
                 basesClippedAfter,
@@ -851,7 +851,7 @@ BaseAligner::scoreLocationWithAffineGap(
                 &matchProb1);
         }
 
-        agScore1 += (seedLen - readLen) * 4;
+        agScore1 += (seedLen - readLen);
     }
     if (score1 != ScoreAboveLimit) {
         if (seedOffset != 0) {
@@ -867,7 +867,7 @@ BaseAligner::scoreLocationWithAffineGap(
                     reads[OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
                     seedOffset,
                     limitLeft,
-                    readLen * 4,
+                    readLen,
                     direction,
                     genomeLocationOffset,
                     basesClippedBefore,
@@ -881,7 +881,7 @@ BaseAligner::scoreLocationWithAffineGap(
                     reads[OppositeDirection(direction)]->getQuality() + readLen - seedOffset,
                     seedOffset,
                     limitLeft,
-                    readLen * 4,
+                    readLen,
                     direction,
                     genomeLocationOffset,
                     basesClippedBefore,
@@ -889,7 +889,7 @@ BaseAligner::scoreLocationWithAffineGap(
                     &matchProb2);
             }
 
-            agScore2 -= (readLen * 4);
+            agScore2 -= (readLen);
 
             if (score2 == ScoreAboveLimit) {
                 *score = ScoreAboveLimit;
