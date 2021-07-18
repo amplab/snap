@@ -2920,7 +2920,8 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 NULL,
                 basesClippedAfter,
                 &score1,
-                &matchProb1);
+                &matchProb1,
+                useSoftClip);
         }
         else {
             agScore1 = affineGap->computeScore(data + tailStart,
@@ -2934,7 +2935,8 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
                 NULL,
                 basesClippedAfter,
                 &score1,
-                &matchProb1);
+                &matchProb1,
+                useSoftClip);
         }
 
         agScore1 += (seedLen - readLen);
@@ -2958,7 +2960,8 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                genomeLocationOffset,
 	                basesClippedBefore,
 	                &score2,
-	                &matchProb2);
+	                &matchProb2,
+                    useSoftClip);
             }
             else {
                 agScore2 = reverseAffineGap->computeScore(data + seedOffset,
@@ -2972,7 +2975,8 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	                genomeLocationOffset,
 	                basesClippedBefore,
 	                &score2,
-	                &matchProb2);
+	                &matchProb2,
+                    useSoftClip);
             }
 
             agScore2 -= (readLen);

@@ -130,7 +130,7 @@ public:
     unsigned                             gapExtendPenalty;
     unsigned                             fivePrimeEndBonus;
     unsigned                             threePrimeEndBonus;
-    unsigned                             minAGScore;
+    bool                                 useSoftClipping;
 
 
     // iteration variables

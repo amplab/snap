@@ -221,7 +221,7 @@ SingleAlignerContext::runIterationThread()
         }
 #endif
         SingleAlignmentResult firstALTResult;
-        while (!aligner->AlignRead(read, alignmentResults, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1, 0, NULL, NULL)) {
+        while (!aligner->AlignRead(read, alignmentResults, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1, 0, NULL, NULL, useSoftClipping)) {
             //
             // Out of secondary alignment buffer.  Reallocate.
             //

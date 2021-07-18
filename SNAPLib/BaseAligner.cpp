@@ -834,7 +834,8 @@ BaseAligner::scoreLocationWithAffineGap(
                 NULL,
                 basesClippedAfter,
                 &score1,
-                &matchProb1);
+                &matchProb1,
+                true);
         }
         else {
             agScore1 = affineGap->computeScore(data + tailStart,
@@ -848,7 +849,8 @@ BaseAligner::scoreLocationWithAffineGap(
                 NULL,
                 basesClippedAfter,
                 &score1,
-                &matchProb1);
+                &matchProb1,
+                true);
         }
 
         agScore1 += (seedLen - readLen);

@@ -79,7 +79,7 @@ AlignerOptions::AlignerOptions(
     subPenalty(4),
     gapOpenPenalty(6),
     gapExtendPenalty(1),
-    fivePrimeEndBonus(10),
+    fivePrimeEndBonus(5),
     threePrimeEndBonus(5),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
@@ -100,7 +100,7 @@ AlignerOptions::AlignerOptions(
 	altAwareness(true),
     emitALTAlignments(false),
     maxScoreGapToPreferNonALTAlignment(64),
-    useSoftClipping(true),
+    useSoftClipping(false),
     flattenMAPQAtOrBelow(3)
 {
     if (forPairedEnd) {
@@ -249,9 +249,9 @@ AlignerOptions::usage()
             "  -fmb Force MAPQ below this value to zero.  By the strict definition of MAPQ a read with two equally good alignments should have MAPQ 3\n"
             "       Other aligners, however, will score these alignments at MAPQ 0 and some variant callers depend on that behavior.  Setting this will\n"
             "       force any MAPQ value at or below the parameter value to zero.  (default:%d)\n"
-            "   -SC When a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.  Whether this is a good idea\n"
-            "       depends on the downstream tools that will consume the alignments; if they're not careful, it could result in false positives.  This is the default\n"
-            "  -SC- Turn off soft clipping (see the -SC flag for a description).\n"
+            "  -hc Enable SNAP mode optimized for use with GATK HaplotypeCaller. (default: true)\n"
+            " -hc- Turn off optimizations specific to GATK HaplotypeCaller (e.g., when using the DRAGEN variant caller on SNAP aligned output)\n"
+            "       In this mode, when a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.\n"
 		,
             commandLine,
             maxDist,
@@ -383,13 +383,16 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        } else if (strcmp(argv[n], "-SC") == 0) {
-            useSoftClipping = true;
-            return true;
-        } else if (strcmp(argv[n], "-SC-") == 0) {
+        } else if (strcmp(argv[n], "-hc") == 0) {
             useSoftClipping = false;
             return true;
-        } else if (strcmp(argv[n], "-fmb") == 0) { 
+        } else if (strcmp(argv[n], "-hc-") == 0) {
+            useSoftClipping = true;
+            fivePrimeEndBonus = 10;
+            threePrimeEndBonus = 7;
+            return true;
+        }
+        else if (strcmp(argv[n], "-fmb") == 0) {
             if (n + 1 < argc) {
                 n++;
                 flattenMAPQAtOrBelow = atoi(argv[n + 1]);

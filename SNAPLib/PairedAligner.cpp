@@ -380,8 +380,8 @@ bool PairedAlignerContext::initialize()
     maxSeedsSingleEnd = options2->maxSeedsSingleEnd;
     minScoreRealignment = options2->minScoreRealignment;
     minScoreGapRealignmentALT = options2->minScoreGapRealignmentALT;
-    minAGScoreImprovement = options2->minAGScoreImprovement;
     useSoftClipping = options->useSoftClipping;
+    minAGScoreImprovement = options->useSoftClipping ? options2->minAGScoreImprovement : 15; // we use an affine gap score threshold of 15 for choosing single end alignments when running with Haplotype Caller (i.e., no soft clipping optimizations)
     flattenMAPQAtOrBelow = options->flattenMAPQAtOrBelow;
     enableHammingScoringBaseAligner = options2->enableHammingScoringBaseAligner;
 
