@@ -701,7 +701,7 @@ got_answer:
                     //
                     // Sometimes it is better just to clip, rather than relying too much on base quality scores. For now, we only allow fewer than 10 high quality bases to be inserted
                     //
-                    if (countInsertions <= 10) { // FIXME: make 10 a parameter
+                    if (countInsertions <= 15) { // FIXME: make 15 a parameter
                         if (patternOffsetAdj == patternLen - 1) {
                             *o_patternOffset = patternOffsetAdj;
                         }
@@ -718,7 +718,7 @@ got_answer:
                             }
 
                             _ASSERT(remPatternLen != 0);
-                            if (((float)countRemHighQualityBases) / remPatternLen < 0.075) {
+                            if (((float)countRemHighQualityBases) / remPatternLen < 0.15) {
                                 *o_patternOffset = patternOffsetAdj;
                             }
                         }
@@ -1224,7 +1224,7 @@ got_answer:
                     //
                     // Sometimes it is better just to clip, rather than relying too much on base quality scores. For now, we only allow fewer than 10 high quality bases to be inserted
                     //
-                    if (countInsertions <= 10) { // FIXME: make 10 a parameter
+                    if (countInsertions <= 15) { // FIXME: make 15 a parameter
                         if (patternOffsetAdj == patternLen - 1) {
                             *o_patternOffset = patternOffsetAdj;
                         }
@@ -1241,7 +1241,7 @@ got_answer:
                             }
 
                             _ASSERT(remPatternLen != 0);
-                            if (((float)countRemHighQualityBases) / remPatternLen < 0.075) {
+                            if (((float)countRemHighQualityBases) / remPatternLen < 0.15) {
                                 *o_patternOffset = patternOffsetAdj;
                             }
                         }
