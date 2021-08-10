@@ -711,14 +711,14 @@ got_answer:
                             int remPatternLen = patternLen - tmpOffset;
 
                             while (tmpOffset != patternLen - 1) {
-                                if (qualityString[tmpOffset] >= 60) {
+                                if (qualityString[tmpOffset] >= 65) {
                                     countRemHighQualityBases++;
                                 }
                                 tmpOffset++;
                             }
 
                             _ASSERT(remPatternLen != 0);
-                            if (((float)countRemHighQualityBases) / remPatternLen < 0.15) {
+                            if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
                                 *o_patternOffset = patternOffsetAdj;
                             }
                         }
@@ -1234,14 +1234,14 @@ got_answer:
                             int remPatternLen = patternLen - tmpOffset;
 
                             while (tmpOffset != patternLen - 1) {
-                                if (qualityString[tmpOffset] >= 60) {
+                                if (qualityString[tmpOffset] >= 65) {
                                     countRemHighQualityBases++;
                                 }
                                 tmpOffset++;
                             }
 
                             _ASSERT(remPatternLen != 0);
-                            if (((float)countRemHighQualityBases) / remPatternLen < 0.15) {
+                            if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
                                 *o_patternOffset = patternOffsetAdj;
                             }
                         }
