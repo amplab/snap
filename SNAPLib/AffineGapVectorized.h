@@ -608,7 +608,7 @@ got_answer:
 
             if (maxScoreRow == 0) break;
 
-            if (maxScoreRow >= bestLocalAlignmentScore) { // If we obtained a better score this round
+            if (maxScoreRow > bestLocalAlignmentScore) { // If we obtained a better score this round
                 // 
                 // Get index in pattern where maximum score was obtained
                 // 
@@ -1135,7 +1135,7 @@ got_answer:
 
             if (maxScoreRow == 0) break;
 
-            if (maxScoreRow >= bestLocalAlignmentScore) { // If we obtained a better score this round
+            if (maxScoreRow > bestLocalAlignmentScore) { // If we obtained a better score this round
                 // Get index in pattern where maximum score was obtained
                 for (int j = 0; j < numVec; ++j) {
                     __m128i h = _mm_load_si128(Hminus1ptr + j); // Load a vector of score values 
