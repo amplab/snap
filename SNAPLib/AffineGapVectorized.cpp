@@ -442,12 +442,12 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
             else {
                 if (i > 0 && rowIdx < textUsed && colIdx < patternLen - 1) {
                     if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx]) && (quality[colIdx] < 65)) { // only insert high quality bases if possible
-                        if ((i + 1 <= n_res - 1) && res.action[i + 1] == M) {
+                        if ((i + 1 <= n_res - 1) && res.action[i + 1] == M && res.count[i - 1] > 1) {
                             res.count[i + 1] += 1;
                             rowIdx++;
                             colIdx++;
                         }
-                        if (res.action[i - 1] == M) {
+                        if (res.action[i - 1] == M && res.count[i - 1] > 1) {
                             res.count[i - 1] -= 1;
                         }
                     }
@@ -925,12 +925,12 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
             else {
                 if (i > 0 && rowIdx < textUsed && colIdx < patternLen - 1) {
                     if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx]) && (quality[colIdx] < 65)) { // only insert high quality bases (>= 65) if possible
-                        if ((i + 1 <= n_res - 1) && res.action[i + 1] == M) {
+                        if ((i + 1 <= n_res - 1) && res.action[i + 1] == M && res.count[i - 1] > 1) {
                             res.count[i + 1] += 1;
                             rowIdx++;
                             colIdx++;
                         }
-                        if (res.action[i - 1] == M) {
+                        if (res.action[i - 1] == M && res.count[i - 1] > 1) {
                             res.count[i - 1] -= 1;
                         }
                     }
