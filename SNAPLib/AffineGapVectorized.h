@@ -698,29 +698,24 @@ got_answer:
                         countInsertions++;
                     }
 
-                    //
-                    // Sometimes it is better just to clip, rather than relying too much on base quality scores. For now, we only allow fewer than 10 high quality bases to be inserted
-                    //
-                    if (countInsertions <= 15) { // FIXME: make 15 a parameter
-                        if (patternOffsetAdj == patternLen - 1) {
-                            *o_patternOffset = patternOffsetAdj;
+                    if (patternOffsetAdj == patternLen - 1) {
+                        *o_patternOffset = patternOffsetAdj;
+                    }
+                    else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                        int tmpOffset = patternOffsetAdj + 1;
+                        int countRemHighQualityBases = 0;
+                        int remPatternLen = patternLen - tmpOffset;
+
+                        while (tmpOffset != patternLen - 1) {
+                            if (qualityString[tmpOffset] >= 65) {
+                                countRemHighQualityBases++;
+                            }
+                            tmpOffset++;
                         }
-                        else if (patternOffsetAdj >= *o_patternOffset + 2) {
-                            int tmpOffset = patternOffsetAdj + 1;
-                            int countRemHighQualityBases = 0;
-                            int remPatternLen = patternLen - tmpOffset;
 
-                            while (tmpOffset != patternLen - 1) {
-                                if (qualityString[tmpOffset] >= 65) {
-                                    countRemHighQualityBases++;
-                                }
-                                tmpOffset++;
-                            }
-
-                            _ASSERT(remPatternLen != 0);
-                            if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
-                                *o_patternOffset = patternOffsetAdj;
-                            }
+                        _ASSERT(remPatternLen != 0);
+                        if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                            *o_patternOffset = patternOffsetAdj;
                         }
                     }
                 }
@@ -1221,29 +1216,24 @@ got_answer:
                         countInsertions++;
                     }
 
-                    //
-                    // Sometimes it is better just to clip, rather than relying too much on base quality scores. For now, we only allow fewer than 10 high quality bases to be inserted
-                    //
-                    if (countInsertions <= 15) { // FIXME: make 15 a parameter
-                        if (patternOffsetAdj == patternLen - 1) {
-                            *o_patternOffset = patternOffsetAdj;
+                    if (patternOffsetAdj == patternLen - 1) {
+                        *o_patternOffset = patternOffsetAdj;
+                    }
+                    else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                        int tmpOffset = patternOffsetAdj + 1;
+                        int countRemHighQualityBases = 0;
+                        int remPatternLen = patternLen - tmpOffset;
+
+                        while (tmpOffset != patternLen - 1) {
+                            if (qualityString[tmpOffset] >= 65) {
+                                countRemHighQualityBases++;
+                            }
+                            tmpOffset++;
                         }
-                        else if (patternOffsetAdj >= *o_patternOffset + 2) {
-                            int tmpOffset = patternOffsetAdj + 1;
-                            int countRemHighQualityBases = 0;
-                            int remPatternLen = patternLen - tmpOffset;
 
-                            while (tmpOffset != patternLen - 1) {
-                                if (qualityString[tmpOffset] >= 65) {
-                                    countRemHighQualityBases++;
-                                }
-                                tmpOffset++;
-                            }
-
-                            _ASSERT(remPatternLen != 0);
-                            if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
-                                *o_patternOffset = patternOffsetAdj;
-                            }
+                        _ASSERT(remPatternLen != 0);
+                        if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                            *o_patternOffset = patternOffsetAdj;
                         }
                     }
                 }
