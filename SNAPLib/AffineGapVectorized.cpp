@@ -457,6 +457,33 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
         }
 
         rowIdx = 0; colIdx = 0;
+        // Flip order of insertions and substitution with match in between in CIGAR string
+        for (int i = n_res - 1; i >= min_i; --i) {
+            if (res.action[i] == M) {
+                rowIdx += res.count[i];
+                colIdx += res.count[i];
+            }
+            else if (res.action[i] == D) {
+                rowIdx += res.count[i];
+            }
+            else {
+                if (i > 0 && rowIdx + 1 < textUsed && colIdx + res.count[i] < patternLen - 1) {
+                    if ((pattern[colIdx + res.count[i]] == pattern[colIdx]) && (pattern[colIdx + res.count[i] + 1] != text[rowIdx + 1]) && (quality[colIdx] < 65)) { // only insert high quality bases (>= 65) if possible
+                        if ((i + 1 <= n_res - 1) && res.action[i + 1] == M && res.count[i - 1] > 2) {
+                            res.count[i + 1] += 2;
+                            rowIdx += 2;
+                            colIdx += 2;
+                        }
+                        if (res.action[i - 1] == M && res.count[i - 1] > 2) {
+                            res.count[i - 1] -= 2;
+                        }
+                    }
+                }
+                colIdx += res.count[i];
+            }
+        }
+
+        rowIdx = 0; colIdx = 0;
         for (int i = n_res - 1; i >= min_i; --i) { // Reverse local result to obtain CIGAR in correct order
             if (useM) {
                 // Compute edit distance NM:i flag
@@ -932,6 +959,33 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
                         }
                         if (res.action[i - 1] == M && res.count[i - 1] > 1) {
                             res.count[i - 1] -= 1;
+                        }
+                    }
+                }
+                colIdx += res.count[i];
+            }
+        }
+
+        rowIdx = 0; colIdx = 0;
+        // Flip order of insertions and substitution with match in between in CIGAR string
+        for (int i = n_res - 1; i >= min_i; --i) {
+            if (res.action[i] == M) {
+                rowIdx += res.count[i];
+                colIdx += res.count[i];
+            }
+            else if (res.action[i] == D) {
+                rowIdx += res.count[i];
+            }
+            else {
+                if (i > 0 && rowIdx + 1 < textUsed && colIdx + res.count[i] < patternLen - 1) {
+                    if ((pattern[colIdx + res.count[i]] == pattern[colIdx]) && (pattern[colIdx + res.count[i] + 1] != text[rowIdx + 1]) && (quality[colIdx] < 65)) { // only insert high quality bases (>= 65) if possible
+                        if ((i + 1 <= n_res - 1) && res.action[i + 1] == M && res.count[i - 1] > 2) {
+                            res.count[i + 1] += 2;
+                            rowIdx += 2;
+                            colIdx += 2;
+                        }
+                        if (res.action[i - 1] == M && res.count[i - 1] > 2) {
+                            res.count[i - 1] -= 2;
                         }
                     }
                 }
