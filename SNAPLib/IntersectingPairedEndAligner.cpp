@@ -2689,7 +2689,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     bool nonALTAlignment = (!altAwareness) || !genome->isGenomeLocationALT(result->location[0]);
     scoresForAllAlignments.init(result);
     bool altBestAlignment = false;
-    if (firstALTResult->status[0] != NotFound) {
+    if (firstALTResult->status[0] != NotFound && firstALTResult->status[1] != NotFound) {
         altBestAlignment = scoresForAllAlignments.updateBestHitIfNeeded(firstALTResult->score[0] + firstALTResult->score[1],
             firstALTResult->agScore[0] + firstALTResult->agScore[1], firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1], firstALTResult);
     }
