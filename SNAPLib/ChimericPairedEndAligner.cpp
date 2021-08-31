@@ -157,6 +157,7 @@ bool ChimericPairedEndAligner::align(
     result->basesClippedAfter[0] = result->basesClippedAfter[1] = 0;
     result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
     result->agScore[0] = result->agScore[1] = 0;
+    result->liftover[0] = result->liftover[1] = false;
     result->agForcedSingleAlignerCall = false;
 
     firstALTResult->status[0] = firstALTResult->status[1] = NotFound;
@@ -230,12 +231,14 @@ bool ChimericPairedEndAligner::align(
         result->mapq[0] = result->mapq[0] <= flattenMAPQAtOrBelow ? 0 : result->mapq[0];
         result->mapq[1] = result->mapq[1] <= flattenMAPQAtOrBelow ? 0 : result->mapq[1];
 
-        // If we have already seen a good ALT pair, don't separate them with by running the single end aligner
+        // If we have already seen a good ALT pair, don't separate them by running the single end aligner
         bool seenBetterAltResult = (firstALTResult->status[0] != NotFound)
                                    && (firstALTResult->status[1] != NotFound)
                                    && (sumPairScoreAlt <= sumPairScore - minScoreGapRealignmentALT);
 
-        if ((result->usedAffineGapScoring[0] || result->usedAffineGapScoring[1]) && maxScore >= minScoreRealignment && !seenBetterAltResult) {
+        bool useAltLiftover = result->liftover[0] && result->liftover[1];
+
+        if ((result->usedAffineGapScoring[0] || result->usedAffineGapScoring[1]) && maxScore >= minScoreRealignment && !seenBetterAltResult && !useAltLiftover) {
             compareWithSingleEndAlignment = true;
         }
         

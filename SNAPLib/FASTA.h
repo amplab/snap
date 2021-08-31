@@ -42,4 +42,10 @@ ReadFASTAGenome(
 	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
 	GenomeDistance	 maxSizeForAutomaticALT,
-	bool             autoAlt);
+	bool             autoAlt,
+    char            **alt_liftover_contig_names,
+	unsigned		*alt_liftover_contig_flags,
+	char			**alt_liftover_proj_contig_names,
+	unsigned		*alt_liftover_proj_contig_offsets,
+	char			**alt_liftover_proj_cigar,
+	int				 alt_liftover_count);

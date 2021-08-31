@@ -196,7 +196,13 @@ ReadFASTAGenome(
 	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
 	GenomeDistance	 maxSizeForAutomaticALT,
-    bool             autoALT)
+    bool             autoALT,
+    char            **alt_liftover_contig_names,
+	unsigned		*alt_liftover_contig_flags,
+	char			**alt_liftover_proj_contig_names,
+	unsigned		*alt_liftover_proj_contig_offsets,
+	char			**alt_liftover_proj_cigar,
+	int				 alt_liftover_count)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -360,6 +366,9 @@ ReadFASTAGenome(
     while (altContigs != NULL) {
         AddContigToGenome(altContigs, genome, paddingBuffer);
         genome->markContigALT(altContigs->name);
+        if (alt_liftover_count > 0) {
+            genome->markContigLiftover(altContigs->name, alt_liftover_contig_names, alt_liftover_contig_flags, alt_liftover_proj_contig_names, alt_liftover_proj_contig_offsets, alt_liftover_proj_cigar, alt_liftover_count);
+        }
         RawContigData* toDelete = altContigs;
         altContigs = altContigs->next;
         delete toDelete;

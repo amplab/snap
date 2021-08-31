@@ -455,7 +455,8 @@ private:
             int                 *basesClippedAfter = NULL,
             int                 *agScore = NULL,
             int                 *totalIndelsLV = NULL,
-            bool                *usedGaplessClipping = NULL
+            bool                *usedGaplessClipping = NULL,
+            int                 *genomeSpan = NULL
     );
 
 	void scoreLocationWithAffineGap(
@@ -469,7 +470,9 @@ private:
             int                 *genomeLocationOffset,
             int                 *basesClippedBefore,
             int                 *basesClippedAfter,
-            int                 *agScore
+            int                 *agScore,
+            int                 *genomeSpan,
+            bool                useAltLiftover = false
 	);
 
     void scoreLocationWithHammingDistance(
@@ -556,6 +559,7 @@ private:
         int                     basesClippedAfter;
         int                     agScore;
         int                     lvIndels;
+        int                     refSpan;
 
         void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
@@ -572,6 +576,7 @@ private:
             agScore = 0;
             lvIndels = 0;
             largestBigIndelDetected = 0;
+            refSpan = 0;
         }
 
         static const int LocationNotYetScored = -2;
@@ -595,6 +600,7 @@ private:
         int                     agScore;
         int                     lvIndels;
         double                  matchProbability;
+        int                     refSpan;
 
         void init(GenomeLocation readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
                   unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_)
@@ -615,6 +621,7 @@ private:
             lvIndels = 0;
             matchProbability = 1.0;
             largestBigIndelDetected = 0;
+            refSpan = 0;
          }
     }; // ScoringCandidate
 
@@ -676,6 +683,7 @@ private:
                 bestResultLVIndels[i] = 0;
                 bestResultMatchProbability[i] = 0.0;
                 bestResultUsedGaplessClipping[i] = false;
+                bestResultRefSpan[i] = 0;
             }
 
             probabilityOfBestPair = 0;
@@ -698,6 +706,7 @@ private:
                 bestResultLVIndels[i] = result->lvIndels[i];
                 bestResultMatchProbability[i] = result->matchProbability[i];
                 bestResultUsedGaplessClipping[i] = result->usedGaplessClipping[i];
+                bestResultRefSpan[i] = result->refSpan[i];
             }
             probabilityOfBestPair = result->matchProbability[0] * result->matchProbability[1];
             probabilityOfAllPairs = result->probabilityAllPairs;
@@ -727,6 +736,7 @@ private:
         int bestResultLVIndels[NUM_READS_PER_PAIR];
         double bestResultMatchProbability[NUM_READS_PER_PAIR];
         bool bestResultUsedGaplessClipping[NUM_READS_PER_PAIR];
+        int bestResultRefSpan[NUM_READS_PER_PAIR];
 
         double probabilityOfBestPair;
         double probabilityOfAllPairs;

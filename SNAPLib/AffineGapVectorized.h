@@ -266,7 +266,8 @@ public:
         int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
         double *matchProbability = NULL,
-        bool useClippingOptimizations = false)
+        bool useClippingOptimizations = false,
+        bool useAltLiftover = false)
     {
 
 #ifdef TRACE_AG
@@ -689,33 +690,35 @@ got_answer:
                 if (*o_patternOffset == bestLocalAlignmentPatternOffset && *o_textOffset == bestLocalAlignmentTextOffset) {
                     patternOffsetAdj = *o_patternOffset;
                     textOffsetAdj = *o_textOffset;
-                    //
-                    // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
-                    //
-                    int countInsertions = 0;
-                    while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
-                        patternOffsetAdj += 1;
-                        countInsertions++;
-                    }
-
-                    if (patternOffsetAdj == patternLen - 1) {
-                        *o_patternOffset = patternOffsetAdj;
-                    }
-                    else if (patternOffsetAdj >= *o_patternOffset + 2) {
-                        int tmpOffset = patternOffsetAdj + 1;
-                        int countRemHighQualityBases = 0;
-                        int remPatternLen = patternLen - tmpOffset;
-
-                        while (tmpOffset != patternLen - 1) {
-                            if (qualityString[tmpOffset] >= 65) {
-                                countRemHighQualityBases++;
-                            }
-                            tmpOffset++;
+                    if (!useAltLiftover) { // base quality aware optimization leads to spurious INDELs at the ends of reads after liftover. Disabled
+                        //
+                        // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
+                        //
+                        int countInsertions = 0;
+                        while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
+                            patternOffsetAdj += 1;
+                            countInsertions++;
                         }
 
-                        _ASSERT(remPatternLen != 0);
-                        if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                        if (patternOffsetAdj == patternLen - 1) {
                             *o_patternOffset = patternOffsetAdj;
+                        }
+                        else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                            int tmpOffset = patternOffsetAdj + 1;
+                            int countRemHighQualityBases = 0;
+                            int remPatternLen = patternLen - tmpOffset;
+
+                            while (tmpOffset != patternLen - 1) {
+                                if (qualityString[tmpOffset] >= 65) {
+                                    countRemHighQualityBases++;
+                                }
+                                tmpOffset++;
+                            }
+
+                            _ASSERT(remPatternLen != 0);
+                            if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                                *o_patternOffset = patternOffsetAdj;
+                            }
                         }
                     }
                 }
@@ -728,7 +731,7 @@ got_answer:
             score = bestGlobalAlignmentScore;
         }
 
-        if (score > scoreInit) { 
+        if (useAltLiftover || (score > scoreInit)) { // score < scoreInit for some ALT liftover alignments, but still valid
             // Perform traceback and compute nEdits
             int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
@@ -830,7 +833,8 @@ got_answer:
         int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
         double *matchProbability = NULL,
-        bool useClippingOptimizations = false)
+        bool useClippingOptimizations = false,
+        bool useAltLiftover = false)
     {
 
 #ifdef TRACE_AG
@@ -1207,33 +1211,35 @@ got_answer:
                 if (*o_patternOffset == bestLocalAlignmentPatternOffset && *o_textOffset == bestLocalAlignmentTextOffset) {
                     patternOffsetAdj = *o_patternOffset;
                     textOffsetAdj = *o_textOffset;
-                    //
-                    // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
-                    //
-                    int countInsertions = 0;
-                    while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
-                        patternOffsetAdj += 1;
-                        countInsertions++;
-                    }
-
-                    if (patternOffsetAdj == patternLen - 1) {
-                        *o_patternOffset = patternOffsetAdj;
-                    }
-                    else if (patternOffsetAdj >= *o_patternOffset + 2) {
-                        int tmpOffset = patternOffsetAdj + 1;
-                        int countRemHighQualityBases = 0;
-                        int remPatternLen = patternLen - tmpOffset;
-
-                        while (tmpOffset != patternLen - 1) {
-                            if (qualityString[tmpOffset] >= 65) {
-                                countRemHighQualityBases++;
-                            }
-                            tmpOffset++;
+                    if (!useAltLiftover) { // base quality aware optimization leads to spurious INDELs at the ends of reads after liftover. Disabled
+                        //
+                        // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
+                        //
+                        int countInsertions = 0;
+                        while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
+                            patternOffsetAdj += 1;
+                            countInsertions++;
                         }
 
-                        _ASSERT(remPatternLen != 0);
-                        if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                        if (patternOffsetAdj == patternLen - 1) {
                             *o_patternOffset = patternOffsetAdj;
+                        }
+                        else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                            int tmpOffset = patternOffsetAdj + 1;
+                            int countRemHighQualityBases = 0;
+                            int remPatternLen = patternLen - tmpOffset;
+
+                            while (tmpOffset != patternLen - 1) {
+                                if (qualityString[tmpOffset] >= 65) {
+                                    countRemHighQualityBases++;
+                                }
+                                tmpOffset++;
+                            }
+
+                            _ASSERT(remPatternLen != 0);
+                            if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                                *o_patternOffset = patternOffsetAdj;
+                            }
                         }
                     }
                 }
@@ -1246,7 +1252,7 @@ got_answer:
             score = bestGlobalAlignmentScore;
         }
 
-        if (score > scoreInit) {
+        if (useAltLiftover || (score > scoreInit)) { // score < scoreInit for some ALT alignments after liftover, but still valid
             // Perform traceback and compute nEdits
             int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;

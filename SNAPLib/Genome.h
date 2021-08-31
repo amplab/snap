@@ -293,6 +293,15 @@ public:
 		void markContigALT(
 			const char			*contigName);
 
+        void markContigLiftover(
+            char        *contigName,
+            char        **altLiftoverContigNames,
+            unsigned    *altLiftoverContigFlags,
+            char        **altLiftoverProjContigNames,
+            unsigned    *altLiftoverProjContigOffsets,
+            char        **altLiftoverProjCigar,
+            int         nAltLiftover);
+
         void addData(
             const char          *data);
 
@@ -366,8 +375,15 @@ public:
             _mm_prefetch(bases + GenomeLocationAsInt64(genomeLocation) + 64, _MM_HINT_T2);
         }
 
+        struct ProjCigarOpFormat {
+            ProjCigarOpFormat() : action('M'), count(0) {}
+            char action;
+            unsigned count;
+        };
+
         struct Contig {
-            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false), originalContigNumber(OriginalContigNum(-1)), internalContigNumber(InternalContigNum(-1)) {}
+            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false), originalContigNumber(OriginalContigNum(-1)), internalContigNumber(InternalContigNum(-1)),
+                       projBeginningLocation(InvalidGenomeLocation), isProjRC(false), projCigar(NULL), projCigarOps(NULL), countProjCigarOps(0) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;                  // This includes the padding
             unsigned           nameLength;
@@ -375,6 +391,12 @@ public:
             OriginalContigNum  originalContigNumber;    // Where was this contig in the FASTA file?  We reorder them because of ALTs, but then undo that at sort time.
             char              *name;
 			bool			   isALT;
+            GenomeLocation     projBeginningLocation;   // only valid for ALT contigs
+            GenomeLocation     projEndLocation;         // only valid for ALT contigs
+            bool               isProjRC;                // only valid for ALT contigs
+            char              *projCigar;               // only valid for ALT contigs
+            ProjCigarOpFormat *projCigarOps;            // only valid for ALT contigs
+            int                countProjCigarOps;       // only valid for ALT contigs
         };
 
         //inline const Contig *getContigs() const { return contigs; }
@@ -398,6 +420,12 @@ public:
         const Contig *getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const;
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
         int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
+        int getContigNumByName(const char* contigName) const;
+        GenomeLocation getBeginningLocation(const char* contigName) const;
+        int getProjContigNumAtLocation(GenomeLocation location) const;
+        GenomeLocation getProjLocation(GenomeLocation location, int span) const;
+        GenomeDistance getContigProjSpan(int contig) const;
+        bool isProjContigRC(GenomeLocation location) const;
 
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.

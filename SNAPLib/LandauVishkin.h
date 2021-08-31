@@ -101,10 +101,12 @@ public:
                 int k,
                 double *matchProbability,
                 int *o_netIndel = NULL,  // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
-                int *o_totalIndels = NULL)  // also keep track of total (absolute) indels seen
+                int *o_totalIndels = NULL,
+                int *o_textSpan = NULL)  // also keep track of total (absolute) indels seen
 {
     int localNetIndel;
     int localTotalIndels;
+    int localTextSpan;
 	int d;
 
     if (k < 0) {
@@ -125,10 +127,13 @@ public:
         //
         o_totalIndels = &localTotalIndels;
     }
+    if (NULL == o_textSpan) {
+        o_textSpan = &localTextSpan;
+    }
 
     _ASSERT(k < MAX_K);
 
-    *o_netIndel = 0; *o_totalIndels = 0;
+    *o_netIndel = 0; *o_totalIndels = 0; *o_textSpan = 0;
 
     k = __min(MAX_K - 1, k); // enforce limit even in non-debug builds
     if (NULL == text) {
@@ -168,6 +173,7 @@ public:
             //
             return ScoreAboveLimit;
         }
+        *o_textSpan += patternLen;
         return result;
     }
 
@@ -312,6 +318,7 @@ got_answer:
 				offset -= actionCount;
 				*o_netIndel -= actionCount;
                 *o_totalIndels += actionCount;
+                *o_textSpan += actionCount;
 			}
 			else {
 				_ASSERT(action == 'X');
@@ -326,6 +333,7 @@ got_answer:
 		}
 
 		*matchProbability *= lv_perfectMatchProbability[patternLen - e]; // Accounting for the < 1.0 chance of no changes for matching bases
+        *o_textSpan += patternLen;
 	} else {
 		//
 		// Not tracking match probability.

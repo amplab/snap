@@ -120,11 +120,59 @@ Genome::markContigALT(
 	} // for each contig
 } // markContigALT
 
+    int
+Genome::getContigNumByName(
+    const char* contigName) const
+{
+    for (int i = 0; i < nContigs; i++) {
+        if (!strcmp(contigs[i].name, contigName)) {
+            return i;
+        } // if it matches
+    }
+    return -1;
+}
+
+    GenomeLocation
+Genome::getBeginningLocation(
+    const char* contigName) const
+{
+    int contigNum = getContigNumByName(contigName);
+    return contigs[contigNum].beginningLocation;
+}
+
+    void
+Genome::markContigLiftover(
+    char *contigName,
+    char** altLiftoverContigNames,
+    unsigned* altLiftoverContigFlags,
+    char** altLiftoverProjContigNames,
+    unsigned* altLiftoverProjContigOffsets,
+    char** altLiftoverProjCigar,
+    int nAltLiftover)
+{
+    int contigNum = getContigNumByName(contigName);
+    for (int i = 0; i < nAltLiftover; i++) {
+        if (NULL != altLiftoverContigNames[i]) {
+            if (!strcmp(altLiftoverContigNames[i], contigName)) {
+                int projContigNum = getContigNumByName(altLiftoverProjContigNames[i]);
+                contigs[contigNum].projBeginningLocation = contigs[projContigNum].beginningLocation + altLiftoverProjContigOffsets[i] - 1;
+                contigs[contigNum].isProjRC = (altLiftoverContigFlags[i] & 16) != 0; // bit 4 for rc
+                contigs[contigNum].projCigar = altLiftoverProjCigar[i];
+                return;
+            }
+        }
+    }
+}
+
 Genome::~Genome()
 {
     for (int i = 0; i < nContigs; i++) {
         delete [] contigs[i].name;
         contigs[i].name = NULL;
+        delete [] contigs[i].projCigar;
+        contigs[i].projCigar = NULL;
+        delete [] contigs[i].projCigarOps;
+        contigs[i].projCigarOps = NULL;
     }
 
     BigDealloc(contigs);
@@ -149,6 +197,8 @@ Genome::~Genome()
 
 // Flags for the per-contig options
 #define GENOME_FLAG_CONTIG_IS_ALT			0x1
+
+#define GENOME_FLAG_ALT_PROJ_CONTIG_IS_RC   0x1
     bool
 Genome::saveToFile(const char *fileName) const
 {
@@ -173,7 +223,8 @@ Genome::saveToFile(const char *fileName) const
              if (*curChar == ' '){ *curChar = '_'; }
         }
 
-        fprintf(saveFile, "%lld %x %d %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), OriginalContigNumToInt(contigs[i].originalContigNumber), contigs[i].name);
+        fprintf(saveFile, "%lld %x %d %lld %x %d %d %s %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), (contigs[i].isALT ? GENOME_FLAG_CONTIG_IS_ALT : 0), OriginalContigNumToInt(contigs[i].originalContigNumber), GenomeLocationAsInt64(contigs[i].projBeginningLocation),
+            contigs[i].isProjRC ? GENOME_FLAG_ALT_PROJ_CONTIG_IS_RC : 0, (int) strlen(contigs[i].name), contigs[i].projCigar != NULL ? (int) strlen(contigs[i].projCigar) : 1, contigs[i].name, (contigs[i].projCigar != NULL) ? contigs[i].projCigar : "*");
     }
 
 	//
@@ -281,7 +332,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         for (;;) {
             if (contigNameBuffer[n] == ' ') {
                 spacesFound++;
-                if (spacesFound >= 3) {
+                if (spacesFound >= 7) {
                     contigNameBuffer[n] = '\0';
                     break;
                 } // If we've found all three
@@ -296,15 +347,20 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         } // for ever
 
         _int64 contigStart;
+        _int64 projContigStart;
+        int contigNameSize;
+        int cigarLength;
         int originalContigNumber = -1;
         int flags;
+        int altProjRC;
 
-        if (3 != sscanf(contigNameBuffer, "%lld %x %d", &contigStart, &flags, &originalContigNumber)) {
+        if (7 != sscanf(contigNameBuffer, "%lld %x %d %lld %x %d %d", &contigStart, &flags, &originalContigNumber, &projContigStart, &altProjRC, &contigNameSize, &cigarLength)) {
             WriteErrorMessage("Unable to parse contig start flags or original contig number in genome file '%s', '%s%'\n", fileName, contigNameBuffer);
             soft_exit(1);
         }
 
         genome->contigs[i].beginningLocation = GenomeLocation(contigStart);
+        genome->contigs[i].projBeginningLocation = GenomeLocation(projContigStart);
 	    contigNameBuffer[n] = ' '; 
 	    n++; // increment n so we start copying at the position after the space
 
@@ -312,14 +368,40 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         genome->contigs[i].internalContigNumber = InternalContigNum(i);
         genome->contigs[i].originalContigNumber = OriginalContigNum(originalContigNumber);
 
-	    contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
-        genome->contigs[i].name = new char[contigSize + 1];
-        genome->contigs[i].nameLength = (unsigned)contigSize;
+        genome->contigs[i].name = new char[contigNameSize + 1];
+        genome->contigs[i].nameLength = (unsigned)contigNameSize;
 	    curName = genome->contigs[i].name;
-	    for (unsigned pos = 0; pos < contigSize; pos++) {
+	    for (int pos = 0; pos < contigNameSize; pos++) {
 	      curName[pos] = contigNameBuffer[pos + n];
 	    }
-        curName[contigSize] = '\0';
+        curName[contigNameSize] = '\0';
+
+        n += contigNameSize;
+        contigNameBuffer[n] = ' ';
+        n++;
+
+        if (cigarLength > 1) {
+            genome->contigs[i].projCigar = new char[cigarLength + 1];
+            for (int pos = 0; pos < cigarLength; pos++) {
+                genome->contigs[i].projCigar[pos] = contigNameBuffer[pos + n];
+            }
+            genome->contigs[i].projCigar[cigarLength] = '\0';
+            genome->contigs[i].isProjRC = (altProjRC & GENOME_FLAG_ALT_PROJ_CONTIG_IS_RC) != 0;
+            genome->contigs[i].projCigarOps = new ProjCigarOpFormat[cigarLength];
+            char* nextChunkOfCigar = genome->contigs[i].projCigar;
+            ProjCigarOpFormat* cigarOps = genome->contigs[i].projCigarOps;
+            int scannedOps = 0;
+            while ('\0' != *nextChunkOfCigar) {
+                int fieldsScanned = sscanf(nextChunkOfCigar, "%d%c", &cigarOps[scannedOps].count, &cigarOps[scannedOps].action);
+                scannedOps++;
+                while ('0' <= *nextChunkOfCigar && '9' >= *nextChunkOfCigar) {
+                    nextChunkOfCigar++;
+                }
+                nextChunkOfCigar++;
+                _ASSERT(scannedOps <= cigarLength);
+            }
+            genome->contigs[i].countProjCigarOps = scannedOps;
+        }
     } // for each contig
 
 
@@ -548,6 +630,87 @@ Genome::getNextContigAfterLocation(GenomeLocation location) const
         }
     }
     return NULL; // Should not be reached
+}
+
+int Genome::getProjContigNumAtLocation(GenomeLocation location) const {
+    int contig = getContigNumAtLocation(location);
+    GenomeLocation projLocation = contigs[contig].projBeginningLocation;
+    return getContigNumAtLocation(projLocation);
+}
+
+GenomeDistance Genome::getContigProjSpan(int contig) const {
+    GenomeDistance offset = 0;
+    ProjCigarOpFormat* cigar = contigs[contig].projCigarOps;
+    int nCigarOps = contigs[contig].countProjCigarOps;
+    if (nCigarOps > 0) {
+        char action = cigar[0].action;
+        int count = cigar[0].count;
+        if (action != 'S' && action != 'H') {
+            offset += count;
+        }
+    }
+    for (int i = 1; i < nCigarOps; ++i) {
+        char action = cigar[i].action;
+        int count = cigar[i].count;
+        if (action == 'M' || action == 'I') {
+            offset += count;
+        }
+    }
+    return offset;
+}
+
+GenomeLocation Genome::getProjLocation(GenomeLocation location, int alnSpan) const {
+    int contig = getContigNumAtLocation(location);
+    bool isProjRC = contigs[contig].isProjRC;
+    GenomeDistance offset = !isProjRC ? location - contigs[contig].beginningLocation : getContigProjSpan(contig) - (location - contigs[contig].beginningLocation + alnSpan);
+    GenomeDistance projOffset = 0;
+    ProjCigarOpFormat* cigar = contigs[contig].projCigarOps;
+    int cigarOpCount = contigs[contig].countProjCigarOps;
+    int start = 0;
+    if (cigarOpCount > 0) {
+        char action = cigar[0].action;
+        if (action == 'S' || action == 'H') {
+            start = 1;
+        }
+    }
+    // From bwa-postalt.js: https://github.com/lh3/bwa/blob/master/bwakit/bwa-postalt.js
+    GenomeDistance x = 0, y = 0; // x - REF, y - ALT
+    for (int i = start; i < cigarOpCount; ++i) {
+        char action = cigar[i].action;
+        int count = cigar[i].count;
+        if (action == 'M') {
+            if (y <= offset && offset < y + count) {
+                projOffset = x + (offset - y);
+                break;
+            }
+            x += count;
+            y += count;
+        }
+        else if (action == 'D') {
+            x += count;
+        }
+        else if (action == 'I') {
+            if (y <= offset && offset < y + count) {
+                projOffset = x;
+                break;
+        }
+            y += count;
+        }
+        else if (action == 'S' || action == 'H') {
+            if (y <= offset && offset < y + count) {
+                projOffset = -1;
+                break;
+            }
+            y += count;
+        }
+    }
+    _ASSERT(projOffset != -1);
+    return contigs[contig].projBeginningLocation + projOffset;
+}
+
+bool Genome::isProjContigRC(GenomeLocation location) const {
+    int contig = getContigNumAtLocation(location);
+    return contigs[contig].isProjRC;
 }
 
 GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB) 
