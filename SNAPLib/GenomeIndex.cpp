@@ -91,6 +91,7 @@ static void usage()
 		" -altContigFile    Specify the name of a file with a list of alt contig names, one per line.  You may specify this as often as you'd like\n"
 		" -nonAltContigName Specify the name of a contig that's not an alt, regardless of its size\n"
 		" -nonAltContigFile Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
+        " -altLiftoverFile  Specify the file containing ALT-to-REF mappings (SAM format). e.g., hs38DH.fa.alt from bwa-kit\n"
 		,
         BINARY_NAME,
         DEFAULT_SEED_SIZE,
