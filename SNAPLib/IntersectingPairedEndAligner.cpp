@@ -2879,58 +2879,85 @@ IntersectingPairedEndAligner::alignAffineGap(
         }
 
         bool useAltLiftover = altAwareness && (((bestAltScore < bestResScore) && (altProjContigNum != resContigNum)) || isResultALT);
+
         if (useAltLiftover) {
+
+            bool foundAltProjection[NUM_READS_PER_PAIR] = { true, true };
+            Direction newDirectionAfterProjection[NUM_READS_PER_PAIR];
+            GenomeLocation newStartLocationAfterProjection[NUM_READS_PER_PAIR];
+            int newSeedOffsetAfterProjection[NUM_READS_PER_PAIR];
+            int newMapqAfterProjection[NUM_READS_PER_PAIR];
+            PairedAlignmentResult resultBeforeLiftover = *result;
             if (isResultALT) {
                 bool isProjRC = genome->isProjContigRC(result->location[0]); // orientation of ALT contig w.r.t primary contig
                 for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-                    bool newDirection = (result->direction[r] != isProjRC) ? RC : FORWARD;
-                    if (newDirection != result->direction[r]) {
-                        result->seedOffset[r] = readLen[r] - result->seedOffset[r] - 1; // flip read orientation
+                    newDirectionAfterProjection[r] = (result->direction[r] != isProjRC) ? RC : FORWARD;
+                    if (newDirectionAfterProjection[r] != result->direction[r]) {
+                        newSeedOffsetAfterProjection[r] = readLen[r] - result->seedOffset[r] - 1; // flip read orientation
                     }
-                    result->direction[r] = newDirection;
-                    result->location[r] = genome->getProjLocation(result->location[r], result->refSpan[r]); // get projected location for ALT alignment
-                    // TOOO: keep the ALT result as a supplementary alignment
+                    else {
+                        newSeedOffsetAfterProjection[r] = result->seedOffset[r];
+                    }
+                    newStartLocationAfterProjection[r] = genome->getProjLocation(result->location[r], result->refSpan[r]); // get projected location for ALT alignment
+                    foundAltProjection[r] = newStartLocationAfterProjection[r] != InvalidGenomeLocation ? true : false;
+                    newMapqAfterProjection[r] = result->mapq[r];
                 }
             }
             else {
                 bool isProjRC = genome->isProjContigRC(firstALTResult->location[0]); // orientation of ALT contig w.r.t primary contig
                 for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-                    bool newDirection = (firstALTResult->direction[r] != isProjRC) ? RC : FORWARD;
-                    if (newDirection != firstALTResult->direction[r]) {
-                        result->seedOffset[r] = readLen[r] - firstALTResult->seedOffset[r] - 1; // flip read orientation
+                    newDirectionAfterProjection[r] = (firstALTResult->direction[r] != isProjRC) ? RC : FORWARD;
+                    if (newDirectionAfterProjection[r] != firstALTResult->direction[r]) {
+                        newSeedOffsetAfterProjection[r] = readLen[r] - firstALTResult->seedOffset[r] - 1; // flip read orientation
                     }
-                    result->direction[r] = newDirection;
-                    result->location[r] = genome->getProjLocation(firstALTResult->location[r], firstALTResult->refSpan[r]); // get projected location for ALT alignment
-                    result->mapq[r] = firstALTResult->mapq[r]; // TODO: make mapq computation more accurate
+                    else {
+                        newSeedOffsetAfterProjection[r] = firstALTResult->seedOffset[r];
+                    }
+                    newStartLocationAfterProjection[r] = genome->getProjLocation(firstALTResult->location[r], firstALTResult->refSpan[r]); // get projected location for ALT alignment
+                    foundAltProjection[r] = newStartLocationAfterProjection[r] != InvalidGenomeLocation ? true : false;
+                    newMapqAfterProjection[r] = firstALTResult->mapq[r]; // TODO: make mapq computation more accurate
                 }
             }
-            for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-                scoreLimit = MAX_K - 1; // using the maximum score limit here since we don't know how well the read aligns to the projected primary reference contig
-                result->usedAffineGapScoring[r] = true;
-                result->liftover[r] = true;
-                scoreLocationWithAffineGap(r, result->direction[r], result->location[r],
-                    result->seedOffset[r], scoreLimit, &result->score[r], &result->matchProbability[r],
-                    &genomeOffset[r], &result->basesClippedBefore[r], &result->basesClippedAfter[r], &result->agScore[r], &result->refSpan[r], true);
+            if (foundAltProjection[0] && foundAltProjection[1]) {
+                for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+                    scoreLimit = MAX_K - 1; // using the maximum score limit here since we don't know how well the read aligns to the projected primary reference contig
+                    result->usedAffineGapScoring[r] = true;
+                    result->liftover[r] = true;
+                    result->direction[r] = newDirectionAfterProjection[r];
+                    result->location[r] = newStartLocationAfterProjection[r];
+                    result->seedOffset[r] = newSeedOffsetAfterProjection[r];
+                    result->mapq[r] = newMapqAfterProjection[r];
+                    scoreLocationWithAffineGap(r, result->direction[r], result->location[r],
+                        result->seedOffset[r], scoreLimit, &result->score[r], &result->matchProbability[r],
+                        &genomeOffset[r], &result->basesClippedBefore[r], &result->basesClippedAfter[r], &result->agScore[r], &result->refSpan[r], true);
 
-                if (result->score[r] != ScoreAboveLimit) {
-                    result->location[r] += genomeOffset[r];
+                    if ((result->score[r] != ScoreAboveLimit) && (result->score[r] <= MAX_K - 1)) {
+                        result->location[r] += genomeOffset[r];
+                    }
+                    else {
+                        result->status[r] = NotFound;
+                    }
                 }
-                else {
-                    result->status[r] = NotFound;
+                if (result->status[0] == NotFound || result->status[1] == NotFound) { // affine gap could not find a liftover alignment
+                    *result = resultBeforeLiftover;
+                    return true;
                 }
-            }
-#ifdef _DEBUG
-            if (_DumpAlignments) {
-                printf("Affine gap read 0 liftover location %s:%llu\n",
-                    genome->getContigAtLocation(result->location[0])->name,
-                    result->location[0] - genome->getContigAtLocation(result->location[0])->beginningLocation);
-                printf("Affine gap read 1 liftover location %s:%llu\n",
-                    genome->getContigAtLocation(result->location[1])->name,
-                    result->location[1] - genome->getContigAtLocation(result->location[1])->beginningLocation);
-            }
-#endif
-        }
-    }
+                // TODO: make ALT result as a supplementary alignment, store in firstALTResult
+    #ifdef _DEBUG
+                if (_DumpAlignments) {
+                    printf("Liftover Affine gap read 0 location %s:%llu score %d agScore %d mapq %d\n",
+                        genome->getContigAtLocation(result->location[0])->name,
+                        result->location[0] - genome->getContigAtLocation(result->location[0])->beginningLocation,
+                        result->score[0], result->agScore[0], result->mapq[0]);
+                    printf("Liftover Affine gap read 1 location %s:%llu score %d agScore %d mapq %d\n",
+                        genome->getContigAtLocation(result->location[1])->name,
+                        result->location[1] - genome->getContigAtLocation(result->location[1])->beginningLocation,
+                        result->score[1], result->agScore[1], result->mapq[1]);
+                }
+    #endif
+            } // found ALT projections
+        } // useAltLiftover
+    } // use soft clipping mode
     return true;
 }
 

@@ -704,7 +704,9 @@ GenomeLocation Genome::getProjLocation(GenomeLocation location, int alnSpan) con
             y += count;
         }
     }
-    _ASSERT(projOffset != -1);
+    if (projOffset == -1) {
+        return InvalidGenomeLocation;
+    }
     return contigs[contig].projBeginningLocation + projOffset;
 }
 
