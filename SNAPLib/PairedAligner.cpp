@@ -455,6 +455,34 @@ void PairedAlignerContext::computeSpacingDist(GenomeDistance* pairedEndSpacing, 
 
 void PairedAlignerContext::runIterationThread()
 {
+    Read* reads[NUM_READS_PER_PAIR];
+    for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
+        reads[i] = NULL;
+    }
+
+#ifdef _MSC_VER
+    __try { // This is the Visual C++ general exception handler.  Alas, it is not standard C++, so we only do this error reporting on Windows.
+#endif // _MSC_VER
+
+        runIterationThreadImpl(reads);
+
+#ifdef _MSC_VER
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (reads[0] == NULL) {
+            fprintf(stderr, "SNAP crashed while not processing a read.\n");
+        }
+        else {
+            fprintf(stderr, "SNAP crashed processing a read with ID %.*s\n", reads[0]->getIdLength(), reads[0]->getId());
+
+        }
+        fflush(stderr);
+        soft_exit(1);
+    }
+#endif // _MSC_VER
+}
+
+void PairedAlignerContext::runIterationThreadImpl(Read **reads)
+{
 	PreventMachineHibernationWhileThisThreadIsAlive();
 
     PairedReadSupplier *supplier = pairedReadSupplierGenerator->generateNewPairedReadSupplier();
@@ -471,7 +499,6 @@ void PairedAlignerContext::runIterationThread()
 		return;
 	}
 
-    Read *reads[NUM_READS_PER_PAIR];
     _int64 nSingleResults[2] = { 0, 0 };
 
  	if (index == NULL) {
@@ -624,258 +651,261 @@ void PairedAlignerContext::runIterationThread()
 
     _uint64 readIdxInBatch = 0;
     _int64 startTime = timeInMillis();
-    while (supplier->getNextReadPair(&reads[0],&reads[1])) {
-        _int64 readFinishedTime;
-        if (options->profile) {
-            readFinishedTime = timeInMillis();
-            stats->millisReading += (readFinishedTime - startTime);
-        }
+    while (supplier->getNextReadPair(&reads[0], &reads[1])) {
+            _int64 readFinishedTime;
+            if (options->profile) {
+                readFinishedTime = timeInMillis();
+                stats->millisReading += (readFinishedTime - startTime);
+            }
 
-        // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
-        if (!ignoreMismatchedIDs) {
-            Read::checkIdMatch(reads[0], reads[1]);
-        }
+            // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
+            if (!ignoreMismatchedIDs) {
+                Read::checkIdMatch(reads[0], reads[1]);
+            }
 
-        stats->totalReads += 2;
+            stats->totalReads += 2;
 
-        if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
-            fprintf(stderr, "reporter:counter:SNAP,readsAligned,%llu\n", stats->totalReads - readsWhenLastReported);
-            readsWhenLastReported = stats->totalReads;
-            lastReportTime = timeInMillis();
-        }
+            if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
+                fprintf(stderr, "reporter:counter:SNAP,readsAligned,%llu\n", stats->totalReads - readsWhenLastReported);
+                readsWhenLastReported = stats->totalReads;
+                lastReportTime = timeInMillis();
+            }
 
-        // Skip the pair if there are too many Ns and/or they're too short
-        int maxDist = this->maxDist;
-        bool useful0 = reads[0]->getDataLength() >= minReadLength && (int)reads[0]->countOfNs() <= maxDist;
-        bool useful1 = reads[1]->getDataLength() >= minReadLength && (int)reads[1]->countOfNs() <= maxDist;
-        if (!useful0 && !useful1) {
-            PairedAlignmentResult result;
-            result.status[0] = NotFound;
-            result.status[1] = NotFound;
-            result.location[0] = InvalidGenomeLocation;
-            result.location[1] = InvalidGenomeLocation;
-            nSingleResults[0] = nSingleResults[1] = 0;
-            result.clippingForReadAdjustment[0] = result.clippingForReadAdjustment[1] = 0;
-            result.usedAffineGapScoring[0] = result.usedAffineGapScoring[1] = false;
-            result.basesClippedBefore[0] = result.basesClippedBefore[1] = 0;
-            result.basesClippedAfter[0] = result.basesClippedAfter[1] = 0;
-            result.agScore[0] = result.agScore[1] = 0;
-            result.supplementary[0] = result.supplementary[1] = false;
+            // Skip the pair if there are too many Ns and/or they're too short
+            int maxDist = this->maxDist;
+            bool useful0 = reads[0]->getDataLength() >= minReadLength && (int)reads[0]->countOfNs() <= maxDist;
+            bool useful1 = reads[1]->getDataLength() >= minReadLength && (int)reads[1]->countOfNs() <= maxDist;
+            if (!useful0 && !useful1) {
+                PairedAlignmentResult result;
+                result.status[0] = NotFound;
+                result.status[1] = NotFound;
+                result.location[0] = InvalidGenomeLocation;
+                result.location[1] = InvalidGenomeLocation;
+                nSingleResults[0] = nSingleResults[1] = 0;
+                result.clippingForReadAdjustment[0] = result.clippingForReadAdjustment[1] = 0;
+                result.usedAffineGapScoring[0] = result.usedAffineGapScoring[1] = false;
+                result.basesClippedBefore[0] = result.basesClippedBefore[1] = 0;
+                result.basesClippedAfter[0] = result.basesClippedAfter[1] = 0;
+                result.agScore[0] = result.agScore[1] = 0;
+                result.supplementary[0] = result.supplementary[1] = false;
 
-            bool pass0 = options->passFilter(reads[0], result.status[0], true, false);
-            bool pass1 = options->passFilter(reads[1], result.status[1], true, false);
-            bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
-                ? (pass0 && pass1) : (pass0 || pass1);
+                bool pass0 = options->passFilter(reads[0], result.status[0], true, false);
+                bool pass1 = options->passFilter(reads[1], result.status[1], true, false);
+                bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+                    ? (pass0 && pass1) : (pass0 || pass1);
 
 
-            if (pass) {
-                if (NULL != readWriter) {
-                    readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true, useAffineGap);
+                if (pass) {
+                    if (NULL != readWriter) {
+                        readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true, useAffineGap);
+                    }
+                    stats->uselessReads += 2;
                 }
-                stats->uselessReads += 2;
+                else {
+                    stats->filtered += 2;
+                }
+
+                continue;
+            }
+
+
+#if     TIME_HISTOGRAM
+            _int64 startTime = timeInNanos();
+#endif // TIME_HISTOGRAM
+
+            _int64 nSecondaryResults;
+            _int64 nPairedCandidatesForAffineGap;
+            _int64 nSingleSecondaryResults[2];
+            _int64 nSingleCandidatesForAffineGap[2];
+            PairedAlignmentResult firstALTResult;
+
+            while (!aligner->align(reads[0], reads[1], results, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
+                maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults,
+                maxPairedCandidatesForAffineGap, &nPairedCandidatesForAffineGap, pairedCandidatesForAffineGap,
+                maxSingleCandidatesForAffineGap, &nSingleCandidatesForAffineGap[0], &nSingleCandidatesForAffineGap[1], singleCandidatesForAffineGap, maxDist)) {
+
+                _ASSERT(nSecondaryResults > maxPairedSecondaryHits || nSingleSecondaryResults[0] > maxSingleSecondaryHits ||
+                    nPairedCandidatesForAffineGap > maxPairedCandidatesForAffineGap || nSingleCandidatesForAffineGap[0] > maxSingleCandidatesForAffineGap);
+
+                if (nSecondaryResults > maxPairedSecondaryHits) {
+                    if (reallocatedPairedSecondaryBuffer) {
+                        BigDealloc(results);
+                        results = NULL;
+                    }
+
+                    maxPairedSecondaryHits *= 2;
+                    results = (PairedAlignmentResult*)BigAlloc((maxPairedSecondaryHits + 1) * sizeof(PairedAlignmentResult));
+                    reallocatedPairedSecondaryBuffer = true;
+                }
+
+                if (nSingleSecondaryResults[0] > maxSingleSecondaryHits) {
+                    if (reallocatedSingleSecondaryBuffer) {
+                        BigDealloc(singleSecondaryResults);
+                        singleSecondaryResults = NULL;
+                    }
+
+                    maxSingleSecondaryHits *= 2;
+                    singleSecondaryResults = (SingleAlignmentResult*)BigAlloc(maxSingleSecondaryHits * sizeof(SingleAlignmentResult));
+                    reallocatedSingleSecondaryBuffer = true;
+                }
+
+                if (nPairedCandidatesForAffineGap > maxPairedCandidatesForAffineGap) {
+                    _ASSERT(useAffineGap);
+                    if (reallocatedPairedCandidatesForAffineGapBuffer) {
+                        BigDealloc(pairedCandidatesForAffineGap);
+                        pairedCandidatesForAffineGap = NULL;
+                    }
+
+                    maxPairedCandidatesForAffineGap *= 2;
+                    pairedCandidatesForAffineGap = (PairedAlignmentResult*)BigAlloc((maxPairedCandidatesForAffineGap) * sizeof(PairedAlignmentResult));
+                    reallocatedPairedCandidatesForAffineGapBuffer = true;
+                }
+
+                if (nSingleCandidatesForAffineGap[0] > maxSingleCandidatesForAffineGap) {
+                    _ASSERT(useAffineGap);
+                    if (reallocatedSingleCandidatesForAffineGapBuffer) {
+                        BigDealloc(singleCandidatesForAffineGap);
+                        singleCandidatesForAffineGap = NULL;
+                    }
+
+                    maxSingleCandidatesForAffineGap *= 2;
+                    singleCandidatesForAffineGap = (SingleAlignmentResult*)BigAlloc(maxSingleCandidatesForAffineGap * sizeof(SingleAlignmentResult));
+                    reallocatedSingleCandidatesForAffineGapBuffer = true;
+                }
+            }
+
+            _int64 alignFinishedTime;
+            if (options->profile) {
+                alignFinishedTime = timeInMillis();
+                stats->millisAligning += (alignFinishedTime - readFinishedTime);
+            }
+
+#if     TIME_HISTOGRAM
+            _int64 runTime = timeInNanos() - startTime;
+            if (runTime < 0) { // For reasons that I really don't understand, this seems to run backwards sometimes.  Just ignore the sample when it does.
+                stats->backwardsTimeStamps++;
+                stats->totalBackwardsTimeStamps += runTime;
+            }
+            else {
+                int timeBucket = min(30, cheezyLogBase2(runTime));
+                stats->countByTimeBucket[timeBucket] += 2;
+                stats->nanosByTimeBucket[timeBucket] += runTime;
+
+                for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+                    if (results[0].status[whichRead] == NotFound) {
+                        stats->countOfUnaligned++;
+                        stats->timeOfUnaligned += runTime / 2;
+                    }
+                    else {
+                        stats->countByMAPQ[results[0].mapq[whichRead]]++;
+                        stats->timeByMAPQ[results[0].mapq[whichRead]] += runTime / 2;
+
+                        int score = __min(results[0].score[whichRead], 30);
+                        stats->countByNM[score]++;
+                        stats->timeByNM[score] += runTime / 2;
+                    }
+                }
+        }
+#endif // TIME_HISTOGRAM
+
+            if (forceSpacing && isOneLocation(results[0].status[0]) != isOneLocation(results[0].status[1])) {
+                // either both align or neither do
+                results[0].status[0] = results[0].status[1] = NotFound;
+                results[0].location[0] = results[0].location[1] = InvalidGenomeLocation;
+                results[0].usedAffineGapScoring[0] = results[0].usedAffineGapScoring[1] = false;
+                results[0].basesClippedBefore[0] = results[0].basesClippedBefore[1] = 0;
+                results[0].basesClippedAfter[0] = results[0].basesClippedAfter[1] = 0;
+                results[0].agScore[0] = results[0].agScore[1] = 0;
+            }
+
+            bool firstIsPrimary = true;
+            for (int i = 0; i <= nSecondaryResults; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
+                bool pass0 = options->passFilter(reads[0], results[i].status[0], !useful0, i != 0 || !firstIsPrimary);
+                bool pass1 = options->passFilter(reads[1], results[i].status[1], !useful1, i != 0 || !firstIsPrimary);
+                bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+                    ? (pass0 && pass1) : (pass0 || pass1);
+
+                if (!pass) {
+                    //
+                    // Remove this one from the list by copying the last one here.
+                    //
+                    results[i] = results[nSecondaryResults];
+                    nSecondaryResults--;
+                    if (0 == i) {
+                        firstIsPrimary = false;
+                    }
+                    i--;
+                }
+            }
+
+            //
+            // Now check the single secondary alignments
+            //
+            SingleAlignmentResult* singleResults[2] = { singleSecondaryResults, singleSecondaryResults + nSingleSecondaryResults[0] };
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+                for (int whichAlignment = 0; whichAlignment < nSingleSecondaryResults[whichRead]; whichAlignment++) {
+                    if (!options->passFilter(reads[whichRead], singleResults[whichRead][whichAlignment].status, false, true)) {
+                        singleResults[whichRead][whichAlignment] = singleResults[whichRead][nSingleSecondaryResults[whichRead] - 1];
+                        nSingleSecondaryResults[whichRead]--;
+                        whichAlignment--;
+                    }
+                }
+            }
+
+            if (NULL != readWriter) {
+                readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary, useAffineGap);
+
+                if (emitALTAlignments && (firstALTResult.status[0] != NotFound || firstALTResult.status[1] != NotFound)) {
+                    readWriter->writePairs(readerContext, reads, &firstALTResult, 1, NULL, 0, true, useAffineGap);
+                }
+            }
+
+            if (options->profile) {
+                startTime = timeInMillis();
+                stats->millisWriting += (startTime - alignFinishedTime);
+            }
+
+            stats->extraAlignments += nSecondaryResults + (firstIsPrimary ? 0 : 1); // If first isn't primary, it's secondary.
+
+            if (inferSpacing) {
+                pairedEndSpacing[readIdxInBatch] = 0;
+            }
+
+            if (firstIsPrimary) {
+                updateStats((PairedAlignerStats*)stats, reads[0], reads[1], &results[0], useful0, useful1);
+                if (inferSpacing) {
+                    if ((results[0].direction[0] == FORWARD && results[0].direction[1] == RC) ||
+                        (results[0].direction[0] == RC && results[0].direction[1] == FORWARD)) {
+                        pairedEndSpacing[readIdxInBatch] = DistanceBetweenGenomeLocations(results[0].location[0], results[0].location[1]);
+                        readIdxInBatch++;
+                    }
+                }
             }
             else {
                 stats->filtered += 2;
             }
 
-            continue;
-        }
-
-
-#if     TIME_HISTOGRAM
-        _int64 startTime = timeInNanos();
-#endif // TIME_HISTOGRAM
-
-        _int64 nSecondaryResults;
-        _int64 nPairedCandidatesForAffineGap;
-        _int64 nSingleSecondaryResults[2];
-        _int64 nSingleCandidatesForAffineGap[2];
-        PairedAlignmentResult firstALTResult;
-
-        while (!aligner->align(reads[0], reads[1], results, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
-            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults,
-            maxPairedCandidatesForAffineGap, &nPairedCandidatesForAffineGap, pairedCandidatesForAffineGap,
-            maxSingleCandidatesForAffineGap, &nSingleCandidatesForAffineGap[0], &nSingleCandidatesForAffineGap[1], singleCandidatesForAffineGap, maxDist)) {
-
-            _ASSERT(nSecondaryResults > maxPairedSecondaryHits || nSingleSecondaryResults[0] > maxSingleSecondaryHits ||
-                    nPairedCandidatesForAffineGap > maxPairedCandidatesForAffineGap || nSingleCandidatesForAffineGap[0] > maxSingleCandidatesForAffineGap);
-
-            if (nSecondaryResults > maxPairedSecondaryHits) {
-                if (reallocatedPairedSecondaryBuffer) {
-                    BigDealloc(results);
-                    results = NULL;
-                }
-
-                maxPairedSecondaryHits *= 2;
-                results = (PairedAlignmentResult *)BigAlloc((maxPairedSecondaryHits + 1) * sizeof(PairedAlignmentResult));
-                reallocatedPairedSecondaryBuffer = true;
-            }
-
-            if (nSingleSecondaryResults[0] > maxSingleSecondaryHits) {
-                if (reallocatedSingleSecondaryBuffer) {
-                    BigDealloc(singleSecondaryResults);
-                    singleSecondaryResults = NULL;
-                }
-
-                maxSingleSecondaryHits *= 2;
-                singleSecondaryResults = (SingleAlignmentResult *)BigAlloc(maxSingleSecondaryHits * sizeof(SingleAlignmentResult));
-                reallocatedSingleSecondaryBuffer = true;
-            }
-
-            if (nPairedCandidatesForAffineGap > maxPairedCandidatesForAffineGap) {
-                _ASSERT(useAffineGap);
-                if (reallocatedPairedCandidatesForAffineGapBuffer) {
-                    BigDealloc(pairedCandidatesForAffineGap);
-                    pairedCandidatesForAffineGap = NULL;
-                }
-
-                maxPairedCandidatesForAffineGap *= 2;
-                pairedCandidatesForAffineGap = (PairedAlignmentResult *)BigAlloc((maxPairedCandidatesForAffineGap) * sizeof(PairedAlignmentResult));
-                reallocatedPairedCandidatesForAffineGapBuffer = true;
-            }
-
-            if (nSingleCandidatesForAffineGap[0] > maxSingleCandidatesForAffineGap) {
-                _ASSERT(useAffineGap);
-                if (reallocatedSingleCandidatesForAffineGapBuffer) {
-                    BigDealloc(singleCandidatesForAffineGap);
-                    singleCandidatesForAffineGap = NULL;
-                }
-
-                maxSingleCandidatesForAffineGap *= 2;
-                singleCandidatesForAffineGap = (SingleAlignmentResult*)BigAlloc(maxSingleCandidatesForAffineGap * sizeof(SingleAlignmentResult));
-                reallocatedSingleCandidatesForAffineGapBuffer = true;
-            }
-        }
-
-        _int64 alignFinishedTime;
-        if (options->profile) {
-            alignFinishedTime = timeInMillis();
-            stats->millisAligning += (alignFinishedTime - readFinishedTime);
-        }
-
-#if     TIME_HISTOGRAM
-        _int64 runTime = timeInNanos() - startTime;
-        if (runTime < 0) { // For reasons that I really don't understand, this seems to run backwards sometimes.  Just ignore the sample when it does.
-            stats->backwardsTimeStamps++;
-            stats->totalBackwardsTimeStamps += runTime;
-        } else {
-            int timeBucket = min(30, cheezyLogBase2(runTime));
-            stats->countByTimeBucket[timeBucket] += 2;
-            stats->nanosByTimeBucket[timeBucket] += runTime;
-
-            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-                if (results[0].status[whichRead] == NotFound) {
-                    stats->countOfUnaligned++;
-                    stats->timeOfUnaligned += runTime / 2;
-                }
-                else {
-                    stats->countByMAPQ[results[0].mapq[whichRead]]++;
-                    stats->timeByMAPQ[results[0].mapq[whichRead]] += runTime / 2;
-
-                    int score = __min(results[0].score[whichRead], 30);
-                    stats->countByNM[score]++;
-                    stats->timeByNM[score] += runTime / 2;
-                }
-            }
-        }
-#endif // TIME_HISTOGRAM
-
-        if (forceSpacing && isOneLocation(results[0].status[0]) != isOneLocation(results[0].status[1])) {
-            // either both align or neither do
-            results[0].status[0] = results[0].status[1] = NotFound;
-            results[0].location[0] = results[0].location[1] = InvalidGenomeLocation;
-            results[0].usedAffineGapScoring[0] = results[0].usedAffineGapScoring[1] = false;
-            results[0].basesClippedBefore[0] = results[0].basesClippedBefore[1] = 0;
-            results[0].basesClippedAfter[0] = results[0].basesClippedAfter[1] = 0;
-            results[0].agScore[0] = results[0].agScore[1] = 0;
-        }
-
-        bool firstIsPrimary = true;
-        for (int i = 0; i <= nSecondaryResults; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
-            bool pass0 = options->passFilter(reads[0], results[i].status[0], !useful0, i != 0 || !firstIsPrimary);
-            bool pass1 = options->passFilter(reads[1], results[i].status[1], !useful1, i != 0 || !firstIsPrimary);
-            bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
-                ? (pass0 && pass1) : (pass0 || pass1);
-
-            if (!pass) {
-                //
-                // Remove this one from the list by copying the last one here.
-                //
-                results[i] = results[nSecondaryResults];
-                nSecondaryResults--;
-                if (0 == i) {
-                    firstIsPrimary = false;
-                }
-                i--;
-            }
-        }
-
-        //
-        // Now check the single secondary alignments
-        //
-        SingleAlignmentResult *singleResults[2] = { singleSecondaryResults, singleSecondaryResults + nSingleSecondaryResults[0] };
-        for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-            for (int whichAlignment = 0; whichAlignment < nSingleSecondaryResults[whichRead]; whichAlignment++) {
-                if (!options->passFilter(reads[whichRead], singleResults[whichRead][whichAlignment].status, false, true)) {
-                    singleResults[whichRead][whichAlignment] = singleResults[whichRead][nSingleSecondaryResults[whichRead] - 1];
-                    nSingleSecondaryResults[whichRead]--;
-                    whichAlignment--;
-                }
-            }
-        }
-
-        if (NULL != readWriter) {
-            readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary, useAffineGap);
-
-            if (emitALTAlignments && (firstALTResult.status[0] != NotFound || firstALTResult.status[1] != NotFound)) {
-                readWriter->writePairs(readerContext, reads, &firstALTResult, 1, NULL, 0, true, useAffineGap);
-            }
-        }
-
-        if (options->profile) {
-            startTime = timeInMillis();
-            stats->millisWriting += (startTime - alignFinishedTime);
-        }
-
-        stats->extraAlignments += nSecondaryResults + (firstIsPrimary ? 0 : 1); // If first isn't primary, it's secondary.
-
-        if (inferSpacing) {
-            pairedEndSpacing[readIdxInBatch] = 0;
-        }
-
-        if (firstIsPrimary) {
-            updateStats((PairedAlignerStats*)stats, reads[0], reads[1], &results[0], useful0, useful1);
             if (inferSpacing) {
-                if ((results[0].direction[0] == FORWARD && results[0].direction[1] == RC) ||
-                    (results[0].direction[0] == RC && results[0].direction[1] == FORWARD)) {
-                    pairedEndSpacing[readIdxInBatch] = DistanceBetweenGenomeLocations(results[0].location[0], results[0].location[1]);
-                    readIdxInBatch++;
+                // Compute new minSpacing and maxSpacing for batch
+                if (readIdxInBatch == DEFAULT_BATCH_SIZE_IS_ESTIMATION) {
+
+                    // Sort all alignments based on spacing
+                    qsort(pairedEndSpacing, DEFAULT_BATCH_SIZE_IS_ESTIMATION, sizeof(GenomeDistance), compareBySpacing);
+
+                    int newMinSpacing = minSpacing, newMaxSpacing = maxSpacing;
+                    double avg, stddev;
+                    computeSpacingDist(pairedEndSpacing, &newMinSpacing, &newMaxSpacing, &avg, &stddev);
+
+                    // fprintf(stderr, "SNAP paired-end read spacing (min, max, avg, stddev) = (%d, %d, %.3f, %.3f)\n", newMinSpacing, newMaxSpacing, avg, stddev);
+
+                    // Update min and max spacing for paired-end aligner
+                    intersectingAligner->setMinSpacing(newMinSpacing);
+                    intersectingAligner->setMaxSpacing(newMaxSpacing);
+
+                    readIdxInBatch = 0;
                 }
             }
-        } else {
-            stats->filtered += 2;
-        }
 
-        if (inferSpacing) {
-            // Compute new minSpacing and maxSpacing for batch
-            if (readIdxInBatch == DEFAULT_BATCH_SIZE_IS_ESTIMATION) {
-
-                // Sort all alignments based on spacing
-                qsort(pairedEndSpacing, DEFAULT_BATCH_SIZE_IS_ESTIMATION, sizeof(GenomeDistance), compareBySpacing);
-
-                int newMinSpacing = minSpacing, newMaxSpacing = maxSpacing;
-                double avg, stddev;
-                computeSpacingDist(pairedEndSpacing, &newMinSpacing, &newMaxSpacing, &avg, &stddev);
-
-                // fprintf(stderr, "SNAP paired-end read spacing (min, max, avg, stddev) = (%d, %d, %.3f, %.3f)\n", newMinSpacing, newMaxSpacing, avg, stddev);
-
-                // Update min and max spacing for paired-end aligner
-                intersectingAligner->setMinSpacing(newMinSpacing);
-                intersectingAligner->setMaxSpacing(newMaxSpacing);
-
-                readIdxInBatch = 0;
-            }
-        }
     }   // while we have a read pair
 
     stats->lvCalls = aligner->getLocationsScored();
