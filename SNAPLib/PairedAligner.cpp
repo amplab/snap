@@ -470,14 +470,16 @@ void PairedAlignerContext::runIterationThread()
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         if (reads[0] == NULL) {
             fprintf(stderr, "SNAP crashed while not processing a read.\n");
-        }
-        else {
+        } else {
             fprintf(stderr, "SNAP crashed processing a read with ID %.*s\n", reads[0]->getIdLength(), reads[0]->getId());
-
-        }
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+                fprintf(stderr, "@%.*s\n%.*s\n+\n%.*s\n", reads[whichRead]->getIdLength(), reads[whichRead]->getId(), reads[whichRead]->getDataLength(), reads[whichRead]->getData(),
+                        reads[whichRead]->getDataLength(), reads[whichRead]->getQuality());
+            } // for each read
+        } // if we're processing a read
         fflush(stderr);
         soft_exit(1);
-    }
+    } // except
 #endif // _MSC_VER
 }
 

@@ -76,6 +76,8 @@ void SingleAlignerContext::runIterationThread()
             fprintf(stderr, "SNAP crashed before processing a read\n");
         } else {
             fprintf(stderr, "SNAP crashed while processing single-end read with ID %.*s\n", read->getIdLength(), read->getId()); 
+            fprintf(stderr, "@%.*s\n%.*s\n+\n%.*s\n", read->getIdLength(), read->getId(), read->getDataLength(), read->getData(),
+                    read->getDataLength(), read->getQuality());
         }
         fflush(stderr);
         soft_exit(1);
