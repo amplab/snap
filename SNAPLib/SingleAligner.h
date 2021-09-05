@@ -60,4 +60,7 @@ protected:
 	friend class AlignerContext2;
 
     bool isPaired() {return false;}
+
+private:
+    virtual void runIterationThreadImpl(Read*& read);
 };

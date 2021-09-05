@@ -58,9 +58,37 @@ SingleAlignerContext::runTask()
     ParallelTask<SingleAlignerContext> task(this);
     task.run();
 }
+
+void SingleAlignerContext::runIterationThread()
+{
+    Read * read = NULL; 
+
+#ifdef _MSC_VER
+    __try {
+#endif // _MSC_VER
+
+
+        runIterationThreadImpl(read);
+
+#ifdef _MSC_VER
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (read == NULL) {
+            fprintf(stderr, "SNAP crashed before processing a read\n");
+        } else {
+            fprintf(stderr, "SNAP crashed while processing single-end read with ID %.*s\n", read->getIdLength(), read->getId()); 
+            fprintf(stderr, "@%.*s\n%.*s\n+\n%.*s\n", read->getIdLength(), read->getId(), read->getDataLength(), read->getData(),
+                    read->getDataLength(), read->getQuality());
+        }
+        fflush(stderr);
+        soft_exit(1);
+    }
+#endif // _MSC_VER
+
+
+}
     
     void
-SingleAlignerContext::runIterationThread()
+SingleAlignerContext::runIterationThreadImpl(Read *& read)
 {
 	PreventMachineHibernationWhileThisThreadIsAlive();
 
@@ -77,7 +105,6 @@ SingleAlignerContext::runIterationThread()
 	}
     if (index == NULL) {
         // no alignment, just input/output
-        Read *read;
         while (NULL != (read = supplier->getNextRead())) {
             stats->totalReads++;
             SingleAlignmentResult result;
@@ -165,7 +192,6 @@ SingleAlignerContext::runIterationThread()
 #endif  // _MSC_VER
 
     // Align the reads.
-    Read *read;
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
 

@@ -89,6 +89,10 @@ protected:
     static int compareBySpacing(const void *first_, const void *second_);
 
 	friend class AlignerContext2;
+
+private:
+    
+    void runIterationThreadImpl(Read **reads);   // An array of NUM_READS_PER_PAIR into which to write the reads
 };
 
 struct PairedAlignerOptions : public AlignerOptions
