@@ -475,6 +475,22 @@ private:
             bool                useAltLiftover = false
 	);
 
+	void scoreLocationWithAffineGapLiftover(
+            unsigned             whichRead,
+            Direction            direction,
+            GenomeLocation       genomeLocation,
+            unsigned             seedOffset,
+            int                  scoreLimit,
+            int                 *score,
+            double              *matchProbability,
+            int                 *genomeLocationOffset,
+            int                 *basesClippedBefore,
+            int                 *basesClippedAfter,
+            int                 *agScore,
+            int                 *genomeSpan,
+            bool                useAltLiftover = false
+	);
+
     void scoreLocationWithHammingDistance(
         unsigned             whichRead,
         Direction            direction,
@@ -715,9 +731,11 @@ private:
         }
 
         void updateProbabilityOfAllPairs(double oldPairProbability);
-        inline void updateProbabilityOfBestPair(double newPairProbability) {
+        inline void updateProbabilityOfBestPair(double newPairProbability, bool updateAllPairProbability = true) {
             probabilityOfBestPair = newPairProbability;
-            probabilityOfAllPairs += probabilityOfBestPair;
+            if (updateAllPairProbability) {
+                probabilityOfAllPairs += probabilityOfBestPair;
+            }
         }
         bool updateBestHitIfNeeded(int pairScore, int pairAGScore, double pairProbability, int fewerEndScore, int readWithMoreHits, GenomeDistance fewerEndGenomeLocationOffset, ScoringCandidate* candidate, ScoringMateCandidate* mate); // returns true iff it updated the best hit
         bool updateBestHitIfNeeded(int pairScore, int pairAGScore, double pairProbability, PairedAlignmentResult* newResult); // returns true iff it updated the best hit

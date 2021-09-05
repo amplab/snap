@@ -731,7 +731,7 @@ got_answer:
             score = bestGlobalAlignmentScore;
         }
 
-        if (useAltLiftover || (score > scoreInit)) { // score < scoreInit for some ALT liftover alignments, but still valid
+        if (useAltLiftover || (score >= scoreInit)) { // score < scoreInit for some ALT liftover alignments, but still valid
             // Perform traceback and compute nEdits
             int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
@@ -1252,7 +1252,7 @@ got_answer:
             score = bestGlobalAlignmentScore;
         }
 
-        if (useAltLiftover || (score > scoreInit)) { // score < scoreInit for some ALT alignments after liftover, but still valid
+        if (useAltLiftover || (score >= scoreInit)) { // score < scoreInit for some ALT alignments after liftover, but still valid
             // Perform traceback and compute nEdits
             int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
