@@ -1034,7 +1034,7 @@ bool
 
                             if (!mergeReplacement && (pairProbability > scoresForAllAlignments.probabilityOfBestPair) && (maxLVCandidatesForAffineGapBufferSize > 0) && (extraSearchDepth >= scoresForAllAlignments.bestPairScore - pairScore)) {
                                 //
-                                // This is close enough that scoring it with affine gap scoring might make it be the best result.  Save it for possible consideration in pase 4.
+                                // This is close enough that scoring it with affine gap scoring might make it be the best result.  Save it for possible consideration in phase 4.
                                 //
                                 if (*nLVCandidatesForAffineGap >= maxLVCandidatesForAffineGapBufferSize) {
                                     *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1;
@@ -1078,7 +1078,7 @@ bool
 
                             // scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments);
                             
-                            if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore) {
+                            if ((!updatedBestScore) && maxEditDistanceForSecondaryResults != -1 && (pairScore <= (maxK + extraSearchDepth)) && maxEditDistanceForSecondaryResults >= pairScore - scoresForAllAlignments.bestPairScore) {
                                 
                                 //
                                 // A secondary result to save.
@@ -1123,7 +1123,7 @@ bool
                             }
 
 
-                            if ((!updatedBestScore) && maxLVCandidatesForAffineGapBufferSize > 0 && pairScore <= maxK && (extraSearchDepth >= pairScore - scoresForAllAlignments.bestPairScore)) {
+                            if ((!updatedBestScore) && maxLVCandidatesForAffineGapBufferSize > 0 && (pairScore <= (maxK + extraSearchDepth)) && (extraSearchDepth >= pairScore - scoresForAllAlignments.bestPairScore)) {
 
                                 if (*nLVCandidatesForAffineGap >= maxLVCandidatesForAffineGapBufferSize) {
                                     *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1;
@@ -2119,7 +2119,7 @@ IntersectingPairedEndAligner::alignHamming(
 
                             if (!mergeReplacement && (pairProbability > scoresForAllAlignments.probabilityOfBestPair) && (maxLVCandidatesForAffineGapBufferSize > 0) && (pairScore <= scoresForAllAlignments.bestPairScore) && (extraSearchDepth >= scoresForAllAlignments.bestPairScore - pairScore)) {
                                 //
-                                // This is close enough that scoring it with affine gap scoring might make it be the best result.  Save it for possible consideration in pase 4.
+                                // This is close enough that scoring it with affine gap scoring might make it be the best result.  Save it for possible consideration in phase 4.
                                 //
                                 if (*nLVCandidatesForAffineGap >= maxLVCandidatesForAffineGapBufferSize) {
                                     *nLVCandidatesForAffineGap = maxLVCandidatesForAffineGapBufferSize + 1;
