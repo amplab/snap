@@ -39,6 +39,7 @@ Environment:
 extern bool _DumpAlignments;
 #endif // _DEBUG
 
+#define VALIDATE_CIGAR 1
 
 using std::max;
 using std::min;
@@ -1697,6 +1698,10 @@ BAMFormat::writeRead(
             return false;
         }
     }
+
+#if VALIDATE_CIGAR
+    SAMFormat::validateCigarString(context.genome, (char*)cigarBuf, cigarBufSize * sizeof(_uint32), clippedData - basesClippedBefore, clippedLength + basesClippedBefore + basesClippedAfter, genomeLocation + extraBasesClippedBefore, direction == RC, useM, read);
+#endif
 
     // Write the BAM entry
     unsigned auxLen;

@@ -308,6 +308,13 @@ public:
         GenomeDistance *o_extraBasesClippedAfter,
         GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping, int *o_backClippingMissedByLV);
 
+    // #ifdef _DEBUG
+    static void validateCigarString(const Genome* genome, const char* cigarBuf, int cigarBufLen, const char* data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM, Read* read = NULL);
+
+    // #else	// DEBUG
+    //	inline static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM) {}
+    //#endif // DEBUG
+
 private:
     static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
@@ -321,13 +328,9 @@ private:
         unsigned frontHardClipped, unsigned backHardClipped,
         GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping, int * o_refSpan);
 
-// #ifdef _DEBUG
-	static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM);
-// #else	// DEBUG
-//	inline static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM) {}
-//#endif // DEBUG
-
     static void getRefSpanFromCigar(const char * cigarBuf, int cigarBufLen, int* refSpan);
+
+    static void printRead(const Genome* genome, Read* read, GenomeLocation location);
 
     const bool useM;
 };

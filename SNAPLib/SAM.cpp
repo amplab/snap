@@ -2669,10 +2669,30 @@ SAMFormat::getRefSpanFromCigar(const char * cigarBuf, int cigarBufLen, int* refS
     }
 }
 
+    void
+SAMFormat::printRead(const Genome* genome, Read* read, GenomeLocation location)
+{
+    if (read) {
+        const char* read_data = read->getUnclippedData();
+        const char* readId = read->getId();
+        for (unsigned i = 0; i < read->getIdLength(); ++i) {
+            printf("%c", readId[i]);
+        }
+        printf(",");
+        for (unsigned i = 0; i < read->getUnclippedLength(); ++i) {
+            printf("%c", read_data[i]);
+        }
+        printf("\n");
+        printf("Aligned location %s:%llu\n",
+            genome->getContigAtLocation(location)->name,
+            location - genome->getContigAtLocation(location)->beginningLocation);
+    }
+}
+
 // #ifdef _DEBUG
 	void 
 SAMFormat::validateCigarString(
-	const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM)
+	const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM, Read* read)
 {
 	const char *nextChunkOfCigar = cigarBuf;
 	GenomeDistance offsetInData = 0;
@@ -2683,6 +2703,7 @@ SAMFormat::validateCigarString(
     #else
 		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation);
     #endif
+        printRead(genome, read, genomeLocation);
 		soft_exit(1);
 	}
 	GenomeDistance offsetInReference = 0;
@@ -2707,19 +2728,22 @@ SAMFormat::validateCigarString(
 
 	if (!nullTerminated) {
 		WriteErrorMessage("validateCigarString: non-null-terminated or overflow cigar string: '%.*s'\n", cigarBufLen, cigarBuf);
-		soft_exit(1);
+        printRead(genome, read, genomeLocation);
+        soft_exit(1);
 	}
 
 	const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
 	if (NULL == contig) {
 		WriteErrorMessage("validateCigarString: read alignment location isn't in a chromosome, genomeLocation %lld\n", GenomeLocationAsInt64(genomeLocation));
-		soft_exit(1);
+        printRead(genome, read, genomeLocation);
+        soft_exit(1);
 	}
 
 	if (genomeLocation >= contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
 		WriteErrorMessage("validateCigarString: alignment location is in genome padding: %lld, contig name %s, base %lld, len %lld, padding size %d\n",
 			GenomeLocationAsInt64(genomeLocation), contig->name, GenomeLocationAsInt64(contig->beginningLocation), contig->length, genome->getChromosomePadding());
-		soft_exit(1);
+        printRead(genome, read, genomeLocation);
+        soft_exit(1);
 	}
 
 	while ('\0' != *nextChunkOfCigar) {
@@ -2728,28 +2752,33 @@ SAMFormat::validateCigarString(
 		int fieldsScanned = sscanf(nextChunkOfCigar, "%d%c", &len, &op);
 		if (2 != fieldsScanned) {
 			WriteErrorMessage("validateCigarString: didn't scan two fields here '%s' in overall cigar string '%s'\n", nextChunkOfCigar, cigarBuf);
-			soft_exit(1);
+            printRead(genome, read, genomeLocation);
+            soft_exit(1);
 		}
 
 		if (0 == len) {
 			WriteErrorMessage("validateCigarString: got zero length field here '%s' in overall cigar string '%s'\n", nextChunkOfCigar, cigarBuf);
-			soft_exit(1);
+            printRead(genome, read, genomeLocation);
+            soft_exit(1);
 		}
 
 		if (op != 'H' && sawTailS) {
 			WriteErrorMessage("validateCigarString: saw incorrect op type after what should have been the terminal soft or hard clipping here '%s', in overall cigar string '%s'\n",
 				nextChunkOfCigar, cigarBuf);
-			soft_exit(1);
+            printRead(genome, read, genomeLocation);
+            soft_exit(1);
 		}
 
 		if (sawTrailingH) {
 			WriteErrorMessage("validateCigarString: saw op after what should have been the terminal hard clip here '%s' in overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
-			soft_exit(1);
+            printRead(genome, read, genomeLocation);
+            soft_exit(1);
 		}
 
 		if (op == previousOp) {
 			WriteErrorMessage("validateCigarString: saw consecutive ops of the same type '%c' here '%s' in overall cigar '%s'\n", op, nextChunkOfCigar, cigarBuf);
-			soft_exit(1);
+            printRead(genome, read, genomeLocation);
+            soft_exit(1);
 		}
 
 		switch (op) {
@@ -2757,7 +2786,8 @@ SAMFormat::validateCigarString(
 			{
 				if (!useM) {
 					WriteErrorMessage("validateCigarString: generated an M when we were supposed to use X and = here '%s' in overall cigar string '%s'\n", nextChunkOfCigar, cigarBuf);
-					soft_exit(1);
+                    printRead(genome, read, genomeLocation);
+                    soft_exit(1);
 				}
 				offsetInData += len;
 				sawNonH = true;
@@ -2771,19 +2801,22 @@ SAMFormat::validateCigarString(
 			{
 				if (useM) {
 					WriteErrorMessage("validateCigarString: generated an %c when were supposed to use M here '%s' in overall cigar string '%s'\n", op, nextChunkOfCigar, cigarBuf);
-					soft_exit(1);
+                    printRead(genome, read, genomeLocation);
+                    soft_exit(1);
 				}
 
 				if (len + offsetInData > dataLength) {
 					WriteErrorMessage("validateCigarString: cigar string overflowed read length, here '%s', overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
-					soft_exit(1);
+                    printRead(genome, read, genomeLocation);
+                    soft_exit(1);
 				}
 
 				for (unsigned offset = 0; offset < len; offset++) {
 					if ((data[offset + offsetInData] == reference[offset + offsetInReference]) == ('X' == op)) {
 						WriteErrorMessage("validateCigarString: saw a (non-)matching base in an %c range, offset %d, offsetInData %lld, offsetInReference %lld, data '%.*s', reference '%.*s', here '%s', overall cigar '%s'\n",
 							op, offset, offsetInData, offsetInReference, dataLength, data, dataLength, reference, nextChunkOfCigar, cigarBuf);
-						soft_exit(1);
+                        printRead(genome, read, genomeLocation);
+                        soft_exit(1);
 					}
 				}
 
@@ -2802,16 +2835,19 @@ SAMFormat::validateCigarString(
 				//
 				if (len + offsetInData > dataLength) {
 					WriteErrorMessage("validateCigarString: insertion pushes cigar string overlength, here '%s' in overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
-					soft_exit(1);
+                    printRead(genome, read, genomeLocation);
+                    soft_exit(1);
 				}
 
 				if (!sawXorM) {
 					WriteErrorMessage("validateCigarString: cigar string started with I (after clipping) here '%s' in overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
-					soft_exit(1);
+                    printRead(genome, read, genomeLocation);
+                    soft_exit(1);
 				}
 
                 if (previousOp == 'D') {
                     WriteErrorMessage("validateCigarString: cigar string had D immediately followed by I here '%'s in overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
+                    printRead(genome, read, genomeLocation);
                     soft_exit(1);
                 }
 
@@ -2825,11 +2861,13 @@ SAMFormat::validateCigarString(
 			{
 				if (!sawXorM) {
 					WriteErrorMessage("validateCigarString: cigar string started with D (after clipping) here '%s' in overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
-					soft_exit(1);
+                    printRead(genome, read, genomeLocation);
+                    soft_exit(1);
 				}
 						
                 if (previousOp == 'I') {
                     WriteErrorMessage("validateCigarString: cigar string had I immediately followed by D here '%'s in overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
+                    printRead(genome, read, genomeLocation);
                     soft_exit(1);
                 }
 
@@ -2846,7 +2884,8 @@ SAMFormat::validateCigarString(
 			case 'P':
 			{
 				WriteErrorMessage("validateCigarString: saw valid op type '%c' that SNAP shouldn't generate, here '%s' in overall cigar string '%s'\n", op, nextChunkOfCigar, cigarBuf);
-				soft_exit(1);
+                printRead(genome, read, genomeLocation);
+                soft_exit(1);
 			}
 
 			case 'H':
@@ -2877,7 +2916,8 @@ SAMFormat::validateCigarString(
 
 			default: {
 				WriteErrorMessage("validateCigarString: got unrecognized cigar op '%c', here '%s' in overall string '%s'\n", op, nextChunkOfCigar, cigarBuf);
-				soft_exit(1);
+                printRead(genome, read, genomeLocation);
+                soft_exit(1);
 			}
 		}
 
@@ -2890,19 +2930,22 @@ SAMFormat::validateCigarString(
 		}
 		if (*nextChunkOfCigar != op) {
 			WriteErrorMessage("validateCigarString: bug in validation code; expected op '%c', got '%c' at '%s' in '%s'\n", op, *nextChunkOfCigar, nextChunkOfCigar, cigarBuf);
-			soft_exit(1);
+            printRead(genome, read, genomeLocation);
+            soft_exit(1);
 		}
 		nextChunkOfCigar++;
 	}
 
 	if (offsetInData != dataLength) {
 		WriteErrorMessage("validateCigarString: Didn't consume entire read data, got %lld of %lld, cigar '%s'\n", offsetInData, dataLength, cigarBuf);
-		soft_exit(1);
+        printRead(genome, read, genomeLocation);
+        soft_exit(1);
 	}
 
 	if (lastItemWasIndel) {
 		WriteErrorMessage("validateCigarString: cigar string ended with indel '%s'\n", cigarBuf);
-		soft_exit(1);
+        printRead(genome, read, genomeLocation);
+        soft_exit(1);
 	}
 
     //
@@ -2911,6 +2954,7 @@ SAMFormat::validateCigarString(
     if (genomeLocation + offsetInReference > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
         WriteErrorMessage("validateCigarString: alignment runs into contig padding: %lld, contig name %s, base %lld, len %lld, padding size %d, offsetInReference %lld\n",
             GenomeLocationAsInt64(genomeLocation), contig->name, GenomeLocationAsInt64(contig->beginningLocation), contig->length, genome->getChromosomePadding(), offsetInReference);
+        printRead(genome, read, genomeLocation);
         soft_exit(1);
     }
 }
