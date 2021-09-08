@@ -1523,6 +1523,7 @@ SAMFormat::createSAMLine(
         mapQuality = max(0, min(70, mapQuality));       // FIXME: manifest constant.
     } else {
         flags |= SAM_UNMAPPED;
+        flags &= ~SAM_REVERSE_COMPLEMENT;
         mapQuality = 0;
         *extraBasesClippedBefore = 0;
         *contigIndex = OriginalContigNum(-1);
@@ -1623,6 +1624,9 @@ SAMFormat::writePairs(
                             result->status[whichRead] = NotFound;
                             result->location[whichRead] = InvalidGenomeLocation;
                             locations[whichRead] = InvalidGenomeLocation;
+                            cigar[whichRead] = "*";
+                            editDistance[whichRead] = -1;
+                            result->direction[whichRead] = FORWARD;
                         }
                         else {
                             if (addFrontClipping < 0) { // Insertion (soft-clip)
@@ -1657,6 +1661,9 @@ SAMFormat::writePairs(
                             result->status[whichRead] = NotFound;
                             result->location[whichRead] = InvalidGenomeLocation;
                             locations[whichRead] = InvalidGenomeLocation;
+                            cigar[whichRead] = "*";
+                            editDistance[whichRead] = -1;
+                            result->direction[whichRead] = FORWARD;
                         }
                         else {
                             if (addFrontClipping > 0) {

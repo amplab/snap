@@ -360,6 +360,12 @@ BAMAlignment::decodeCigar(
         _ASSERT((*cigar & 0xf) <= 8);
         _uint32 op = *cigar & 0xf;
         o_cigar[i++] = BAMAlignment::CodeToCigar[op];
+#if VALIDATE_CIGAR
+    if (op == lastOp) {
+        WriteErrorMessage("Repeating action in CIGAR string. Op: %c PrevOp: %c\n", BAMAlignment::CodeToCigar[op], BAMAlignment::CodeToCigar[lastOp]);
+        soft_exit(1);
+    }
+#endif
         _ASSERT(op != lastOp);
         lastOp = op;
         ops--;
@@ -1098,6 +1104,9 @@ BAMFormat::writePairs(
                             result->status[whichRead] = NotFound;
                             result->location[whichRead] = InvalidGenomeLocation;
                             locations[whichRead] = InvalidGenomeLocation;
+                            cigarOps[whichRead] = 0;
+                            editDistance[whichRead] = -1;
+                            result->direction[whichRead] = FORWARD;
                         }
                         else {
                             if (addFrontClipping < 0) { // Insertion (soft-clip)
@@ -1131,6 +1140,9 @@ BAMFormat::writePairs(
                             result->status[whichRead] = NotFound;
                             result->location[whichRead] = InvalidGenomeLocation;
                             locations[whichRead] = InvalidGenomeLocation;
+                            cigarOps[whichRead] = 0;
+                            editDistance[whichRead] = -1;
+                            result->direction[whichRead] = FORWARD;
                         }
                         else {
                             if (addFrontClipping > 0) {
@@ -1698,10 +1710,6 @@ BAMFormat::writeRead(
             return false;
         }
     }
-
-#if VALIDATE_CIGAR
-    SAMFormat::validateCigarString(context.genome, (char*)cigarBuf, cigarBufSize * sizeof(_uint32), clippedData - basesClippedBefore, clippedLength + basesClippedBefore + basesClippedAfter, genomeLocation + extraBasesClippedBefore, direction == RC, useM, read);
-#endif
 
     // Write the BAM entry
     unsigned auxLen;

@@ -248,6 +248,8 @@ SimpleReadWriter::writeReads(
                         //
                         results[whichResult].status = NotFound;
                         results[whichResult].location = InvalidGenomeLocation;
+                        results[whichResult].score = -1;
+                        results[whichResult].direction = FORWARD;
                         finalLocations[whichResult] = InvalidGenomeLocation;
                     } else {
                         if (addFrontClipping < 0) { // Insertion (soft-clip)
@@ -290,6 +292,8 @@ SimpleReadWriter::writeReads(
                         //
                         results[whichResult].status = NotFound;
                         results[whichResult].location = InvalidGenomeLocation;
+                        results[whichResult].score = -1;
+                        results[whichResult].direction = FORWARD;
                         finalLocations[whichResult] = InvalidGenomeLocation;
                     }
                     else {
@@ -527,6 +531,8 @@ SimpleReadWriter::writePairs(
                             //
                             singleResults[whichRead][whichAlignment].status = NotFound;
                             location = InvalidGenomeLocation;
+                            singleResults[whichRead][whichAlignment].score = -1;
+                            singleResults[whichRead][whichAlignment].direction = FORWARD;
                         }
                         else {
                             if (addFrontClipping < 0) { // Insertion (soft-clip)
@@ -560,6 +566,8 @@ SimpleReadWriter::writePairs(
                             //
                             singleResults[whichRead][whichAlignment].status = NotFound;
                             location = InvalidGenomeLocation;
+                            singleResults[whichRead][whichAlignment].score = -1;
+                            singleResults[whichRead][whichAlignment].direction = FORWARD;
                         }
                         else {
                             if (addFrontClipping > 0) {
