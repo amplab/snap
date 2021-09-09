@@ -3063,7 +3063,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGapLiftover(
 
     agScore1 -= readLen;
 
-    if (score1 != ScoreAboveLimit) {
+    if (score1 != ScoreAboveLimit && score1 <= MAX_K - 1) {
         int limitLeft = score1;
         int patternLen = readLen - *basesClippedAfter;
         //
@@ -3104,7 +3104,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGapLiftover(
 
         agScore2 -= (readLen);
 
-        if (score2 == ScoreAboveLimit) {
+        if (score2 == ScoreAboveLimit || score2 > MAX_K - 1) {
 	        *score = ScoreAboveLimit;
 	        *genomeLocationOffset = 0;
 	        *agScore = -1;
