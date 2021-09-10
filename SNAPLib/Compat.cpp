@@ -1890,6 +1890,8 @@ public:
 
     OsxAsyncFile(int i_fd);
 
+    _int64 getSize();
+
     virtual bool close();
 
     class Writer : public AsyncFile::Writer
@@ -1935,6 +1937,18 @@ public:
 private:
     int         fd;
 };
+
+    _int64
+OsxAsyncFile::getSize()
+{
+    struct stat statBuffer;
+    if (-1 == fstat(fd, &statBuffer)) {
+        WriteErrorMessage("PosixAsyncFile: fstat failed, %d\n", errno);
+        return -1;
+    }
+
+    return statBuffer.st_size;
+}
 
     OsxAsyncFile*
 OsxAsyncFile::open(
