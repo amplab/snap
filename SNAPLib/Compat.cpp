@@ -1942,8 +1942,8 @@ private:
 OsxAsyncFile::getSize()
 {
     struct stat statBuffer;
-    if (-1 == fstat(fd, &statBuffer)) {
-        WriteErrorMessage("PosixAsyncFile: fstat failed, %d\n", errno);
+    if (-1 == ::fstat(fd, &statBuffer)) {
+        WriteErrorMessage("OsxAsyncFile: fstat failed, %d\n", errno);
         return -1;
     }
 
