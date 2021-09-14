@@ -222,7 +222,7 @@ ReadFASTAGenome(
 
     FILE *fastaFile = fopen(fileName, "r");
     if (fastaFile == NULL) {
-        WriteErrorMessage("Unable to open FASTA file '%s' (even though we already got its size)\n",fileName);
+        WriteErrorMessage("Unable to open FASTA file '%s' (does it exist and do you have permission to open it?)\n",fileName);
         return NULL;
     }
 
