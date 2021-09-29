@@ -39,6 +39,7 @@ obj
 *.log
 *.unsuccessfulbuild
 .vs
+enc_temp_folder
 
 # Compiled binaries
 /snap

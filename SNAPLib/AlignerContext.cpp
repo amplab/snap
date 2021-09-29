@@ -287,6 +287,7 @@ AlignerContext::initialize()
 
     maxHits_ = options->maxHits;
     maxDist_ = options->maxDist;
+    maxDistForIndels_ = options->maxDistForIndels;
     extraSearchDepth = options->extraSearchDepth;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
@@ -303,6 +304,9 @@ AlignerContext::initialize()
     subPenalty = options->subPenalty;
     gapOpenPenalty = options->gapOpenPenalty;
     gapExtendPenalty = options->gapExtendPenalty;
+    fivePrimeEndBonus = options->fivePrimeEndBonus;
+    threePrimeEndBonus = options->threePrimeEndBonus;
+    useSoftClipping = options->useSoftClipping;
 
     if (maxSecondaryAlignmentAdditionalEditDistance < 0 && (maxSecondaryAlignments < 1000000 || maxSecondaryAlignmentsPerContig > 0)) {
         WriteErrorMessage("You set -omax and/or -mpc without setting -om.  They're meaningful only in the context of -om, so you probably didn't really mean to do that.\n");
@@ -338,6 +342,7 @@ AlignerContext::beginIteration()
     totalThreads = options->numThreads;
     bindToProcessors = options->bindToProcessors;
     maxDist = maxDist_;
+    maxDistForIndels = maxDistForIndels_;
     maxHits = maxHits_;
     numSeedsFromCommandLine = options->numSeedsFromCommandLine;
     seedCoverage = options->seedCoverage;
@@ -481,7 +486,6 @@ char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen
     void
 AlignerContext::printStats()
 {
-
     WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)%s%s\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
         (stats->filtered > 0) ? "Filtered               " : "",
         (stats->extraAlignments) ? "Extra Alignments  " : "",

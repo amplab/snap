@@ -51,13 +51,18 @@ public:
 		unsigned			minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
         int                 maxScoreGapToPreferNonAltAlignment,
+        int                 flattenMAPQAtOrBelow_,
+        bool                useSoftClipping_,
         unsigned            matchReward = 1,
         unsigned            subPenalty = 4,
         unsigned            gapOpenPenalty = 6,
         unsigned            gapExtendPenalty = 1,
+        unsigned            fivePrimeEndBonus = 10,
+        unsigned            threePrimeEndBonus = 5,
         int                 minScoreRealignment_ = 3,
         int                 minScoreGapRealignmentALT_ = 3,
-        int                 minAGScoreImprovement_ = 15,
+        int                 minAGScoreImprovement_ = 24,
+        bool                enableHammingScoringBaseAligner = false,
         BigAllocator        *allocator = NULL);
     
     virtual ~ChimericPairedEndAligner();
@@ -83,9 +88,14 @@ public:
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        _int64                 maxLVCandidatesForAffineGapBufferSize,
-        _int64                *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap
+        _int64                 maxPairedCandidatesForAffineGapBufferSize,
+        _int64                *nPairedCandidatesForAffineGap,
+        PairedAlignmentResult *pairedCandidatesForAffineGap,
+        _int64                 maxSingleCandidatesForAffineGapBufferSize,
+        _int64                *nSingleCandidatesForAffineGapFirstRead,
+        _int64                *nSingleCandidatesForAffineGapSecondRead,
+        SingleAlignmentResult *singleCandidatesForAffineGap,
+        int                    maxK
 	);
 
     void *operator new(size_t size) {return BigAlloc(size);}
@@ -116,12 +126,18 @@ private:
 	unsigned	minReadLength;
 
     bool emitALTAlignments;
+    bool useSoftClipping;
 
     unsigned maxKSingleEnd;
+    unsigned maxKPairedEnd;
 
     int extraSearchDepth;
     int minScoreRealignment;
     int minScoreGapRealignmentALT;
     int minAGScoreImprovement;
+    int flattenMAPQAtOrBelow;
+
+    bool enableHammingScoringBaseAligner;
+    bool useAffineGap;
 
 };

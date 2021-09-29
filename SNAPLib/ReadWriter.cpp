@@ -224,7 +224,7 @@ SimpleReadWriter::writeReads(
             if (useAffineGap && (results[whichResult].usedAffineGapScoring || results[whichResult].score > 0)) {
                 while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
                     results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, results[whichResult].supplementary, &addFrontClipping,
-                    results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag, results[whichResult].basesClippedBefore,
+                    results[whichResult].score, results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag, results[whichResult].basesClippedBefore,
                     results[whichResult].basesClippedAfter)) {
 
                     _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster.
@@ -248,6 +248,8 @@ SimpleReadWriter::writeReads(
                         //
                         results[whichResult].status = NotFound;
                         results[whichResult].location = InvalidGenomeLocation;
+                        results[whichResult].score = -1;
+                        results[whichResult].direction = FORWARD;
                         finalLocations[whichResult] = InvalidGenomeLocation;
                     } else {
                         if (addFrontClipping < 0) { // Insertion (soft-clip)
@@ -290,6 +292,8 @@ SimpleReadWriter::writeReads(
                         //
                         results[whichResult].status = NotFound;
                         results[whichResult].location = InvalidGenomeLocation;
+                        results[whichResult].score = -1;
+                        results[whichResult].direction = FORWARD;
                         finalLocations[whichResult] = InvalidGenomeLocation;
                     }
                     else {
@@ -512,7 +516,7 @@ SimpleReadWriter::writePairs(
                 if (useAffineGap && (singleResults[whichRead][whichAlignment].usedAffineGapScoring || singleResults[whichRead][whichAlignment].score > 0)) {
                     while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
                         reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
-                        true, singleResults[whichRead][whichAlignment].supplementary, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag,
+                        true, singleResults[whichRead][whichAlignment].supplementary, &addFrontClipping, singleResults[whichRead][whichAlignment].score, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag,
                         singleResults[whichRead][whichAlignment].basesClippedBefore, singleResults[whichRead][whichAlignment].basesClippedAfter)) {
 
                         if (0 == addFrontClipping) {
@@ -527,6 +531,8 @@ SimpleReadWriter::writePairs(
                             //
                             singleResults[whichRead][whichAlignment].status = NotFound;
                             location = InvalidGenomeLocation;
+                            singleResults[whichRead][whichAlignment].score = -1;
+                            singleResults[whichRead][whichAlignment].direction = FORWARD;
                         }
                         else {
                             if (addFrontClipping < 0) { // Insertion (soft-clip)
@@ -560,6 +566,8 @@ SimpleReadWriter::writePairs(
                             //
                             singleResults[whichRead][whichAlignment].status = NotFound;
                             location = InvalidGenomeLocation;
+                            singleResults[whichRead][whichAlignment].score = -1;
+                            singleResults[whichRead][whichAlignment].direction = FORWARD;
                         }
                         else {
                             if (addFrontClipping > 0) {

@@ -137,6 +137,112 @@ inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
     _ASSERT(genomeLocation.location <= 0xffffffff && genomeLocation.location >= 0);
     return (unsigned)genomeLocation.location;
 }
+
+//
+// A wrapper for contig nums in the order of the orginal FASTA.
+// It's done this way to make its type different from internal contig nums.
+//
+class OriginalContigNum {
+public:
+    OriginalContigNum(int contigNumFromFASTA_) {
+        contigNumFromFASTA = contigNumFromFASTA_;
+    }
+
+    OriginalContigNum() {
+        contigNumFromFASTA = -1;
+    }
+
+    //
+    // We use unsigned comparisons because we want -1, which is unaligned,
+    // to be bigger than any ordinary contig.  We have to use -1 because
+    // it gets written into BAM files and the BAM spec requires it.
+    //
+    bool operator==(const OriginalContigNum& peer) const {
+        return (unsigned)contigNumFromFASTA == (unsigned)peer.contigNumFromFASTA;
+    }
+
+    bool operator!=(const OriginalContigNum& peer) const {
+        return (unsigned)contigNumFromFASTA != (unsigned)peer.contigNumFromFASTA;
+    }
+
+    bool operator<(const OriginalContigNum& peer) const {
+        return (unsigned)contigNumFromFASTA < (unsigned)peer.contigNumFromFASTA;
+    }
+
+    bool operator<=(const OriginalContigNum& peer) const {
+        return (unsigned)contigNumFromFASTA <= (unsigned)peer.contigNumFromFASTA;
+    }
+
+    bool operator>(const OriginalContigNum& peer) const {
+        return (unsigned)contigNumFromFASTA > (unsigned)peer.contigNumFromFASTA;
+    }
+
+    bool operator>=(const OriginalContigNum& peer) const {
+        return (unsigned)contigNumFromFASTA >= (unsigned)peer.contigNumFromFASTA;
+    }
+
+private:
+
+    int     contigNumFromFASTA;
+
+    friend int OriginalContigNumToInt(const OriginalContigNum originalContigNum);
+
+};
+
+inline int OriginalContigNumToInt(const OriginalContigNum originalContigNum) {
+    return originalContigNum.contigNumFromFASTA;
+}
+
+//
+// A wrapper for contig nums in the order of our index (i.e., with ALTs later than others).
+// It's done this way to make its type different from original contig nums.
+//
+class InternalContigNum {
+public:
+    InternalContigNum(int contigNumFromIndex_)
+    {
+        contigNumFromIndex = contigNumFromIndex_;
+    }
+
+    InternalContigNum() {
+        contigNumFromIndex = -1;
+    }
+
+    bool operator==(const InternalContigNum& peer) const {
+        return contigNumFromIndex == peer.contigNumFromIndex;
+    }
+
+    bool operator!=(const InternalContigNum& peer) const {
+        return contigNumFromIndex != peer.contigNumFromIndex;
+    }
+
+    bool operator<(const InternalContigNum& peer) const {
+        return contigNumFromIndex < peer.contigNumFromIndex;
+    }
+
+    bool operator<=(const InternalContigNum& peer) const {
+        return contigNumFromIndex <= peer.contigNumFromIndex;
+    }
+
+    bool operator>(const InternalContigNum& peer) const {
+        return contigNumFromIndex > peer.contigNumFromIndex;
+    }
+
+    bool operator>=(const InternalContigNum& peer) const {
+        return contigNumFromIndex >= peer.contigNumFromIndex;
+    }
+
+private:
+
+    int     contigNumFromIndex;
+    friend int InternalContigNumToInt(const InternalContigNum internalContigNum);
+
+};
+
+inline int InternalContigNumToInt(const InternalContigNum internalContigNum) {
+    return internalContigNum.contigNumFromIndex;
+}
+
 #else   // _DEBUG
 typedef _int64 GenomeLocation;
 
@@ -150,9 +256,16 @@ inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
     return (unsigned)genomeLocation;
 }
 
+typedef int InternalContigNum;
+typedef unsigned OriginalContigNum; // Unsigned so that -1 is big rather than small.  See comment in the _DEBUG version for details.
+inline int OriginalContigNumToInt(const OriginalContigNum originalContigNum) { return originalContigNum; }
+inline int InternalContigNumToInt(const InternalContigNum internalContigNum) { return internalContigNum; }
+
 #endif // _DEBUG
 
 typedef _int64 GenomeDistance;
+
+
 
 extern GenomeLocation InvalidGenomeLocation;
 
@@ -171,14 +284,23 @@ public:
             GenomeDistance          i_maxBases,
             GenomeDistance          nBasesStored,
             unsigned                i_chromosomePadding,
-            unsigned                maxContigs,
-            bool                    i_areALTContigsMarked);
+            unsigned                maxContigs);
 
 		void startContig(
-			const char          *contigName);
+			const char          *contigName,
+            int                  originalContigNumber);
 
 		void markContigALT(
 			const char			*contigName);
+
+        void markContigLiftover(
+            char        *contigName,
+            char        **altLiftoverContigNames,
+            unsigned    *altLiftoverContigFlags,
+            char        **altLiftoverProjContigNames,
+            unsigned    *altLiftoverProjContigOffsets,
+            char        **altLiftoverProjCigar,
+            int         nAltLiftover);
 
         void addData(
             const char          *data);
@@ -207,7 +329,7 @@ public:
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
 
-        static bool getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs, bool *hasAltContigsMarked);
+        static bool getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs);
 
         bool saveToFile(const char *fileName) const;
 
@@ -246,23 +368,49 @@ public:
 
         inline GenomeDistance getCountOfBases() const {return nBases;}
 
-        bool getLocationOfContig(const char *contigName, GenomeLocation *location, int* index = NULL) const;
+        bool getLocationOfContig(const char *contigName, GenomeLocation *location, InternalContigNum* index = NULL) const;
 
         inline void prefetchData(GenomeLocation genomeLocation) const {
             _mm_prefetch(bases + GenomeLocationAsInt64(genomeLocation), _MM_HINT_T2);
             _mm_prefetch(bases + GenomeLocationAsInt64(genomeLocation) + 64, _MM_HINT_T2);
         }
 
-        struct Contig {
-            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false) {}
-            GenomeLocation     beginningLocation;
-            GenomeDistance     length;
-            unsigned           nameLength;
-            char              *name;
-			bool			   isALT;
+        struct ProjCigarOpFormat {
+            ProjCigarOpFormat() : action('M'), count(0) {}
+            char action;
+            unsigned count;
         };
 
-        inline const Contig *getContigs() const { return contigs; }
+        struct Contig {
+            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), isALT(false), originalContigNumber(OriginalContigNum(-1)), internalContigNumber(InternalContigNum(-1)),
+                       projBeginningLocation(InvalidGenomeLocation), isProjRC(false), projCigar(NULL), projCigarOps(NULL), countProjCigarOps(0) {}
+            GenomeLocation     beginningLocation;
+            GenomeDistance     length;                  // This includes the padding
+            unsigned           nameLength;
+            InternalContigNum  internalContigNumber;    // The contig number in the order in the index; this corresponds to 
+            OriginalContigNum  originalContigNumber;    // Where was this contig in the FASTA file?  We reorder them because of ALTs, but then undo that at sort time.
+            char              *name;
+			bool			   isALT;
+            GenomeLocation     projBeginningLocation;   // only valid for ALT contigs
+            GenomeLocation     projEndLocation;         // only valid for ALT contigs
+            bool               isProjRC;                // only valid for ALT contigs
+            char              *projCigar;               // only valid for ALT contigs
+            ProjCigarOpFormat *projCigarOps;            // only valid for ALT contigs
+            int                countProjCigarOps;       // only valid for ALT contigs
+        };
+
+        //inline const Contig *getContigs() const { return contigs; }
+
+        inline const Contig* getContigByInternalNumber(InternalContigNum internalContigNum) const {
+            return &contigs[InternalContigNumToInt(internalContigNum)];
+        }
+
+        inline const Contig* getContigByOriginalContigNumber(OriginalContigNum originalContigNum) const {
+            return getContigByInternalNumber(contigNumberByOriginalOrder[OriginalContigNumToInt(originalContigNum)]);
+        }
+
+        // This maps the original contig number to the index of the reordered contig, i.e., the index in contigs[].  It's the inverse mapping of contigs[i].originalContigNumber
+        inline const InternalContigNum* getContigNumbersByOriginalOrder() const { return contigNumberByOriginalOrder; }    
 
         inline int getNumContigs() const { return nContigs; }
 
@@ -272,10 +420,12 @@ public:
         const Contig *getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const;
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
         int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
-		inline bool isGenomeContigAware() 
-		{
-			return isContigAware;
-		}
+        int getContigNumByName(const char* contigName) const;
+        GenomeLocation getBeginningLocation(const char* contigName) const;
+        int getProjContigNumAtLocation(GenomeLocation location) const;
+        GenomeLocation getProjLocation(GenomeLocation location, int span) const;
+        GenomeDistance getContigProjSpan(int contig) const;
+        bool isProjContigRC(GenomeLocation location) const;
 
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
@@ -289,9 +439,11 @@ public:
 
         char* genomeLocationInStringForm(GenomeLocation location, char *buffer, size_t bufferSize) const;
 
+        void setUpContigNumbersByOriginalOrder();
+
 private:
 
-        static const int N_PADDING = 100; // Padding to add on either end of the genome to allow substring reads past it
+        static const int N_PADDING = 1000; // Padding to add on either end of the genome to allow substring reads past it
 
         //
         // The actual genome.
@@ -309,21 +461,190 @@ private:
         int          nContigs;
         int          maxContigs;
 
-		bool		areALTContigsMarked;
-
         Contig      *contigs;    // This is always in order (it's not possible to express it otherwise in FASTA).
 
-        Contig      *contigsByName;
+
+        Contig              *contigsByName;
+        InternalContigNum   *contigNumberByOriginalOrder;
  
-        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map, bool *hasALTContigsMarked);
+        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map);
 
         const unsigned chromosomePadding;
 
 		GenericFile_map *mappedFile;
 
-		bool isContigAware;
-
         GenomeLocation  genomeLocationOfFirstALTContig;
+};
+
+//
+// A wrapper for GenomeLocation that does comparison by the original order of contigs from the FASTA that generated the index, not
+// by GenomeLocation space.  The trick here is that the index *almost* preserves the original order.  The only thing that it does
+// is to move all of the ALT contigs to the end, so that the aligner can test whether a GenomeLocation is ALT by just comparing it
+// with the cutoff.  So, to compare two genome locations in the original order if they're both non-ALT or both ALT then you can
+// still just compare the raw location.  If they're one of each then you need to go to the genome and look up the contig structure,
+// and from there you can just look at the original contig number to make the comparison.
+//
+class GenomeLocationOrderedByOriginalContigs
+{
+    GenomeLocation  location;
+    const Genome    *genome;
+
+public:
+    GenomeLocationOrderedByOriginalContigs(GenomeLocation i_location, const Genome* i_genome) : location(i_location), genome(i_genome) {}
+
+    inline bool operator>=(GenomeLocationOrderedByOriginalContigs& peer)
+    {
+        if (location == InvalidGenomeLocation) {
+            return true;
+        }
+
+        if (peer.location == InvalidGenomeLocation) {
+            return false;
+        }
+
+        if (genome->isGenomeLocationALT(location) == genome->isGenomeLocationALT(peer.location))
+        {
+            return location >= peer.location;
+        }
+
+        return genome->getContigAtLocation(location)->originalContigNumber >= genome->getContigAtLocation(peer.location)->originalContigNumber;
+    }
+
+    inline bool operator>(GenomeLocationOrderedByOriginalContigs& peer)
+    {
+        if (location == peer.location) {
+            return false;
+        }
+
+        if (location == InvalidGenomeLocation) {
+            return true;
+        }
+
+        if (peer.location == InvalidGenomeLocation) {
+            return false;
+        }
+
+        if (genome->isGenomeLocationALT(location) == genome->isGenomeLocationALT(peer.location))
+        {
+            return location > peer.location;
+        }
+
+        return genome->getContigAtLocation(location)->originalContigNumber > genome->getContigAtLocation(peer.location)->originalContigNumber;
+    }
+
+    inline bool operator<(GenomeLocationOrderedByOriginalContigs& peer)
+    {
+        if (location == peer.location) {
+            return false;
+        }
+
+        if (location == InvalidGenomeLocation) {
+            return false;
+        }
+
+        if (peer.location == InvalidGenomeLocation) {
+            return true;
+        }
+
+        if (genome->isGenomeLocationALT(location) == genome->isGenomeLocationALT(peer.location))
+        {
+            return location < peer.location;
+        }
+
+        return genome->getContigAtLocation(location)->originalContigNumber < genome->getContigAtLocation(peer.location)->originalContigNumber;
+    }
+
+    inline bool operator<=(GenomeLocationOrderedByOriginalContigs& peer)
+    {
+        if (location == peer.location) {
+            return true;
+        }
+
+        if (location == InvalidGenomeLocation) {
+            return false;
+        }
+
+        if (peer.location == InvalidGenomeLocation) {
+            return true;
+        }
+
+        if (genome->isGenomeLocationALT(location) == genome->isGenomeLocationALT(peer.location))
+        {
+            return location <= peer.location;
+        }
+
+        return genome->getContigAtLocation(location)->originalContigNumber <= genome->getContigAtLocation(peer.location)->originalContigNumber;
+    }
+
+    inline bool operator==(GenomeLocationOrderedByOriginalContigs& peer)
+    {
+        return location == peer.location;
+    }
+
+    inline bool operator!=(GenomeLocationOrderedByOriginalContigs& peer)
+    {
+        return location != peer.location;
+    }
+};
+
+class ContigAndPos {
+public:
+    ContigAndPos(OriginalContigNum originalContigNum_, int pos_) {
+        originalContigNum = originalContigNum_;
+        pos = pos_;
+    }
+
+    ContigAndPos() {
+        originalContigNum = -1;
+        pos = 0;
+    }
+
+    inline bool operator==(const ContigAndPos& peer) const {
+        return originalContigNum == peer.originalContigNum && pos == peer.pos;
+    }
+
+    inline bool operator!=(const ContigAndPos& peer) const {
+        return originalContigNum != peer.originalContigNum || pos != peer.pos;
+    }
+
+    inline bool operator>=(const ContigAndPos& peer) const {
+        if (originalContigNum == peer.originalContigNum) {
+            return pos >= peer.pos;
+        }
+
+        return originalContigNum > peer.originalContigNum;
+    }
+
+    inline bool operator>(const ContigAndPos& peer) const {
+        if (originalContigNum == peer.originalContigNum) {
+            return pos > peer.pos;
+        }
+
+        return originalContigNum > peer.originalContigNum;
+    }
+
+    inline bool operator<=(const ContigAndPos& peer) const {
+        if (originalContigNum == peer.originalContigNum) {
+            return pos <= peer.pos;
+        }
+
+        return originalContigNum < peer.originalContigNum;
+    }
+
+    inline bool operator<(const ContigAndPos& peer) const {
+        if (originalContigNum == peer.originalContigNum) {
+            return pos < peer.pos;
+        }
+
+        return originalContigNum < peer.originalContigNum;
+    }
+
+    inline OriginalContigNum getContig() { return originalContigNum; }
+    inline int getPos() { return pos; }
+
+private:
+    OriginalContigNum originalContigNum;
+    int pos;
 };
 
 GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB);

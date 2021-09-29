@@ -1,3 +1,7 @@
+//
+// DP formulation based on https://figshare.com/articles/preprint/Notes_on_pairwise_alignment_with_dynamic_programming/5223973
+//
+
 #pragma once
 
 #include "Compat.h"
@@ -78,16 +82,18 @@ template<int TEXT_DIRECTION = 1> class AffineGapVectorized {
 public:
     AffineGapVectorized()
     {
-        init(1, 4, 6, 1);
+        init(1, 4, 6, 1, 10, 5);
     }
 
     AffineGapVectorized(
         int i_matchReward,
         int i_subPenalty,
         int i_gapOpenPenalty,
-        int i_gapExtendPenalty)
+        int i_gapExtendPenalty,
+        int i_fivePrimeEndBonus,
+        int i_threePrimeEndBonus)
     {
-        init(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
+        init(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty, i_fivePrimeEndBonus, i_threePrimeEndBonus);
     }
 
     static size_t getBigAllocatorReservation() { return sizeof(AffineGapVectorized<TEXT_DIRECTION>); }
@@ -100,12 +106,16 @@ public:
         int i_matchReward,
         int i_subPenalty,
         int i_gapOpenPenalty,
-        int i_gapExtendPenalty)
+        int i_gapExtendPenalty,
+        int i_fivePrimeEndBonus,
+        int i_threePrimeEndBonus)
     {
         matchReward = i_matchReward;
         subPenalty = -i_subPenalty;
         gapOpenPenalty = i_gapOpenPenalty + i_gapExtendPenalty; // First gap costs (gapOpen + gapExtend)
         gapExtendPenalty = i_gapExtendPenalty;
+        fivePrimeEndBonus = i_fivePrimeEndBonus;
+        threePrimeEndBonus = i_threePrimeEndBonus;
 
         //
         // Initialize nucleotide <-> nucleotide transition matrix
@@ -122,6 +132,127 @@ public:
         }
     }
 
+    //
+    // Compute Hamming distance between text and pattern. Poorly matching sections of pattern are clipped out
+    // TODO: Make faster version
+    // 
+    int computeGaplessScore(
+        const char* text,
+        int textLen,
+        const char* pattern,
+        const char* qualityString,
+        int patternLen,
+        int scoreInit,
+        int scoreLimit,
+        int* o_nEdits = NULL,
+        int* o_textOffset = NULL,
+        int* o_patternOffset = NULL,
+        double* matchProbability = NULL,
+        int* o_nEditsGapless = NULL)
+    {
+        _ASSERT(textLen <= MAX_READ_LENGTH + MAX_K);
+        _ASSERT(patternLen <= textLen);
+
+        int localTextOffset, localPatternOffset;
+        if (NULL == o_textOffset) {
+            //
+            // If the user doesn't want textOffset, just use a stack local to avoid
+            // having to check it all the time.
+            //
+            o_textOffset = &localTextOffset;
+        }
+
+        if (NULL == o_patternOffset) {
+            o_patternOffset = &localPatternOffset;
+        }
+
+        double localMatchProbability;
+        if (NULL == matchProbability) {
+            //
+            // If the user doesn't want matchProbability, just use a stack local to avoid
+            // having to check it all the time.
+            //
+            matchProbability = &localMatchProbability;
+        }
+
+        int localnEdits;
+        if (NULL == o_nEdits) {
+            //
+            // If the user doesn't want matchProbability, just use a stack local to avoid
+            // having to check it all the time.
+            //
+            o_nEdits = &localnEdits;
+        }
+
+        int localnEditsGapless;
+        if (NULL == o_nEditsGapless) {
+            //
+            // If the user doesn't want matchProbability, just use a stack local to avoid
+            // having to check it all the time.
+            //
+            o_nEditsGapless = &localnEditsGapless;
+        }
+
+        if (scoreLimit < 0 || NULL == text) {
+            *o_nEdits = ScoreAboveLimit;
+            *o_nEditsGapless = ScoreAboveLimit;
+            return ScoreAboveLimit;
+        }
+
+        //
+        // Start with perfect match probability and work our way down.
+        //
+        *matchProbability = 1.0;
+
+        if (TEXT_DIRECTION == -1) {
+            text--; // so now it points at the "first" character of t, not after it.
+        }
+
+        int gapLessScore = scoreInit;
+        int maxScore = scoreInit;
+        for (int i = 0; i < patternLen; i++) {
+            const char* p = pattern + i;
+            const char* t = text + i * TEXT_DIRECTION;
+            gapLessScore += (*p == *t) ? matchReward : subPenalty;
+
+            // Keep track of maximum score and corresponding length of pattern matched
+            if (gapLessScore > maxScore) {
+                maxScore = gapLessScore;
+                *o_patternOffset = i;
+            }
+
+        } // patternLen
+
+        // We were able to extend the seed. Now compute matchProbability for the portion that was extended
+        if (maxScore > scoreInit) {
+            *o_nEdits = 0;
+            int nMatches = 0;
+            for (int i = 0; i <= *o_patternOffset; i++) {
+                const char* p = pattern + i;
+                const char* t = text + i * TEXT_DIRECTION;
+                if (*p != *t) {
+                    *o_nEdits += 1;
+                    *matchProbability *= lv_phredToProbability[qualityString[i]];
+                } else {
+                    nMatches++;
+                }
+            }
+            *matchProbability *= lv_perfectMatchProbability[nMatches];
+            *o_patternOffset += 1;
+            *o_patternOffset = patternLen - *o_patternOffset;
+            *o_textOffset = *o_patternOffset;
+            *o_nEditsGapless = (*o_nEdits <= scoreLimit) ? *o_nEdits : -1;
+            *o_nEdits += *o_patternOffset; // Add gaps at the end
+            *matchProbability *= lv_indelProbabilities[*o_patternOffset];
+            return maxScore;
+        }
+        else { // We could not find a longer gapless alignment beyond seedLen
+            *o_nEdits = ScoreAboveLimit;
+            *o_nEditsGapless = ScoreAboveLimit;
+            return ScoreAboveLimit;
+        }
+    }
+    
     int computeScoreBanded(
         const char* text,
         int textLen,
@@ -130,10 +261,13 @@ public:
         int patternLen,
         int w,
         int scoreInit,
+        bool isRC,
         int *o_textOffset = NULL,
         int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
-        double *matchProbability = NULL)
+        double *matchProbability = NULL,
+        bool useClippingOptimizations = false,
+        bool useAltLiftover = false)
     {
 
 #ifdef TRACE_AG
@@ -242,6 +376,24 @@ public:
         __m128i v_gapExtend = _mm_set1_epi16(gapExtendPenalty);
         __m128i v_scoreInit = _mm_set1_epi16(scoreInit);
         __m128i v_mask = _mm_cmpgt_epi16(_mm_set_epi16(0, 0, 0, 0, 0, 0, 0, 1), v_zero);
+
+        int endBonus;
+        if (!isRC) {
+            if (TEXT_DIRECTION == -1) {
+                endBonus = fivePrimeEndBonus;
+            }
+            else {
+                endBonus = threePrimeEndBonus;
+            }
+        }
+        else {
+            if (TEXT_DIRECTION == -1) {
+                endBonus = threePrimeEndBonus;
+            }
+            else {
+                endBonus = fivePrimeEndBonus;
+            }
+        }
 
         //
         // Initialize scores of first row
@@ -457,7 +609,7 @@ got_answer:
 
             if (maxScoreRow == 0) break;
 
-            if (maxScoreRow > bestLocalAlignmentScore) { // If we obtained a better score this round  
+            if (maxScoreRow > bestLocalAlignmentScore) { // If we obtained a better score this round
                 // 
                 // Get index in pattern where maximum score was obtained
                 // 
@@ -490,11 +642,87 @@ got_answer:
         } // end text
 
         // Choose between local and global alignment for patternOffset
-        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) {
             // Local alignment preferred
             *o_patternOffset = bestLocalAlignmentPatternOffset;
             *o_textOffset = bestLocalAlignmentTextOffset;
             score = bestLocalAlignmentScore;
+
+            if (useClippingOptimizations) {
+                //
+                // Check if we can match more bases near the end of the soft-clipped read by deleting a character from the reference.
+                // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
+                //
+                int patternOffsetAdj = *o_patternOffset - 1;
+                int textOffsetAdj = *o_textOffset;
+                int countEndMatches = 0;
+
+                while ((patternOffsetAdj + 1 != patternLen) && pattern[patternOffsetAdj + 1] == *(text + (textOffsetAdj + 1) * TEXT_DIRECTION)) {
+                    countEndMatches++;
+                    patternOffsetAdj++;
+                    textOffsetAdj++;
+                }
+
+                if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with deletion. FIXME: check if 3 is enough!
+                    *o_patternOffset = patternOffsetAdj;
+                    *o_textOffset = textOffsetAdj;
+                } else {
+                    //
+                    // Check if we can match more bases near the end of the soft-clipped read by inserting a character to the pattern.
+                    // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
+                    //
+                    patternOffsetAdj = *o_patternOffset + 1;
+                    textOffsetAdj = *o_textOffset;
+                    countEndMatches = 0;
+
+                    while ((patternOffsetAdj < patternLen) && pattern[patternOffsetAdj] == *(text + (textOffsetAdj)*TEXT_DIRECTION)) {
+                        countEndMatches++;
+                        patternOffsetAdj++;
+                        textOffsetAdj++;
+                    }
+
+                    if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with insertion. FIXME: check if 3 is enough!
+                        *o_patternOffset = patternOffsetAdj - 1;
+                        *o_textOffset = textOffsetAdj - 1;
+                    }
+                }
+
+                if (*o_patternOffset == bestLocalAlignmentPatternOffset && *o_textOffset == bestLocalAlignmentTextOffset) {
+                    patternOffsetAdj = *o_patternOffset;
+                    textOffsetAdj = *o_textOffset;
+                    if (!useAltLiftover) { // base quality aware optimization leads to spurious INDELs at the ends of reads after liftover. Disabled
+                        //
+                        // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
+                        //
+                        int countInsertions = 0;
+                        while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
+                            patternOffsetAdj += 1;
+                            countInsertions++;
+                        }
+
+                        if (patternOffsetAdj == patternLen - 1) {
+                            *o_patternOffset = patternOffsetAdj;
+                        }
+                        else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                            int tmpOffset = patternOffsetAdj + 1;
+                            int countRemHighQualityBases = 0;
+                            int remPatternLen = patternLen - tmpOffset;
+
+                            while (tmpOffset != patternLen - 1) {
+                                if (qualityString[tmpOffset] >= 65) {
+                                    countRemHighQualityBases++;
+                                }
+                                tmpOffset++;
+                            }
+
+                            _ASSERT(remPatternLen != 0);
+                            if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                                *o_patternOffset = patternOffsetAdj;
+                            }
+                        }
+                    }
+                }
+            }
         }
         else {
             // Global alignment preferred
@@ -503,9 +731,9 @@ got_answer:
             score = bestGlobalAlignmentScore;
         }
 
-        if (score > scoreInit) { 
-            // Perform traceback and compute nEdits assuming the entire pattern is aligned
-            int rowIdx = bestGlobalAlignmentTextOffset, colIdx = patternLen - 1, matrixIdx;
+        if (useAltLiftover || (score >= scoreInit)) { // score < scoreInit for some ALT liftover alignments, but still valid
+            // Perform traceback and compute nEdits
+            int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
             int actionCount = 1;
             int nMatches = 0, nMismatches = 0, nGaps = 0;
@@ -573,7 +801,7 @@ got_answer:
 
             *o_nEdits = nMismatches + nGaps;
 
-            *o_nEdits = (*o_nEdits <= w) ? *o_nEdits : -1; // return -1 if we have more edits than threshold w
+            // *o_nEdits = (*o_nEdits <= w) ? *o_nEdits : -1; // return -1 if we have more edits than threshold w
 
             *matchProbability *= lv_perfectMatchProbability[nMatches];
 
@@ -582,6 +810,8 @@ got_answer:
 
             *o_textOffset = patternLen - *o_textOffset;
             *o_patternOffset = patternLen - *o_patternOffset;
+
+            *matchProbability *= lv_indelProbabilities[*o_patternOffset];
             
             return score;
         }
@@ -598,10 +828,13 @@ got_answer:
         int patternLen,
         int w,
         int scoreInit,
+        bool isRC,
         int *o_textOffset = NULL,
         int *o_patternOffset = NULL,
         int *o_nEdits = NULL,
-        double *matchProbability = NULL)
+        double *matchProbability = NULL,
+        bool useClippingOptimizations = false,
+        bool useAltLiftover = false)
     {
 
 #ifdef TRACE_AG
@@ -715,6 +948,24 @@ got_answer:
         __m128i v_gapExtend = _mm_set1_epi16(gapExtendPenalty);
         __m128i v_scoreInit = _mm_set1_epi16(scoreInit);
         __m128i v_mask = _mm_cmpgt_epi16(_mm_set_epi16(0, 0, 0, 0, 0, 0, 0, 1), v_zero);
+
+        int endBonus;
+        if (!isRC) {
+            if (TEXT_DIRECTION == -1) {
+                endBonus = fivePrimeEndBonus;
+            }
+            else {
+                endBonus = threePrimeEndBonus;
+            }
+        }
+        else {
+            if (TEXT_DIRECTION == -1) {
+                endBonus = threePrimeEndBonus;
+            }
+            else {
+                endBonus = fivePrimeEndBonus;
+            }
+        }
 
         //
         // Initialize scores of first row
@@ -883,7 +1134,7 @@ got_answer:
 
             if (maxScoreRow == 0) break;
 
-            if (maxScoreRow > bestLocalAlignmentScore) { // If we obtained a better score this round  
+            if (maxScoreRow > bestLocalAlignmentScore) { // If we obtained a better score this round
                 // Get index in pattern where maximum score was obtained
                 for (int j = 0; j < numVec; ++j) {
                     __m128i h = _mm_load_si128(Hminus1ptr + j); // Load a vector of score values 
@@ -910,11 +1161,89 @@ got_answer:
         } // end text
 
         // Choose between local and global alignment for patternOffset
-        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + 5)) { // FIXME: Change 5 to a clipping penalty
+
+        if ((bestLocalAlignmentScore != bestGlobalAlignmentScore) && (bestLocalAlignmentScore >= bestGlobalAlignmentScore + endBonus)) {
             // Local alignment preferred
             *o_patternOffset = bestLocalAlignmentPatternOffset;
             *o_textOffset = bestLocalAlignmentTextOffset;
             score = bestLocalAlignmentScore;
+
+            if (useClippingOptimizations) {
+                //
+                // Check if we can match more bases near the end of the soft-clipped read by deleting a character from the reference.
+                // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
+                //
+                int patternOffsetAdj = *o_patternOffset - 1;
+                int textOffsetAdj = *o_textOffset;
+                int countEndMatches = 0;
+
+                while ((patternOffsetAdj + 1 != patternLen) && pattern[patternOffsetAdj + 1] == *(text + (textOffsetAdj + 1) * TEXT_DIRECTION)) {
+                    countEndMatches++;
+                    patternOffsetAdj++;
+                    textOffsetAdj++;
+                }
+
+                if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with deletion. FIXME: check if 3 is enough!
+                    *o_patternOffset = patternOffsetAdj;
+                    *o_textOffset = textOffsetAdj;
+                }
+                else {
+                    //
+                    // Check if we can match more bases near the end of the soft-clipped read by inserting a character to the pattern.
+                    // This helps reduce some INDEL false negatives introduced by using a high gap open penalty
+                    //
+                    patternOffsetAdj = *o_patternOffset + 1;
+                    textOffsetAdj = *o_textOffset;
+                    countEndMatches = 0;
+
+                    while ((patternOffsetAdj < patternLen) && pattern[patternOffsetAdj] == *(text + (textOffsetAdj)*TEXT_DIRECTION)) {
+                        countEndMatches++;
+                        patternOffsetAdj++;
+                        textOffsetAdj++;
+                    }
+
+                    if (countEndMatches >= 3) { // matched too few bases, don't use the alignment with insertion. FIXME: check if 3 is enough!
+                        *o_patternOffset = patternOffsetAdj - 1;
+                        *o_textOffset = textOffsetAdj - 1;
+                    }
+                }
+
+                if (*o_patternOffset == bestLocalAlignmentPatternOffset && *o_textOffset == bestLocalAlignmentTextOffset) {
+                    patternOffsetAdj = *o_patternOffset;
+                    textOffsetAdj = *o_textOffset;
+                    if (!useAltLiftover) { // base quality aware optimization leads to spurious INDELs at the ends of reads after liftover. Disabled
+                        //
+                        // Try not to clip high quality bases (>= 65) from the read. These will be reported as insertions in the final alignment
+                        //
+                        int countInsertions = 0;
+                        while (patternOffsetAdj != patternLen - 1 && qualityString[patternOffsetAdj] >= 65 && qualityString[patternOffsetAdj + 1] >= 65) {
+                            patternOffsetAdj += 1;
+                            countInsertions++;
+                        }
+
+                        if (patternOffsetAdj == patternLen - 1) {
+                            *o_patternOffset = patternOffsetAdj;
+                        }
+                        else if (patternOffsetAdj >= *o_patternOffset + 2) {
+                            int tmpOffset = patternOffsetAdj + 1;
+                            int countRemHighQualityBases = 0;
+                            int remPatternLen = patternLen - tmpOffset;
+
+                            while (tmpOffset != patternLen - 1) {
+                                if (qualityString[tmpOffset] >= 65) {
+                                    countRemHighQualityBases++;
+                                }
+                                tmpOffset++;
+                            }
+
+                            _ASSERT(remPatternLen != 0);
+                            if (((float)countRemHighQualityBases) / remPatternLen < 0.1) {
+                                *o_patternOffset = patternOffsetAdj;
+                            }
+                        }
+                    }
+                }
+            }
         }
         else {
             // Global alignment preferred
@@ -923,9 +1252,9 @@ got_answer:
             score = bestGlobalAlignmentScore;
         }
 
-        if (score > scoreInit) {
-            // Perform traceback and compute nEdits assuming the entire pattern is aligned
-            int rowIdx = bestGlobalAlignmentTextOffset, colIdx = patternLen - 1, matrixIdx;
+        if (useAltLiftover || (score >= scoreInit)) { // score < scoreInit for some ALT alignments after liftover, but still valid
+            // Perform traceback and compute nEdits
+            int rowIdx = *o_textOffset, colIdx = *o_patternOffset, matrixIdx;
             BacktraceActionType action = M, prevAction = M;
             int actionCount = 1;
             int nMatches = 0, nMismatches = 0, nGaps = 0;
@@ -992,7 +1321,7 @@ got_answer:
 
             *o_nEdits = nMismatches + nGaps;
 
-            *o_nEdits = (*o_nEdits <= w) ? *o_nEdits : -1; // return -1 if we have more edits than threshold w
+            // *o_nEdits = (*o_nEdits <= w) ? *o_nEdits : -1; // return -1 if we have more edits than threshold w
 
             *matchProbability *= lv_perfectMatchProbability[nMatches];
 
@@ -1001,6 +1330,8 @@ got_answer:
 
             *o_textOffset = patternLen - *o_textOffset;
             *o_patternOffset = patternLen - *o_patternOffset;
+
+            *matchProbability *= lv_indelProbabilities[*o_patternOffset];
             
             return score;
         }
@@ -1029,6 +1360,8 @@ private:
     int subPenalty;
     int gapOpenPenalty;
     int gapExtendPenalty;
+    int fivePrimeEndBonus;
+    int threePrimeEndBonus;
 
     __m128i qProfile[MAX_ALPHABET_SIZE * MAX_VEC_SEGMENTS];
     __m128i H[MAX_VEC_SEGMENTS];
@@ -1051,13 +1384,18 @@ public:
 
     // Compute the affine gap score between two strings and write the CIGAR string in cigarBuf.
     // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
-    int computeGlobalScore(const char* text, int textLen, const char* pattern, int patternLen, int w,
+    int computeGlobalScore(const char* text, int textLen, const char* pattern, const char* quality, int patternLen, int w,
         char* cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format = COMPACT_CIGAR_STRING,
         int* o_cigarBufUsed = NULL, int *o_netDel = NULL, int *o_tailIns = NULL);
 
+    int computeGlobalScoreBanded(const char* text, int textLen, const char* pattern, const char* quality, int patternLen, int w, int scoreInit,
+        char* cigarBuf, int cigarBufLen, bool useM,
+        CigarFormat format = COMPACT_CIGAR_STRING,
+        int* o_cigarBufUsed = NULL, int* o_netDel = NULL, int* o_tailIns = NULL);
+
     int computeGlobalScoreNormalized(const char* text, int textLen,
-        const char* pattern, int patternLen,
+        const char* pattern, const char* quality, int patternLen,
         int k,
         char *cigarBuf, int cigarBufLen, bool useM,
         CigarFormat format, int* o_cigarBufUsed,

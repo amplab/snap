@@ -81,6 +81,7 @@ struct AlignerOptions : public AbstractOptions
     int                 numThreads;
     unsigned            maxDist;
     float               maxDistFraction;
+    unsigned            maxDistForIndels;
     unsigned            numSeedsFromCommandLine;
     double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
     bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
@@ -112,16 +113,20 @@ struct AlignerOptions : public AbstractOptions
     int                 maxSecondaryAlignmentAdditionalEditDistance;
 	int					maxSecondaryAlignments;
     int                 maxSecondaryAlignmentsPerContig;
+    int                 flattenMAPQAtOrBelow;
     bool                preserveClipping;
     float               expansionFactor;
     bool                noUkkonen;
     bool                noOrderedEvaluation;
 	bool				noTruncation;
     bool                useAffineGap;
+    bool                useSoftClipping;
     unsigned            matchReward;
     unsigned            subPenalty;
     unsigned            gapOpenPenalty;
     unsigned            gapExtendPenalty;
+    unsigned            fivePrimeEndBonus;
+    unsigned            threePrimeEndBonus;
 	unsigned			minReadLength;
 	bool				mapIndex;
 	bool				prefetchIndex;

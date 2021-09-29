@@ -50,6 +50,7 @@ struct SingleAlignmentResult {
 	AlignmentResult status;
 
     GenomeLocation  location;	// Aligned genome location.
+    GenomeLocation  origLocation;   // Location before seed was aligned
     Direction       direction;	// Did we match the reverse complement? 
     int             score;		// score of each end if matched
     int             scorePriorToClipping;   // Score prior to soft clipping generated when a read aligns off the end of a contig
@@ -64,6 +65,11 @@ struct SingleAlignmentResult {
     int             agScore;
 
     bool            supplementary;
+
+    int             seedOffset;
+    double          matchProbability;
+    double          probabilityAllCandidates;
+    unsigned        popularSeedsSkipped;
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
@@ -106,6 +112,9 @@ struct PairedAlignmentResult {
     double matchProbability[NUM_READS_PER_PAIR];
     double probabilityAllPairs;
     unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
+    bool usedGaplessClipping[NUM_READS_PER_PAIR];
+    int refSpan[NUM_READS_PER_PAIR];
+    bool liftover[NUM_READS_PER_PAIR];
 
     bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
     bool agForcedSingleAlignerCall;             // Did we call the single aligner only because affine gap asked us to?  
@@ -115,4 +124,36 @@ struct PairedAlignmentResult {
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
+
+    inline PairedAlignmentResult& operator=(const PairedAlignmentResult& other) {
+        for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
+            status[i] = other.status[i];
+            location[i] = other.location[i];
+            origLocation[i] = other.origLocation[i];
+            direction[i] = other.direction[i];
+            score[i] = other.score[i];
+            scorePriorToClipping[i] = other.scorePriorToClipping[i];
+            mapq[i] = other.mapq[i];
+            clippingForReadAdjustment[i] = other.clippingForReadAdjustment[i];
+            usedAffineGapScoring[i] = other.usedAffineGapScoring[i];
+            basesClippedBefore[i] = other.basesClippedBefore[i];
+            basesClippedAfter[i] = other.basesClippedAfter[i];
+            agScore[i] = other.agScore[i];
+            supplementary[i] = other.supplementary[i];
+            seedOffset[i] = other.seedOffset[i];
+            lvIndels[i] = other.lvIndels[i];
+            matchProbability[i] = other.matchProbability[i];
+            popularSeedsSkipped[i] = other.popularSeedsSkipped[i];
+            usedGaplessClipping[i] = other.usedGaplessClipping[i];
+            refSpan[i] = other.refSpan[i];
+            liftover[i] = other.liftover[i];
+        }
+        probabilityAllPairs = other.probabilityAllPairs;
+        alignedAsPair = other.alignedAsPair;
+        agForcedSingleAlignerCall = other.agForcedSingleAlignerCall;
+        nanosInAlignTogether = other.nanosInAlignTogether;
+        nLVCalls = other.nLVCalls;
+        nSmallHits = other.nSmallHits;
+        return *this;
+    }
 };

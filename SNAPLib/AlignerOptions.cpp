@@ -34,6 +34,7 @@ Revision History:
 #include "BaseAligner.h"
 #include "CommandProcessor.h"
 
+
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
     bool forPairedEnd)
@@ -78,6 +79,8 @@ AlignerOptions::AlignerOptions(
     subPenalty(4),
     gapOpenPenalty(6),
     gapExtendPenalty(1),
+    fivePrimeEndBonus(5),
+    threePrimeEndBonus(5),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(true),
@@ -96,15 +99,19 @@ AlignerOptions::AlignerOptions(
     emitInternalScore(false),
 	altAwareness(true),
     emitALTAlignments(false),
-    maxScoreGapToPreferNonALTAlignment(16)
+    maxScoreGapToPreferNonALTAlignment(64),
+    useSoftClipping(false),
+    flattenMAPQAtOrBelow(3)
 {
     if (forPairedEnd) {
         maxDist                 = 27;
+        maxDistForIndels        = 35;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
         maxHits                 = 300;
      } else {
         maxDist                 = 27;
+        maxDistForIndels        = 35;
         numSeedsFromCommandLine = 25;
         maxHits                 = 300;
 		seedCoverage			= 0;
@@ -128,7 +135,8 @@ AlignerOptions::usage()
             "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
             "       explicit type specifier (see below).  Use a dash with an explicit type specifier to write to\n"
             "       stdout, so for example -o -sam - would write SAM output to stdout\n"
-            "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
+            "  -d   maximum edit distance allowed per read or pair absent indels (default: %d)\n"
+            "  -i   maximum distance allowed per read for indels (default: %d)\n"
             "  -n   number of seeds to use per read\n"
             "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default uses -n)\n"
             "  -h   maximum hits to consider per seed (default: %d)\n"
@@ -229,6 +237,8 @@ AlignerOptions::usage()
             "           cost for substitution -gs (default: %u)\n"
             "           cost for opening a gap -go (default: %u)\n"
             "           cost for extending a gap -ge (default: %u)\n"
+            "           bonus for alignment reaching 5' end of read -g5 (default: %u)\n"
+            "           bonus for alignment reaching 3' end of read -g3 (default: %u)\n"
             "  -A-  Disable ALT awareness.  The default is to try to map reads to the primary assembly and only to choose ALT alignments when they're much better,\n"
             "       and to compute MAPQ for non-ALT alignments using only non-ALT hits. This flag disables that behavior and results in ALT-oblivious behavior.\n"
             "  -ea  Emit ALT alignments.  When the aligner is ALT aware (i.e., -A- isn't specified) if it finds an ALT alignment that would have been\n"
@@ -236,9 +246,16 @@ AlignerOptions::usage()
             "       flag set and MAPQ computed across all potential mappings, both primary and ALT\n"
             "  -asg Maximum score gap to prefer a non-ALT alignment.  If the best non-ALT alignment is more than this much worse than the best ALT alignment\n"
             "       emit the ALT alignment as the primary result rather than as a supplementary result. (default: %u)\n"
+            "  -fmb Force MAPQ below this value to zero.  By the strict definition of MAPQ a read with two equally good alignments should have MAPQ 3\n"
+            "       Other aligners, however, will score these alignments at MAPQ 0 and some variant callers depend on that behavior.  Setting this will\n"
+            "       force any MAPQ value at or below the parameter value to zero.  (default:%d)\n"
+            "  -hc Enable SNAP mode optimized for use with GATK HaplotypeCaller. (default: true)\n"
+            " -hc- Turn off optimizations specific to GATK HaplotypeCaller (e.g., when using the DRAGEN variant caller on SNAP aligned output)\n"
+            "       In this mode, when a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.\n"
 		,
             commandLine,
             maxDist,
+            maxDistForIndels,
             maxHits,
 			minWeightToCheck,
             MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
@@ -249,7 +266,10 @@ AlignerOptions::usage()
             subPenalty,
             gapOpenPenalty,
             gapExtendPenalty,
-            maxScoreGapToPreferNonALTAlignment
+            fivePrimeEndBonus,
+            threePrimeEndBonus,
+            maxScoreGapToPreferNonALTAlignment,
+            flattenMAPQAtOrBelow
         );
 
     if (extra != NULL) {
@@ -307,8 +327,13 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-n") == 0) {
+        } else if (strcmp(argv[n], "-i") == 0) {
+            if (n + 1 < argc) {
+                maxDistForIndels = atoi(argv[n + 1]);
+                n++;
+                return true;
+            }
+        } else if (strcmp(argv[n], "-n") == 0) {
             if (n + 1 < argc) {
                 if (seedCountSpecified) {
                     WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
@@ -319,8 +344,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-sc") == 0) {
+        } else if (strcmp(argv[n], "-sc") == 0) {
             if (n + 1 < argc) {
                 if (seedCountSpecified) {
                     WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
@@ -332,8 +356,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-ms") == 0) {
+        } else if (strcmp(argv[n], "-ms") == 0) {
             if (n + 1 < argc) {
                 minWeightToCheck = (unsigned)atoi(argv[n + 1]);
                 if (minWeightToCheck > 1000) {
@@ -350,16 +373,29 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-c") == 0) { // conf diff is deprecated, but we just ignore it rather than throwing an error.
+        } else if (strcmp(argv[n], "-c") == 0) { // conf diff is deprecated, but we just ignore it rather than throwing an error.
             if (n + 1 < argc) {
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-a") == 0) { // adaptive conf diff is deprecated, but we just ignore it rather than throwing an error.
+        } else if (strcmp(argv[n], "-a") == 0) { // adaptive conf diff is deprecated, but we just ignore it rather than throwing an error.
             if (n + 1 < argc) {
                 n++;
+                return true;
+            }
+        } else if (strcmp(argv[n], "-hc") == 0) {
+            useSoftClipping = false;
+            return true;
+        } else if (strcmp(argv[n], "-hc-") == 0) {
+            useSoftClipping = true;
+            fivePrimeEndBonus = 10;
+            threePrimeEndBonus = 7;
+            return true;
+        }
+        else if (strcmp(argv[n], "-fmb") == 0) {
+            if (n + 1 < argc) {
+                n++;
+                flattenMAPQAtOrBelow = atoi(argv[n + 1]);
                 return true;
             }
         } else if (strcmp(argv[n], "-t") == 0) {
@@ -374,8 +410,7 @@ AlignerOptions::usage()
  
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-o") == 0) {
+        } else if (strcmp(argv[n], "-o") == 0) {
             int argsConsumed;
             if (!SNAPFile::generateFromCommandLine(argv + n + 1, argc - n - 1, &argsConsumed, &outputFile, false, false)) {
                 WriteErrorMessage("Must have a file specifier after -o\n");
@@ -454,8 +489,7 @@ AlignerOptions::usage()
             strcpy(internalScoreTag, argv[n + 1]);
             n++;
             return true;
-        }
-        else if (strcmp(argv[n], "-F") == 0) {
+        } else if (strcmp(argv[n], "-F") == 0) {
             if (n + 1 < argc) {
                 n++;
                 if (strcmp(argv[n], "a") == 0) {
@@ -464,39 +498,33 @@ AlignerOptions::usage()
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterMultipleHits | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "s") == 0) {
+                } else if (strcmp(argv[n], "s") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "u") == 0) {
+                } else if (strcmp(argv[n], "u") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E  option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterUnaligned | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "l") == 0) {
+                } else if (strcmp(argv[n], "l") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E  option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterMultipleHits | FilterUnaligned;
-                }
-                else if (strcmp(argv[n], "b") == 0) {
+                } else if (strcmp(argv[n], "b") == 0) {
                     // ignore paired-end option(s)
-                }
-                else {
+                } else {
                     WriteErrorMessage("Unknown option type after -F: %s\n", argv[n]);
                     return false;
                 }
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-E") == 0) {
+        } else if (strcmp(argv[n], "-E") == 0) {
             if (n + 1 < argc) {
                 if (0 != filterFlags) {
                     WriteErrorMessage("You can have only one -F and/or -E switch (excepting -F b)\n");
@@ -704,6 +732,30 @@ AlignerOptions::usage()
             gapExtendPenalty = atoi(argv[n]);
             if (gapExtendPenalty <= 0) {
                 WriteErrorMessage("-ge must be greater than zero");
+                return false;
+            }
+            return true;
+        } else if (strcmp(argv[n], "-g5") == 0) {
+            if (n + 1 >= argc) {
+                WriteErrorMessage("-g5 requires an additional value\n");
+                return false;
+            }
+            n++;
+            fivePrimeEndBonus = atoi(argv[n]);
+            if (fivePrimeEndBonus <= 0) {
+                WriteErrorMessage("-g5 must be greater than zero");
+                return false;
+            }
+            return true;
+        } else if (strcmp(argv[n], "-g3") == 0) {
+            if (n + 1 >= argc) {
+                WriteErrorMessage("-g3 requires an additional value\n");
+                return false;
+            }
+            n++;
+            threePrimeEndBonus = atoi(argv[n]);
+            if (threePrimeEndBonus <= 0) {
+                WriteErrorMessage("-g3 must be greater than zero");
                 return false;
             }
             return true;

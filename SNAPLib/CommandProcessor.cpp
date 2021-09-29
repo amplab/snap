@@ -35,7 +35,7 @@ Revision History:
 #include "Error.h"
 #include "Compat.h"
 
-const char *SNAP_VERSION = "1.0dev.104";
+const char *SNAP_VERSION = "1.0.4 (affine branch)";
 
 static void usage()
 {
@@ -163,7 +163,9 @@ void RunDaemonMode(int argc, const char **argv)
 void ProcessTopLevelCommands(int argc, const char **argv)
 {
 	fprintf(stderr, "Welcome to SNAP version %s.\n\n", SNAP_VERSION);       // Can't use WriteStatusMessage, because we haven't parsed args yet to determine if -hdp is specified.  Just stick with stderr.
-
+#if TIME_HISTOGRAM
+	fprintf(stderr, "TIME_HISTOGRAM is compiled in.\n");
+#endif // TIME_HISTOGRAM
 	InitializeSeedSequencers();
 
 	if (argc < 2) {
@@ -176,6 +178,11 @@ void ProcessTopLevelCommands(int argc, const char **argv)
 	} else {
 		ProcessNonDaemonCommands(argc, argv);
 	}
+
+#if TIME_HISTOGRAM
+fclose(BJBSlowFASTQFile[0]);
+fclose(BJBSlowFASTQFile[1]);
+#endif
 }
 
 NamedPipe *CommandPipe = NULL;

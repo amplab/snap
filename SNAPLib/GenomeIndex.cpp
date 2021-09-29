@@ -43,7 +43,7 @@ using namespace std;
 
 static const int DEFAULT_SEED_SIZE = 27;
 static const double DEFAULT_SLACK = 0.3;
-static const unsigned DEFAULT_PADDING = 500;
+static const unsigned DEFAULT_PADDING = 2000;
 
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
@@ -67,7 +67,7 @@ static void usage()
         " -bSpace-          Indicates that space and tab characters should be included in chromosome names.\n"
         " -p                Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
         "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
-        "                   read you'll process.  Default is %d.  Specify the amount of padding directly after -p without a space.\n"
+        "                   read you'll process or gap between paired-end reads.  Default is %d.  Specify the amount of padding directly after -p without a space.\n"
         " -H                Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
         "                   Specify the histogram file name directly after -H without leaving a space.\n"
         " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
@@ -91,6 +91,7 @@ static void usage()
 		" -altContigFile    Specify the name of a file with a list of alt contig names, one per line.  You may specify this as often as you'd like\n"
 		" -nonAltContigName Specify the name of a contig that's not an alt, regardless of its size\n"
 		" -nonAltContigFile Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
+        " -altLiftoverFile  Specify the file containing ALT-to-REF mappings (SAM format). e.g., hs38DH.fa.alt from bwa-kit\n"
 		,
         BINARY_NAME,
         DEFAULT_SEED_SIZE,
@@ -149,6 +150,13 @@ GenomeIndex::runIndexer(
 	int nAltOptOut = 0;
 	char **altOptOutList = NULL;
     bool autoALT = true;
+    int nAltLiftover = 0;
+    char **altLiftoverLines = NULL;
+    char **altLiftoverContigNames = NULL;
+    unsigned *altLiftoverContigFlags = NULL;
+    char **altLiftoverProjContigNames = NULL;
+    unsigned *altLiftoverProjContigOffsets = NULL;
+    char **altLiftoverProjCigar = NULL;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -294,7 +302,107 @@ GenomeIndex::runIndexer(
 				usage();
 			}
 			n++;
-		} else {
+		} else if (!strcmp(argv[n], "-altLiftoverFile")) {
+            if (n + 1 < argc) {
+                FILE* inputFile = fopen(argv[n + 1], "r");
+                if (NULL == inputFile) {
+                    WriteErrorMessage("Unable to open ALT liftover file %s\n", argv[n + 1]);
+                    soft_exit(1);
+                }
+                char* altLiftoverBuffer = NULL;
+                int altLiftoverBufferSize = 0;
+
+                while (NULL != reallocatingFgets(&altLiftoverBuffer, &altLiftoverBufferSize, inputFile)) {
+                    if (altLiftoverBuffer[0] == '@') {
+                        continue;
+                    }
+                    if (NULL != strchr(altLiftoverBuffer, '\n')) {
+                        *strchr(altLiftoverBuffer, '\n') = '\0';
+                    }
+                    if (NULL != strchr(altLiftoverBuffer, '\r')) {
+                        *strchr(altLiftoverBuffer, '\r') = '\0';
+                    }
+                    addToCountedListOfStrings(altLiftoverBuffer, &nAltLiftover, &altLiftoverLines);
+                } // while we have an input string.
+
+                altLiftoverContigNames = new char*[nAltLiftover];
+                altLiftoverContigFlags = new unsigned [nAltLiftover];
+                altLiftoverProjContigNames = new char*[nAltLiftover];
+                altLiftoverProjContigOffsets = new unsigned [nAltLiftover];
+                altLiftoverProjCigar = new char*[nAltLiftover];
+
+                for (int i = 0; i < nAltLiftover; i++) {
+                    // get contig name
+                    char* contigNameStart = altLiftoverLines[i];
+                    char* contigNameEnd = strchr(contigNameStart, '\t');
+                    if (NULL == contigNameEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+                    // get contig flags
+                    char* contigFlagsEnd = strchr(contigNameEnd + 1, '\t');
+                    if (1 != sscanf(contigNameEnd + 1, "%u", &altLiftoverContigFlags[i]) || NULL == contigFlagsEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+                    // get projected contig name
+                    char* projContigNameStart = contigFlagsEnd + 1;
+                    char* projContigNameEnd = strchr(projContigNameStart, '\t');
+                    if (NULL == projContigNameEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+                    // get projected contig offsets
+                    char* projContigOffsetEnd = strchr(projContigNameEnd + 1, '\t');
+                    if (1 != sscanf(projContigNameEnd + 1, "%u", &altLiftoverProjContigOffsets[i]) || NULL == projContigOffsetEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+                    // skip next field (mapping quality)
+                    char* tmp = strchr(projContigOffsetEnd + 1, '\t');
+                    if (NULL == tmp) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+                    // get projected cigar
+                    char* projCigarStart = tmp + 1;
+                    char* projCigarEnd = strchr(projCigarStart, '\t');
+                    if (NULL == projCigarEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+                    // skip contigs that do not have a mapping to the primary reference
+                    if (*projContigNameStart == '*') {
+                        altLiftoverContigNames[i] = NULL;
+                        altLiftoverProjContigNames[i] = NULL;
+                        altLiftoverProjCigar[i] = NULL;
+                        continue;
+                    }
+
+                    size_t contigNameLength = contigNameEnd - contigNameStart;
+                    altLiftoverContigNames[i] = new char[contigNameLength + 1];
+                    strncpy(altLiftoverContigNames[i], contigNameStart, contigNameLength);
+                    altLiftoverContigNames[i][contigNameLength] = '\0';
+
+                    size_t projContigNameLength = projContigNameEnd - projContigNameStart;
+                    altLiftoverProjContigNames[i] = new char[projContigNameLength + 1];
+                    strncpy(altLiftoverProjContigNames[i], projContigNameStart, projContigNameLength);
+                    altLiftoverProjContigNames[i][projContigNameLength] = '\0';
+
+                    size_t projCigarLength = projCigarEnd - projCigarStart;
+                    altLiftoverProjCigar[i] = new char[projCigarLength + 1];
+                    strncpy(altLiftoverProjCigar[i], projCigarStart, projCigarLength);
+                    altLiftoverProjCigar[i][projCigarLength] = '\0';
+                }
+
+                fclose(inputFile);
+                delete[] altLiftoverBuffer;
+            }
+            else {
+                usage();
+            }
+            n++;
+        } else {
             WriteErrorMessage("Invalid argument: %s\n\n", argv[n]);
             usage();
         }
@@ -340,7 +448,8 @@ GenomeIndex::runIndexer(
     BigAllocUseHugePages = false;
 
     _int64 start = timeInMillis();
-    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altOptInList, nAltOptIn, altOptOutList, nAltOptOut, maxSizeForAutomaticALT, autoALT);
+    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altOptInList, nAltOptIn, altOptOutList, nAltOptOut, maxSizeForAutomaticALT, autoALT,
+        altLiftoverContigNames, altLiftoverContigFlags, altLiftoverProjContigNames, altLiftoverProjContigOffsets, altLiftoverProjCigar, nAltLiftover);
     if (NULL == genome) {
         WriteErrorMessage("Unable to read FASTA file\n");
         soft_exit(1);
@@ -1420,7 +1529,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
         // it in the overflow table.
         //
         int entryIndex = usingComplement ? 1 : 0;
-        void *entryPointer = entry64 + locationSize * entryIndex;
+        void *entryPointer = entry64 + (_int64)locationSize * entryIndex;
         if (locationSize > 4) {
             entry32 = NULL; // Using this would be bad
             _int64 entryValue = 0;
@@ -1709,7 +1818,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     if (10 != (nRead = sscanf(indexFileBuf,"%d %d %d %lld %d %d %d %lld %d %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
 											&hashTableKeySize, &hashTablesFileSize, &smallHashTable, &locationSize))) {
         if (3 == nRead || 6 == nRead || 7 == nRead || 9 == nRead) {
-            WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
+            WriteErrorMessage("Indices built by versions before 1.0.4 are no longer supported.  Please rebuild your index.\n");
         } else {
             WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }

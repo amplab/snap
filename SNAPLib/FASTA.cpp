@@ -89,6 +89,7 @@ struct RawContigData {
     GenomeDistance totalSize;
     char* name;
     RawContigData* next;
+    int contigNumber;   // Where this contig is in the original FASTA file
 
     RawContigData() {
         lines = NULL;
@@ -96,6 +97,7 @@ struct RawContigData {
         totalSize = 0;
         name = NULL;
         next = NULL;
+        contigNumber = -1;
     }
 
     void addLine(const char* bases) {
@@ -152,12 +154,36 @@ AddContigToGenome(
     char            *paddingBuffer)
 {
     genome->addData(paddingBuffer);
-    genome->startContig(contig->name);
+    genome->startContig(contig->name, contig->contigNumber);
 
     for (ContigLine* line = contig->lines; NULL != line; line = line->next) {
         genome->addData(line->bases);
     }
 } // AddContigToGenome
+
+   void
+ReverseContigList(RawContigData** head) 
+{
+    if (*head == NULL) {
+        return;
+    }
+
+    RawContigData* cur = *head;
+    RawContigData* prev = NULL;
+
+    for (;;) {
+        RawContigData* next = cur->next;
+        cur->next = prev;
+
+        if (next == NULL) {
+            *head = cur;
+            return;
+        }
+
+        prev = cur;
+        cur = next;
+    } // for ever
+} // ReverseContigList
 
     const Genome *
 ReadFASTAGenome(
@@ -170,7 +196,13 @@ ReadFASTAGenome(
 	const char* const*opt_out_alt_names,
 	int				 opt_out_alt_names_count,
 	GenomeDistance	 maxSizeForAutomaticALT,
-    bool             autoALT)
+    bool             autoALT,
+    char            **alt_liftover_contig_names,
+	unsigned		*alt_liftover_contig_flags,
+	char			**alt_liftover_proj_contig_names,
+	unsigned		*alt_liftover_proj_contig_offsets,
+	char			**alt_liftover_proj_cigar,
+	int				 alt_liftover_count)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -190,7 +222,7 @@ ReadFASTAGenome(
 
     FILE *fastaFile = fopen(fileName, "r");
     if (fastaFile == NULL) {
-        WriteErrorMessage("Unable to open FASTA file '%s' (even though we already got its size)\n",fileName);
+        WriteErrorMessage("Unable to open FASTA file '%s' (does it exist and do you have permission to open it?)\n",fileName);
         return NULL;
     }
 
@@ -209,6 +241,8 @@ ReadFASTAGenome(
 
     bool warningIssued = false;
     bool inAContig = false;
+
+    int nextContigNumber = 0;
 
     while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, fastaFile)) {
         fileSize += strlen(lineBuffer);
@@ -260,10 +294,12 @@ ReadFASTAGenome(
 
             currentContig->name = new char[nameLength];
             strncpy(currentContig->name, lineBuffer + 1, nameLength);
+            currentContig->contigNumber = nextContigNumber;
+            nextContigNumber++;
 
         } else {
             if (!inAContig) {
-                WriteErrorMessage("\nFASTA file doesn't beging with a contig name (i.e., the first line doesn't start with '>').\n");
+                WriteErrorMessage("\nFASTA file doesn't begin with a contig name (i.e., the first line doesn't start with '>').\n");
                 soft_exit(1);
             }
 
@@ -305,7 +341,14 @@ ReadFASTAGenome(
 
     AddRawContigToList(currentContig, &altContigs, &regularContigs, opt_in_alt_names, opt_in_alt_names_count, opt_out_alt_names, opt_out_alt_names_count, maxSizeForAutomaticALT, autoALT);
 
-    Genome* genome = new Genome(fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1, altContigs != NULL);
+    //
+    // AddRawContigToList reversed them.  Reverse them again so that they're in the same order as the FASTA, except that all ALTs follow all non-ALTs.
+    // That's necessary to have the test for ALT be a simple comparison.  We fix that at sort time so they come out in the original order.
+    //
+    ReverseContigList(&altContigs);
+    ReverseContigList(&regularContigs);
+
+    Genome* genome = new Genome(fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, fileSize + ((_int64)nContigs + 1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nContigs + 1);
 
     char* paddingBuffer = new char[(GenomeDistance)chromosomePaddingSize + 1];
     for (unsigned i = 0; i < chromosomePaddingSize; i++) {
@@ -323,6 +366,9 @@ ReadFASTAGenome(
     while (altContigs != NULL) {
         AddContigToGenome(altContigs, genome, paddingBuffer);
         genome->markContigALT(altContigs->name);
+        if (alt_liftover_count > 0) {
+            genome->markContigLiftover(altContigs->name, alt_liftover_contig_names, alt_liftover_contig_flags, alt_liftover_proj_contig_names, alt_liftover_proj_contig_offsets, alt_liftover_proj_cigar, alt_liftover_count);
+        }
         RawContigData* toDelete = altContigs;
         altContigs = altContigs->next;
         delete toDelete;
@@ -334,30 +380,10 @@ ReadFASTAGenome(
     genome->addData(paddingBuffer);
     genome->fillInContigLengths();
     genome->sortContigsByName();
+    genome->setUpContigNumbersByOriginalOrder();
 
     fclose(fastaFile);
     delete [] paddingBuffer;
     delete [] lineBuffer;
     return genome;
-}
-
-//
-// TODO: Reduce code duplication with the mutator.
-//
-bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
-{
-    int nContigs = genome->getNumContigs();
-    const Genome::Contig *contigs = genome->getContigs();
-    for (int i = 0; i < nContigs; ++i) {
-        const Genome::Contig &contig = contigs[i];
-        GenomeLocation start = contig.beginningLocation;
-        GenomeLocation end = i + 1 < nContigs ? contigs[i + 1].beginningLocation : genome->getCountOfBases();
-        GenomeDistance size = end - start;
-        const char *bases = genome->getSubstring(start, size);
-
-        fprintf(fasta, ">%s%s\n", prefix, contig.name);
-        fwrite(bases, 1, size, fasta);
-        fputc('\n', fasta);
-    }
-    return !ferror(fasta);
 }
