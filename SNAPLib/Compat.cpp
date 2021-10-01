@@ -1936,6 +1936,7 @@ public:
 
 private:
     int         fd;
+    ExclusiveLock lock;
 };
 
     _int64
@@ -1967,11 +1968,13 @@ OsxAsyncFile::OsxAsyncFile(
     int i_fd)
     : fd(i_fd)
 {
+    InitializeExclusiveLock(&lock);
 }
 
     bool
 OsxAsyncFile::close()
 {
+    DestroyExclusiveLock(&lock);
     return ::close(fd) == 0;
 }
 
@@ -1999,6 +2002,7 @@ OsxAsyncFile::Writer::beginWrite(
     size_t offset,
     size_t *bytesWritten)
 {
+    AcquireExclusiveLock(&file->lock);
     size_t m = ::lseek(file->fd, offset, SEEK_SET);
     if (m == -1) {
         return false;
@@ -2007,6 +2011,7 @@ OsxAsyncFile::Writer::beginWrite(
     if (bytesWritten) {
       *bytesWritten = n;
     }
+    ReleaseExclusiveLock(&file->lock);
     return n != -1;
 }
 
@@ -2041,6 +2046,7 @@ OsxAsyncFile::Reader::beginRead(
     size_t offset,
     size_t* bytesRead)
 {
+    AcquireExclusiveLock(&file->lock);
     size_t m = ::lseek(file->fd, offset, SEEK_SET);
     if (m == -1) {
         return false;
@@ -2049,6 +2055,7 @@ OsxAsyncFile::Reader::beginRead(
     if (bytesRead) {
         *bytesRead = n;
     }
+    ReleaseExclusiveLock(&file->lock);
     return n != -1;
 }
 
