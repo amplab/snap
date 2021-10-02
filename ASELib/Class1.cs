@@ -9540,6 +9540,7 @@ namespace ASELib
 
                 //try
                 {
+                    cigarAllClipping = true;
 
                     while (offsetInCigarString < cigar.Count())
                     {
@@ -9571,6 +9572,7 @@ namespace ASELib
                                 cigarElementStart = offsetInCigarString;
 
                                 nonclippedBases += count;
+                                cigarAllClipping = false;
 
                                 break;
 
@@ -9593,6 +9595,8 @@ namespace ASELib
                                 // reset cigar element information
                                 cigarElementLength = 0;
                                 cigarElementStart = offsetInCigarString;
+
+                                cigarAllClipping = false;
 
                                 break;
 
@@ -9791,6 +9795,7 @@ namespace ASELib
             public readonly int pos;
             public readonly int mapq;
             public readonly string cigar;
+            public readonly bool cigarAllClipping;  // Are all of the cigar fields soft or hard clips?  (This is a violation of the SAM spec, but we've seen it.)
             public readonly string rnext;
             public readonly int pnext;
             public readonly int tlen;

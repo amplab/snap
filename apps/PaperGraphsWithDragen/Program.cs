@@ -18,10 +18,10 @@ namespace PaperGraphsWithDragen
 
         static void SetAlignerStrings()
         {
-            alignerDesignation.Add(Aligner.SNAP, "snap-reordered");
+            alignerDesignation.Add(Aligner.SNAP, "snap");
             alignerDesignation.Add(Aligner.Bowtie, "bowtie_s1000");
             alignerDesignation.Add(Aligner.BWA, "bwa");
-            alignerDesignation.Add(Aligner.DRAGEN, "dragen");
+            alignerDesignation.Add(Aligner.DRAGEN, "dragen3.8");
             alignerDesignation.Add(Aligner.GEM, "gem");
             alignerDesignation.Add(Aligner.Novoalign, "novoalign");
 
@@ -51,7 +51,7 @@ namespace PaperGraphsWithDragen
         {
             SetAlignerStrings();
 
-            string concordanceDirectory = @"d:\temp\concordance-dragenVC\";
+            string concordanceDirectory = @"d:\temp\concordance-dragen3.8VC\";
             string timingDirectory = @"d:\temp\timings\";
 
             var samples = new Dictionary<string, Sample>();
@@ -63,11 +63,20 @@ namespace PaperGraphsWithDragen
             samples.Add("ERR194146", new Sample("ERR194146"));
             samples.Add("ERR194147", new Sample("ERR194147"));
 
+            string oneTabPerAligner = "";
+            foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>()) oneTabPerAligner += "\t";
+
+            string tabSeparatedAlignerNamesWithLeadingTab = "";
+            foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+            {
+                tabSeparatedAlignerNamesWithLeadingTab += "\t" + alignerName[aligner];
+            }
+
             foreach (var sample in samples.Select(_ => _.Value))
             {
                 foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
                 {
-                    var concordanceFilename = concordanceDirectory + sample.name + "." + alignerDesignation[aligner] + ".dragenVC.concordance.tar";
+                    var concordanceFilename = concordanceDirectory + sample.name + "." + alignerDesignation[aligner] + ".dragen3.8VC.concordance.tar";
                     if (File.Exists(concordanceFilename))
                     {
                         sample.concordance.Add(aligner, new ASETools.ConcordanceResults(concordanceFilename));
@@ -102,16 +111,12 @@ namespace PaperGraphsWithDragen
                 } // aligner
             } // sample
 
-            var outputFile = ASETools.CreateStreamWriterWithRetry(@"d:\temp\DragenVCConcordanceAndTimings.txt");
+            var outputFile = ASETools.CreateStreamWriterWithRetry(@"d:\temp\Dragen3.8VCConcordanceAndTimings.txt");
 
-            outputFile.WriteLine("\tMean F1\t\t\t\t\t\tIndel F1\t\t\t\t\t\t\tSNV F1\t\t\t\t\t\t\tIndel Recall\t\t\t\t\t\t\tIndel Precision\t\t\t\t\t\t\tSNV Recall\t\t\t\t\t\t\tSNV Precision");
+            outputFile.WriteLine("\tMean F1" + oneTabPerAligner + "\tIndel F1" +  oneTabPerAligner + "\tSNV F1" + oneTabPerAligner+ "\tIndel Recall" + oneTabPerAligner + "\tIndel Precision" + oneTabPerAligner + "\tSNV Recall" + oneTabPerAligner + "\tSNV Precision");
             for (int i = 0; i < 7; i++)
             {
-                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
-                {
-                    outputFile.Write("\t" + alignerName[aligner]);
-                }
-                outputFile.Write("\t");
+                outputFile.Write(tabSeparatedAlignerNamesWithLeadingTab + "\t");  // The extra tab at the end is for the next header
             }
             outputFile.WriteLine();
 
@@ -196,6 +201,20 @@ namespace PaperGraphsWithDragen
 
                 outputFile.WriteLine();
             } // sample
+
+            outputFile.WriteLine();
+
+            outputFile.WriteLine("\tLoad & Align" + oneTabPerAligner + "\tLoad & Align Error Bar" + oneTabPerAligner + "\tWhole pipeline");
+
+            foreach (var sample in samples.Select(_ => _.Value))
+            {
+                outputFile.Write(sample.name);
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<Aligner>())
+                {
+
+                }
+            }
 
             outputFile.Close();
 

@@ -4808,7 +4808,7 @@ namespace ASEProcessManager
                             ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna-statistics.txt" + @" d:\temp\ " +
                             (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 -proAg " + getInputFilename(case_) +
                             (bamMetadata.isPaired ? " " + getInputFilename2(case_) : "") +
-                            @" -mrl 40 -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputBAMFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
+                            @" -mrl 40 -d 20 -i 40 -hc- -eh -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputBAMFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
                             fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna.bam");
                     } // We thought we had everything
                 }// for each case 
@@ -5094,6 +5094,12 @@ namespace ASEProcessManager
             {
                 filesToDownload = null;
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
+
+                if (aligner == ASETools.Aligner.Dragen)
+                {
+                    // Not implemented yet
+                    return;
+                }
 
                 //ASETools.Case.ColumnGetter getOutput;
                 //ASETools.Case.ColumnGetter getOutputBai;
