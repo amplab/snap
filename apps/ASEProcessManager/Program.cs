@@ -35,6 +35,65 @@ namespace ASEProcessManager
         static string jobAddString = "";
 
         //
+        // A class to make sure we always write the same number of lines per operation to the Linux script.
+        // The actual number is hard coded because it needs to be copied into a script that sends the work out
+        // to the cluster.  If you change that number, you also need to change the script.
+        //
+        public class LinuxScriptWriter
+        {
+            readonly int nLinesPerOperation = 50;   // Big enough that we probably won't go over
+
+            public LinuxScriptWriter(StreamWriter _linuxScript)
+            {
+                linuxScript = _linuxScript;
+            }
+
+            public void Write(string line)
+            {
+                if (currentBatch == null)
+                {
+                    currentBatch = new List<string>();
+                }
+
+                if (!line.EndsWith("\n") || line.Substring(0,line.Count() - 1).Contains("\n"))
+                {
+                    throw new Exception("LinuxScriptWriter.Write: input line either doesn't end with newline, or has an internal newline (or both): " + line);
+                }
+
+                currentBatch.Add(line);
+                if (currentBatch.Count() > nLinesPerOperation)
+                {
+                    throw new Exception("LinuxScriptWriter: batch too big.  Last line is " + line);
+                }
+            }
+
+            public void EndOperation()
+            {
+                if (currentBatch == null)
+                {
+                    return;
+                }
+
+                currentBatch.ForEach(_ => linuxScript.Write(_));
+
+                for (int i = currentBatch.Count(); i < nLinesPerOperation; i++)
+                {
+                    linuxScript.Write("# Placeholder\n");
+                }
+
+                currentBatch = null;
+            }
+
+            public void Close()
+            {
+                linuxScript.Close();
+            }
+
+            StreamWriter linuxScript;
+            List<string> currentBatch = null;
+        } // LinuxScriptWriter
+
+        //
         // A ProcessingStage examines the state of the world and if the prerequisites are there and the step isn't completed adds commands to the script to do some
         // work and advance the state of the world.
         //
@@ -42,7 +101,7 @@ namespace ASEProcessManager
         {
             string GetStageName();
             bool NeedsCases();
-            void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites);
+            void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites);
             bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld);
         }
 
@@ -166,7 +225,7 @@ namespace ASEProcessManager
                 return caseFileInputGetters.Any(inputFileGetter => inputFileGetter(case_) == "");
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nAddedToScript = 0;
                 filesToDownload = null;
@@ -411,7 +470,7 @@ namespace ASEProcessManager
 
             public string GetStageName() { return stageName; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nAddedToScript = 0;
                 filesToDownload = null;
@@ -586,7 +645,7 @@ namespace ASEProcessManager
 
             public string GetStageName() { return stageName; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nAddedToScript = 0;
                 filesToDownload = null;
@@ -745,7 +804,7 @@ namespace ASEProcessManager
             public string GetStageName() { return stageName; }
             public bool NeedsCases() { return needsCases; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nWaitingForPrerequisites = 0;
                 nDone = 0;
@@ -916,7 +975,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return false; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
@@ -955,7 +1014,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return false; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
@@ -1040,7 +1099,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -1144,7 +1203,7 @@ namespace ASEProcessManager
             }
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -1191,7 +1250,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null; // This stage never generates downloads
                 nAddedToScript = 0;
@@ -1321,39 +1380,36 @@ namespace ASEProcessManager
             } // EvaluateDependencies
         }
 
-        static void WriteFreebayesLinuxScript(StreamWriter linuxScript, string caseId, string inputFilename, string fileId, string outputExtension, string regionFileName, string derivedFilesDirectory, string fastaName)
+        static void WriteFreebayesLinuxScript(LinuxScriptWriter linuxScriptWriter, string caseId, string inputFilename, string fileId, string outputExtension, string regionFileName, string derivedFilesDirectory, string fastaName)
         {
-            linuxScript.Write("date\n");
+            linuxScriptWriter.Write("date\n");
 
             var mountpoint = "/mnt/" + ASETools.ComputerFromPathname(inputFilename);
-            linuxScript.Write("sudo mkdir " + mountpoint + "\n");
-            linuxScript.Write("sudo chmod 777 " + mountpoint + "\n");
-            linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(inputFilename) + "' " + mountpoint + "\n");
+            linuxScriptWriter.Write("sudo mkdir " + mountpoint + "\n");
+            linuxScriptWriter.Write("sudo chmod 777 " + mountpoint + "\n");
+            linuxScriptWriter.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(inputFilename) + "' " + mountpoint + "\n");
             var copiedBamDirectory = "/mnt/d/temp/freebayes_temp/";
-            linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(inputFilename)) + " " + copiedBamDirectory + "/\n");
-            linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(inputFilename))) + "/*bai " + copiedBamDirectory + "/\n");
+            linuxScriptWriter.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(inputFilename)) + " " + copiedBamDirectory + "/\n");
+            linuxScriptWriter.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(inputFilename))) + "/*bai " + copiedBamDirectory + "/\n");
 
-            linuxScript.Write("cd ~/freebayes/scripts\n");
+            linuxScriptWriter.Write("cd ~/freebayes/scripts\n");
             var outputFilename = fileId + outputExtension;
-            linuxScript.Write("./freebayes-parallel " + regionFileName + " `nproc` --fasta-reference " + fastaName + " " + copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(inputFilename) +
+            linuxScriptWriter.Write("./freebayes-parallel " + regionFileName + " `nproc` --fasta-reference " + fastaName + " " + copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(inputFilename) +
                 " > " + copiedBamDirectory + outputFilename + "\n");
 
-            linuxScript.Write("if [ $? = 0 ]; then\n");
+            linuxScriptWriter.Write("if [ $? = 0 ]; then\n");
             var outputDirectory = mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(inputFilename)) + @"\..\..\" + derivedFilesDirectory + @"\" + caseId);
 
-            linuxScript.Write("    mkdir " + outputDirectory + "\n");
-            linuxScript.Write("    cp " + copiedBamDirectory + outputFilename + " " + outputDirectory + "/\n");
-            linuxScript.Write("    rm " + copiedBamDirectory + "*\n");
-            linuxScript.Write("else\n");
-            linuxScript.Write(@"    echo " + fileId + " >> variant_calling_errors\n");
-            linuxScript.Write("fi\n");
-            linuxScript.Write("sleep 60\n");    // Time to let the copy finish before we can umount
-            linuxScript.Write("sudo umount " + mountpoint + "\n");
-            linuxScript.Write("sudo rmdir " + mountpoint + "\n");
-            for (int i = 19; i <= 36; i++)
-            {
-                linuxScript.Write("# Placeholder\n");
-            }
+            linuxScriptWriter.Write("    mkdir " + outputDirectory + "\n");
+            linuxScriptWriter.Write("    cp " + copiedBamDirectory + outputFilename + " " + outputDirectory + "/\n");
+            linuxScriptWriter.Write("    rm " + copiedBamDirectory + "*\n");
+            linuxScriptWriter.Write("else\n");
+            linuxScriptWriter.Write(@"    echo " + fileId + " >> variant_calling_errors\n");
+            linuxScriptWriter.Write("fi\n");
+            linuxScriptWriter.Write("sleep 60\n");    // Time to let the copy finish before we can umount
+            linuxScriptWriter.Write("sudo umount " + mountpoint + "\n");
+            linuxScriptWriter.Write("sudo rmdir " + mountpoint + "\n");
+            linuxScriptWriter.EndOperation();
         }
 
         class GermlineVariantCallingProcessingStage : ProcessingStage
@@ -1367,7 +1423,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -1435,38 +1491,39 @@ namespace ASEProcessManager
 
                     if (false)
                     {
-                        linuxScript.Write("date\n");
+                        linuxScriptWriter.Write("date\n");
 
                         var mountpoint = "/mnt/" + ASETools.ComputerFromPathname(case_.normal_dna_filename);
-                        linuxScript.Write("sudo mkdir " + mountpoint + "\n");
-                        linuxScript.Write("sudo chmod 777 " + mountpoint + "\n");
-                        linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(case_.normal_dna_filename) + "' " + mountpoint + "\n");
+                        linuxScriptWriter.Write("sudo mkdir " + mountpoint + "\n");
+                        linuxScriptWriter.Write("sudo chmod 777 " + mountpoint + "\n");
+                        linuxScriptWriter.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(case_.normal_dna_filename) + "' " + mountpoint + "\n");
                         var copiedBamDirectory = "~/" + case_.normal_dna_file_id;
-                        linuxScript.Write("mkdir " + copiedBamDirectory + "\n");
-                        linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(case_.normal_dna_filename)) + " " + copiedBamDirectory + "/\n");
-                        linuxScript.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(case_.normal_dna_filename))) + "/*bai " + copiedBamDirectory + "/\n");
+                        linuxScriptWriter.Write("mkdir " + copiedBamDirectory + "\n");
+                        linuxScriptWriter.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(case_.normal_dna_filename)) + " " + copiedBamDirectory + "/\n");
+                        linuxScriptWriter.Write("cp " + mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(case_.normal_dna_filename))) + "/*bai " + copiedBamDirectory + "/\n");
 
-                        linuxScript.Write("cd ~/freebayes/scripts\n");
+                        linuxScriptWriter.Write("cd ~/freebayes/scripts\n");
                         var outputFilename = case_.normal_dna_file_id + ASETools.vcfExtension;
-                        linuxScript.Write("./freebayes-parallel " + regionFileName + " `nproc` --fasta-reference " + fastaName + " " + copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(case_.normal_dna_filename) +
+                        linuxScriptWriter.Write("./freebayes-parallel " + regionFileName + " `nproc` --fasta-reference " + fastaName + " " + copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(case_.normal_dna_filename) +
                             " > ~/" + outputFilename + "\n");
 
-                        linuxScript.Write("if [ $? = 0 ]; then\n");
+                        linuxScriptWriter.Write("if [ $? = 0 ]; then\n");
                         var outputDirectory = mountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(ASETools.GetDirectoryFromPathname(case_.normal_dna_filename)) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id);
 
-                        linuxScript.Write("    mkdir " + outputDirectory + "\n");
-                        linuxScript.Write("    cp ~/" + outputFilename + " " + outputDirectory + "/\n");
-                        linuxScript.Write("    rm ~/" + outputFilename + "\n");
-                        linuxScript.Write("else\n");
-                        linuxScript.Write(@"    echo " + case_.normal_dna_file_id + " >> variant_calling_errors\n");
-                        linuxScript.Write("fi\n");
-                        linuxScript.Write("sleep 60\n");    // Time to let the copy finish before we can umount
-                        linuxScript.Write("sudo umount " + mountpoint + "\n");
-                        linuxScript.Write("sudo rmdir " + mountpoint + "\n");
-                        linuxScript.Write("rm -rf " + copiedBamDirectory + "\n"); // * is to get bai as well
+                        linuxScriptWriter.Write("    mkdir " + outputDirectory + "\n");
+                        linuxScriptWriter.Write("    cp ~/" + outputFilename + " " + outputDirectory + "/\n");
+                        linuxScriptWriter.Write("    rm ~/" + outputFilename + "\n");
+                        linuxScriptWriter.Write("else\n");
+                        linuxScriptWriter.Write(@"    echo " + case_.normal_dna_file_id + " >> variant_calling_errors\n");
+                        linuxScriptWriter.Write("fi\n");
+                        linuxScriptWriter.Write("sleep 60\n");    // Time to let the copy finish before we can umount
+                        linuxScriptWriter.Write("sudo umount " + mountpoint + "\n");
+                        linuxScriptWriter.Write("sudo rmdir " + mountpoint + "\n");
+                        linuxScriptWriter.Write("rm -rf " + copiedBamDirectory + "\n"); // * is to get bai as well
+                        linuxScriptWriter.EndOperation();
                     } else
                     {
-                        WriteFreebayesLinuxScript(linuxScript, case_.case_id, case_.normal_dna_filename, case_.normal_dna_file_id, ASETools.vcfExtension, regionFileName, stateOfTheWorld.configuration.derivedFilesDirectory, fastaName);
+                        WriteFreebayesLinuxScript(linuxScriptWriter, case_.case_id, case_.normal_dna_filename, case_.normal_dna_file_id, ASETools.vcfExtension, regionFileName, stateOfTheWorld.configuration.derivedFilesDirectory, fastaName);
                     }
 
                     nAddedToScript++;
@@ -1507,7 +1564,7 @@ namespace ASEProcessManager
                 return true;
             } // EvaluateDependencies
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -1535,7 +1592,7 @@ namespace ASEProcessManager
                         continue;
                     }
 
-                    WriteFreebayesLinuxScript(linuxScript, case_.case_id, ASETools.getRealignedNormalDNAByAligner[aligner](case_), case_.normal_dna_file_id, 
+                    WriteFreebayesLinuxScript(linuxScriptWriter, case_.case_id, ASETools.getRealignedNormalDNAByAligner[aligner](case_), case_.normal_dna_file_id, 
                         ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.Freebayes],  // Only normal for now
                         "/mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta.100k-regions-only-main-chromosomes", stateOfTheWorld.configuration.derivedFilesDirectory, "/mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta");
 
@@ -1972,7 +2029,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
@@ -2052,7 +2109,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -2568,7 +2625,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -2633,7 +2690,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -2744,7 +2801,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
                 nDone = 0;
@@ -2841,7 +2898,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return false; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -2874,7 +2931,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return false; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -2924,7 +2981,7 @@ namespace ASEProcessManager
 
             public string GetStageName() { return "Make Repetitive Region Map"; }
             public bool NeedsCases() { return false; }
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -2967,7 +3024,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -3068,7 +3125,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
                 nDone = 0;
@@ -3103,7 +3160,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -3138,7 +3195,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
 
             {
                 nDone = 0;
@@ -3173,7 +3230,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -3206,7 +3263,7 @@ namespace ASEProcessManager
             public ASEMapProcessingStage() { }
             public string GetStageName() { return "ASE Map"; }
             public bool NeedsCases() { return true; }
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -3244,7 +3301,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3282,7 +3339,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3315,7 +3372,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3349,7 +3406,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3380,7 +3437,7 @@ namespace ASEProcessManager
             public SelectRegulatoryMAFLinesProcessingStage() { }
             public string GetStageName() { return "Select Regulatory MAF Lines"; }
             public bool NeedsCases() { return true; }
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3423,7 +3480,7 @@ namespace ASEProcessManager
             public MappedBaseCountDistributionProcessingStage() { }
             public string GetStageName() { return "Mapped base count distruibution"; }
             public bool NeedsCases() { return true; }
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3521,7 +3578,7 @@ namespace ASEProcessManager
             public string GetStageName() { return "Regulatory Mutations Near Mutations"; }
 
             public bool NeedsCases() { return true; }
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3577,7 +3634,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3610,7 +3667,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3683,7 +3740,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3752,7 +3809,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3786,7 +3843,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3820,7 +3877,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3859,7 +3916,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3902,7 +3959,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3937,7 +3994,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -3987,7 +4044,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -4021,7 +4078,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -4057,7 +4114,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -4118,7 +4175,7 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -4180,7 +4237,7 @@ namespace ASEProcessManager
 
 			public bool NeedsCases() { return true; }
 
-			public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+			public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
 			{
 				filesToDownload = new List<string>();
 				nDone = 0;
@@ -4719,7 +4776,7 @@ namespace ASEProcessManager
                 return true; // Should fill this in
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter,
                 StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
@@ -4768,7 +4825,7 @@ namespace ASEProcessManager
                 return true; // Just depends on the downloaded BAM file
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter,
                 StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
@@ -4807,8 +4864,8 @@ namespace ASEProcessManager
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SnapTimer.exe " +
                             ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna-statistics.txt" + @" d:\temp\ " +
                             (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 -proAg " + getInputFilename(case_) +
-                            (bamMetadata.isPaired ? " " + getInputFilename2(case_) : "") +
-                            @" -mrl 40 -d 20 -i 40 -hc- -eh -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputBAMFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
+                            (bamMetadata.isPaired ? " " + getInputFilename2(case_) + " -eh" : "") +
+                            @" -mrl 40 -d 20 -i 40 -hc- -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputBAMFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
                             fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna.bam");
                     } // We thought we had everything
                 }// for each case 
@@ -4838,7 +4895,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter,
                             StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
@@ -4903,7 +4960,7 @@ namespace ASEProcessManager
                 return true; // Just depends on the downloaded BAM file
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter,
                                         StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
@@ -4942,43 +4999,45 @@ namespace ASEProcessManager
                         var copiedBamDirectory = "~/" + fileIDGetter(case_);
                         var copiedInputFile = copiedBamDirectory + "/" + ASETools.GetFileNameFromPathname(inputGetter(case_));
 
-                        linuxScript.Write("date\n");
+                        linuxScriptWriter.Write("date\n");
 
                         var sourceMountpoint = "/mnt/" + ASETools.ComputerFromPathname(inputGetter(case_));
-                        linuxScript.Write("sudo mkdir " + sourceMountpoint + "\n");
-                        linuxScript.Write("sudo chmod 777 " + sourceMountpoint + "\n");
-                        linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(inputGetter(case_)) + "' " + sourceMountpoint + "\n");
+                        linuxScriptWriter.Write("sudo mkdir " + sourceMountpoint + "\n");
+                        linuxScriptWriter.Write("sudo chmod 777 " + sourceMountpoint + "\n");
+                        linuxScriptWriter.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(inputGetter(case_)) + "' " + sourceMountpoint + "\n");
 
-                        linuxScript.Write("mkdir " + copiedBamDirectory + "\n");
-                        linuxScript.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(inputGetter(case_))) + " " + copiedBamDirectory + "/\n");
-                        linuxScript.Write("sudo umount " + sourceMountpoint + "\n");
-                        linuxScript.Write("sudo rmdir " + sourceMountpoint + "\n");
+                        linuxScriptWriter.Write("mkdir " + copiedBamDirectory + "\n");
+                        linuxScriptWriter.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(inputGetter(case_))) + " " + copiedBamDirectory + "/\n");
+                        linuxScriptWriter.Write("sudo umount " + sourceMountpoint + "\n");
+                        linuxScriptWriter.Write("sudo rmdir " + sourceMountpoint + "\n");
 
-                        linuxScript.Write("samtools view -@ 16 -F 2048 -b -o " + filteredBAMFilename + " " + copiedInputFile + "\n");
-                        linuxScript.Write("rm -rf " + copiedBamDirectory + "\n");
+                        linuxScriptWriter.Write("~/bin/samtools view -@ 16 -F 2048 -b -o " + filteredBAMFilename + " " + copiedInputFile + "\n");
+                        linuxScriptWriter.Write("rm -rf " + copiedBamDirectory + "\n");
                         var tempBamPrefix = "/mnt/d/temp/" + fileIDGetter(case_) + ".sort_temp";
 
-                        linuxScript.Write("~/bin/samtools sort -n -l 1 -m 10G -@ 16 " + filteredBAMFilename  + " -T " + tempBamPrefix + " -o " + sortedFilteredBAMFilename + "\n");
+                        linuxScriptWriter.Write("~/bin/samtools sort -n -l 1 -m 10G -@ 16 " + filteredBAMFilename  + " -T " + tempBamPrefix + " -o " + sortedFilteredBAMFilename + "\n");
                         if (paired)
                         {
-                            linuxScript.Write("bedtools bamtofastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + " -fq2 " + fastq2Filename + "\n");
+                            linuxScriptWriter.Write("bedtools bamtofastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + " -fq2 " + fastq2Filename + "\n");
                         }
                         else 
                         {
-                            linuxScript.Write("bedtools bamtofastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + "\n");
+                            linuxScriptWriter.Write("bedtools bamtofastq -i " + sortedFilteredBAMFilename + " -fq " + fastq1Filename + "\n");
                         }
 
                         var destinationDownloadDirectory = stateOfTheWorld.randomFilesystemByFreeSpace.select();
                         var destinationMountpoint = "/mnt/" + ASETools.ComputerFromPathname(destinationDownloadDirectory);
                         var destinationDirectory = destinationMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(destinationDownloadDirectory)) + "../derived_files/" + case_.case_id;
-                        linuxScript.Write("sudo mkdir " + destinationMountpoint + "\n");
-                        linuxScript.Write("sudo chmod 777 " + destinationMountpoint + "\n");
-                        linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(destinationDownloadDirectory) + "' " + destinationMountpoint + "\n");
-                        linuxScript.Write("mkdir " + destinationDirectory + "\n");
-                        linuxScript.Write("cp " + allFastqFilenames + " " + destinationDirectory + "/\n");
-                        linuxScript.Write("rm /mnt/d/temp/*.filtered_supplementary.bam /mnt/d/temp/*.filtered_supplementary_name_sorted.bam " + allFastqFilenames + "\n");
-                        linuxScript.Write("sudo umount " + destinationMountpoint + "\n");
-                        linuxScript.Write("sudo rmdir " + destinationMountpoint + "\n");
+                        linuxScriptWriter.Write("sudo mkdir " + destinationMountpoint + "\n");
+                        linuxScriptWriter.Write("sudo chmod 777 " + destinationMountpoint + "\n");
+                        linuxScriptWriter.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(destinationDownloadDirectory) + "' " + destinationMountpoint + "\n");
+                        linuxScriptWriter.Write("mkdir " + destinationDirectory + "\n");
+                        linuxScriptWriter.Write("cp " + allFastqFilenames + " " + destinationDirectory + "/\n");
+                        linuxScriptWriter.Write("rm /mnt/d/temp/*.filtered_supplementary.bam /mnt/d/temp/*.filtered_supplementary_name_sorted.bam " + allFastqFilenames + "\n");
+                        linuxScriptWriter.Write("sudo umount " + destinationMountpoint + "\n");
+                        linuxScriptWriter.Write("sudo rmdir " + destinationMountpoint + "\n");
+
+                        linuxScriptWriter.EndOperation();
 
                         nAddedToScript++;
                     } // if we're doing it
@@ -4989,82 +5048,53 @@ namespace ASEProcessManager
 
         } // FASTQGenerationProcessingStage
 
-        static public string MountFilesystemLinux(StreamWriter linuxScript, string sourceFile)
+        static public string MountFilesystemLinux(LinuxScriptWriter linuxScriptWriter, string sourceFile)
         {
             string mountpoint = "/mnt/" + ASETools.ComputerFromPathname(sourceFile);
 
-            linuxScript.Write("sudo mkdir " + mountpoint + "\n");
-            linuxScript.Write("sudo chmod 777 " + mountpoint + "\n");
-            linuxScript.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(sourceFile) + "' " + mountpoint + "\n");
+            linuxScriptWriter.Write("sudo mkdir " + mountpoint + "\n");
+            linuxScriptWriter.Write("sudo chmod 777 " + mountpoint + "\n");
+            linuxScriptWriter.Write("sudo mount -t drvfs '" + ASETools.ShareFromPathname(sourceFile) + "' " + mountpoint + "\n");
 
             return mountpoint;
         }
 
-        static public void DontMountFilesystemLinux(StreamWriter linuxScript)
+        static public void UnmountFilesystemLinux(LinuxScriptWriter linuxScriptWriter, string mountpoint)
         {
-            linuxScript.Write("# Placeholder\n");
-            linuxScript.Write("# Placeholder\n");
-            linuxScript.Write("# Placeholder\n");
+            linuxScriptWriter.Write("sudo umount " + mountpoint + "\n");
+            linuxScriptWriter.Write("sudo rmdir " + mountpoint + "\n");
         }
 
-        static public void UnmountFilesystemLinux(StreamWriter linuxScript, string mountpoint)
+
+        static public void CopyFileInLinux(LinuxScriptWriter linuxScriptWriter, string sourceFile, string localDestinationDirectory)
         {
-            linuxScript.Write("sudo umount " + mountpoint + "\n");
-            linuxScript.Write("sudo rmdir " + mountpoint + "\n");
+            var sourceMountpoint = MountFilesystemLinux(linuxScriptWriter, sourceFile);
+            linuxScriptWriter.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(sourceFile)) + " " + localDestinationDirectory + "\n");
+            UnmountFilesystemLinux(linuxScriptWriter, sourceMountpoint);
         }
 
-        static public void DontUnmountFilesystemLinux(StreamWriter linuxScript)
+        static public void CopyFilesOutLinux(LinuxScriptWriter linuxScriptWriter, List<string> localSourceFiles, string remoteDestinationDirectory)    // This works with wildcards for input.
         {
-            linuxScript.Write("# Placeholder\n");
-            linuxScript.Write("# Placeholder\n");
-        }
-
-        static public void CopyFileInLinux(StreamWriter linuxScript, string sourceFile, string localDestinationDirectory)
-        {
-            var sourceMountpoint = MountFilesystemLinux(linuxScript, sourceFile);
-            linuxScript.Write("cp " + sourceMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(sourceFile)) + " " + localDestinationDirectory + "\n");
-            UnmountFilesystemLinux(linuxScript, sourceMountpoint);
-        }
-
-        static public void DontCopyFileInLinux(StreamWriter linuxScript)  // This is to make not copying a file an equal number of lines to copying it so that scripts for single and paired-end so splitting by line works
-        {
-            DontMountFilesystemLinux(linuxScript);
-            linuxScript.Write("# Placeholder\n");
-            DontUnmountFilesystemLinux(linuxScript);
-        }
-
-        static public void CopyFilesOutLinux(StreamWriter linuxScript, List<string> localSourceFiles, string remoteDestinationDirectory)    // This works with wildcards for input.
-        {
-            var destinationMountpoint = MountFilesystemLinux(linuxScript, remoteDestinationDirectory);
+            var destinationMountpoint = MountFilesystemLinux(linuxScriptWriter, remoteDestinationDirectory);
 
             var linuxRemoteDestinationDirectory = destinationMountpoint + ASETools.PathnameToLinuxPathname(ASETools.PathnameWithoutUNC(remoteDestinationDirectory));
-            linuxScript.Write("mkdir " + linuxRemoteDestinationDirectory + "\n");
+            linuxScriptWriter.Write("mkdir " + linuxRemoteDestinationDirectory + "\n");
 
             foreach (var localSourceFile in localSourceFiles)
             {
-                linuxScript.Write("cp " + localSourceFile + " " + linuxRemoteDestinationDirectory + "/\n");
+                linuxScriptWriter.Write("cp " + localSourceFile + " " + linuxRemoteDestinationDirectory + "/\n");
             }
-            UnmountFilesystemLinux(linuxScript, destinationMountpoint);
+            UnmountFilesystemLinux(linuxScriptWriter, destinationMountpoint);
         } // CopyFilesOutLinux
 
-        static public void CopyFilesOutLinux(StreamWriter linuxScript, string localSourceFiles, string remoteDestinationDirectory) // This works with wildcards for input.
+        static public void CopyFilesOutLinux(LinuxScriptWriter linuxScriptWriter, string localSourceFiles, string remoteDestinationDirectory) // This works with wildcards for input.
         {
             var listOfOutput = new List<string>();
             listOfOutput.Add(localSourceFiles);
 
-            CopyFilesOutLinux(linuxScript, listOfOutput, remoteDestinationDirectory);
+            CopyFilesOutLinux(linuxScriptWriter, listOfOutput, remoteDestinationDirectory);
         } // CopyFilesOutLinux
 
-        static public void DontCopyFileOutLinux(StreamWriter linuxScript, List<string> localSourceFiles)
-        {
-            DontMountFilesystemLinux(linuxScript);
-            linuxScript.Write("# Placeholder\n");   // For the mkdir
-            foreach (var localSourceFile in localSourceFiles)
-            {
-                linuxScript.Write("# Placeholder\n");
-            }
-            DontUnmountFilesystemLinux(linuxScript);
-        }
 
         class LinuxAlignerAlignmentStage : ProcessingStage
         {
@@ -5089,7 +5119,7 @@ namespace ASEProcessManager
                 return true; // Add dependency on FASTQ files
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter,
                             StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
@@ -5123,18 +5153,18 @@ namespace ASEProcessManager
                     {
                         nDone++;
                     }
-                    else if (getInput(case_) == "" || paired && getSecondInput(case_) == "")
+                    else if (getInput(case_) == "" || paired && getSecondInput(case_) == "" || aligner == ASETools.Aligner.Novoalign) // Novoalign license is expired
                     {
                         nWaitingForPrerequisites++;
                     }
                     else
                     {
- 
-                        linuxScript.Write("date\n");
-                        linuxScript.Write("date > " + timingFilename + "\n"); // start
+
+                        linuxScriptWriter.Write("date\n");
+                        linuxScriptWriter.Write("date > " + timingFilename + "\n"); // start
 
                         var localInputFile = tempDir + ASETools.GetFileNameFromPathname(getInput(case_));
-                        CopyFileInLinux(linuxScript, getInput(case_), localInputFile);
+                        CopyFileInLinux(linuxScriptWriter, getInput(case_), localInputFile);
 
                         string localSecondInputFile = paired ? tempDir + ASETools.GetFileNameFromPathname(getSecondInput(case_)) : "";
                         string samFileName = "/mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor) + "." + ASETools.alignerName[aligner] + "_realigned.sam";
@@ -5143,23 +5173,20 @@ namespace ASEProcessManager
 
                         if (paired)
                         {
-                            CopyFileInLinux(linuxScript, getSecondInput(case_), localSecondInputFile);
-                        } else
-                        {
-                            DontCopyFileInLinux(linuxScript);
+                            CopyFileInLinux(linuxScriptWriter, getSecondInput(case_), localSecondInputFile);
                         }
 
-                        linuxScript.Write("date >> " + timingFilename + "\n"); // copy
+                        linuxScriptWriter.Write("date >> " + timingFilename + "\n"); // copy
 
                         switch (aligner) {
                             case ASETools.Aligner.BWA:
                                 if (paired)
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/bwa-mem2 mem -Y -K 100000000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' -t 16 /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bwa/Homo_Sapiens_assembly38.fasta " + localInputFile + " " + localSecondInputFile + " -o " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/bwa-mem2 mem -Y -K 100000000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' -t 16 /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bwa/Homo_Sapiens_assembly38.fasta " + localInputFile + " " + localSecondInputFile + " -o " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 else
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/bwa-mem2 mem -Y -K 100000000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' -t 16 /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bwa/Homo_Sapiens_assembly38.fasta " + localInputFile + " -o " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/bwa-mem2 mem -Y -K 100000000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' -t 16 /mnt/d/sequence/indices/Homo_Sapiens_assembly38-bwa/Homo_Sapiens_assembly38.fasta " + localInputFile + " -o " + samFileName + " 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
 
@@ -5167,11 +5194,11 @@ namespace ASEProcessManager
                         
                                 if (paired)
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -t --maxins 1000 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -t --maxins 1000 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -1 " + localInputFile + " -2 " + localSecondInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 else
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1  2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/bowtie-linux/bowtie2 -x /mnt/d/sequence/indices/Homo_sapiens_assembly38-bowtie/Homo_sapiens_assembly38 -t -p 16 -U " + localInputFile + " -S " + samFileName + " -t --rg-id 4 --rg LB:" + case_.getDNAFileIdByTumor(tumor) + @" --rg PL:ILLUMINA --rg SM:20 --rg PU:unit1  2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
 //#if useGEM
@@ -5180,11 +5207,11 @@ namespace ASEProcessManager
 
                                 if (paired)
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -1 " + localInputFile + " -2 " + localSecondInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -1 " + localInputFile + " -2 " + localSecondInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 else
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -i " + localInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/gem-mapper -I /mnt/d/sequence/indices/Homo_Sapiens_assembly38-gem/Homo_sapiens_assembly38.gem -i " + localInputFile + " -o " + samFileName + @" -M 1 -t 16 -r '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' 2>&1 | tee -a " + timingFilename + "\n");
                                 }
                                 break;
 //#endif // useGEM
@@ -5192,11 +5219,22 @@ namespace ASEProcessManager
                             case ASETools.Aligner.Novoalign:
                                 if (paired)
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/novocraft/novoalign -d /mnt/d/sequence/indices/Homo_sapiens_assembly38.nix -f " + localInputFile + " " + localSecondInputFile + " --alt on -o BAM 0 \"@RG\\tID:4\\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1" + "\" > " + unsortedBamFilename + "\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/novocraft/novoalign -d /mnt/d/sequence/indices/Homo_sapiens_assembly38.nix -f " + localInputFile + " " + localSecondInputFile + " --alt on -o BAM 0 \"@RG\\tID:4\\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1" + "\" > " + unsortedBamFilename + "\n");
                                 }
                                 else
                                 {
-                                    linuxScript.Write(@"/mnt/d/gdc/novocraft/novoalign -d /mnt/d/sequence/indices/Homo_sapiens_assembly38.nix -f " + localInputFile + " --alt on -o BAM 0 \"@RG\\tID:4\\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1" + "\" > " + unsortedBamFilename + "\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/novocraft/novoalign -d /mnt/d/sequence/indices/Homo_sapiens_assembly38.nix -f " + localInputFile + " --alt on -o BAM 0 \"@RG\\tID:4\\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1" + "\" > " + unsortedBamFilename + "\n");
+                                }
+                                break;
+                            
+                            case ASETools.Aligner.Dragen:
+                                if (paired)
+                                {
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1" + localInputFile + " -2 " + localSecondInputFile + " --output-directory /mnt/d/temp  --output-file-prefix /mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor));
+                                } 
+                                else
+                                {
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1" + localInputFile + " --output-directory /mnt/d/temp  --output-file-prefix /mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor));
                                 }
                                 break;
 
@@ -5204,20 +5242,17 @@ namespace ASEProcessManager
                                 throw new Exception("LinuxAlignerAlignmentStage: unrecognized aligner " + aligner);
                         
                         } // switch
-                        linuxScript.Write("date >> " + timingFilename + "\n"); // alignment
+                        linuxScriptWriter.Write("date >> " + timingFilename + "\n"); // alignment
 
                         var sortedSuffix = "." + ASETools.alignerName[aligner] + "_sorted.bam";
                         var sortTempSuffix = "." + ASETools.alignerName[aligner] + "_sort.temp";
 
                         if (aligner != ASETools.Aligner.Novoalign)
                         {
-                            linuxScript.Write("~/bin/samtools view -@ 16 -S -1 -b " + samFileName + " > " + unsortedBamFilename + "\n");   // samtools auto-appends .bam to the output filename
-                        } else
-                        {
-                            // Novoalign makes an unsorted BAM directly
-                            linuxScript.Write("# Placeholder\n");
+                            linuxScriptWriter.Write("~/bin/samtools view -@ 16 -S -1 -b " + samFileName + " > " + unsortedBamFilename + "\n");   // samtools auto-appends .bam to the output filename
                         }
-                        linuxScript.Write("date >> " + timingFilename + "\n"); // sam->bam
+
+                        linuxScriptWriter.Write("date >> " + timingFilename + "\n"); // sam->bam
 
                         var sortedBamFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + sortedSuffix;
                         var sortIntermediatePrefix = tempDir + case_.getDNAFileIdByTumor(tumor) + sortTempSuffix;
@@ -5225,30 +5260,25 @@ namespace ASEProcessManager
 
                         if (aligner == ASETools.Aligner.Novoalign)
                         {
-                            linuxScript.Write(@"/mnt/d/gdc/novocraft/novosort --md " + unsortedBamFilename + " > " + outputFilename + "\n");
+                            linuxScriptWriter.Write(@"/mnt/d/gdc/novocraft/novosort --md " + unsortedBamFilename + " > " + outputFilename + "\n");
                         }
                         else
                         {
-                            linuxScript.Write("~/bin/samtools sort -@ 16 -m 10G -l 1 " + unsortedBamFilename + " -o " + sortedBamFilename + " -T " + sortIntermediatePrefix + "\n"); // L6 is the default compression that SNAP uses
+                            linuxScriptWriter.Write("~/bin/samtools sort -@ 16 -m 10G -l 1 " + unsortedBamFilename + " -o " + sortedBamFilename + " -T " + sortIntermediatePrefix + "\n"); // L6 is the default compression that SNAP uses
                         }
-                        linuxScript.Write("date >> " + timingFilename + "\n"); // sort
+                        linuxScriptWriter.Write("date >> " + timingFilename + "\n"); // sort
 
-                        if (aligner == ASETools.Aligner.Novoalign)
+                        if (aligner != ASETools.Aligner.Novoalign)
                         {
-                            // Novosort does sort & mark duplicate together
-                            linuxScript.Write("# Placeholder\n");
+                            linuxScriptWriter.Write("java -jar /mnt/d/gdc/bin/picard.jar MarkDuplicates I=" + sortedBamFilename + " O=" + outputFilename + " M=/dev/null 2>&1 >> /dev/null\n");
                         }
-                        else
-                        {
-                            linuxScript.Write("java -jar /mnt/d/gdc/bin/picard.jar MarkDuplicates I=" + sortedBamFilename + " O=" + outputFilename + " M=/dev/null 2>&1 >> /dev/null\n");
-                        }
-                        linuxScript.Write("date >> " + timingFilename + "\n"); // mark duplicates
+                        linuxScriptWriter.Write("date >> " + timingFilename + "\n"); // mark duplicates
 
                         var outputBaiFilename = tempDir + case_.getDNAFileIdByTumor(tumor) + outputExtensionBai;
 
-                        linuxScript.Write("~/bin/samtools index -@ 16 " + outputFilename + " " + outputBaiFilename + "\n");
-                        linuxScript.Write("date >> " + timingFilename + "\n"); // index
-                        linuxScript.Write("echo '**done**' >> " + timingFilename + "\n");
+                        linuxScriptWriter.Write("~/bin/samtools index -@ 16 " + outputFilename + " " + outputBaiFilename + "\n");
+                        linuxScriptWriter.Write("date >> " + timingFilename + "\n"); // index
+                        linuxScriptWriter.Write("echo '**done**' >> " + timingFilename + "\n");
 
                         var outputFiles = new List<string>();
                         outputFiles.Add(outputFilename);
@@ -5256,9 +5286,11 @@ namespace ASEProcessManager
                         outputFiles.Add(timingFilename);
 
                         var destinationDirectory = stateOfTheWorld.randomFilesystemByFreeSpace.select() + @"..\derived_files\" + case_.case_id;
-                        CopyFilesOutLinux(linuxScript, outputFiles, destinationDirectory);
+                        CopyFilesOutLinux(linuxScriptWriter, outputFiles, destinationDirectory);
 
-                        linuxScript.Write("rm " + localInputFile + " " + localSecondInputFile + " " + samFileName + " " + timingFilename + " " + unsortedBamFilename +  " " + sortedBamFilename + " " + outputFilename + " " + outputBaiFilename + "\n");
+                        linuxScriptWriter.Write("rm " + localInputFile + " " + localSecondInputFile + " " + samFileName + " " + timingFilename + " " + unsortedBamFilename +  " " + sortedBamFilename + " " + outputFilename + " " + outputBaiFilename + "\n");
+
+                        linuxScriptWriter.EndOperation();
 
                         nAddedToScript++;
                     } // We're adding it to the script
@@ -5292,7 +5324,7 @@ namespace ASEProcessManager
                 return true;
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter,
                             StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
@@ -5319,30 +5351,25 @@ namespace ASEProcessManager
                         string localDNAFilename = tempDirectory + ASETools.GetFileNameFromPathname(sourceDNAFilename);
                         string localBAIFilename = tempDirectory + ASETools.GetFileNameFromPathname(sourceBAIFilename);
 
-                        linuxScript.Write("mkdir " + tempDirectory + "\n");
-                        linuxScript.Write("rm " + tempDirectory + "*\n");
+                        linuxScriptWriter.Write("mkdir " + tempDirectory + "\n");
+                        linuxScriptWriter.Write("rm " + tempDirectory + "*\n");
 
-                        CopyFileInLinux(linuxScript, sourceDNAFilename, localDNAFilename);
-                        CopyFileInLinux(linuxScript, sourceBAIFilename, localBAIFilename);
+                        CopyFileInLinux(linuxScriptWriter, sourceDNAFilename, localDNAFilename);
+                        CopyFileInLinux(linuxScriptWriter, sourceBAIFilename, localBAIFilename);
 
-                        linuxScript.Write("cd ~/gatk\n");
-                        linuxScript.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j 12 ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
+                        linuxScriptWriter.Write("cd ~/gatk\n");
+                        linuxScriptWriter.Write("cat /mnt/d/gdc/chromosomes.txt | parallel -j 12 ./gatk HaplotypeCaller -R /mnt/d/sequence/genomes/Homo_sapiens_assembly38.fasta -I " + localDNAFilename + " -O " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".{}.g." +
                             ASETools.alignerName[aligner] + ".vcf.gz  -L {} -ERC GVCF -pcr-indel-model NONE --dont-use-soft-clipped-bases true --dbsnp /mnt/d/sequence/genomes/Homo_sapiens_assembly38.dbsnp138.vcf\n"); // Using less parallelism than cores speeds things up, becuase chr1 starts first and ends last, so giving it more resources helps
 
                         string localOutputFile = tempDirectory + case_.getDNAFileIdByTumor(tumor) + ASETools.vcfExtensionByAlignerTumorAndVariantCaller[aligner][false][ASETools.VariantCaller.HaplotypeCaller];  // Only normal for now
 
-                        linuxScript.Write("bcftools concat -o " + localOutputFile + " " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".*.g." + ASETools.alignerName[aligner] + ".vcf.gz\n");
+                        linuxScriptWriter.Write("bcftools concat -o " + localOutputFile + " " + tempDirectory + case_.getDNAFileIdByTumor(tumor) + ".*.g." + ASETools.alignerName[aligner] + ".vcf.gz\n");
 
-                        CopyFilesOutLinux(linuxScript, localOutputFile, ASETools.GetDirectoryFromPathname(sourceDNAFilename));
-                        linuxScript.Write("rm -rf " + tempDirectory + "\n");
+                        CopyFilesOutLinux(linuxScriptWriter, localOutputFile, ASETools.GetDirectoryFromPathname(sourceDNAFilename));
+                        linuxScriptWriter.Write("rm -rf " + tempDirectory + "\n");
 
-                        //
-                        // These make the script the same length as running an aliger, so splitIntoPieces will do the right thing.
-                        //
-                        for (int i = 0; i < 11; i++)
-                        {
-                            linuxScript.Write("# Placeholder\n");
-                        }
+                        linuxScriptWriter.EndOperation();
+
                     } // If we're running this one
                 } // for each case
             } // EvaluateStage
@@ -5375,7 +5402,7 @@ namespace ASEProcessManager
                 return true;
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript,
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, LinuxScriptWriter linuxScriptWriter,
                 StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
@@ -5403,43 +5430,41 @@ namespace ASEProcessManager
                     {
                         nAddedToScript++;
 
-                        linuxScript.Write("date\n");
+                        linuxScriptWriter.Write("date\n");
                         string tempBase = @"/mnt/d/temp/HappyIntermediates/";
 
-                        linuxScript.Write("cd ~\n");
-                        linuxScript.Write("rm -rf " + tempBase + "*\n");
-                        linuxScript.Write("mkdir " + tempBase + "output\n");
+                        linuxScriptWriter.Write("cd ~\n");
+                        linuxScriptWriter.Write("rm -rf " + tempBase + "*\n");
+                        linuxScriptWriter.Write("mkdir " + tempBase + "output\n");
 
                         string alignersFile = tempBase + "aligners";
 
-                        linuxScript.Write("echo " + firstAlignerName + " > " + alignersFile + "\n");
-                        linuxScript.Write("echo " + secondAlignerName + " >> " + alignersFile + "\n");
+                        linuxScriptWriter.Write("echo " + firstAlignerName + " > " + alignersFile + "\n");
+                        linuxScriptWriter.Write("echo " + secondAlignerName + " >> " + alignersFile + "\n");
 
                         string firstVcfLocal = tempBase + firstAlignerName + ".vcf";
                         string secondVcfLocal = tempBase + secondAlignerName + ".vcf";
 
-                        CopyFileInLinux(linuxScript, case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename, firstVcfLocal);
-                        CopyFileInLinux(linuxScript, case_.realignments[alignerPair.secondAligner][tumor].variantCalls[variantCaller].vcf_filename, secondVcfLocal);
+                        CopyFileInLinux(linuxScriptWriter, case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename, firstVcfLocal);
+                        CopyFileInLinux(linuxScriptWriter, case_.realignments[alignerPair.secondAligner][tumor].variantCalls[variantCaller].vcf_filename, secondVcfLocal);
 
-                        linuxScript.Write("cat " + alignersFile + " | parallel -j 2 bcftools annotate -x FORMAT/AD -O z -o " + tempBase + "{}.NoAd.vcf.gz " + tempBase + "{}.vcf\n");
-                        linuxScript.Write("cat " + alignersFile + " | parallel -j 2 bcftools view -c 1 -O z -o " + tempBase + "{}.NoAd.NoHomRef.vcf.gz " + tempBase + "{}.NoAd.vcf.gz\n");
-                        linuxScript.Write("cd ~/hap.py\n");
-                        linuxScript.Write("python hap.py-install/bin/hap.py " + tempBase + firstAlignerName + ".NoAd.NoHomRef.vcf.gz " + tempBase + secondAlignerName + ".NoAd.NoHomRef.vcf.gz -r " + fastaName + " -o " +
+                        linuxScriptWriter.Write("cat " + alignersFile + " | parallel -j 2 bcftools annotate -x FORMAT/AD -O z -o " + tempBase + "{}.NoAd.vcf.gz " + tempBase + "{}.vcf\n");
+                        linuxScriptWriter.Write("cat " + alignersFile + " | parallel -j 2 bcftools view -c 1 -O z -o " + tempBase + "{}.NoAd.NoHomRef.vcf.gz " + tempBase + "{}.NoAd.vcf.gz\n");
+                        linuxScriptWriter.Write("cd ~/hap.py\n");
+                        linuxScriptWriter.Write("python hap.py-install/bin/hap.py " + tempBase + firstAlignerName + ".NoAd.NoHomRef.vcf.gz " + tempBase + secondAlignerName + ".NoAd.NoHomRef.vcf.gz -r " + fastaName + " -o " +
                             tempBase + "output/" + case_.getDNAFileIdByTumor(tumor) + "." + alignerPair + ".concordance --engine=vcfeval\n");
-                        linuxScript.Write("cd " + tempBase + "output/\n");
+                        linuxScriptWriter.Write("cd " + tempBase + "output/\n");
 
                         var tarballName = case_.getDNAFileIdByTumor(tumor) + "." + alignerPair + "-" + ASETools.tumorToString[tumor] + "-" + ASETools.variantCallerName[variantCaller] + ".tar";
-                        linuxScript.Write("tar cvf " + tempBase + tarballName + " . \n");
-                        linuxScript.Write("cd ~\n");
+                        linuxScriptWriter.Write("tar cvf " + tempBase + tarballName + " . \n");
+                        linuxScriptWriter.Write("cd ~\n");
 
-                        CopyFilesOutLinux(linuxScript, tempBase + tarballName, ASETools.GetDirectoryFromPathname(case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename));
+                        CopyFilesOutLinux(linuxScriptWriter, tempBase + tarballName, ASETools.GetDirectoryFromPathname(case_.realignments[alignerPair.firstAligner][tumor].variantCalls[variantCaller].vcf_filename));
 
-                        linuxScript.Write("rm -rf " + tempBase + "*\n");
+                        linuxScriptWriter.Write("rm -rf " + tempBase + "*\n");
 
-                        for (int i = 0; i < 3; i++)
-                        {
-                            linuxScript.Write("# Placeholder\n");
-                        }
+                        linuxScriptWriter.EndOperation();
+
                     } // If we add it to the script.
                 } // foreach case
 
@@ -5820,7 +5845,7 @@ namespace ASEProcessManager
                 azureScript = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + configuration.azureScriptFilename);
             }
 
-            var linuxScript = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + linuxScriptFilename);
+            var linuxScriptWriter = new LinuxScriptWriter(ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + linuxScriptFilename));
 
             var allFilesToDownload = new List<string>();
 
@@ -5858,7 +5883,7 @@ namespace ASEProcessManager
 
                 if (stateOfTheWorld.cases != null || !processingStage.NeedsCases())
                 {
-                    processingStage.EvaluateStage(stateOfTheWorld, script, hpcScript, linuxScript, azureScript, out stageFilesToDownload, out nDone, out nAddedToScript, out nWaitingForPrerequisites);
+                    processingStage.EvaluateStage(stateOfTheWorld, script, hpcScript, linuxScriptWriter, azureScript, out stageFilesToDownload, out nDone, out nAddedToScript, out nWaitingForPrerequisites);
                 }
                 else
                 {
@@ -5948,7 +5973,7 @@ namespace ASEProcessManager
 
             script.Close();
             hpcScript.Close();
-            linuxScript.Close();
+            linuxScriptWriter.Close();
             azureScript.Close();
 
             stateOfTheWorld.expressionDistributionByChromosomeMap.WriteToFile(configuration.expression_distribution_by_chromosome_map_filename);

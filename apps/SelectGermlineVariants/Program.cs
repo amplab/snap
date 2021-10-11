@@ -412,7 +412,7 @@ namespace SelectGermlineVariants
             //
             // Now run through the grains, select only the variants that have enough reads, and emit the best one for each grain.
             //
-            var outputFilename = case_.vcf_filename.Substring(0, case_.vcf_filename.LastIndexOf('.')) + ASETools.tentativeSelectedVariantsExtension;
+            var outputFilename = ASETools.GetDirectoryFromPathname(case_.vcf_filename) + @"\\" + case_.normal_dna_file_id + ASETools.tentativeSelectedVariantsExtension;
             var outputFile = computeDistribution ? StreamWriter.Null :  ASETools.CreateStreamWriterWithRetry(outputFilename);    // Don't actually write the output if we're computing distribution.
             outputFile.WriteLine("SelectGermlineVariants v1.1 for input file " + case_.vcf_filename);      // v1.0 didn't take into account the read counts when selecting variants.
 

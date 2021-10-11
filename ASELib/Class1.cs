@@ -15815,7 +15815,7 @@ namespace ASELib
             }
             catch (Exception e)
             {
-                Console.WriteLine("Error trying to start process cmd.exe");
+                Console.WriteLine("Error trying to start process " + binaryName);
                 Console.WriteLine("Exception message: " + e.Message);
 
                 throw e;
@@ -15863,7 +15863,7 @@ namespace ASELib
             }
             catch (Exception e)
             {
-                Console.WriteLine("Error trying to start process cmd.exe");
+                Console.WriteLine("Error trying to start process " + binaryName);
                 Console.WriteLine("Exception message: " + e.Message);
 
                 throw e;
@@ -15883,7 +15883,6 @@ namespace ASELib
 
             return output;
         } // RunProcessAndGetOutput
-
 
 
 #if false

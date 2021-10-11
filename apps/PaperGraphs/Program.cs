@@ -47,7 +47,7 @@ namespace PaperGraphs
         static void Main(string[] args)
         {
             var timingsDirectory = @"d:\temp\timings\";
-            var concordanceDirectory = @"d:\temp\concordance\";
+            var concordanceDirectory = @"d:\temp\concordance-dragen3.8VC\";
 
             string[] dataSets = { "hg001", "hg002", "hg003", "hg004", "hg005", "hg006", "hg007", "ERR194146", "ERR194147"  };
 
@@ -66,7 +66,7 @@ namespace PaperGraphs
                 {
                     nTotal++;
 
-                    var timingFilename = timingsDirectory + dataSet + "." + ASETools.alignerName[aligner] + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + "_timings.txt";
+                    var timingFilename = timingsDirectory + dataSet + "." + ASETools.alignerName[aligner] + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : (aligner == ASETools.Aligner.Dragen ? "3.8" : "")) + "_timings.txt";
                     var splitTimingsFilenames = new List<string>();
                     for (int i = 0; i < 9; i++)
                     {
@@ -110,7 +110,7 @@ namespace PaperGraphs
 
                     }
 
-                    var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + ".concordance.tar";
+                    var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : (aligner == ASETools.Aligner.Dragen ? "3.8" : "")) + ".dragen3.8VC.concordance.tar";
                     //Console.WriteLine(concordanceFilename);
 
                     if (File.Exists(concordanceFilename))
