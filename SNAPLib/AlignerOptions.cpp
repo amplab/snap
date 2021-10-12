@@ -142,7 +142,7 @@ AlignerOptions::usage()
             "  -h   maximum hits to consider per seed (default: %d)\n"
             "  -ms  minimum seed matches per location (default: %d)\n"
             "  -t   number of threads (default is one per core)\n"
-            "  -b-  Don't bind each thread to its processor (note the double dash)\n"
+            "  -b-  Don't bind each thread to its processor (--b (with two dashes) does the smae thing)\n"
             "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
             "       with small caches or lots of cores/cache\n"
             "  -so  sort output file by alignment location\n"

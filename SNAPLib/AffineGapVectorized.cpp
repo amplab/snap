@@ -134,7 +134,6 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
     CigarFormat format,
     int* o_cigarBufUsed, int *o_netDel, int *o_tailIns)
 {
-
     _ASSERT(w < MAX_K);
     _ASSERT(textLen <= MAX_READ_LENGTH + MAX_K);
 

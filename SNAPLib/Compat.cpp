@@ -226,6 +226,11 @@ void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread
     }
 }
 
+bool DoesThreadHaveProcessorAffinitySet()
+{
+    return false;   // This is harder to do in Windows than you'd think, so we just no-op it.
+}
+
 int InterlockedIncrementAndReturnNewValue(volatile int *valueToIncrement)
 {
     return InterlockedIncrement((volatile long *)valueToIncrement);
@@ -1476,6 +1481,27 @@ void BindThreadToProcessor(unsigned processorNumber)
         perror("sched_setaffinity");
     }
 #endif
+}
+
+bool DoesThreadHaveProcessorAffinitySet()
+{
+#ifdef __linux__
+    cpu_set_t cpuset;
+    if (sched_getaffinity(0, sizeof(cpu_set_t), &cpuset) != 0) {
+        perror("sched_getaffinity");
+    } else {
+unsigned BJB = 0;
+        for (int i = 0; i < GetNumberOfProcessors(); i++) {
+if (CPU_ISSET(i, &cpuset)) BJB |= 1 << i;
+            if (!CPU_ISSET(i, &cpuset)) {
+                return true;
+            } // if this CPU is clear
+        } // for each CPU
+fprintf(stderr, "CPU mask 0x%x\n", BJB);
+    } // if sched_getaffinity worked
+#endif
+
+    return false;   // We didn't find a CPU we can't use, or else we got an error or aren't on Linux, in which case the default is false.
 }
 
 unsigned GetNumberOfProcessors()

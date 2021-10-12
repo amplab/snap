@@ -345,6 +345,7 @@ void* InterlockedCompareExchangePointerAndReturnOldValue(void * volatile *valueT
 typedef void (*ThreadMainFunction) (void *threadMainFunctionParameter);
 bool StartNewThread(ThreadMainFunction threadMainFunction, void *threadMainFunctionParameter);
 void BindThreadToProcessor(unsigned processorNumber); // This hard binds a thread to a processor.  You can no-op it at some perf hit.
+bool DoesThreadHaveProcessorAffinitySet();    // Is the current thread bound to a processor (not necessarily by SNAP)?  If not implemented by the underlying OS, just return false
 #ifdef  _MSC_VER
 #define GetThreadId() GetCurrentThreadId()
 #else   // _MSC_VER
