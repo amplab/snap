@@ -73,7 +73,7 @@ static void usage()
         " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
         " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.\n"
         "                   By default it's autoselected based on the seed size.\n"
-        " -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
+        " -large            Build a larger index that's a little faster, particularly for runs with quick/inaccurate parameters.  Increases index size by\n"
         "                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
         " -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
         "                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
