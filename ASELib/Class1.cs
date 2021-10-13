@@ -1629,6 +1629,7 @@ namespace ASELib
             public string isoform_read_counts_filename = "";
             public string compressed_vcf_filename = "";
             public string case_metadata_filename = "";
+            public string case_pairedness_filename = "";
             public string tentative_asv_without_cnvs_filename = "";
             public string variant_phasing_filename = "";
             public string vcf_statistics_filename = "";
@@ -1744,6 +1745,7 @@ namespace ASELib
             public long isoform_read_counts_file_size = 0;
             public long compressed_vcf_file_size = 0;
             public long case_metadata_file_size = 0;
+            public long case_pairedness_file_size = 0;
             public long tentative_asv_without_cnvs_size = 0;
             public long variant_phasing_size = 0;
             public long vcf_statistics_size = 0;
@@ -2121,6 +2123,7 @@ namespace ASELib
                     derivedFileTypes.Add(new DerivedFileType("Isoform Read Counts", c => c.isoform_read_counts_filename, (c, v) => c.isoform_read_counts_filename = v, isoformReadCountsExtension, c => c.case_id, c => c.isoform_read_counts_file_size, (c, v) => c.isoform_read_counts_file_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Compressed VCF", c => c.compressed_vcf_filename, (c, v) => c.compressed_vcf_filename = v, compressedVCFExtension, c => c.normal_dna_file_id, c => c.compressed_vcf_file_size, (c, v) => c.compressed_vcf_file_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Case Metadata", c => c.case_metadata_filename, (c, v) => c.case_metadata_filename = v, caseMetadataExtension, c => c.case_id, c => c.case_metadata_file_size, (c, v) => c.case_metadata_file_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Case Pairedness", c => c.case_pairedness_filename, (c, v) => c.case_pairedness_filename = v, casePairednessExtension, c => c.case_id, c => c.case_pairedness_file_size, (c, v) => c.case_pairedness_file_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Tentative ASVs without CNVs", c => c.tentative_asv_without_cnvs_filename, (c, v) => c.tentative_asv_without_cnvs_filename = v, tentativeASVsWithoutCNVsExtension, c => c.case_id, c => c.tentative_asv_without_cnvs_size, (c, v) => c.tentative_asv_without_cnvs_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Variant Phasing", c => c.variant_phasing_filename, (c, v) => c.variant_phasing_filename = v, variantPhasingExtension, c => c.case_id, c => c.variant_phasing_size, (c, v) => c.variant_phasing_size = v));
                     derivedFileTypes.Add(new DerivedFileType("VCF Statistics", c => c.vcf_statistics_filename, (c, v) => c.vcf_statistics_filename = v, vcfStatisticsExtension, c => c.normal_dna_file_id, c => c.vcf_statistics_size, (c, v) => c.vcf_statistics_size = v));
@@ -3907,6 +3910,7 @@ namespace ASELib
         public const string isoformReadCountsExtension = ".isoformReadCounts";
         public const string compressedVCFExtension = ".vcf.gz";
         public const string caseMetadataExtension = ".case_metadata.txt";
+        public const string casePairednessExtension = ".case_pairedness.txt";
         public const string tentativeASVsWithoutCNVsExtension = ".tentative_asvs_without_cnvs.txt";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
@@ -15659,6 +15663,79 @@ namespace ASELib
 
                 return specifier;
             }
+
+            class CasePairedness // This is also in CaseMetadata, but we need a separate class to break a dependency loop, where CaseMetadata needs realignment, but that needs pairedness
+            {
+                public readonly string case_id;
+                public Dictionary<bool, Dictionary<bool, bool>> pairedness;   // tumor->dna->pairedness.
+
+                CasePairedness(string case_id_, Dictionary<bool, Dictionary<bool, bool>> pairedness_)
+                {
+                    case_id = case_id_;
+                    pairedness = pairedness_;
+                } // ctor
+
+                static CasePairedness parser(HeaderizedFile<CasePairedness>.FieldGrabber fieldGrabber)
+                {
+                    var case_id = fieldGrabber.AsString("Case ID");
+
+                    var pairedness = new Dictionary<bool, Dictionary<bool, bool>>();
+
+                    foreach (var tumor in BothBools)
+                    {
+                        pairedness.Add(tumor, new Dictionary<bool, bool>();
+
+                        foreach (var dna in BothBools)
+                        {
+                            string specifier = getSpecifier(tumor, dna);
+
+                            pairedness[tumor].Add(dna, fieldGrabber.AsBool(specifier + " is paired"));
+                        } // dna
+                    } // tumor
+
+                    return new CasePairedness(case_id, pairedness);
+                } // parser
+
+                public static void WriteToFile(string outputFilename, CasePairedness pairedness)
+                {
+                    var listOfPairedness = new List<CasePairedness>();
+                    listOfPairedness.Add(pairedness);
+                    WriteToFile(outputFilename, listOfPairedness);
+                }
+
+                public static void WriteToFile(string outputFilename, List<CasePairedness> pairednesses)
+                {
+                    var outputFile = CreateStreamWriterWithRetry(outputFilename);
+
+                    outputFile.Write("Case ID");
+
+                    foreach (var tumor in BothBools)
+                    {
+                        foreach (var dna in BothBools)
+                        {
+                            string specifier = getSpecifier(tumor, dna);
+
+                            outputFile.Write("\t" + specifier + " is paired");
+                        } // dna
+                    } // tumor
+                    outputFile.WriteLine();
+
+                    foreach (var pairedness in pairednesses)
+                    {
+                        outputFile.Write(pairedness.case_id);
+
+                        foreach (var tumor in BothBools)
+                        {
+                            foreach (var dna in BothBools)
+                            {
+                                outputFile.Write("\t" + pairedness.pairedness[tumor][dna]);
+                            } // dna
+                        } // tumor
+                        outputFile.WriteLine();
+                    } // for each pairedness
+                } // WriteToFile
+
+            } // CasePairedness
 
             static CaseMetadata parser(HeaderizedFile<CaseMetadata>.FieldGrabber fieldGrabber)
             {
