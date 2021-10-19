@@ -30,6 +30,10 @@ inline unsigned RoundUpToPageSize(unsigned size)
 
 //#define PROFILE_BIGALLOC    1
 
+//#define _BIGALLOC_CHECK_MEMORY_CORRUPTION defined(_DEBUG)
+#define _BIGALLOC_CHECK_MEMORY_CORRUPTION 1
+
+
 #ifdef PROFILE_BIGALLOC
 
 #define BigAlloc(s) BigAllocProfile((s), NULL, __FUNCTION__)
@@ -92,11 +96,11 @@ public:
 
     size_t amountAllocated();
 
-#ifdef _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
     void checkCanaries();
-#else  // DEBUG
+#else  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
     void checkCanaries() {}
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
 private:
 
     char    *basePointer;
@@ -104,14 +108,14 @@ private:
     size_t  maxMemory;
     size_t  allocationGranularity;
 
-#ifdef _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
     //
-    // Stick a canary between each allocation and 
+    // Stick a canary after each allocation 
     unsigned    nCanaries;
     static const unsigned maxCanaries = 100;
     static const unsigned canaryValue = 0xca4a71e5;
     unsigned    *canaries[maxCanaries];
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
 };
 
 //

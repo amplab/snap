@@ -255,14 +255,14 @@ Return Value:
 
         size_t largePageSizeToAllocate = ((virtualAllocSize + largePageSize - 1) / largePageSize) * largePageSize;
 
-#if     _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
         largePageSizeToAllocate += largePageSize;   // For the guard page.
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
 
         allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE|((BigAllocUseHugePages && !reserveOnly) ? MEM_LARGE_PAGES : 0),PAGE_READWRITE);
 
         if (NULL != allocatedMemory) {
-#if     _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
             DWORD oldProtect;
             if (!VirtualProtect((char *)allocatedMemory + virtualAllocSize, systemInfo->dwPageSize, PAGE_NOACCESS, &oldProtect)) {
                 static bool printedVirtualProtectedWarning = false;
@@ -272,7 +272,7 @@ Return Value:
                 }
             }
             largePageSizeToAllocate -= largePageSize;   // Back out the guard page
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
             if (NULL != sizeAllocated) {
                 *sizeAllocated = largePageSizeToAllocate;
             }
@@ -510,13 +510,14 @@ bool BigCommit(
 
 BigAllocator::BigAllocator(size_t i_maxMemory, size_t i_allocationGranularity) : maxMemory(i_maxMemory), allocationGranularity(i_allocationGranularity)
 {
-#if     _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
     maxMemory += maxCanaries * sizeof(unsigned);
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
+
     basePointer = (char *)BigAlloc(__max(maxMemory, 2 * 1024 * 1024)); // The 2MB minimum is to assure this lands in a big page
     allocPointer = basePointer;
 
-#if     _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
     //
     // Stick a canary at the beginning of the array so that we can detect underflows for whatever's allocated first.
     //
@@ -524,7 +525,7 @@ BigAllocator::BigAllocator(size_t i_maxMemory, size_t i_allocationGranularity) :
     *canaries[0] = canaryValue;
     nCanaries = 1;
     allocPointer += sizeof(unsigned);
-#endif  // _DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
 }
 
 BigAllocator::~BigAllocator()
@@ -558,7 +559,7 @@ BigAllocator::allocate(size_t amountToAllocate)
     void *retVal = allocPointer;
     allocPointer += amountToAllocate;
 
-#if     _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
     if (nCanaries < maxCanaries) {
         _ASSERT(allocPointer + sizeof(unsigned) <= basePointer + maxMemory);
         canaries[nCanaries] = (unsigned *)allocPointer;
@@ -566,11 +567,11 @@ BigAllocator::allocate(size_t amountToAllocate)
         nCanaries++;
         allocPointer += sizeof(unsigned);
     }
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
     return retVal;
 }
  
-#if     _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
     void
 BigAllocator::checkCanaries()
 {
@@ -583,7 +584,7 @@ BigAllocator::checkCanaries()
     }
     _ASSERT(allOK);
 }
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
 
 
     void *

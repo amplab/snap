@@ -1683,6 +1683,7 @@ private:
         _int64 decompressedStart;
         _int64 decompressedValid;
         _int64 decompressedSize;
+        _int64 fileOffset;  // This is just for debugging
         bool allocated; // if decompressed has been allocated specially, not from inner extra data
         void ensureSize(_int64 newSize, _int64 newTotal, _int64 copyOld);
     };
@@ -1804,10 +1805,15 @@ DecompressDataReader::readHeader(
     while (headerSize < *io_headerSize && compressedBytes > 0) {
         _int64 compressedBlockSize, decompressedBlockSize;
         //fprintf(stderr,"decompress chunkSize %d compressedBytes %d headerSize %d totalExtra %d\n", chunkSize, compressedBytes, headerSize, totalExtra);
-        decompress(&zstream, chunkSize != 0 ? &heap : NULL,
+        bool ok = decompress(&zstream, chunkSize != 0 ? &heap : NULL,
             compressed, compressedBytes, &compressedBlockSize,
             header + headerSize, totalExtra - headerSize, &decompressedBlockSize,
             StartMultiBlock);
+        if (!ok) {
+            WriteErrorMessage("DecompressDataReader::readHeader: decompress failed.  Maybe your input file is corrupt?\n");
+            soft_exit(1);
+        }
+
         // This just gets reinit()'ed later, and in the interim confuses the non-rewind stdio data reader.  inner->advance(compressedBlockSize);
         compressed += compressedBlockSize;
         compressedBytes -= compressedBlockSize;
@@ -1993,17 +1999,30 @@ DecompressDataReader::decompress(
             }
             oldAvailOut = zstream->avail_out;
             oldAvailIn = zstream->avail_in;
+
             status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
             // fprintf(stderr, "decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
             block++;
             if (status < 0 && status != Z_BUF_ERROR) {
                 WriteErrorMessage("GzipDataReader: inflate failed with %d\n", status);
-                soft_exit(1);
+                if (Z_DATA_ERROR == status) {
+                    fprintf(stderr, "%d is Z_DATA_ERROR, indicating a corrupt input.  zstream->availIn is 0x%x:", status, zstream->avail_in);
+                    for (_int64 offset = 0; offset < oldAvailIn; offset++) {
+                        if (offset % 32 == 0) {
+                            fprintf(stderr, "\n0x%llx\t", offset);
+                        }
+                        fprintf(stderr, " %02x", ((unsigned char*)zstream->next_in)[offset]);
+                    }
+
+                    fprintf(stderr, "\n");
+                }
+                return false;
             }
             if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
                 WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
-                soft_exit(1);
+                return false;
             }
+
         } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
 
         if (status == Z_STREAM_END) {
@@ -2087,7 +2106,7 @@ public:
     DecompressDataReader::Entry* entry;
 
     friend class DecompressWorker;
-};
+}; // DecompressManager
 
 DecompressWorker::DecompressWorker()
     : heap(BAM_BLOCK)
@@ -2103,7 +2122,7 @@ DecompressWorker::step()
     DecompressManager* manager = (DecompressManager*) getManager();
     for (int i = getThreadNum(); i < manager->inputs->size() - 1; i += getNumThreads()) {
         _int64 inputUsed, outputUsed;
-        DecompressDataReader::decompress(&zstream,
+        bool ok = DecompressDataReader::decompress(&zstream,
             &heap,
             manager->entry->compressed + (*manager->inputs)[i],
             (*manager->inputs)[i + 1] - (*manager->inputs)[i],
@@ -2112,6 +2131,12 @@ DecompressWorker::step()
             (*manager->outputs)[i + 1] - (*manager->outputs)[i],
             &outputUsed,
             DecompressDataReader::SingleBlock);
+
+        if (!ok) {
+            WriteErrorMessage("DecompressWorker::step(): DecompressDataReader::decompress() failed.  File offset 0x%llx\n", manager->entry->fileOffset);
+            soft_exit(1);
+        }
+
         _ASSERT(inputUsed == (*manager->inputs)[i + 1] - (*manager->inputs)[i] &&
             outputUsed == (*manager->outputs)[i + 1] - (*manager->outputs)[i]);
     }
@@ -2147,6 +2172,7 @@ DecompressDataReader::decompressThread(
     bool stop = false;
     while (! stop) {
         Entry* entry = reader->dequeueAvailable();
+        entry->fileOffset = reader->getFileOffset();
         if (reader->stopping) {
             break;
         }
@@ -2235,6 +2261,9 @@ DecompressDataReader::decompressThreadContinuous(
         if (reader->stopping) {
             break;
         }
+
+        entry->fileOffset = reader->getFileOffset();
+
         // always starts with a fresh batch - advances after reading it all
         bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
         int index = (int) (entry - reader->entries);

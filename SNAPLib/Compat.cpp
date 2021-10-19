@@ -1490,14 +1490,11 @@ bool DoesThreadHaveProcessorAffinitySet()
     if (sched_getaffinity(0, sizeof(cpu_set_t), &cpuset) != 0) {
         perror("sched_getaffinity");
     } else {
-unsigned BJB = 0;
         for (int i = 0; i < GetNumberOfProcessors(); i++) {
-if (CPU_ISSET(i, &cpuset)) BJB |= 1 << i;
             if (!CPU_ISSET(i, &cpuset)) {
                 return true;
             } // if this CPU is clear
         } // for each CPU
-fprintf(stderr, "CPU mask 0x%x\n", BJB);
     } // if sched_getaffinity worked
 #endif
 
