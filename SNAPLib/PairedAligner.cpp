@@ -271,7 +271,7 @@ void PairedAlignerOptions::usageMessage()
         "  -eg  min affine gap score improvement needed for single-end alignments to be considered over\n"
         "       paired-end alignments. Default: %d\n"
         "  -eh  perform Hamming distance scoring to try and map reads that cannot be mapped by both the paired-end\n"
-        "       and the single-end aligner. Default: false"
+        "       and the single-end aligner. Default: false\n"
         ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
