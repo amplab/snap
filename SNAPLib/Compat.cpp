@@ -777,6 +777,11 @@ WindowsAsyncFile::Writer::launchWrite()
     lap.OffsetHigh = liWriteOffset.HighPart;
     lap.Offset = liWriteOffset.LowPart;
 
+    if (writeLength >= (unsigned)0xffffffff) {
+        fprintf(stderr, "Trying to write > 4GB, which isn't supported.  WriteLength = 0x%llx, write offset = 0x%llx\n", writeLength, writeOffset);
+        soft_exit(1);
+    }
+
     if (!WriteFile(file->hFile, writeBuffer, (DWORD)writeLength, (LPDWORD)writeBytesWritten, &lap)) {
         if (ERROR_IO_PENDING != GetLastError()) {
             WriteErrorMessage("WindowsAsyncFile: WriteFile failed, %d\n", GetLastError());

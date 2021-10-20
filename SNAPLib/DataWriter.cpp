@@ -495,9 +495,9 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                     batches[current].logicalUsed = batches[current].used;
                     batches[current].bufferSize = newBufferSize;
                     batches[current].buffer = newBuffer;
-#ifdef VALIDATE_WRITE
+//BJB#ifdef VALIDATE_WRITE
                     fprintf(stderr, "1-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
-#endif
+//BJB#endif
                     write->used = 0;
                     write->logicalUsed = 0;
                 }
@@ -515,9 +515,9 @@ AsyncDataWriter::nextBatch(bool lastBatch)
                         BigDealloc(batches[current].buffer);
                         batches[current].bufferSize = newBufferSize;
                         batches[current].buffer = newBuffer;
-#ifdef VALIDATE_WRITE
+//BJB#ifdef VALIDATE_WRITE
                         fprintf(stderr, "2-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
-#endif
+//BJB#endif
                     }
                     else {
                         memcpy(batches[current].buffer, write->buffer + bytesRead, batches[current].used);
