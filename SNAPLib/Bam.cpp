@@ -361,10 +361,10 @@ BAMAlignment::decodeCigar(
         _uint32 op = *cigar & 0xf;
         o_cigar[i++] = BAMAlignment::CodeToCigar[op];
 #if VALIDATE_CIGAR
-    if (op == lastOp) {
-        WriteErrorMessage("Repeating action in CIGAR string. Op: %c PrevOp: %c\n", BAMAlignment::CodeToCigar[op], BAMAlignment::CodeToCigar[lastOp]);
-        soft_exit(1);
-    }
+        if (op == lastOp) {
+            WriteErrorMessage("Repeating action in CIGAR string. Op: %c PrevOp: %c\n", BAMAlignment::CodeToCigar[op], BAMAlignment::CodeToCigar[lastOp]);
+            soft_exit(1);
+        }
 #endif
         _ASSERT(op != lastOp);
         lastOp = op;
