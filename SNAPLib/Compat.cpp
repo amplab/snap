@@ -316,11 +316,13 @@ _int64 QueryFileSize(const char *fileName) {
         WriteErrorMessage("Unable to open file '%s' for QueryFileSize, %d\n", fileName, GetLastError());
         soft_exit(1);
     }
+
     LARGE_INTEGER fileSize;
     if (!GetFileSizeEx(hFile,&fileSize)) {
         WriteErrorMessage("GetFileSize failed, %d\n",GetLastError());
         soft_exit(1);
     }
+
     CloseHandle(hFile);
 
     return fileSize.QuadPart;
@@ -1591,7 +1593,10 @@ void SleepForMillis(unsigned millis)
 _int64 QueryFileSize(const char *fileName)
 {
     int fd = open(fileName, O_RDONLY);
-    _ASSERT(fd != -1);
+    if (fd < 0) {
+        WriteErrorMessage("Unable to open file '%s' for query file size, errno %d (%s)\n", fileName, errno, strerror(errno));
+        soft_exit(1);
+    }
     struct stat sb;
     int r = fstat(fd, &sb);
     _ASSERT(r != -1);
@@ -1685,7 +1690,7 @@ OpenMemoryMappedFile(
 {
   int fd = open(filename, write ? O_CREAT | O_RDWR : O_RDONLY, S_IRUSR | S_IWUSR);
     if (fd < 0) {
-        warn("OpenMemoryMappedFile %s failed", filename);
+        WriteErrorMessage("OpenMemoryMappedFile %s failed\n", filename);
         return NULL;
     }
     // todo: large page support
@@ -1693,13 +1698,13 @@ OpenMemoryMappedFile(
     size_t extra = offset % page;
     void* map = mmap(NULL, length + extra, (write ? PROT_WRITE : 0) | PROT_READ, MAP_PRIVATE, fd, offset - extra);
     if (map == NULL || map == MAP_FAILED) {
-        warn("OpenMemoryMappedFile %s mmap failed", filename);
+        WriteErrorMessage("OpenMemoryMappedFile %s mmap failed\n", filename);
         close(fd);
         return NULL;
     }
     int e = madvise(map, length + extra, sequential ? MADV_SEQUENTIAL : MADV_RANDOM);
     if (e < 0) {
-        warn("OpenMemoryMappedFile %s madvise failed", filename);
+        WriteErrorMessage("OpenMemoryMappedFile %s madvise failed; this should only affect performance\n", filename);
     }
     MemoryMappedFile* result = new MemoryMappedFile();
     result->fd = fd;
@@ -1723,11 +1728,11 @@ CloseMemoryMappedFile(
 void AdviseMemoryMappedFilePrefetch(const MemoryMappedFile *mappedFile)
 {
   if (madvise(mappedFile->map, mappedFile->length, MADV_SEQUENTIAL)) {
-    WriteErrorMessage("madvise MADV_SEQUENTIAL failed (since it's only an optimization, this is OK).  Errno %d\n", errno);
+    WriteErrorMessage("madvise MADV_SEQUENTIAL failed (since it's only an optimization, this is OK).  Errno %d (%s)\n", errno, strerror(errno));
   }
 
   if (madvise(mappedFile->map, mappedFile->length, MADV_WILLNEED)) {
-    WriteErrorMessage("madvise MADV_WILLNEED failed (since it's only an optimization, this is OK).  Errno %d\n", errno);
+    WriteErrorMessage("madvise MADV_WILLNEED failed (since it's only an optimization, this is OK).  Errno %d (%s)\n", errno, strerror(errno));
   }
 }
 
@@ -1815,7 +1820,7 @@ PosixAsyncFile::getSize()
 {
     struct stat statBuffer;
     if (-1 == fstat(fd, &statBuffer)) {
-        WriteErrorMessage("PosixAsyncFile: fstat failed, %d\n", errno);
+        WriteErrorMessage("PosixAsyncFile: fstat failed, %d (%s)\n", errno, strerror(errno));
         return -1;
     }
 
@@ -1829,7 +1834,7 @@ PosixAsyncFile::open(
 {
     int fd = ::open(filename, write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
     if (fd < 0) {
-        WriteErrorMessage("Unable to create SAM file '%s', %d\n",filename,errno);
+        WriteErrorMessage("Unable to open file '%s', %d (%s)\n",filename, errno, strerror(errno));
         return NULL;
     }
     return new PosixAsyncFile(fd);
@@ -1893,7 +1898,7 @@ PosixAsyncFile::Writer::sigev_ready_called()
 
     ssize_t ret = aio_return(&aiocb);
     if (ret < 0 && errno != 0) {
-        WriteErrorMessage("PosixAsyncFile Writer aio_return failed, errno %d\n", errno);
+        WriteErrorMessage("PosixAsyncFile Writer aio_return failed, errno %d (%s)\n", errno, strerror(errno));
         writeErrno = errno;
     }
 
@@ -1903,7 +1908,7 @@ PosixAsyncFile::Writer::sigev_ready_called()
         // We're not done, launch the next chunk of the write.
         //
         if (!launchWrite()) {
-            WriteErrorMessage("PosixAsyncFile::Writer::sigev_ready_called: launch of later portion of buffer failed.  errno %d\n", errno);
+            WriteErrorMessage("PosixAsyncFile::Writer::sigev_ready_called: launch of later portion of buffer failed.  errno %d (%s)\n", errno, strerror(errno));
             soft_exit(1);
         }
     } else {
@@ -2050,7 +2055,7 @@ PosixAsyncFile::Reader::waitForCompletion()
         reading = false;
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0 && errno != 0) {
-            warn("PosixAsyncFile Reader aio_return");
+            WriteErrorMessage("PosixAsyncFile Reader aio_return errno %d (%s)\n", errno, strerror(errno));
             return false;
         }
         if (result != NULL) {
@@ -2410,7 +2415,7 @@ bool createPipe(const char *fullyQualifiedPipeName)
 				return false;
 			}
 
-			WriteErrorMessage("OpenNamedPipe: unexpectedly failed to create named pipe '%s', errno %d\n", fullyQualifiedPipeName, errno);
+			WriteErrorMessage("OpenNamedPipe: unexpectedly failed to create named pipe '%s', errno %d (%s)\n", fullyQualifiedPipeName, errno, strerror(errno));
 			return false;
 		}
 	}
@@ -2421,7 +2426,7 @@ FILE *connectPipe(char *fullyQualifiedPipeName, bool forInput)
 {
 	FILE *pipeFile = fopen(fullyQualifiedPipeName, forInput ? "r" : "w");
 	if (NULL == pipeFile) {
-		WriteErrorMessage("OpenNamedPipe: unable to open pipe file '%s', errno %d\n", fullyQualifiedPipeName, errno);
+		WriteErrorMessage("OpenNamedPipe: unable to open pipe file '%s', errno %d (%s)\n", fullyQualifiedPipeName, errno, strerror(errno));
 	}
 	return pipeFile;
 }
@@ -2481,7 +2486,7 @@ bool connectNamedPipes(NamedPipe *pipe)
 	    lock.l_pid = 0;
 
 	    if (fcntl(fileno(pipe->output), F_SETLKW, &lock) < 0) {
-	        fprintf(stderr,"Unable to clear named pipe lock, errno %d\n", errno);
+	        fprintf(stderr,"Unable to clear named pipe lock, errno %d (%s)\n", errno, strerror(errno));
 	        delete pipe;
 	        return NULL;
 	    }
@@ -2540,7 +2545,7 @@ NamedPipe *OpenNamedPipe(const char *pipeName, bool serverSide)
 	    lock.l_pid = 0;
 
 	    if (fcntl(fileno(pipe->output), F_SETLKW, &lock) < 0) {
-	        fprintf(stderr,"OpenNamedPipe: F_SETLKW failed, errno %d\n", errno);
+	        fprintf(stderr,"OpenNamedPipe: F_SETLKW failed, errno %d (%s)\n", errno, strerror(errno));
 	        delete pipe;
 	        return NULL;
 	    }

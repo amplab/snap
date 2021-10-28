@@ -58,8 +58,8 @@ struct SortBlock
 #ifdef VALIDATE_SORT
     SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL), minLocation(0), maxLocation(0) {}
 #else
-    SortBlock() : start(0), bytes(0), /*location(0),BJB */ length(0), reader(NULL), dataReaderIsBuffer(false), data(NULL) {}
-    SortBlock(DataReader* bufferDataReader) : start(0), bytes(0), /*location(0), BJB*/ length(0), reader(bufferDataReader), dataReaderIsBuffer(bufferDataReader != NULL), data(NULL) {}
+    SortBlock() : start(0), bytes(0), length(0), reader(NULL), dataReaderIsBuffer(false), data(NULL) {}
+    SortBlock(DataReader* bufferDataReader) : start(0), bytes(0), length(0), reader(bufferDataReader), dataReaderIsBuffer(bufferDataReader != NULL), data(NULL) {}
 #endif
 	SortBlock(const SortBlock& other) { *this = other; }
     void operator=(const SortBlock& other);
@@ -71,7 +71,6 @@ struct SortBlock
 #endif
     // for mergesort phase
     DataReader* reader;
-    //GenomeLocation    location; // genome location of current read
     ContigAndPos    contigAndPos;   // the sort key
     char*       data; // read data in read buffer
     GenomeDistance    length; // length in bytes
@@ -84,7 +83,6 @@ SortBlock::operator=(
 {
     start = other.start;
     bytes = other.bytes;
-    //BJBlocation = other.location;
     length = other.length;
     reader = other.reader;
     dataReaderIsBuffer = other.dataReaderIsBuffer;
@@ -534,7 +532,6 @@ public:
     {
         if (currentBuffer == NULL || currentBuffer->usedBufferSpace >= queue->bufferSize) 
         {
-///*BJB*/ fprintf(stderr, "DataQueueWriter::getBuffer: buffer is 0x%llx, free space %lld\n", currentBuffer, currentBuffer == NULL ? 0 : queue->bufferSize - currentBuffer->usedBufferSpace);
             *o_buffer = NULL;
             *o_size = 0;
             return false;
@@ -569,14 +566,12 @@ public:
     {
         if (currentBuffer != NULL) 
         {
-///*BJB*/ fprintf(stderr, "DataQueueWriter::nextBatch() enqueueing buffer at 0x%llx\n", currentBuffer);
             queue->readyBufferQueue->enqueue(currentBuffer);
             currentBuffer = NULL;
         }
 
         currentBuffer = (DataQueue::Buffer *)queue->freeBufferQueue->dequeue();
         currentBuffer->usedBufferSpace = 0;
-///*BJB*/ fprintf(stderr, "DataQueueWriter::nextBatch() set next buffer to 0x%llx, used bytes %lld\n", currentBuffer, currentBuffer->usedBufferSpace);
 
         return true;
     }
