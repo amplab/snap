@@ -221,7 +221,6 @@ AlignerOptions::usage()
             "       with limited memory, where some alignment tasks will push SNAP into paging, and take disproportinaltely long.  This allows the script\n"
             "       to move on to the next alignment.  Only works when generating output, and not during the sort phase.  If you're running out of memory\n"
             "       sorting, try using -di.\n"
-
             " -pro  Profile alignment to give you an idea of how much time is spent aligning and how much waiting for IO\n"
             " -proAg Profile affine-gap scoring to show how often it forces single-end alignment\n"
             "  -ae  Apply the end-of-contig soft clipping before the -om processing rather than after it.  A read that's soft clipped because of hanging off one end or the other\n"
