@@ -1743,7 +1743,6 @@ class PosixAsyncFile : public AsyncFile
 public:
     static PosixAsyncFile* open(const char* filename, bool write);
 
-    PosixAsyncFile(int i_fd);
 
     virtual bool close();
 
@@ -1785,6 +1784,7 @@ public:
 
         friend              void sigev_ready_write(union sigval val);
         void                sigev_ready_called();
+
     };
 
     virtual AsyncFile::Writer* getWriter();
@@ -1812,14 +1812,59 @@ public:
     virtual AsyncFile::Reader* getReader();
 
 private:
-    int         fd;
+
+    //
+    // We can open lots of handles to the same file, so in order to avoid exhausting the 
+    // file descriptor space we keep a cache of them with reference counts.
+    //
+    static ExclusiveLock* cacheLock;    // This starts out as null and then gets initialized using the interlocked swap trick
+
+
+    struct CacheEntry {
+        char*           filename;   // NULL indicates that this is an unused entry.
+        int             referenceCount;
+        int             fd;
+        bool            write;
+        CacheEntry*     next;
+        CacheEntry*     prev;
+
+        void enqueue() {
+            prev = cache;
+            next = cache->next;
+            prev->next = this;
+            next->prev = this;
+        }
+
+        void dequeue()
+        {
+            prev->next = next;
+            next->prev = prev;
+        }
+
+        CacheEntry() : filename(NULL), referenceCount(0), fd(-1), write(false) {}
+
+    };
+
+
+    //
+    // We don't expect there to be too many open files, so we use an unordered array here.
+    //
+    static CacheEntry *cache; // This is the header of the linked list
+
+    struct CacheEntry* cacheEntry;  // This is where our fd is
+
+    PosixAsyncFile(CacheEntry *i_cacheEntry);
+
 };
+
+PosixAsyncFile::CacheEntry *PosixAsyncFile::cache = NULL;
+ExclusiveLock* PosixAsyncFile::cacheLock = NULL;
 
     _int64
 PosixAsyncFile::getSize()
 {
     struct stat statBuffer;
-    if (-1 == fstat(fd, &statBuffer)) {
+    if (-1 == fstat(cacheEntry->fd, &statBuffer)) {
         WriteErrorMessage("PosixAsyncFile: fstat failed, %d (%s)\n", errno, strerror(errno));
         return -1;
     }
@@ -1832,24 +1877,93 @@ PosixAsyncFile::open(
     const char* filename,
     bool write)
 {
+    if (cacheLock == NULL) {
+        ExclusiveLock* newLock = new ExclusiveLock();
+        InitializeExclusiveLock(newLock);
+        AcquireExclusiveLock(newLock);
+
+        if (NULL != InterlockedCompareExchangePointerAndReturnOldValue((void * volatile*)&cacheLock, newLock, NULL)) {
+            //
+            // Someone else beat us to it.
+            //
+            ReleaseExclusiveLock(newLock);
+            DestroyExclusiveLock(newLock);
+            delete newLock;
+
+            AcquireExclusiveLock(cacheLock);
+        } else {
+            cache = new CacheEntry;
+            cache->next = cache->prev = cache;
+        }
+    } else {
+        AcquireExclusiveLock(cacheLock);
+    }
+
+    //
+    // Scan the cache to see if we already have this.  The cache is unsorted linear because we expect 
+    // it to be small.
+    //
+    CacheEntry* cacheEntry = cache->next;
+    while (cacheEntry != cache && (cacheEntry->write != write || strcmp(cacheEntry->filename, filename))) {
+        cacheEntry = cacheEntry->next;
+    }
+
+    if (cacheEntry != cache) {
+        //
+        // Cache hit.
+        //
+        cacheEntry->referenceCount++;
+        ReleaseExclusiveLock(cacheLock);
+        return new PosixAsyncFile(cacheEntry);
+    }
+
+    //
+    // It's not in the cache, so make a new entry.
+    //
+
     int fd = ::open(filename, write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
     if (fd < 0) {
-        WriteErrorMessage("Unable to open file '%s', %d (%s)\n",filename, errno, strerror(errno));
+        ReleaseExclusiveLock(cacheLock);
+        WriteErrorMessage("Unable to open file '%s', %d (%s)\n", filename, errno, strerror(errno));
         return NULL;
     }
-    return new PosixAsyncFile(fd);
+
+    cacheEntry = new CacheEntry;
+
+    cacheEntry->fd = fd;
+    cacheEntry->filename = new char[strlen(filename) + 1];
+    strcpy(cacheEntry->filename, filename);
+    cacheEntry->write = write;
+    cacheEntry->referenceCount = 1;
+    cacheEntry->enqueue();
+
+    ReleaseExclusiveLock(cacheLock);
+
+    return new PosixAsyncFile(cacheEntry);
 }
 
 PosixAsyncFile::PosixAsyncFile(
-    int i_fd)
-    : fd(i_fd)
+    CacheEntry *i_cacheEntry)
+    : cacheEntry(i_cacheEntry)
 {
 }
 
     bool
 PosixAsyncFile::close()
 {
-    return ::close(fd) == 0;
+    bool closeWorked = true;
+
+    AcquireExclusiveLock(cacheLock);
+    cacheEntry->referenceCount--;
+    if (cacheEntry->referenceCount == 0) {
+        cacheEntry->dequeue();
+        delete[] cacheEntry->filename;
+        closeWorked = ::close(cacheEntry->fd) == 0;
+        delete cacheEntry;
+    }
+    ReleaseExclusiveLock(cacheLock);
+
+    return closeWorked;
 }
 
     AsyncFile::Writer*
@@ -1969,7 +2083,7 @@ PosixAsyncFile::Writer::launchWrite()
 {
     _ASSERT(writing);
 
-    aio_setup(&aiocb, this, sigev_ready_write, file->fd, writeBuffer + bytesAlreadyWritten, bytesToWrite - bytesAlreadyWritten, writeOffset + bytesAlreadyWritten);
+    aio_setup(&aiocb, this, sigev_ready_write, file->cacheEntry->fd, writeBuffer + bytesAlreadyWritten, bytesToWrite - bytesAlreadyWritten, writeOffset + bytesAlreadyWritten);
 
     if (aio_write(&aiocb) < 0) {
         warn("PosixAsyncFile aio_write failed");
@@ -2033,7 +2147,7 @@ PosixAsyncFile::Reader::beginRead(
     if (! waitForCompletion()) {
         return false;
     }
-    aio_setup(&aiocb, &ready, sigev_ready_read, file->fd, buffer, length, offset);
+    aio_setup(&aiocb, &ready, sigev_ready_read, file->cacheEntry->fd, buffer, length, offset);
     result = bytesRead;
     bytesToRead = length;
 
@@ -2055,7 +2169,7 @@ PosixAsyncFile::Reader::waitForCompletion()
         reading = false;
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0 && errno != 0) {
-            WriteErrorMessage("PosixAsyncFile Reader aio_return errno %d (%s)\n", errno, strerror(errno));
+            WriteErrorMessage("PosixAsyncFile::Reader(0x%llx) aio_return returned %lld errno %d (%s) on fd %d, buffer 0x%llx\n", this, ret, errno, strerror(errno), aiocb.aio_fildes, aiocb.aio_buf);
             return false;
         }
         if (result != NULL) {

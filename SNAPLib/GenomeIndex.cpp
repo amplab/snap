@@ -41,7 +41,7 @@ Revision History:
 
 using namespace std;
 
-static const int DEFAULT_SEED_SIZE = 27;
+static const int DEFAULT_SEED_SIZE = 24;
 static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 2000;
 

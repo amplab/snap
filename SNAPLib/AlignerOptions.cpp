@@ -105,13 +105,13 @@ AlignerOptions::AlignerOptions(
 {
     if (forPairedEnd) {
         maxDist                 = 27;
-        maxDistForIndels        = 35;
+        maxDistForIndels        = 40;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
         maxHits                 = 300;
      } else {
         maxDist                 = 27;
-        maxDistForIndels        = 35;
+        maxDistForIndels        = 40;
         numSeedsFromCommandLine = 25;
         maxHits                 = 300;
 		seedCoverage			= 0;
