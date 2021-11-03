@@ -60,7 +60,7 @@ namespace CompressVCF
                 return;
             }
 
-            var commandLine = "/c " + configuration.binariesDirectory + "cat " + case_.vcf_filename + " | " + configuration.binariesDirectory + "gzip.exe -9" + " > " + case_.vcf_filename + ".gz";
+            var commandLine = "/c " + configuration.binariesDirectory + "cat " + case_.vcf_filename + " | " + configuration.binariesDirectory + "gzip.exe -9" + " > " + ASETools.GetDirectoryFromPathname(case_.vcf_filename) + @"\" + case_.normal_dna_file_id + ASETools.compressedVCFExtension;
             ASETools.RunAndWaitForProcess(configuration.binariesDirectory + "cmd.exe", commandLine);
 
         } // HandleOneCase

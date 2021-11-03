@@ -41,18 +41,79 @@ namespace PaperGraphs
 
         } // ScatterGraphInfo
 
+        static string timingsDirectory = @"d:\temp\timings\";
+        static string concordanceDirectory = @"d:\temp\concordance-dragen3.8VC\";
+
+        static void RunSeedSizeSweep(StreamWriter outputFile, string sample)
+        {
+            var seedSizesToRun = new List<int>();
+
+            for (int seedSize = 13; seedSize <= 32; seedSize++)
+            {
+                if (seedSize == 22)
+                {
+                    if (File.Exists(timingsDirectory + sample + ".snap_timings.txt") && File.Exists(concordanceDirectory + sample + ".snap.dragen3.8VC.concordance.tar"))
+                    {
+                        seedSizesToRun.Add(seedSize);
+                    }
+                } 
+                else if (File.Exists(timingsDirectory + sample + ".snap_s" + seedSize + "_timings.txt") && File.Exists(concordanceDirectory + sample + ".snap_s" + seedSize + ".dragen3.8VC.concordance.tar"))
+                {
+                    seedSizesToRun.Add(seedSize);
+                }
+            } // for each possible seed size
+
+            if (seedSizesToRun.Count() == 0)
+            {
+                return;
+            }
+
+            outputFile.WriteLine();
+            outputFile.WriteLine(sample + " seed size sweep");
+            outputFile.WriteLine("seed size\ttime\tmean F1\tSNV F1\tindel F1");
+
+            foreach (var seedSize in seedSizesToRun)
+            {
+                string timingFilename;
+                string concordanceFilename;
+
+                if (seedSize == 22)
+                {
+                    timingFilename = timingsDirectory + sample + ".snap_timings.txt";
+                    concordanceFilename = concordanceDirectory + sample + ".snap.dragen3.8VC.concordance.tar";
+                } else
+                {
+                    timingFilename = timingsDirectory + sample + ".snap_s" + seedSize + "_timings.txt";
+                    concordanceFilename = concordanceDirectory + sample + ".snap_s" + seedSize + ".dragen3.8VC.concordance.tar";
+                }
+
+                var timing = ASETools.RunTiming.LoadFromSNAPFile(timingFilename);
+                var concordance = new ASETools.ConcordanceResults(concordanceFilename);
+
+                outputFile.WriteLine(seedSize + "\t" + ((double)timing.alignTime + timing.loadingTime) / 3600 / 24 + "\t" + concordance.Mean_F1_Score() + "\t" + concordance.results[ASETools.VariantType.SNV].F1_score + "\t" + concordance.results[ASETools.VariantType.Indel].F1_score);
+            }
+
+        } // RunSeedSizeSweep
+
 
         static int nDigits = 4;
 
         static void Main(string[] args)
         {
-            var timingsDirectory = @"d:\temp\timings\";
-            var concordanceDirectory = @"d:\temp\concordance-dragen3.8VC\";
 
-            string[] dataSets = { "hg001", "hg002", "hg003", "hg004", "hg005", "hg006", "hg007", "ERR194146", "ERR194147"  };
+
+            string[] dataSets = { "ERR194146", "ERR194147" , "hg001", "hg002", "hg003", "hg004", "hg005", "hg006", "hg007",  };
 
             Dictionary<string, Dictionary<ASETools.Aligner, Result>> resultsByDataSetAndAligner = new Dictionary<string, Dictionary<ASETools.Aligner, Result>>();
             Dictionary<string, Dictionary<ASETools.Aligner, List<Result>>> replicasByDataSetAndAligner = new Dictionary<string, Dictionary<ASETools.Aligner, List<Result>>>();
+
+            var aligners = new List<ASETools.Aligner>();    // The same as the aligners from ASETools, but in a good order for the paper
+            aligners.Add(ASETools.Aligner.SNAP);
+            aligners.Add(ASETools.Aligner.Dragen);
+            aligners.Add(ASETools.Aligner.Novoalign);
+            aligners.Add(ASETools.Aligner.BWA);
+            aligners.Add(ASETools.Aligner.GEM);
+            aligners.Add(ASETools.Aligner.Bowtie);
 
 
             int nTotal = 0;
@@ -62,7 +123,7 @@ namespace PaperGraphs
             foreach (var dataSet in dataSets) {
                 resultsByDataSetAndAligner.Add(dataSet, new Dictionary<ASETools.Aligner, Result>());
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     nTotal++;
 
@@ -136,13 +197,13 @@ namespace PaperGraphs
             // Write the first header line
             //
             string oneTabPerAligner = "";
-            foreach (var aligner in ASETools.allAligners) oneTabPerAligner += "\t";
+            foreach (var aligner in aligners) oneTabPerAligner += "\t";
 
             outputFile.WriteLine("\tMean F1" + oneTabPerAligner + "SNV F1" + oneTabPerAligner + "Indel F1" + oneTabPerAligner + "SNV Precision" + oneTabPerAligner + "SNV Recall" + oneTabPerAligner + "Indel Precision" + oneTabPerAligner + "Indel Recall");
 
             for (int i = 0; i < 7; i++)
             {
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t" + ASETools.alignerName[aligner]);
                 }
@@ -153,7 +214,7 @@ namespace PaperGraphs
             foreach (var dataSet in dataSets)
             {
                 outputFile.Write(dataSet);
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t");
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
@@ -163,7 +224,7 @@ namespace PaperGraphs
                     }
                 } // aligner
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t");
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
@@ -173,7 +234,7 @@ namespace PaperGraphs
                     }
                 } // aligner
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t");
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
@@ -183,7 +244,7 @@ namespace PaperGraphs
                     }
                 } // aligner
                 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t");
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
@@ -193,7 +254,7 @@ namespace PaperGraphs
                     }
                 } // aligner
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t");
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
@@ -203,7 +264,7 @@ namespace PaperGraphs
                     }
                 } // aligner
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t");
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
@@ -213,7 +274,7 @@ namespace PaperGraphs
                     }
                 } // aligner
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t");
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
@@ -234,7 +295,7 @@ namespace PaperGraphs
             // 9s (= -1Log1(1-F1 score))
             for (int i = 0; i < 3; i++)
             {
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var alignerName = ASETools.alignerName[aligner];
                     outputFile.Write("\t" + alignerName);
@@ -245,7 +306,7 @@ namespace PaperGraphs
             foreach (var dataSet in dataSets)
             {
                 outputFile.Write(dataSet);
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
@@ -258,7 +319,7 @@ namespace PaperGraphs
                     }// If we have concordance
                 } // aligner
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
@@ -271,7 +332,7 @@ namespace PaperGraphs
                     }// If we have concordance
                 } // aligner
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
                     if (concordance != null)
@@ -292,7 +353,7 @@ namespace PaperGraphs
             outputFile.Write("Run Time");
             for (int i = 0; i < 3; i++)
             {
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var alignerName = ASETools.alignerName[aligner];
                     outputFile.Write("\t" + alignerName);
@@ -305,7 +366,7 @@ namespace PaperGraphs
                 outputFile.Write(dataSet);
 
                 // Load & Align
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     if (timing != null)
@@ -330,7 +391,7 @@ namespace PaperGraphs
                 } // aligner
 
                 // Standard error for load & align
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     var replicas = resultsByDataSetAndAligner[dataSet][aligner].replicas;
@@ -349,7 +410,7 @@ namespace PaperGraphs
                     }
                 }
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     if (timing != null)
@@ -370,7 +431,7 @@ namespace PaperGraphs
             outputFile.Write("Normalized run time");
             for (int i = 0; i < 2; i++)
             {
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var alignerName = ASETools.alignerName[aligner];
                     outputFile.Write("\t" + alignerName);
@@ -383,7 +444,7 @@ namespace PaperGraphs
                 outputFile.Write(dataSet);
                 var snapTiming = resultsByDataSetAndAligner[dataSet][ASETools.Aligner.SNAP].runTiming;
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     if (timing != null && snapTiming != null)
@@ -396,7 +457,7 @@ namespace PaperGraphs
                     }// If we have concordance
                 } // aligner
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     if (timing != null && snapTiming != null)
@@ -444,7 +505,7 @@ namespace PaperGraphs
                 }
                 outputFile.WriteLine();
 
-                foreach (var aligner in ASETools.allAligners)
+                foreach (var aligner in aligners)
                 {
                     outputFile.Write(ASETools.alignerName[aligner]);
                     foreach (var scatterGraph in scatterGraphs)
@@ -461,6 +522,10 @@ namespace PaperGraphs
                     outputFile.WriteLine();
                 } // aligner
             }
+
+            RunSeedSizeSweep(outputFile, "hg003");
+            RunSeedSizeSweep(outputFile, "hg007");
+            RunSeedSizeSweep(outputFile, "ERR194147");
 
             outputFile.WriteLine("**done**");
             outputFile.Close();

@@ -2592,6 +2592,19 @@ namespace ASELib
                 }
             }
 
+            public string getBAMFilename(bool tumor, bool dna)
+            {
+                if (tumor)
+                {
+                    if (dna) return tumor_dna_filename;
+                    return tumor_rna_filename;
+                } else
+                {
+                    if (dna) return normal_dna_filename;
+                    return normal_rna_filename;
+                }
+            } // getBAMFilename
+
         } // Case
 
         public static long LongFromString(string String)
@@ -4006,6 +4019,7 @@ namespace ASELib
         public const string miRNAExpressionPValueHistogramFilename = "miRNAPValueHistogram.txt";
         public const string CaseMetadataSummaryFilename = "CaseMetadataSummary.txt";
         public const string ConsolodatedCaseMetadataFilename = "ConsolodatedCaseMetadata.txt";
+        public const string ConsolodatedCasePairednessFilename = "ConsolodatedCasePairedness.txt";
         public const string SNAPSummaryFilename = "SNAPSummary.txt";
         public const string VennFilename = "VennDiagrams.txt";
 
@@ -15559,6 +15573,159 @@ namespace ASELib
             }
         } // BAMMetadata
 
+        public static string getTumorAndDNASpecifier(bool tumor, bool dna)
+        {
+            string specifier;
+
+            if (tumor)
+            {
+                specifier = "Tumor ";
+            }
+            else
+            {
+                specifier = "Normal ";
+            }
+
+            if (dna)
+            {
+                specifier += "DNA ";
+            }
+            else
+            {
+                specifier += "RNA ";
+            }
+
+            return specifier;
+        }
+
+        public class CasePairedness // This is also in CaseMetadata, but we need a separate class to break a dependency loop, where CaseMetadata needs realignment, but that needs pairedness
+        {
+            public readonly string case_id;
+            public Dictionary<bool, Dictionary<bool, bool>> pairedness;   // tumor->dna->pairedness.
+
+            public CasePairedness(string case_id_, Dictionary<bool, Dictionary<bool, bool>> pairedness_)
+            {
+                case_id = case_id_;
+                pairedness = pairedness_;
+            } // ctor
+
+            static CasePairedness parser(HeaderizedFile<CasePairedness>.FieldGrabber fieldGrabber)
+            {
+                var case_id = fieldGrabber.AsString("Case ID");
+
+                var pairedness = new Dictionary<bool, Dictionary<bool, bool>>();
+
+                foreach (var tumor in BothBools)
+                {
+                    pairedness.Add(tumor, new Dictionary<bool, bool>());
+
+                    foreach (var dna in BothBools)
+                    {
+                        string specifier = getTumorAndDNASpecifier(tumor, dna);
+
+                        pairedness[tumor].Add(dna, fieldGrabber.AsBool(specifier + " is paired"));
+                    } // dna
+                } // tumor
+
+                return new CasePairedness(case_id, pairedness);
+            } // parser
+
+            public static void WriteToFile(string outputFilename, CasePairedness pairedness)
+            {
+                var listOfPairedness = new List<CasePairedness>();
+                listOfPairedness.Add(pairedness);
+                WriteToFile(outputFilename, listOfPairedness);
+            }
+
+            public static void WriteToFile(string outputFilename, List<CasePairedness> pairednesses)
+            {
+                var outputFile = CreateStreamWriterWithRetry(outputFilename);
+
+                if (outputFile == null)
+                {
+                    throw new Exception("ASETools.CasePairedness.WriteToFile: unable to open output file " + outputFilename);
+                }
+
+                outputFile.Write("Case ID");
+
+                foreach (var tumor in BothBools)
+                {
+                    foreach (var dna in BothBools)
+                    {
+                        string specifier = getTumorAndDNASpecifier(tumor, dna);
+
+                        outputFile.Write("\t" + specifier + " is paired");
+                    } // dna
+                } // tumor
+                outputFile.WriteLine();
+
+                foreach (var pairedness in pairednesses)
+                {
+                    outputFile.Write(pairedness.case_id);
+
+                    foreach (var tumor in BothBools)
+                    {
+                        foreach (var dna in BothBools)
+                        {
+                            outputFile.Write("\t" + pairedness.pairedness[tumor][dna]);
+                        } // dna
+                    } // tumor
+                    outputFile.WriteLine();
+                } // for each pairedness
+
+
+                outputFile.WriteLine("**done**");
+                outputFile.Close();
+            } // WriteToFile
+
+            public static CasePairedness ReadFromFile(string inputFilename)
+            {
+                var listOfPairedness = ReadConsolodatedCasePairedness(inputFilename);
+
+                if (listOfPairedness.Count() != 1)
+                {
+                    throw new Exception("CasePaireness.ReadFromFile: input file " + inputFilename + " didn't have exactly one record (" + listOfPairedness.Count() + ")");
+                }
+
+                return listOfPairedness.ToList()[0].Value;
+            }
+
+            public static Dictionary<string, CasePairedness> ReadConsolodatedCasePairedness(string inputFilename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(inputFilename);
+
+                if (null == inputFile)
+                {
+                    throw new Exception("CasePairedness.ReadFromFile: unable to open " + inputFilename);
+                }
+
+                List<string> neededFields = new List<string>();
+                neededFields.Add("Case ID");
+
+                foreach (var tumor in BothBools)
+                {
+                    foreach (var dna in BothBools)
+                    {
+                        string specifier = getTumorAndDNASpecifier(tumor, dna);
+
+                        neededFields.Add(specifier + "is paired");
+                    } // dna
+
+                } // tumor
+
+                var headerizedFile = new HeaderizedFile<CasePairedness>(inputFile, false, false /*fix this once you've run FixupPairedness*/, "", neededFields);
+                List<CasePairedness> parsedMetadata;
+                headerizedFile.ParseFile(parser, out parsedMetadata);
+
+                inputFile.Close();
+
+                var result = new Dictionary<string, CasePairedness>();
+                parsedMetadata.ForEach(_ => result.Add(_.case_id, _));
+
+                return result;
+            } // ReadConsolodatedCasePairedness
+        } // CasePairedness
+
         public class CaseMetadata
         {
             public readonly string case_id;
@@ -15588,7 +15755,7 @@ namespace ASELib
                 {
                     foreach (var dna in BothBools)
                     {
-                        string specifier = getSpecifier(tumor, dna);
+                        string specifier = getTumorAndDNASpecifier(tumor, dna);
 
                         neededFields.Add(specifier + "is paired");
                         neededFields.Add(specifier + "min read length");
@@ -15639,104 +15806,6 @@ namespace ASELib
                 return parsedMetadata.ToList()[0].Value;
             }
 
-            public static string getSpecifier(bool tumor, bool dna)
-            {
-                string specifier;
-
-                if (tumor)
-                {
-                    specifier = "Tumor ";
-                }
-                else
-                {
-                    specifier = "Normal ";
-                }
-
-                if (dna)
-                {
-                    specifier += "DNA ";
-                }
-                else
-                {
-                    specifier += "RNA ";
-                }
-
-                return specifier;
-            }
-
-            class CasePairedness // This is also in CaseMetadata, but we need a separate class to break a dependency loop, where CaseMetadata needs realignment, but that needs pairedness
-            {
-                public readonly string case_id;
-                public Dictionary<bool, Dictionary<bool, bool>> pairedness;   // tumor->dna->pairedness.
-
-                CasePairedness(string case_id_, Dictionary<bool, Dictionary<bool, bool>> pairedness_)
-                {
-                    case_id = case_id_;
-                    pairedness = pairedness_;
-                } // ctor
-
-                static CasePairedness parser(HeaderizedFile<CasePairedness>.FieldGrabber fieldGrabber)
-                {
-                    var case_id = fieldGrabber.AsString("Case ID");
-
-                    var pairedness = new Dictionary<bool, Dictionary<bool, bool>>();
-
-                    foreach (var tumor in BothBools)
-                    {
-                        pairedness.Add(tumor, new Dictionary<bool, bool>();
-
-                        foreach (var dna in BothBools)
-                        {
-                            string specifier = getSpecifier(tumor, dna);
-
-                            pairedness[tumor].Add(dna, fieldGrabber.AsBool(specifier + " is paired"));
-                        } // dna
-                    } // tumor
-
-                    return new CasePairedness(case_id, pairedness);
-                } // parser
-
-                public static void WriteToFile(string outputFilename, CasePairedness pairedness)
-                {
-                    var listOfPairedness = new List<CasePairedness>();
-                    listOfPairedness.Add(pairedness);
-                    WriteToFile(outputFilename, listOfPairedness);
-                }
-
-                public static void WriteToFile(string outputFilename, List<CasePairedness> pairednesses)
-                {
-                    var outputFile = CreateStreamWriterWithRetry(outputFilename);
-
-                    outputFile.Write("Case ID");
-
-                    foreach (var tumor in BothBools)
-                    {
-                        foreach (var dna in BothBools)
-                        {
-                            string specifier = getSpecifier(tumor, dna);
-
-                            outputFile.Write("\t" + specifier + " is paired");
-                        } // dna
-                    } // tumor
-                    outputFile.WriteLine();
-
-                    foreach (var pairedness in pairednesses)
-                    {
-                        outputFile.Write(pairedness.case_id);
-
-                        foreach (var tumor in BothBools)
-                        {
-                            foreach (var dna in BothBools)
-                            {
-                                outputFile.Write("\t" + pairedness.pairedness[tumor][dna]);
-                            } // dna
-                        } // tumor
-                        outputFile.WriteLine();
-                    } // for each pairedness
-                } // WriteToFile
-
-            } // CasePairedness
-
             static CaseMetadata parser(HeaderizedFile<CaseMetadata>.FieldGrabber fieldGrabber)
             {
                 Dictionary<bool, Dictionary<bool, BAMMetadata>> bamMetadata = new Dictionary<bool, Dictionary<bool, BAMMetadata>>();
@@ -15749,7 +15818,7 @@ namespace ASELib
 
                     foreach (var dna in BothBools)
                     {
-                        string specifier = getSpecifier(tumor, dna);
+                        string specifier = getTumorAndDNASpecifier(tumor, dna);
 
                         bamMetadata[tumor].Add(dna, new BAMMetadata(
                                                         fieldGrabber.AsBool(specifier + "is paired"),
@@ -15802,7 +15871,7 @@ namespace ASELib
                 {
                     foreach (var dna in ASETools.BothBools)
                     {
-                        var specifier = ASETools.CaseMetadata.getSpecifier(tumor, dna);
+                        var specifier = getTumorAndDNASpecifier(tumor, dna);
                         outputFile.Write("\t" + specifier + "is paired");
                         outputFile.Write("\t" + specifier + "min read length");
                         outputFile.Write("\t" + specifier + "max read length");

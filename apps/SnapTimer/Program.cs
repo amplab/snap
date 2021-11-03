@@ -141,7 +141,7 @@ namespace SnapTimer
             {
                 Console.WriteLine("Error trying to start SNAP process ");
                 Console.WriteLine("Exception message: " + e.Message);
-                tempInputFiles.ForEach(_ => File.Delete(_));
+                tempFilesToDelete.ForEach(_ => File.Delete(_));
 
                 throw e;
             }
@@ -168,7 +168,7 @@ namespace SnapTimer
                 {
                     Console.WriteLine(i + ": " + snapOutput[i]);
                 }
-                tempInputFiles.ForEach(_ => File.Delete(_));
+                tempFilesToDelete.ForEach(_ => File.Delete(_));
                 File.Delete(tempOutputFile);
                 File.Delete(tempOutputBAIFile);
                 return;
@@ -181,7 +181,7 @@ namespace SnapTimer
             {
                 Console.WriteLine("Can't parse line 0");
                 snapOutput.ForEach(_ => Console.WriteLine(_));
-                tempInputFiles.ForEach(_ => File.Delete(_));
+                tempFilesToDelete.ForEach(_ => File.Delete(_));
                 File.Delete(tempOutputFile);
                 File.Delete(tempOutputBAIFile);
                 return;
@@ -196,7 +196,7 @@ namespace SnapTimer
             {
                 Console.WriteLine("Can't parse sort line");
                 snapOutput.ForEach(_ => Console.WriteLine(_));
-                tempInputFiles.ForEach(_ => File.Delete(_));
+                tempFilesToDelete.ForEach(_ => File.Delete(_));
                 File.Delete(tempOutputFile);
                 File.Delete(tempOutputBAIFile);
                 return;
@@ -213,7 +213,7 @@ namespace SnapTimer
             {
                 Console.WriteLine("Can't parse header line");
                 snapOutput.ForEach(_ => Console.WriteLine(_));
-                tempInputFiles.ForEach(_ => File.Delete(_));
+                tempFilesToDelete.ForEach(_ => File.Delete(_));
                 File.Delete(tempOutputFile);
                 File.Delete(tempOutputBAIFile);
                 return;

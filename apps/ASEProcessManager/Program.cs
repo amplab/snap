@@ -4200,6 +4200,15 @@ namespace ASEProcessManager
             } // EvaluateStage
         } // ChooseAnnotatedVariantsProcessingStage
 
+        class CasePairednessProcessingStage: PerCaseProcessingStage
+        {
+            public CasePairednessProcessingStage() : base("Compute Case Pairedness", "MakeCasePairing.exe", "", getInputFiles, null, getOutputFiles)
+            { }
+
+            static GetCaseFile[] getInputFiles = { _ => _.normal_dna_filename, _ => _.tumor_dna_filename, _ => _.tumor_rna_filename, _ => (_.normal_rna_file_id == "") ? _.tumor_dna_filename : _.normal_rna_filename };
+            static GetCaseFile[] getOutputFiles = { _ => _.case_pairedness_filename };
+        } // CasePairednessProcessingStage
+
         class CaseMetadataProcessingStage : PerCaseProcessingStage
         {
             public CaseMetadataProcessingStage(): base("Compute Case Metadata", "MakeCaseMetadata.exe", "", getInputFiles, null, getOutputFile)
@@ -4212,9 +4221,18 @@ namespace ASEProcessManager
             static GetCaseFile[] getOutputFile = { _ => _.case_metadata_filename };
         } // CaseMetadataProcessingStage
 
-        class ConsolodatedCaseMetadataProcessingStage : SingleOutputProcessingStage
+        class ConsolodateCasePairednessProcessingStage : SingleOutputProcessingStage
         {
-            public ConsolodatedCaseMetadataProcessingStage() : base("Consolodate Case Metadata", true, "CreateConsolodatedCaseMetadata.exe", "", getInputFiles, null, getOutputFile) { }
+            public ConsolodateCasePairednessProcessingStage() : base("Consolodate Case Pairedness", true, "ConsolodateCasePairedness.exe", "", getCaseFiles, null, getOutputFile)
+            { }
+
+            static GetCaseFile[] getCaseFiles = { _ => _.case_pairedness_filename };
+            static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.ConsolodatedCasePairednessFilename };
+        }
+
+        class ConsolodateCaseMetadataProcessingStage : SingleOutputProcessingStage
+        {
+            public ConsolodateCaseMetadataProcessingStage() : base("Consolodate Case Metadata", true, "CreateConsolodatedCaseMetadata.exe", "", getInputFiles, null, getOutputFile) { }
 
             static GetCaseFile[] getInputFiles = { _ => _.case_metadata_filename };
             static GetOneOffFile[] getOutputFile = { _ => _.configuration.finalResultsDirectory + ASETools.ConsolodatedCaseMetadataFilename };
@@ -4401,6 +4419,7 @@ namespace ASEProcessManager
             Dictionary<string, ASETools.ScannedFilesystem> fileSystems = null;
             public ASETools.BiasedRandom<string> randomFilesystemByFreeSpace = null;
             public Dictionary<string, ASETools.CaseMetadata> caseMetadata = null;
+            public Dictionary<string, ASETools.CasePairedness> casePairedness = null;
 
             bool commonDataAvailable = false;
             bool verifyMD5s;
@@ -4446,6 +4465,11 @@ namespace ASEProcessManager
                 if (File.Exists(configuration.finalResultsDirectory + ASETools.ConsolodatedCaseMetadataFilename))
                 {
                     caseMetadata = ASETools.CaseMetadata.ReadConsolodatedCaseMetadata(configuration.finalResultsDirectory + ASETools.ConsolodatedCaseMetadataFilename);
+                }
+
+                if (File.Exists(configuration.finalResultsDirectory + ASETools.ConsolodatedCasePairednessFilename))
+                {
+                    casePairedness = ASETools.CasePairedness.ReadConsolodatedCasePairedness(configuration.finalResultsDirectory + ASETools.ConsolodatedCasePairednessFilename);
                 }
 
                 fileSizesFromGDC = new Dictionary<string, long>();
@@ -4831,7 +4855,7 @@ namespace ASEProcessManager
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
                 filesToDownload = null;
 
-                if (stateOfTheWorld.caseMetadata == null)
+                if (stateOfTheWorld.casePairedness == null)
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -4847,9 +4871,8 @@ namespace ASEProcessManager
                 foreach (var case_ in stateOfTheWorld.listOfCases)
                 {
                     var fileId = tumor ? case_.tumor_dna_file_id : case_.normal_dna_file_id;
-                    var bamMetadata = stateOfTheWorld.caseMetadata[case_.case_id].getBAMMetadata(tumor, true);
 
-                    if (getInputFilename(case_) == "" || case_.case_metadata_filename == "" || bamMetadata.isPaired && getInputFilename2(case_) == "")
+                    if (getInputFilename(case_) == "" || case_.case_pairedness_filename == "" || stateOfTheWorld.casePairedness[case_.case_id].pairedness[tumor][true] && getInputFilename2(case_) == "")
                     {
                         nWaitingForPrerequisites++;
                     } 
@@ -4859,11 +4882,12 @@ namespace ASEProcessManager
                     } 
                     else
                     {
+                        bool isPaired = stateOfTheWorld.casePairedness[case_.case_id].pairedness[tumor][true];
                         nAddedToScript++;
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SnapTimer.exe " +
-                            ASETools.GetDirectoryFromPathname(case_.case_metadata_filename) + @"\" + fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna-statistics.txt" + @" d:\temp\ " +
-                            (bamMetadata.isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 -proAg " + getInputFilename(case_) +
-                            (bamMetadata.isPaired ? " " + getInputFilename2(case_) + " -eh" : "") +
+                            ASETools.GetDirectoryFromPathname(case_.case_pairedness_filename) + @"\" + fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna-statistics.txt" + @" d:\temp\ " +
+                            (isPaired ? "paired " : "single ") + stateOfTheWorld.configuration.localIndexDirectory + " -map -so -sm 20 -proAg " + getInputFilename(case_) +
+                            (isPaired ? " " + getInputFilename2(case_) + " -eh" : "") +
                             @" -mrl 40 -d 20 -i 40 -hc- -sid d:\temp\ -o " + ASETools.GetDerivedFiledDirectoryFromFilename(getInputBAMFilename(case_), stateOfTheWorld.configuration) + case_.case_id + @"\" +
                             fileId + "." + ASETools.alignerName[ASETools.Aligner.SNAP].ToLower() + "-" + ASETools.tumorToString[tumor].ToLower() + "-dna.bam");
                     } // We thought we had everything
@@ -4970,7 +4994,7 @@ namespace ASEProcessManager
                 ASETools.Case.ColumnGetter secondOutputGetter = c => tumor ? c.tumor_dna_fastq_second_end_filename : c.normal_dna_fastq_second_end_filename;
                 ASETools.Case.ColumnGetter fileIDGetter = c => tumor ? c.tumor_dna_file_id : c.normal_dna_file_id;
 
-                if (stateOfTheWorld.caseMetadata == null)
+                if (stateOfTheWorld.casePairedness == null)
                 {
                     nWaitingForPrerequisites = 1;
                     return;
@@ -4978,7 +5002,7 @@ namespace ASEProcessManager
 
                 foreach (var case_ in stateOfTheWorld.listOfCases)
                 {
-                    var paired = stateOfTheWorld.caseMetadata[case_.case_id].getBAMMetadata(tumor, true).isPaired;
+                    var paired = stateOfTheWorld.casePairedness[case_.case_id].pairedness[tumor][true]; // We only do DNA, hence "true"
 
                     if (outputGetter(case_) != "" && (!paired || secondOutputGetter(case_) != ""))
                     {
@@ -5124,12 +5148,6 @@ namespace ASEProcessManager
                 filesToDownload = null;
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
 
-                if (aligner == ASETools.Aligner.Dragen)
-                {
-                    // Not implemented yet
-                    return;
-                }
-
                 //ASETools.Case.ColumnGetter getOutput;
                 //ASETools.Case.ColumnGetter getOutputBai;
                 //ASETools.Case.ColumnGetter getOutputStatictics;
@@ -5229,11 +5247,11 @@ namespace ASEProcessManager
                             case ASETools.Aligner.Dragen:
                                 if (paired)
                                 {
-                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1" + localInputFile + " -2 " + localSecondInputFile + " --output-directory /mnt/d/temp  --output-file-prefix /mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor));
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1 " + localInputFile + " -2 " + localSecondInputFile + " --output-directory /mnt/d/temp  --output-file-prefix " + case_.getDNAFileIdByTumor(tumor) + ".Dragen_realigned\n");
                                 } 
                                 else
                                 {
-                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1" + localInputFile + " --output-directory /mnt/d/temp  --output-file-prefix /mnt/d/temp/" + case_.getDNAFileIdByTumor(tumor));
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1 " + localInputFile + " --output-directory /mnt/d/temp  --output-file-prefix " + case_.getDNAFileIdByTumor(tumor) + ".Dragen_realigned\n");
                                 }
                                 break;
 
@@ -5712,6 +5730,7 @@ namespace ASEProcessManager
             processingStages.Add(new DistanceBetweenMutationsProcessingStage());
             processingStages.Add(new SingleReadPhasingProcessingStage());
             processingStages.Add(new CompressVCFProcessingStage());
+            processingStages.Add(new CasePairednessProcessingStage());
             processingStages.Add(new CaseMetadataProcessingStage());
             processingStages.Add(new UniparentalDisomyProcessingStage());
             processingStages.Add(new TentativeASVWithoutCNVsProcessingStage());
@@ -5722,7 +5741,8 @@ namespace ASEProcessManager
             processingStages.Add(new ReadStaticticsProcessingStage());
             processingStages.Add(new miRNAProcessingStage());
             processingStages.Add(new SummarizeCaseMetadataProcessingStage());
-            processingStages.Add(new ConsolodatedCaseMetadataProcessingStage());
+            processingStages.Add(new ConsolodateCaseMetadataProcessingStage());
+            processingStages.Add(new ConsolodateCasePairednessProcessingStage());
             processingStages.Add(new FASTQGenerationProcessingStage(false));
             processingStages.Add(new FASTQGenerationProcessingStage(true));
             processingStages.Add(new SNAPRealignmentProcessingStage(false));
