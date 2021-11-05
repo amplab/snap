@@ -50,7 +50,7 @@ namespace PaperGraphs
 
             for (int seedSize = 13; seedSize <= 32; seedSize++)
             {
-                if (seedSize == 22)
+                if (seedSize == 24)
                 {
                     if (File.Exists(timingsDirectory + sample + ".snap_timings.txt") && File.Exists(concordanceDirectory + sample + ".snap.dragen3.8VC.concordance.tar"))
                     {
@@ -77,7 +77,7 @@ namespace PaperGraphs
                 string timingFilename;
                 string concordanceFilename;
 
-                if (seedSize == 22)
+                if (seedSize == 24)
                 {
                     timingFilename = timingsDirectory + sample + ".snap_timings.txt";
                     concordanceFilename = concordanceDirectory + sample + ".snap.dragen3.8VC.concordance.tar";
@@ -158,10 +158,15 @@ namespace PaperGraphs
                             }
                         }
 
-
+                        replicas.Add(timings);
 
                         foreach (var replicaFilename in Directory.GetFiles(timingsDirectory, dataSet + "." + ASETools.alignerName[aligner].ToLower() + "_timings_*.txt"))
                         {
+                            if (replicaFilename.Contains("_timings_s"))
+                            {
+                                continue;   //SNAP runs with different seed sizes.
+                            }
+
                             var replica = ASETools.RunTiming.LoadFromReplicaFile(replicaFilename);
                             if (replica != null)
                             {
@@ -373,7 +378,7 @@ namespace PaperGraphs
                     {
                         int runTime;
 
-                        if (resultsByDataSetAndAligner[dataSet][aligner].replicas != null)
+                        if (resultsByDataSetAndAligner[dataSet][aligner].replicas != null && resultsByDataSetAndAligner[dataSet][aligner].replicas.Count() >= 5)
                         {
                             runTime = (resultsByDataSetAndAligner[dataSet][aligner].replicas.Select(_ => _.alignTime + _.loadingTime).Sum() + timing.alignTime + timing.loadingTime) / (1 + resultsByDataSetAndAligner[dataSet][aligner].replicas.Count());
                         }
@@ -399,8 +404,7 @@ namespace PaperGraphs
                     if (timing != null && replicas.Count() >= 4)
                     {
                         var times = replicas.Select(_ => ((double)_.alignTime + _.loadingTime) / 3600 /24).ToList();
-                        times.Add(((double)timing.alignTime + timing.loadingTime) / 3600 / 24);
-
+ 
                         var sigma = ASETools.StandardDeviationOfList(times);
 
                         outputFile.Write("\t" + ASETools.DoubleRounded(sigma / Math.Sqrt(times.Count()), nDigits));
