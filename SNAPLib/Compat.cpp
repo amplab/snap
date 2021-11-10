@@ -1847,7 +1847,7 @@ private:
 
 
     //
-    // We don't expect there to be too many open files, so we use an unordered array here.
+    // We don't expect there to be too many open files, so we use an unordered list here.
     //
     static CacheEntry *cache; // This is the header of the linked list
 
