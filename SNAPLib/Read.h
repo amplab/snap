@@ -421,6 +421,12 @@ public:
             originalPNEXT = i_originalPNEXT;
             currentReadDirection = FORWARD;
 
+            if (dataLength > MAX_READ_LENGTH) {
+                WriteErrorMessage("Saw a read of length %d while SNAP is compiled with a maximum length of %d. Please use smaller reads or change the value of MAX_READ_LENGTH in SNAPLib/Read.h and recompile SNAP.  Read ID: %.*s\n",
+                    dataLength, MAX_READ_LENGTH, idLength, id);
+                soft_exit(1);
+            }
+
             localBufferAllocationOffset = 0;    // Clears out any allocations that might previously have been in the buffer
             upcaseForwardRead = rcData = rcQuality = NULL;
 
