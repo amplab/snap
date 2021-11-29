@@ -160,7 +160,16 @@ namespace PaperGraphs
 
                         replicas.Add(timings);
 
-                        foreach (var replicaFilename in Directory.GetFiles(timingsDirectory, dataSet + "." + ASETools.alignerName[aligner] +  (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + "_timings_*.txt"))
+                        var replicaFilenames = new List<string>();
+                        replicaFilenames.AddRange(Directory.GetFiles(timingsDirectory, dataSet + "." + ASETools.alignerName[aligner] + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + "_timings_*.txt"));
+                        if (aligner == ASETools.Aligner.Bowtie)
+                        {
+                            // There were two scripts for running bowtie replicas, one that produced X.bowtie_s1000_*.timings.txt" and the other produced X.bowtie_timings_1000_*.txt.  Add in the second ones here.
+                            replicaFilenames.AddRange(Directory.GetFiles(timingsDirectory, dataSet + ".bowtie_timings_1000_*.txt"));
+                        }
+
+
+                        foreach (var replicaFilename in replicaFilenames)
                         {
                             if (replicaFilename.Contains("_timings_s"))
                             {
@@ -172,9 +181,8 @@ namespace PaperGraphs
                             {
                                 replicas.Add(replica);
                             }
-                        }
-
-                    }
+                        } // replica filename  
+                    } // if main timing file exists
 
                     var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : (aligner == ASETools.Aligner.Dragen ? "3.8" : "")) + ".dragen3.8VC.concordance.tar";
                     //Console.WriteLine(concordanceFilename);
@@ -354,7 +362,7 @@ namespace PaperGraphs
 
             outputFile.WriteLine();
 
-            outputFile.WriteLine("\tLoad & Align" + oneTabPerAligner + "Load & Align error bar" + oneTabPerAligner + "Whole Pipeline");
+            outputFile.WriteLine("\tLoad & Align" + oneTabPerAligner + "Load & Align error bar"+ oneTabPerAligner + "Load & Align error bar as fraction of mean" + oneTabPerAligner + "Whole Pipeline");
             outputFile.Write("Run Time");
             for (int i = 0; i < 3; i++)
             {
@@ -395,7 +403,7 @@ namespace PaperGraphs
 
                 } // aligner
 
-                // Standard error for load & align
+                // Standard error
                 foreach (var aligner in aligners)
                 {
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
@@ -404,11 +412,35 @@ namespace PaperGraphs
                     if (timing != null && replicas.Count() >= 4)
                     {
                         var times = replicas.Select(_ => ((double)_.alignTime + _.loadingTime) / 3600 /24).ToList();
- 
+                        times.Add(((double)timing.alignTime + timing.loadingTime) / 3600 / 24);
+
                         var sigma = ASETools.StandardDeviationOfList(times);
 
                         outputFile.Write("\t" + ASETools.DoubleRounded(sigma / Math.Sqrt(times.Count()), nDigits));
                     } else
+                    {
+                        outputFile.Write("\t");
+                    }
+                }
+
+                // Standard error divided by mean
+                foreach (var aligner in aligners)
+                {
+                    var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
+                    var replicas = resultsByDataSetAndAligner[dataSet][aligner].replicas;
+
+                    if (timing != null && replicas.Count() >= 4)
+                    {
+                        var times = replicas.Select(_ => ((double)_.alignTime + _.loadingTime) / 3600 / 24).ToList();
+                        times.Add(((double)timing.alignTime + timing.loadingTime) / 3600/ 24);
+
+                        var sigma = ASETools.StandardDeviationOfList(times);
+
+                        var meanRunTime = times.Average();
+
+                        outputFile.Write("\t" + ASETools.DoubleRounded(sigma / Math.Sqrt(times.Count()) / meanRunTime, nDigits));
+                    }
+                    else
                     {
                         outputFile.Write("\t");
                     }

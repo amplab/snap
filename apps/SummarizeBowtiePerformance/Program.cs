@@ -14,6 +14,7 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
 {
     class Program
     {
+        static Dictionary<string, ASETools.CasePairedness> casePairedness = null;
         class HistogramState
         { 
             public ASETools.PreBucketedHistogram copyTimeHistogram = new ASETools.PreBucketedHistogram(0, ASETools.maxTimeForRealignHistograms, ASETools.timeStepForRealignHistograms);
@@ -75,7 +76,6 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
         static void HandleOneCase(ASETools.Case case_, Dictionary<bool, PerThreadState> state)
         {
             var readStats = ASETools.ReadStatistics.ReadAllFromFile(case_.read_statictics_filename);
-            var caseMetadata = ASETools.CaseMetadata.ReadFromFile(case_.case_metadata_filename);
 
             foreach (var tumor in ASETools.BothBools)
             {
@@ -85,8 +85,7 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
                 }
 
                 var inputFilename = case_.realignments[aligner][tumor].dna_statistics_filename;
-                var bamFilename = case_.realignments[aligner][tumor].dna_filename;
-                if (inputFilename == "" || bamFilename == "")
+                if (inputFilename == "")
                 {
                     continue;
                 }
@@ -129,17 +128,27 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
                     Console.WriteLine("Extremely fast aligner run for case " + case_.case_id + ", stats file " + inputFilename);
                 }
 
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].copyTimeHistogram.addValue(dates[1].Subtract(dates[0]).TotalSeconds);
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].alignerTimeHistogram.addValue(dates[2].Subtract(dates[1]).TotalSeconds);
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].samToBamTimeHistogram.addValue(dates[3].Subtract(dates[2]).TotalSeconds);
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].sortTimeHistogram.addValue(dates[4].Subtract(dates[3]).TotalSeconds);
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].duplicateMarkHistogram.addValue(dates[5].Subtract(dates[4]).TotalSeconds);
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].indexHistogram.addValue(dates[6].Subtract(dates[5]).TotalSeconds);
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].totalTimeHistogram.addValue(dates[6].Subtract(dates[0]).TotalSeconds);
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].copiedToFinalBamTimeHistogram.addValue(dates[6].Subtract(dates[1]).TotalSeconds);
+                bool paired = casePairedness[case_.case_id].pairedness[tumor][true];
+                ASETools.EndCount endCount;
+                if (paired)
+                {
+                    endCount = ASETools.EndCount.Paired;
+                } else
+                {
+                    endCount = ASETools.EndCount.Single;
+                }
 
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].readsPerSecondReportedHistogram.addValue(readStats[tumor][true].totalReads / dates[2].Subtract(dates[1]).TotalSeconds);    // true means dna
-                state[tumor].histograms[caseMetadata.getBAMMetadata(tumor, true).endCount].readsPerSecondAllTimeHistogram.addValue(readStats[tumor][true].totalReads / dates[6].Subtract(dates[1]).TotalSeconds);// true means dna
+                state[tumor].histograms[endCount].copyTimeHistogram.addValue(dates[1].Subtract(dates[0]).TotalSeconds);
+                state[tumor].histograms[endCount].alignerTimeHistogram.addValue(dates[2].Subtract(dates[1]).TotalSeconds);
+                state[tumor].histograms[endCount].samToBamTimeHistogram.addValue(dates[3].Subtract(dates[2]).TotalSeconds);
+                state[tumor].histograms[endCount].sortTimeHistogram.addValue(dates[4].Subtract(dates[3]).TotalSeconds);
+                state[tumor].histograms[endCount].duplicateMarkHistogram.addValue(dates[5].Subtract(dates[4]).TotalSeconds);
+                state[tumor].histograms[endCount].indexHistogram.addValue(dates[6].Subtract(dates[5]).TotalSeconds);
+                state[tumor].histograms[endCount].totalTimeHistogram.addValue(dates[6].Subtract(dates[0]).TotalSeconds);
+                state[tumor].histograms[endCount].copiedToFinalBamTimeHistogram.addValue(dates[6].Subtract(dates[1]).TotalSeconds);
+
+                state[tumor].histograms[endCount].readsPerSecondReportedHistogram.addValue(readStats[tumor][true].totalReads / dates[2].Subtract(dates[1]).TotalSeconds);    // true means dna
+                state[tumor].histograms[endCount].readsPerSecondAllTimeHistogram.addValue(readStats[tumor][true].totalReads / dates[6].Subtract(dates[1]).TotalSeconds);// true means dna
             } // tumor or normal
         } // HandleOneCase
 
@@ -149,7 +158,10 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
             {
                 foreach (var tumor in ASETools.BothBools)
                 {
-                    globalState[tumor].mergeWith(state[tumor]);
+                    if (state.ContainsKey(tumor) && state[tumor] != null && globalState.ContainsKey(tumor) && globalState[tumor] != null)
+                    {
+                        globalState[tumor].mergeWith(state[tumor]);
+                    }
                 }
             }
         } // FinishUp
@@ -171,6 +183,13 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
                 return;
             }
 
+            casePairedness = ASETools.CasePairedness.ReadConsolodatedCasePairedness(configuration.finalResultsDirectory + ASETools.ConsolodatedCasePairednessFilename);
+            if (null == casePairedness)
+            {
+                Console.WriteLine("Unable to read case pairedness from " + configuration.finalResultsDirectory + ASETools.ConsolodatedCasePairednessFilename);
+                return;
+            }
+
             aligner = ASETools.AlignerNameToAligner(configuration.commandLineArgs[0]);
 
             if (aligner == ASETools.Aligner.SNAP)
@@ -189,15 +208,15 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
 
             var listOfCases = cases.Select(_ => _.Value).ToList();
 
-
             foreach (var tumor in ASETools.BothBools)
             {
                 globalState.Add(tumor, new PerThreadState());
             }
 
-            if (listOfCases.Any(_ => _.realignments[aligner][false].dna_statistics_filename == "" || _.realignments[aligner][true].dna_statistics_filename == "" || _.read_statictics_filename == "" || _.case_metadata_filename == "")) {
-                Console.WriteLine("Some realignment statistics or read statistics or case metadata files are missing.  Try again once you've run all the realignments.");
+            if (listOfCases.Any(_ => _.read_statictics_filename == "")) {
+                Console.WriteLine("Some read statistics files are missing.  Try again once you've run all the realignments.");
                 //return;
+                listOfCases = listOfCases.Where(_ => _.read_statictics_filename != "").ToList();
             }
 
             int nPerDot;
@@ -228,7 +247,7 @@ namespace SummarizeBowtiePerformance // This is a misnomer: it all Linux aligner
                         outputFile.WriteLine(); // Space after the tumor results
                     }
 
-                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.endCountToString[ends] + " statictics");
+                    outputFile.WriteLine(ASETools.tumorToString[tumor] + " " + ASETools.endCountToString[ends] + " statistics");
 
                     var histogramsToWrite = new List<KeyValuePair<string, ASETools.PreBucketedHistogram>>();
                     histogramsToWrite.Add(new KeyValuePair<string, ASETools.PreBucketedHistogram>("Copy In", globalState[tumor].histograms[ends].copyTimeHistogram));
