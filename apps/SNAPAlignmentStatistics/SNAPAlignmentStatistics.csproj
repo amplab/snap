@@ -4,10 +4,10 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{BCC92DD4-728F-4673-998B-31476991B617}</ProjectGuid>
+    <ProjectGuid>{0646457B-DC6F-4DF4-AAD7-D7B46F15BA1F}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>FindHole</RootNamespace>
-    <AssemblyName>FindHole</AssemblyName>
+    <RootNamespace>SNAPAlignmentStatistics</RootNamespace>
+    <AssemblyName>SNAPAlignmentStatistics</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -68,6 +68,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ASELib\ASELib.csproj">
+      <Project>{fef6def5-ca17-4fb1-ad7d-30fb579a7cf2}</Project>
+      <Name>ASELib</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

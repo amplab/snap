@@ -160,7 +160,7 @@ namespace PaperGraphs
 
                         replicas.Add(timings);
 
-                        foreach (var replicaFilename in Directory.GetFiles(timingsDirectory, dataSet + "." + ASETools.alignerName[aligner].ToLower() + "_timings_*.txt"))
+                        foreach (var replicaFilename in Directory.GetFiles(timingsDirectory, dataSet + "." + ASETools.alignerName[aligner] +  (aligner == ASETools.Aligner.Bowtie ? "_s1000" : "") + "_timings_*.txt"))
                         {
                             if (replicaFilename.Contains("_timings_s"))
                             {
