@@ -38,6 +38,7 @@ Revision History:
 #include "exit.h"
 #include "Error.h"
 #include "directions.h"
+#include "DataReader.h"
 
 using namespace std;
 
@@ -158,6 +159,8 @@ GenomeIndex::runIndexer(
     unsigned *altLiftoverProjContigOffsets = NULL;
     char **altLiftoverProjCigar = NULL;
 
+    DataSupplier::ExpansionFactor = 50; // This is for the decompression of a gzipped FASTA/ALT file.  FASTAs compress really well so we need a lot.
+
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
             if (n + 1 < argc) {
@@ -251,7 +254,7 @@ GenomeIndex::runIndexer(
 			n++;
 		} else if (!strcmp(argv[n], "-altContigFile")) {
 			if (n + 1 < argc) {
-				FILE *inputFile = fopen(argv[n + 1], "r");
+                DataReader* inputFile = getDefaultOrGzipDataReader(argv[n + 1]);
 				if (NULL == inputFile) {
 					WriteErrorMessage("Unable to open alt contig list file %s\n", argv[n + 1]);
 					soft_exit(1);
@@ -269,7 +272,7 @@ GenomeIndex::runIndexer(
 					addToCountedListOfStrings(contigNameBuffer, &nAltOptIn, &altOptInList);
 				} // while we have an input string.
 
-				fclose(inputFile);
+				delete inputFile;
 				delete[] contigNameBuffer;
 			} else {
 				usage();
@@ -277,7 +280,7 @@ GenomeIndex::runIndexer(
 			n++;
 		} else if (!strcmp(argv[n], "-nonAltContigFile")) {
 			if (n + 1 < argc) {
-				FILE *inputFile = fopen(argv[n + 1], "r");
+				DataReader *inputFile = getDefaultOrGzipDataReader(argv[n + 1]);
 				if (NULL == inputFile) {
 					WriteErrorMessage("Unable to open non-alt contig list file %s\n", argv[n + 1]);
 					soft_exit(1);
@@ -295,7 +298,7 @@ GenomeIndex::runIndexer(
 					addToCountedListOfStrings(contigNameBuffer, &nAltOptOut, &altOptOutList);
 				} // while we have an input string.
 
-				fclose(inputFile);
+				delete inputFile;
 				delete[] contigNameBuffer;
 			}
 			else {
@@ -304,7 +307,8 @@ GenomeIndex::runIndexer(
 			n++;
 		} else if (!strcmp(argv[n], "-altLiftoverFile")) {
             if (n + 1 < argc) {
-                FILE* inputFile = fopen(argv[n + 1], "r");
+                DataReader* inputFile = getDefaultOrGzipDataReader(argv[n + 1]);
+                
                 if (NULL == inputFile) {
                     WriteErrorMessage("Unable to open ALT liftover file %s\n", argv[n + 1]);
                     soft_exit(1);
@@ -395,7 +399,7 @@ GenomeIndex::runIndexer(
                     altLiftoverProjCigar[i][projCigarLength] = '\0';
                 }
 
-                fclose(inputFile);
+                delete inputFile;
                 delete[] altLiftoverBuffer;
             }
             else {

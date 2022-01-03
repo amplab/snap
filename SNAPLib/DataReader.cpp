@@ -2019,7 +2019,7 @@ DecompressDataReader::decompress(
                 return false;
             }
             if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
-                WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
+                WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f (if you're indexing, please decompress the FASTA/ALT files externally and use the uncompressed version here)\n", DataSupplier::ExpansionFactor);
                 return false;
             }
 
@@ -2295,7 +2295,7 @@ DecompressDataReader::decompressThreadContinuous(
                 entry->decompressed + reader->overflowBytes, entry->decompressedSize - reader->overflowBytes, &decompressedWritten,
                 first ? StartMultiBlock : ContinueMultiBlock);
             if (!ok) {
-                WriteErrorMessage("Failed to decompress BAM file at offset %lld\n", reader->inner->getFileOffset());
+                WriteErrorMessage("Failed to decompress gzip/BAM file at offset %lld\n", reader->inner->getFileOffset());
                 soft_exit(1);
             }
             _ASSERT(compressedRead == entry->compressedValid && decompressedWritten <= reader->extraBytes - reader->overflowBytes);

@@ -28,6 +28,7 @@ Revision History:
 #include "Error.h"
 #include "exit.h"
 #include "Util.h"
+#include "DataReader.h"
 
 using namespace std;
 
@@ -220,9 +221,10 @@ ReadFASTAGenome(
     isValidGenomeCharacter['A'] = isValidGenomeCharacter['T'] = isValidGenomeCharacter['C'] = isValidGenomeCharacter['G'] = isValidGenomeCharacter['N'] = true;
     isValidGenomeCharacter['a'] = isValidGenomeCharacter['t'] = isValidGenomeCharacter['c'] = isValidGenomeCharacter['g'] = isValidGenomeCharacter['n'] = true;
 
-    FILE *fastaFile = fopen(fileName, "r");
-    if (fastaFile == NULL) {
-        WriteErrorMessage("Unable to open FASTA file '%s' (does it exist and do you have permission to open it?)\n",fileName);
+    DataReader* fastaDataReader = getDefaultOrGzipDataReader(fileName);
+
+    if (fastaDataReader == NULL) {
+        WriteErrorMessage("Unable to open FASTA file '%s' (does it exist and do you have permission to open it?)\n", fileName);
         return NULL;
     }
 
@@ -244,7 +246,7 @@ ReadFASTAGenome(
 
     int nextContigNumber = 0;
 
-    while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, fastaFile)) {
+    while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, fastaDataReader)) {
         fileSize += strlen(lineBuffer);
         if (lineBuffer[0] == '>') {
             nContigs++;
@@ -382,7 +384,7 @@ ReadFASTAGenome(
     genome->sortContigsByName();
     genome->setUpContigNumbersByOriginalOrder();
 
-    fclose(fastaFile);
+    delete fastaDataReader;
     delete [] paddingBuffer;
     delete [] lineBuffer;
     return genome;
