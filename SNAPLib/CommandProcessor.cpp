@@ -35,7 +35,7 @@ Revision History:
 #include "Error.h"
 #include "Compat.h"
 
-const char *SNAP_VERSION = "2.0.1dev.1";
+const char *SNAP_VERSION = "2.0.1.dev.2";
 
 static void usage()
 {

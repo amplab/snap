@@ -782,7 +782,8 @@ SAMReader::parseLocation(
     char* field[],
     size_t fieldLength[],
 	unsigned rfield,
-	unsigned posfield)
+	unsigned posfield,
+    int *o_pos)
 {
     unsigned oneBasedOffsetWithinContig = 0;
     if ('*' != field[rfield][0] && '*' != field[posfield][0]) {
@@ -804,12 +805,23 @@ SAMReader::parseLocation(
             WriteErrorMessage("SAMReader: Unable to parse position when it was expected.\n");
             soft_exit(1);
         }
+
         if (0 == oneBasedOffsetWithinContig) {
             WriteErrorMessage("SAMReader: Position parsed as 0 when it was expected.\n");
             soft_exit(1);
         }
+
+        if (NULL != o_pos) {
+            *o_pos = oneBasedOffsetWithinContig;
+        }
+
         return locationOfContig + oneBasedOffsetWithinContig - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
     } else {
+
+        if (NULL != o_pos) {
+            *o_pos = 0;
+        }
+
         return InvalidGenomeLocation;
     }
 }
@@ -1008,75 +1020,67 @@ SAMFormat::getSortInfo(
 	if (o_readBytes != NULL) {
 		*o_readBytes = (unsigned) lineLength;
 	}
+
+    GenomeLocation locationBuffer;
+    if (o_location == NULL) {
+        o_location = &locationBuffer;   // We need to call parseLocation to figure out pos, so if we're not returning the value just store it on the stack and discard
+    }
+
+    //
+    // Fill these in to indicate whether we're sorting by the aligned location or by next (which we do for unaligned reads so they land by their mate pair).
+    //
+    int posField;
+    int rField;
+
     if (lengths[SAMReader::POS] == 0 || fields[SAMReader::POS][0] == '*') {
-		if (lengths[SAMReader::PNEXT] == 0 || fields[SAMReader::PNEXT][0] == '*') {
-			if (o_location != NULL) {
-				*o_location = UINT32_MAX;
-			}
-
-			if (o_refID != NULL) {
-				*o_refID = OriginalContigNum(INT32_MAX);    // So that it sorts to the end
-			}
-
-			if (o_pos != NULL) {
-				*o_pos = 0;
-			}
-		} else {
-			const size_t contigNameBufferSize = 512;        // We do a static buffer with reallocation so that in the usual case there is no dynamic memory allocation.  If you have enormous contig names, you'll just run a little slower
-            char contigNameBuffer[contigNameBufferSize];
-            char *contigName = contigNameBuffer;
-			GenomeLocation locationOfContig;
-            size_t neededSize;
-            InternalContigNum internalContigNum;
-            if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, &internalContigNum, fields, lengths, SAMReader::RNEXT))) {
-                //
-                // Need a bigger buffer.
-                //
-                contigName = new char[neededSize];
-                if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, &internalContigNum, fields, lengths, SAMReader::RNEXT)) {
-                    WriteErrorMessage("SAMFormat::getSortInfo: reallocated buffer size is still too small.\n"); // This really shouldn't happen
-                    soft_exit(1);
-                }
+        if (lengths[SAMReader::PNEXT] == 0 || fields[SAMReader::PNEXT][0] == '*') {
+            if (o_location != NULL) {
+                *o_location = InvalidGenomeLocation;
             }
-
-			if (o_location != NULL) {
-				*o_location = SAMReader::parseLocation(locationOfContig, fields, lengths, SAMReader::RNEXT, SAMReader::PNEXT);
-			}
 
             if (o_refID != NULL) {
-                *o_refID = genome->getContigByInternalNumber(internalContigNum)->originalContigNumber;
+                *o_refID = OriginalContigNum(INT32_MAX);    // So that it sorts to the end
             }
 
-            if (contigName != contigNameBuffer) {
-                delete[] contigName;
+            if (o_pos != NULL) {
+                *o_pos = 0;
             }
-		}
+
+            return;
+        } else {
+            posField = SAMReader::PNEXT;
+            rField = SAMReader::RNEXT;
+        }
     } else {
-        const size_t contigNameBufferSize = 512;    // We do a static buffer with reallocation so that in the usual case there is no dynamic memory allocation.  If you have enormous contig names, you'll just run a little slower
-        char contigNameBuffer[contigNameBufferSize];
-        char *contigName = contigNameBuffer;
-        size_t neededSize;
-        GenomeLocation locationOfContig;
-        InternalContigNum internalContigNum;
-        if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, &internalContigNum, fields, lengths))) {
-            contigName = new char[neededSize];
-            if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, &internalContigNum, fields, lengths)) {
-                WriteErrorMessage("SAMFormat::getSortInfo(2): reallocated buffer size is still too small.\n");
-                soft_exit(1);
-            }
+        posField = SAMReader::POS;
+        rField = SAMReader::RNAME;
+    }
+  
+	const size_t contigNameBufferSize = 512;        // We do a static buffer with reallocation so that in the usual case there is no dynamic memory allocation.  If you have enormous contig names, you'll just run a little slower
+    char contigNameBuffer[contigNameBufferSize];
+    char *contigName = contigNameBuffer;
+	GenomeLocation locationOfContig;
+    size_t neededSize;
+    InternalContigNum internalContigNum;
+    if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, &internalContigNum, fields, lengths, rField))) {
+        //
+        // Need a bigger buffer.
+        //
+        contigName = new char[neededSize];
+        if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, &internalContigNum, fields, lengths, rField)) {
+            WriteErrorMessage("SAMFormat::getSortInfo: reallocated buffer size is still too small.\n"); // This really shouldn't happen
+            soft_exit(1);
         }
+    }
 
-		if (o_location != NULL) {
-	        *o_location = SAMReader::parseLocation(locationOfContig, fields, lengths);
-		}
+    *o_location = SAMReader::parseLocation(locationOfContig, fields, lengths, rField, posField, o_pos);
 
-        if (o_refID != NULL) {
-            *o_refID = genome->getContigByInternalNumber(internalContigNum)->originalContigNumber;
-        }
+    if (o_refID != NULL) {
+        *o_refID = genome->getContigByInternalNumber(internalContigNum)->originalContigNumber;
+    }
 
-        if (contigName != contigNameBuffer) {
-            delete[] contigName;
-        }
+    if (contigName != contigNameBuffer) {
+        delete[] contigName;
     }
 }
 
@@ -1627,24 +1631,20 @@ SAMFormat::writePairs(
                             cigar[whichRead] = "*";
                             editDistance[whichRead] = -1;
                             result->direction[whichRead] = FORWARD;
-                        }
-                        else {
+                        } else {
                             if (addFrontClipping < 0) { // Insertion (soft-clip)
                                 cumulativePositiveAddFrontClipping[firstOrSecond] += addFrontClipping;
                                 if (result->direction[whichRead] == FORWARD) {
                                     reads[whichRead]->setAdditionalFrontClipping(-cumulativePositiveAddFrontClipping[firstOrSecond]);
-                                }
-                                else {
+                                } else {
                                     reads[whichRead]->setAdditionalBackClipping(-cumulativePositiveAddFrontClipping[firstOrSecond]);
                                 }
-                            }
-                            else { // Deletion
+                            } else { // Deletion
                                 locations[whichRead] += addFrontClipping;
                             }
                         }
                     }
-                }
-                else {
+                } else {
                     cigar[whichRead] = computeCigarString(context.genome, lv, cigarBuf[whichRead], cigarBufSize, cigarBufWithClipping[whichRead], cigarBufWithClippingSize,
                         clippedData[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], extraBasesClippedBefore[whichRead], basesClippedAfter[whichRead], 
                         read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), locations[whichRead], result->direction[whichRead], useM,
@@ -1664,8 +1664,7 @@ SAMFormat::writePairs(
                             cigar[whichRead] = "*";
                             editDistance[whichRead] = -1;
                             result->direction[whichRead] = FORWARD;
-                        }
-                        else {
+                        } else {
                             if (addFrontClipping > 0) {
                                 cumulativePositiveAddFrontClipping[firstOrSecond] += addFrontClipping;
                                 reads[whichRead]->setAdditionalFrontClipping(cumulativePositiveAddFrontClipping[firstOrSecond]);
@@ -1789,8 +1788,7 @@ SAMFormat::writePairs(
                 soft_exit(1);
             }
             snprintf(libraryString, libraryStringSize, "\tLB:Z:%.*s", (int)libraryLength, library);
-        }
-        else {
+        } else {
             libraryString[0] = '\0';
         }
 
@@ -2395,8 +2393,7 @@ SAMFormat::computeCigar(
         // mapping, we'll refine it later if needed.
         //
         *o_extraBasesClippedAfter = genomeLocation + dataLength - (contig->beginningLocation + contig->length - genome->getChromosomePadding());
-    }
-    else {
+    } else {
         *o_extraBasesClippedAfter = 0;
     }
 
@@ -2527,18 +2524,23 @@ SAMFormat::computeCigarString(
         char clipAfter[16] = {'\0'};
         char hardClipBefore[16] = {'\0'};
         char hardClipAfter[16] = {'\0'};
+
         if (frontHardClipping > 0) {
             snprintf(hardClipBefore, sizeof(hardClipBefore), "%uH", frontHardClipping);
         }
+
         if (basesClippedBefore + extraBasesClippedBefore > 0) {
             snprintf(clipBefore, sizeof(clipBefore), "%lluS", basesClippedBefore + extraBasesClippedBefore);
         }
+
         if (basesClippedAfter + extraBasesClippedAfter > 0) {
             snprintf(clipAfter, sizeof(clipAfter), "%lluS", basesClippedAfter + extraBasesClippedAfter);
         }
+
         if (backHardClipping > 0) {
             snprintf(hardClipAfter, sizeof(hardClipAfter), "%uH", backHardClipping);
         }
+
         snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s%s%s%s%s", hardClipBefore, clipBefore, cigarBuf, clipAfter, hardClipAfter);
 
 		validateCigarString(genome, cigarBufWithClipping, cigarBufWithClippingLen, 
@@ -2595,16 +2597,14 @@ SAMFormat::computeCigarString(
     if (*o_editDistance == -2) {
         WriteErrorMessage("WARNING: computeGlobalScore returned -2; cigarBuf may be too small\n");
         return "*";
-    }
-    else if (*o_editDistance == -1) {
+    } else if (*o_editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
             WriteErrorMessage("WARNING: computeGlobalScore returned -1; this shouldn't happen\n");
             warningPrinted = true;
         }
         return "*";
-    }
-    else {
+    } else {
         // There may be a better way to do this. For now, whenever we see tail insertions, soft-clip them
         basesClippedAfter += backClippingMissedByLV;
         dataLength -= backClippingMissedByLV;
@@ -2619,18 +2619,23 @@ SAMFormat::computeCigarString(
         char clipAfter[16] = { '\0' };
         char hardClipBefore[16] = { '\0' };
         char hardClipAfter[16] = { '\0' };
+
         if (frontHardClipping > 0) {
             snprintf(hardClipBefore, sizeof(hardClipBefore), "%uH", frontHardClipping);
         }
+
         if (basesClippedBefore + extraBasesClippedBefore > 0) {
             snprintf(clipBefore, sizeof(clipBefore), "%lluS", basesClippedBefore + extraBasesClippedBefore);
         }
+
         if (basesClippedAfter + extraBasesClippedAfter > 0) {
             snprintf(clipAfter, sizeof(clipAfter), "%lluS", basesClippedAfter + extraBasesClippedAfter);
         }
+
         if (backHardClipping > 0) {
             snprintf(hardClipAfter, sizeof(hardClipAfter), "%uH", backHardClipping);
         }
+
         snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s%s%s%s%s", hardClipBefore, clipBefore, cigarBuf, clipAfter, hardClipAfter);
 
         validateCigarString(genome, cigarBufWithClipping, cigarBufWithClippingLen,
@@ -2660,6 +2665,7 @@ SAMFormat::getRefSpanFromCigar(const char * cigarBuf, int cigarBufLen, int* refS
     while ('0' <= *nextChunkOfCigar && '9' >= *nextChunkOfCigar) {
         nextChunkOfCigar++;
     }
+
     nextChunkOfCigar++;
     while ('\0' != *nextChunkOfCigar) {
         fieldsScanned = sscanf(nextChunkOfCigar, "%d%c", &len, &op);
@@ -2682,13 +2688,17 @@ SAMFormat::printRead(const Genome* genome, Read* read, GenomeLocation location)
     if (read) {
         const char* read_data = read->getUnclippedData();
         const char* readId = read->getId();
+
         for (unsigned i = 0; i < read->getIdLength(); ++i) {
             printf("%c", readId[i]);
         }
+
         printf(",");
+
         for (unsigned i = 0; i < read->getUnclippedLength(); ++i) {
             printf("%c", read_data[i]);
         }
+
         printf("\n");
         printf("Aligned location %s:%llu\n",
             genome->getContigAtLocation(location)->name,
@@ -2704,15 +2714,13 @@ SAMFormat::validateCigarString(
 	const char *nextChunkOfCigar = cigarBuf;
 	GenomeDistance offsetInData = 0;
 	const char *reference = genome->getSubstring(genomeLocation, dataLength);
+
 	if (NULL == reference) {
-    #ifdef _DEBUG 
-        WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation.location); 
-    #else
-		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation);
-    #endif
+		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", GenomeLocationAsInt64(genomeLocation));
         printRead(genome, read, genomeLocation);
 		soft_exit(1);
 	}
+
 	GenomeDistance offsetInReference = 0;
 	bool sawNonH = false;	// This is to make sure that the clipping types (H & S) occur only at the beginning or end of the cigar string.
 	bool sawTailS = false;	// Did we see a S
@@ -3250,6 +3258,7 @@ SAMFilter::updateSAMLine(
     char* prev = fields[SAMReader::OPT];
     //
     // We remove either the QS: or LB: fields at the end of the SAM record to make space for the new flag. Otherwise we will run out of space in buffer.
+    // XXX: This is just awful and wrong.  We must fix this.
     //
     size_t lengthOPTExcludingLastField = 0;
     bool seenPG = false;
@@ -3260,7 +3269,17 @@ SAMFilter::updateSAMLine(
         }
         prev = p;
     }
+
+    //
+    // Trim a trailing \t if it's there.
+    //
+    if (lengthOPTExcludingLastField > 0 && fields[SAMReader::OPT][lengthOPTExcludingLastField - 1] == '\t') {
+        lengthOPTExcludingLastField--;
+    }
+
     lengths[SAMReader::OPT] = lengthOPTExcludingLastField;
+
+
 
     // FIXME: needs to be changed if more mandatory SAM fields are added
     int charsInString;
@@ -3278,8 +3297,7 @@ SAMFilter::updateSAMLine(
             (int)lengths[SAMReader::SEQ], fields[SAMReader::SEQ],
             (int)lengths[SAMReader::QUAL], fields[SAMReader::QUAL],
             (int)lengths[SAMReader::OPT], fields[SAMReader::OPT]);
-    }
-    else {
+    } else {
         charsInString = snprintf(toBuffer + *toUsed, lineLength, "%.*s\t%d\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\t%.*s\tPG:Z:SNAP\t%.*s\n",
             (int)lengths[SAMReader::QNAME], fields[SAMReader::QNAME],
             flag,
@@ -3298,7 +3316,7 @@ SAMFilter::updateSAMLine(
     *toUsed += charsInString;
 
     if (charsInString > bytes || charsInString > lineLength) {
-        WriteErrorMessage("charsInString %d is larger than bytes %lld, linelength %lld\n", charsInString, bytes, lineLength);
+        WriteErrorMessage("SAMFilter::updateSAMLine: charsInString %d is larger than bytes %lld, linelength %lld\n", charsInString, bytes, lineLength);
         soft_exit(1);
     }
 }
@@ -3585,14 +3603,6 @@ public:
             buffer = NULL;
         }
 
-#ifdef USE_DEVTEAM_OPTIONS
-        if (mates.size() > 0) {
-            WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", mates.size());
-            for (MateMap::iterator i = mates.begin(); i != mates.end(); i = mates.next(i)) {
-	            WriteErrorMessage("%u%s/%u%s\n", GenomeLocationAsInt64(i->key.locations[0]), i->key.isRC[0] ? "rc" : "", GenomeLocationAsInt64(i->key.locations[1]), i->key.isRC[1] ? "rc" : "");
-            }
-        }
-#endif
         run.clear();
         runFragment.clear();
     }
@@ -3642,8 +3652,7 @@ SAMDupMarkFilter::updateBuffer(size_t lastByte)
         if (!offsets[i].isDuplicate) {
             memcpy(buffer + bufferUsed, currentBuffer + offsets[i].offset, recordSize);
             bufferUsed += recordSize;
-        }
-        else {
+        } else {
             updateSAMLine(buffer, &bufferUsed, currentBuffer + offsets[i].offset, recordSize);
         }
     }
@@ -3740,8 +3749,7 @@ SAMDupMarkFilter::onNextBatch(
 
                 runFragment.push_back(entryFragment);
             }
-        }
-        else {
+        } else {
             // 
             // Track the read from which we need to start the next run. Next run starts at nextBatchStart
             // 
@@ -3778,8 +3786,7 @@ SAMDupMarkFilter::onNextBatch(
                     runFragment.push_back(entryFragment);
                 }
 
-            }
-            else {
+            } else {
                 // 
                 // We are done with the run. Begin marking duplicates
                 // 
@@ -3815,8 +3822,7 @@ SAMDupMarkFilter::onNextBatch(
 
             offsets.clear();
 
-        }
-        else if (offsets[unfinishedRunStart].offset == 0) { // we did not yet mark duplicates for this run
+        } else if (offsets[unfinishedRunStart].offset == 0) { // we did not yet mark duplicates for this run
             //
             // If we have a different run from what we have seen before, 
             // simply mark all duplicates in the run we currently have
@@ -3830,13 +3836,11 @@ SAMDupMarkFilter::onNextBatch(
                 memcpy(currentBuffer + offsets[0].offset, buffer, bufferUsed);
 
                 offsets.clear();
-            }
-            else {
+            } else {
                 *needMoreBuffer = true;
                 return 0;
             }
-        }
-        else {
+        } else {
             bytesRead = offsets[unfinishedRunStart].offset;
             updateBuffer(bytesRead);
 
@@ -3851,7 +3855,9 @@ SAMDupMarkFilter::onNextBatch(
                 OffsetInfo oinfo(offsets[i].offset - offsets[unfinishedRunStart].offset, offsets[i].isDuplicate);
                 nextBatchOffsets.push_back(oinfo);
             }
+
             offsets.clear();
+
             for (size_t i = 0; i < nextBatchOffsets.size(); i++) {
                 offsets.push_back(nextBatchOffsets[i]);
             }
@@ -3982,8 +3988,7 @@ SAMDupMarkFilter::dupMarkBatch(size_t runStartIndex) {
             info = &fragments[key];
             //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
             info->isMateMapped = (i->flag & SAM_MULTI_SEGMENT) != 0 && (i->flag & SAM_NEXT_UNMAPPED) == 0;
-        }
-        else {
+        } else {
             info = &f->value;
         }
         bool mateMapped = (i->flag & SAM_MULTI_SEGMENT) != 0 && (i->flag & SAM_NEXT_UNMAPPED) == 0;
@@ -4000,12 +4005,10 @@ SAMDupMarkFilter::dupMarkBatch(size_t runStartIndex) {
                 info->setBestReadId(i->qName);
                 info->isMateMapped = true;
                 info->setBestTileXY(tile, x, y);
-            }
-            else {
+            } else {
                 info->checkBestRecord(i, totalQuality, tile, x, y, offsets[offsetIndex].isDuplicate);
             }
-        }
-        else {
+        } else {
             //
             // No best read pair found so far.
             //
