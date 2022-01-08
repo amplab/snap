@@ -170,8 +170,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
                 if (k < patternLen) {
                     uint8_t bp = BASE_VALUE[pattern[k]];
                     queryResult[patternIdx] = ntTransitionMatrix[i * MAX_ALPHABET_SIZE + bp];
-                }
-                else {
+                } else {
                     queryResult[patternIdx] = INT16_MIN;
                 }
                 patternIdx++;
@@ -375,20 +374,18 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
                 rowIdx--;
                 colIdx--;
                 matrixIdx = 0;
-            }
-            else if (action == D) {
+            } else if (action == D) {
                 rowIdx--;
                 matrixIdx = 1;
-            }
-            else {
+            } else {
                 colIdx--;
                 action = I;
                 matrixIdx = 2;
             }
+
             if (prevAction == action) {
                 actionCount++;
-            }
-            else {
+            } else {
                 if (prevAction != X) {
                     res.action[n_res] = prevAction;
                     res.count[n_res] = actionCount;
@@ -398,18 +395,21 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
             }
             prevAction = action;
         }
+
         // We went past either pattern or text. Dump out any action counts that we have been tracking
         if (prevAction == action) {
             res.action[n_res] = prevAction;
             res.count[n_res] = actionCount;
             n_res++;
         }
+
         if (rowIdx >= 0) {
             actionCount = rowIdx + 1;
             res.action[n_res] = D;
             res.count[n_res] = actionCount;
             n_res++;
         }
+
         if (colIdx >= 0) {
             actionCount = colIdx + 1;
             res.action[n_res] = I;
@@ -434,11 +434,9 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
             if (res.action[i] == M) {
                 rowIdx += res.count[i];
                 colIdx += res.count[i];
-            }
-            else if (res.action[i] == D) {
+            } else if (res.action[i] == D) {
                 rowIdx += res.count[i];
-            }
-            else {
+            } else {
                 if (i > 0 && rowIdx < textUsed && colIdx < patternLen - 1) {
                     if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx]) && (quality[colIdx] < 65)) { // only insert high quality bases if possible
                         if ((i + 1 <= n_res - 1) && res.action[i + 1] == M && res.count[i - 1] > 1) {
@@ -446,6 +444,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
                             rowIdx++;
                             colIdx++;
                         }
+
                         if (res.action[i - 1] == M && res.count[i - 1] > 1) {
                             res.count[i - 1] -= 1;
                         }
@@ -461,11 +460,9 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
             if (res.action[i] == M) {
                 rowIdx += res.count[i];
                 colIdx += res.count[i];
-            }
-            else if (res.action[i] == D) {
+            } else if (res.action[i] == D) {
                 rowIdx += res.count[i];
-            }
-            else {
+            } else {
                 if (i > 0 && rowIdx + 1 < textUsed && colIdx + res.count[i] < patternLen - 1) {
                     if ((pattern[colIdx + res.count[i]] == pattern[colIdx]) && (pattern[colIdx + res.count[i] + 1] != text[rowIdx + 1]) && (quality[colIdx] < 65)) { // only insert high quality bases (>= 65) if possible
                         if ((i + 1 <= n_res - 1) && res.action[i + 1] == M && res.count[i - 1] > 2) {
@@ -473,6 +470,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
                             rowIdx += 2;
                             colIdx += 2;
                         }
+
                         if (res.action[i - 1] == M && res.count[i - 1] > 2) {
                             res.count[i - 1] -= 2;
                         }
@@ -481,6 +479,8 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
                 colIdx += res.count[i];
             }
         }
+
+        return computeFinalCigarString(text, textLen, pattern, patternLen, n_res, min_i, cigarBufStart, &cigarBuf, cigarBufLen, useM, format, o_cigarBufUsed, o_netDel);
 
         rowIdx = 0; colIdx = 0;
         for (int i = n_res - 1; i >= min_i; --i) { // Reverse local result to obtain CIGAR in correct order
@@ -498,16 +498,14 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
                     if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], 'M', format)) {
                         return -2;
                     }
-                }
-                else {
+                } else {
                     if (res.action[i] == D) {
                         rowIdx += res.count[i];
                         *o_netDel += res.count[i];
                         if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], 'D', format)) {
                             return -2;
                         }
-                    }
-                    else if (res.action[i] == I) {
+                    } else if (res.action[i] == I) {
                         colIdx += res.count[i];
                         if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], 'I', format)) {
                             return -2;
@@ -515,8 +513,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
                     }
                     nEdits += res.count[i];
                 }
-            }
-            else {
+            } else {
                 if (res.action[i] == M) {
                     int j = 0, countM = 0;
                     for (int j = 0; j < res.count[i]; ++j) {
@@ -532,22 +529,20 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
                                 return -2;
                             }
                             countM = 0;
-                        }
-                        else {
+                        } else {
                             countM++;
                         }
                     }
                     rowIdx += res.count[i];
                     colIdx += res.count[i];
-                }
-                else {
+                } else {
                     if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], res.action[i], format)) {
                         return -2;
                     }
+
                     if (res.action[i] == D) {
                         rowIdx += res.count[i];
-                    }
-                    else if (res.action[i] == I) {
+                    } else if (res.action[i] == I) {
                         colIdx += res.count[i];
                     }
                 }
@@ -557,9 +552,11 @@ int AffineGapVectorizedWithCigar::computeGlobalScore(const char* text, int textL
         if (format != BAM_CIGAR_OPS) {
             *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
         }
+
         if (o_cigarBufUsed != NULL) {
             *o_cigarBufUsed = (int)(cigarBuf - cigarBufStart);
         }
+
         // nEdits = (nEdits <= w) ? nEdits : -1; // return -1 if we have more edits than threshold w
         return nEdits;
 
@@ -632,15 +629,14 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
                     if (idx < patternLen) {
                         uint8_t bp = BASE_VALUE[pattern[idx]];
                         queryResult[patternIdx] = ntTransitionMatrix[a * MAX_ALPHABET_SIZE + bp];
-                    }
-                    else {
+                    } else {
                         queryResult[patternIdx] = INT16_MIN;
                     }
                     patternIdx++;
-                }
-            }
-        }
-    }
+                } // k
+            } // j
+        } // i
+    } // a
 
     // 
     // Define constants in their vector form
@@ -715,12 +711,10 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
                     hInit = scoreInit - (gapOpenPenalty + (i - 1) * gapExtendPenalty);
                 }
                 v_hInit = _mm_set1_epi16(hInit);
-            }
-            else {
+            } else {
                 if (bandBeg > j * segLen) {
                     v_hInit = v_zero;
-                }
-                else {
+                } else {
                     v_hInit = _mm_load_si128(Hptr + j * numVec - 1);
                     v_hInit = _mm_srli_si128(v_hInit, 14);
                 }
@@ -885,20 +879,18 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
                 rowIdx--;
                 colIdx--;
                 matrixIdx = 0;
-            }
-            else if (action == D) {
+            } else if (action == D) {
                 rowIdx--;
                 matrixIdx = 1;
-            }
-            else {
+            } else {
                 colIdx--;
                 action = I;
                 matrixIdx = 2;
             }
+
             if (prevAction == action) {
                 actionCount++;
-            }
-            else {
+            } else {
                 if (prevAction != X) {
                     res.action[n_res] = prevAction;
                     res.count[n_res] = actionCount;
@@ -908,18 +900,21 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
             }
             prevAction = action;
         }
+
         // We went past either pattern or text. Dump out any action counts that we have been tracking
         if (prevAction == action) {
             res.action[n_res] = prevAction;
             res.count[n_res] = actionCount;
             n_res++;
         }
+
         if (rowIdx >= 0) {
             actionCount = rowIdx + 1;
             res.action[n_res] = D;
             res.count[n_res] = actionCount;
             n_res++;
         }
+
         if (colIdx >= 0) {
             actionCount = colIdx + 1;
             res.action[n_res] = I;
@@ -944,11 +939,9 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
             if (res.action[i] == M) {
                 rowIdx += res.count[i];
                 colIdx += res.count[i];
-            }
-            else if (res.action[i] == D) {
+            } else if (res.action[i] == D) {
                 rowIdx += res.count[i];
-            }
-            else {
+            } else {
                 if (i > 0 && rowIdx < textUsed && colIdx < patternLen - 1) {
                     if ((pattern[colIdx + 1] == pattern[colIdx]) && (pattern[colIdx + 1] != text[rowIdx]) && (quality[colIdx] < 65)) { // only insert high quality bases (>= 65) if possible
                         if ((i + 1 <= n_res - 1) && res.action[i + 1] == M && res.count[i - 1] > 1) {
@@ -971,11 +964,9 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
             if (res.action[i] == M) {
                 rowIdx += res.count[i];
                 colIdx += res.count[i];
-            }
-            else if (res.action[i] == D) {
+            } else if (res.action[i] == D) {
                 rowIdx += res.count[i];
-            }
-            else {
+            } else {
                 if (i > 0 && rowIdx + 1 < textUsed && colIdx + res.count[i] < patternLen - 1) {
                     if ((pattern[colIdx + res.count[i]] == pattern[colIdx]) && (pattern[colIdx + res.count[i] + 1] != text[rowIdx + 1]) && (quality[colIdx] < 65)) { // only insert high quality bases (>= 65) if possible
                         if ((i + 1 <= n_res - 1) && res.action[i + 1] == M && res.count[i - 1] > 2) {
@@ -991,6 +982,8 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
                 colIdx += res.count[i];
             }
         }
+
+        return computeFinalCigarString(text, textLen, pattern, patternLen, n_res, min_i, cigarBufStart, &cigarBuf, cigarBufLen, useM, format, o_cigarBufUsed, o_netDel);
 
         rowIdx = 0; colIdx = 0;
         for (int i = n_res - 1; i >= min_i; --i) { // Reverse local result to obtain CIGAR in correct order
@@ -1008,25 +1001,24 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
                     if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], 'M', format)) {
                         return -2;
                     }
-                }
-                else {
+                } else {
                     if (res.action[i] == D) {
                         rowIdx += res.count[i];
                         *o_netDel += res.count[i];
                         if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], 'D', format)) {
                             return -2;
                         }
-                    }
-                    else if (res.action[i] == I) {
+                    } else if (res.action[i] == I) {
                         colIdx += res.count[i];
                         if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], 'I', format)) {
                             return -2;
                         }
                     }
+
                     nEdits += res.count[i];
                 }
-            }
-            else {
+            } else {
+                // not useM (i.e., = and X CIGAR types)
                 if (res.action[i] == M) {
                     int j = 0, countM = 0;
                     for (int j = 0; j < res.count[i]; ++j) {
@@ -1042,22 +1034,20 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
                                 return -2;
                             }
                             countM = 0;
-                        }
-                        else {
+                        } else {
                             countM++;
                         }
                     }
                     rowIdx += res.count[i];
                     colIdx += res.count[i];
-                }
-                else {
+                } else {
                     if (!writeCigar(&cigarBuf, &cigarBufLen, res.count[i], res.action[i], format)) {
                         return -2;
                     }
+
                     if (res.action[i] == D) {
                         rowIdx += res.count[i];
-                    }
-                    else if (res.action[i] == I) {
+                    } else if (res.action[i] == I) {
                         colIdx += res.count[i];
                     }
                 }
@@ -1079,33 +1069,136 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreBanded(
         *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
         return -1;
     }
+} // AffineGapVectorizedWithCigar::computeGlobalScoreBanded
+
+int AffineGapVectorizedWithCigar::computeFinalCigarString(
+    const char* text,
+    int textLen,
+    const char* pattern,
+    int patternLen,
+    int n_res,
+    int min_i,
+    const char* cigarBufStart,
+    char** cigarBufPtr,
+    int cigarBufLen,
+    bool useM,
+    CigarFormat format,
+    int* o_cigarBufUsed,
+    int* o_netDel
+    )
+{
+    int nEdits = 0, rowIdx = 0, colIdx = 0;
+
+    for (int i = n_res - 1; i >= min_i; --i) { // Reverse local result to obtain CIGAR in correct order
+        if (res.action[i] == D) {
+            rowIdx += res.count[i];
+            *o_netDel += res.count[i];
+            if (!writeCigar(cigarBufPtr, &cigarBufLen, res.count[i], 'D', format)) {
+                return -2;
+            }
+        } else if (res.action[i] == I) {
+            colIdx += res.count[i];
+            if (!writeCigar(cigarBufPtr, &cigarBufLen, res.count[i], 'I', format)) {
+                return -2;
+            }
+        } else if (res.action[i] == M) {
+            if (useM) {
+                for (int j = 0; j < res.count[i]; ++j) {
+                    if (text[rowIdx + j] != pattern[colIdx + j]) {
+                        nEdits++;
+                    }
+                }
+
+                if (!writeCigar(cigarBufPtr, &cigarBufLen, res.count[i], 'M', format)) {
+                    return -2;
+                }
+            } else {
+                // not useM (i.e., = and X CIGAR types)
+                int currentRunSize = 1;
+                bool currentRunIsX = text[rowIdx] != pattern[colIdx];
+
+                
+                for (int j = 1; j < res.count[i]; j++) {
+                    if ((text[rowIdx + j] != pattern[colIdx + j]) == currentRunIsX) {
+                        //
+                        // We're continuing the run of matching or not matching.
+                        //
+                        currentRunSize++;
+                    } else {
+                        //
+                        // We switched between matching and not matching.  Write the CIGAR element
+                        // and start a new run.
+                        //
+                        if (!writeCigar(cigarBufPtr, &cigarBufLen, currentRunSize, currentRunIsX ? 'X' : '=', format)) {
+                            return -2;
+                        }
+                        currentRunSize = 1;
+                        currentRunIsX = !currentRunIsX;
+                    } // ending a run
+                } // for each base in the M section
+
+                //
+                // Now write out the final chunk.
+                //
+                if (!writeCigar(cigarBufPtr, &cigarBufLen, currentRunSize, currentRunIsX ? 'X' : '=', format)) {
+                    return -2;
+                }
+            } // not useM
+
+            rowIdx += res.count[i];
+            colIdx += res.count[i];
+        } // it was an M
+
+        nEdits += res.count[i]; 
+    } // for each raw CIGAR op
+
+    if (format != BAM_CIGAR_OPS) {
+        *(*cigarBufPtr - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
+    }
+
+    if (o_cigarBufUsed != NULL) {
+        *o_cigarBufUsed = (int)(*cigarBufPtr - cigarBufStart);
+    }
+
+
+    return nEdits;
 }
 
 int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text, int textLen,
-    const char* pattern, const char* quality, int patternLen,
-    int k,
-    char *cigarBuf, int cigarBufLen, bool useM,
-    CigarFormat format, int* o_cigarBufUsed,
-    int* o_addFrontClipping, int *o_netDel, int *o_tailIns)
+    const char*     pattern, 
+    const char*     quality, 
+    int             patternLen,
+    int             k,
+    char *          cigarBuf, 
+    int             cigarBufLen, 
+    bool            useM,
+    CigarFormat     format, 
+    int*            o_cigarBufUsed,
+    int*            o_addFrontClipping, 
+    int *           o_netDel, 
+    int *           o_tailIns
+    )
 {
     if (format != BAM_CIGAR_OPS && format != COMPACT_CIGAR_STRING) {
         WriteErrorMessage("AffineGapWithCigar::computeGlobalScoreNormalized invalid parameter\n");
         soft_exit(1);
     }
+
     int bamBufLen = (format == BAM_CIGAR_OPS ? 1 : 2) * cigarBufLen; // should be enough
     char* bamBuf = (char*)alloca(bamBufLen);
     int bamBufUsed;
     int score;
+
     if (patternLen >= (3 * (2 * k + 1))) {
         score = computeGlobalScoreBanded(text, (int)textLen, pattern, quality, (int)patternLen, k, MAX_READ_LENGTH, bamBuf, bamBufLen,
-            useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
+                                         useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
         if (score < 0 || score > k) {
             score = computeGlobalScore(text, (int)textLen, pattern, quality, (int)patternLen, k, bamBuf, bamBufLen,
-                useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
+                                       useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
         }
     } else {
         score = computeGlobalScore(text, (int)textLen, pattern, quality, (int)patternLen, k, bamBuf, bamBufLen,
-            useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
+                                   useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
     }
 
     if (score < 0) {
@@ -1125,11 +1218,9 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text,
             if (*o_addFrontClipping != 0) {
                 return 0; // can fail, will be rerun with new clipping
             }
-        }
-        else if (firstCode == 'I') {
+        } else if (firstCode == 'I') {
             *o_addFrontClipping = -1 * BAMAlignment::GetCigarOpCount(bamOps[0]);
-        }
-        else {
+        } else {
             *o_addFrontClipping = 0;
         }
     }
@@ -1146,8 +1237,7 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text,
         if (o_cigarBufUsed != NULL) {
             *o_cigarBufUsed = bamBufUsed;
         }
-    }
-    else {
+    } else {
         bool ok = BAMAlignment::decodeCigar(cigarBuf, cigarBufLen, bamOps, bamOpCount);
         if (!ok) {
             return -1;

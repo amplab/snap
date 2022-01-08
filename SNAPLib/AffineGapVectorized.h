@@ -1453,4 +1453,20 @@ private:
 
     LocalCigarResult res;
 
+    int computeFinalCigarString(
+        const char* text,
+        int textLen,
+        const char* pattern,
+        int patternLen,
+        int n_res,
+        int min_i,
+        const char *cigarBufStart,
+        char** cigarBuf,
+        int cigarBufLen,
+        bool useM,
+        CigarFormat format,
+        int* o_cigarBufUsed,
+        int* o_netDel
+    );
+
 };

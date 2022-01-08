@@ -1032,8 +1032,8 @@ SAMFormat::getSortInfo(
     int posField;
     int rField;
 
-    if (lengths[SAMReader::POS] == 0 || fields[SAMReader::POS][0] == '*') {
-        if (lengths[SAMReader::PNEXT] == 0 || fields[SAMReader::PNEXT][0] == '*') {
+    if (lengths[SAMReader::RNAME] == 0 || fields[SAMReader::RNAME][0] == '*') {
+        if (lengths[SAMReader::RNEXT] == 0 || fields[SAMReader::RNEXT][0] == '*' || fields[SAMReader::RNEXT][0] == '=') { // The check for = means it's unaligned because we only get here if RNAME is '*'
             if (o_location != NULL) {
                 *o_location = InvalidGenomeLocation;
             }
