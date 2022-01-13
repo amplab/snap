@@ -391,21 +391,6 @@ PairedInterleavedFASTQReader::getNextReadPair(Read *read0, Read *read1)
     }
     bytesConsumed += FASTQReader::getReadFromBuffer(buffer + bytesConsumed, validBytes - bytesConsumed, read1, fileName, data, context);
 
-#if 0   // We don't rely on this read ID format anymore since it's non-standard.  We stopped using the seeking version of PairedInterleavedFATSQ reader for that reason.
-    //
-    // Validate the Read IDs.
-    //
-    if (read0->getIdLength() < 2 || memcmp(read0->getId() + read0->getIdLength() - 2, "/1", 2)) {
-        WriteErrorMessage("PairedInterleavedFASTQReader: first read of batch doesn't have ID ending with /1: '%.*s'\n", read0->getIdLength(), read0->getId());
-        soft_exit(1);
-    }
-
-    if (read1->getIdLength() < 2 || memcmp(read1->getId() + read1->getIdLength() - 2, "/2", 2)) {
-        WriteErrorMessage("PairedInterleavedFASTQReader: second read of batch doesn't have ID ending with /2: '%.*s'\n", read1->getIdLength(), read1->getId());
-        soft_exit(1);
-    }
-#endif // 0
-
     data->advance(bytesConsumed);
     return true;
 }
