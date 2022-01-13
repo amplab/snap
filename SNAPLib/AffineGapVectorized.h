@@ -1378,9 +1378,11 @@ private:
 
 class AffineGapVectorizedWithCigar {
 public:
-    AffineGapVectorizedWithCigar(); // FIXME: Pass scoring parameters
+    AffineGapVectorizedWithCigar();
 
     AffineGapVectorizedWithCigar(int i_matchReward, int i_subPenalty, int i_gapOpenPenalty, int i_gapExtendPenalty);
+
+    void init(int i_matchReward, int i_subPenalty, int i_gapOpenPenalty, int i_gapExtendPenalty);
 
     // Compute the affine gap score between two strings and write the CIGAR string in cigarBuf.
     // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
