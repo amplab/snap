@@ -219,7 +219,7 @@ public:
 
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
         const Genome* genome, bool killIfTooSlowbool, bool emitInternalScore, char *internalScoreTag,
-        bool ignoreAlignmentAdjustmentsForOm);
+        bool ignoreAlignmentAdjustmentsForOm, int matchReward, int subPenalty, int gapOpenPenalty, int gapExtendPenalty);
 
     virtual ~ReadWriterSupplier() {}
 };

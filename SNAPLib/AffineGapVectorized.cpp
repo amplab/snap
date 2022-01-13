@@ -60,6 +60,33 @@ AffineGapVectorizedWithCigar::AffineGapVectorizedWithCigar() :
     }
 }
 
+void
+AffineGapVectorizedWithCigar::init(
+    int i_matchReward,
+    int i_subPenalty,
+    int i_gapOpenPenalty,
+    int i_gapExtendPenalty)
+{
+    matchReward = i_matchReward;
+    subPenalty = -i_subPenalty;
+    gapOpenPenalty = i_gapOpenPenalty + i_gapExtendPenalty;
+    gapExtendPenalty = i_gapExtendPenalty;
+
+    //
+    // Initialize nucleotide <-> nucleotide transition matrix
+    //
+    int i, j, k = 0;
+    for (i = 0; i < (MAX_ALPHABET_SIZE - 1); i++) {
+        for (j = 0; j < (MAX_ALPHABET_SIZE - 1); j++) {
+            ntTransitionMatrix[k++] = (i == j) ? matchReward : subPenalty;
+        }
+        ntTransitionMatrix[k++] = -1; // FIXME: What penalty to use for N ?
+    }
+    for (i = 0; i < MAX_ALPHABET_SIZE; i++) {
+        ntTransitionMatrix[k++] = -1;
+    }
+}
+
 /*++
     Write cigar to buffer, return true if it fits
     null-terminates buffer if it returns false (i.e. fills up buffer)
@@ -937,11 +964,13 @@ int AffineGapVectorizedWithCigar::computeFinalCigarString(
         if (res.action[i] == D) {
             rowIdx += res.count[i];
             *o_netDel += res.count[i];
+            nEdits += res.count[i];
             if (!writeCigar(cigarBufPtr, &cigarBufLen, res.count[i], 'D', format)) {
                 return -2;
             }
         } else if (res.action[i] == I) {
             colIdx += res.count[i];
+            nEdits += res.count[i];
             if (!writeCigar(cigarBufPtr, &cigarBufLen, res.count[i], 'I', format)) {
                 return -2;
             }
@@ -960,7 +989,7 @@ int AffineGapVectorizedWithCigar::computeFinalCigarString(
                 // not useM (i.e., = and X CIGAR types)
                 int currentRunSize = 1;
                 bool currentRunIsX = text[rowIdx] != pattern[colIdx];
-
+                nEdits = currentRunIsX ? nEdits + 1 : nEdits;
                 
                 for (int j = 1; j < res.count[i]; j++) {
                     if ((text[rowIdx + j] != pattern[colIdx + j]) == currentRunIsX) {
@@ -968,6 +997,9 @@ int AffineGapVectorizedWithCigar::computeFinalCigarString(
                         // We're continuing the run of matching or not matching.
                         //
                         currentRunSize++;
+                        if (text[rowIdx + j] != pattern[colIdx + j]) {
+                            nEdits++;
+                        }
                     } else {
                         //
                         // We switched between matching and not matching.  Write the CIGAR element
@@ -978,6 +1010,7 @@ int AffineGapVectorizedWithCigar::computeFinalCigarString(
                         }
                         currentRunSize = 1;
                         currentRunIsX = !currentRunIsX;
+                        nEdits = currentRunIsX ? nEdits + 1 : nEdits;
                     } // ending a run
                 } // for each base in the M section
 
@@ -993,7 +1026,6 @@ int AffineGapVectorizedWithCigar::computeFinalCigarString(
             colIdx += res.count[i];
         } // it was an M
 
-        nEdits += res.count[i]; 
     } // for each raw CIGAR op
 
     if (format != BAM_CIGAR_OPS) {
