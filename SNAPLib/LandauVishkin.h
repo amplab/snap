@@ -5,7 +5,12 @@
 #include "exit.h"
 #include "Genome.h"
 
+#ifdef LONG_READS
+const int MAX_K = 1000;
+#else // LONG_READS
 const int MAX_K = 63;
+#endif // LONG_READS
+
 const int ScoreAboveLimit = -1; // A score value that means "we didn't compute the score because it was above the score limit."
 const int TooBigScoreValue = 65536; // This is much bigger than any score we'll ever see
 

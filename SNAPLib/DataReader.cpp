@@ -2006,7 +2006,7 @@ DecompressDataReader::decompress(
             if (status < 0 && status != Z_BUF_ERROR) {
                 WriteErrorMessage("GzipDataReader: inflate failed with %d\n", status);
                 if (Z_DATA_ERROR == status) {
-                    fprintf(stderr, "%d is Z_DATA_ERROR, indicating a corrupt input.  zstream->availIn is 0x%x:", status, zstream->avail_in);
+                    fprintf(stderr, "%d is Z_DATA_ERROR, indicating a corrupt input.  Are you *sure* this is a gzipped file and it's not just plain text or from some other compressor like bzip?  zstream->availIn is 0x%x:", status, zstream->avail_in);
                     for (_int64 offset = 0; offset < oldAvailIn; offset++) {
                         if (offset % 32 == 0) {
                             fprintf(stderr, "\n0x%llx\t", offset);
@@ -2019,7 +2019,7 @@ DecompressDataReader::decompress(
                 return false;
             }
             if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
-                WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
+                WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f (if you're indexing, please decompress the FASTA/ALT files externally and use the uncompressed version here)\n", DataSupplier::ExpansionFactor);
                 return false;
             }
 
@@ -2295,7 +2295,7 @@ DecompressDataReader::decompressThreadContinuous(
                 entry->decompressed + reader->overflowBytes, entry->decompressedSize - reader->overflowBytes, &decompressedWritten,
                 first ? StartMultiBlock : ContinueMultiBlock);
             if (!ok) {
-                WriteErrorMessage("Failed to decompress BAM file at offset %lld\n", reader->inner->getFileOffset());
+                WriteErrorMessage("Failed to decompress gzip/BAM file at offset %lld\n", reader->inner->getFileOffset());
                 soft_exit(1);
             }
             _ASSERT(compressedRead == entry->compressedValid && decompressedWritten <= reader->extraBytes - reader->overflowBytes);

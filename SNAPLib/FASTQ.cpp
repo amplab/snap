@@ -391,19 +391,6 @@ PairedInterleavedFASTQReader::getNextReadPair(Read *read0, Read *read1)
     }
     bytesConsumed += FASTQReader::getReadFromBuffer(buffer + bytesConsumed, validBytes - bytesConsumed, read1, fileName, data, context);
 
-    //
-    // Validate the Read IDs.
-    //
-    if (read0->getIdLength() < 2 || memcmp(read0->getId() + read0->getIdLength() - 2, "/1", 2)) {
-        WriteErrorMessage("PairedInterleavedFASTQReader: first read of batch doesn't have ID ending with /1: '%.*s'\n", read0->getIdLength(), read0->getId());
-        soft_exit(1);
-    }
-
-    if (read1->getIdLength() < 2 || memcmp(read1->getId() + read1->getIdLength() - 2, "/2", 2)) {
-        WriteErrorMessage("PairedInterleavedFASTQReader: second read of batch doesn't have ID ending with /2: '%.*s'\n", read1->getIdLength(), read1->getId());
-        soft_exit(1);
-    }
-
     data->advance(bytesConsumed);
     return true;
 }
@@ -421,10 +408,16 @@ PairedInterleavedFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileT
     // If we're not at the start of the file, we might have the tail end of a read that someone
     // who got the previous range will process; advance past that. This is fairly tricky because
     // there can be '@' signs in the quality string (and maybe even in read names?).
-    if (startingOffset != 0) {
-        if (!FASTQReader::skipPartialRecord(data)) {
-            return;
-        }
+
+    if (startingOffset == 0) {
+        return;
+    }
+
+    WriteErrorMessage("This should be dead code.  If you get here there's a bug in SNAP, please report it.\n");
+    soft_exit(1);
+
+    if (!FASTQReader::skipPartialRecord(data)) {
+        return;
     }
 
     //
@@ -642,9 +635,9 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
 {
      bool isStdin = !strcmp(fileName,"-");
  
-     if (gzip || isStdin) {
-        //WriteStatusMessage("PairedInterleavedFASTQ using supplier queue\n");
+     if (gzip || isStdin || true /* always use queue for PairedInterleavedFASTQ because otherwise we need to know the read ID format to seek into the middle of the file, but that's nonstandard. */) {
         DataSupplier *dataSupplier;
+        
         if (isStdin) {
             if (gzip) {
                 dataSupplier = DataSupplier::GzipStdio;
@@ -652,7 +645,11 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
                 dataSupplier = DataSupplier::Stdio;
             }
         } else {
-            dataSupplier = DataSupplier::GzipDefault;
+            if (gzip) {
+                dataSupplier = DataSupplier::GzipDefault;
+            } else {
+                dataSupplier = DataSupplier::Default;
+            }
         }
         
         PairedReadReader *reader = PairedInterleavedFASTQReader::create(dataSupplier, fileName,
@@ -662,6 +659,7 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
             delete reader;
             return NULL;
         }
+
         ReadSupplierQueue *queue = new ReadSupplierQueue(reader); 
         queue->startReaders();
         return queue;

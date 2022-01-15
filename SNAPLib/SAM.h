@@ -125,7 +125,7 @@ protected:
             size_t contigNameBufferSize, GenomeLocation * o_locationOfContig, InternalContigNum* o_indexOfContig,
             char* field[], size_t fieldLength[], unsigned rfield = RNAME);  // Returns 0 on success, needed contigNameBufferSize otherwise.
 
-        static GenomeLocation parseLocation(GenomeLocation locationOfContig, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
+        static GenomeLocation parseLocation(GenomeLocation locationOfContig, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS, int *o_pos = NULL);
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
                         GenomeLocation *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);

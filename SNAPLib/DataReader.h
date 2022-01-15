@@ -98,7 +98,7 @@ public:
     // read bytes from the beginning of the file for the header
     virtual char* readHeader(_int64* io_headerSize) = 0;
 
-    // seek to a particular range in the file
+    // seek to a particular range in the file.  Set amountOfFileToProcess to go to EOF.
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
     // get all remaining data in current batch

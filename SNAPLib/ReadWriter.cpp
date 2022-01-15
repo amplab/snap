@@ -34,7 +34,7 @@ Environment:
 class SimpleReadWriter : public ReadWriter
 {
 public:
-    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm)
+    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm, int i_matchReward, int i_subPenalty, int i_gapOpenPenalty, int i_gapExtendPenalty)
         : format(i_format), writer(i_writer), genome(i_genome), killIfTooSlow(i_killIfTooSlow), lastTooSlowCheck(0), emitInternalScore(i_emitInternalScore), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
     {
         if (emitInternalScore) {
@@ -46,6 +46,8 @@ public:
         } else  {
             internalScoreTag[0] = '\0';
         }
+
+        agc.init(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
 
     virtual ~SimpleReadWriter()
@@ -651,14 +653,18 @@ SimpleReadWriter::close()
 class SimpleReadWriterSupplier : public ReadWriterSupplier
 {
 public:
-    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm)
+    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm, int i_matchReward, int i_subPenalty, int i_gapOpenPenalty, int i_gapExtendPenalty)
         :
         format(i_format),
         dataSupplier(i_dataSupplier),
         genome(i_genome),
         killIfTooSlow(i_killIfTooSlow),
         emitInternalScore(i_emitInternalScore),
-        ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
+        ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm),
+        matchReward(i_matchReward),
+        subPenalty(i_subPenalty),
+        gapOpenPenalty(i_gapOpenPenalty),
+        gapExtendPenalty(i_gapExtendPenalty)
     {
         if (emitInternalScore) {
             if (strlen(i_internalScoreTag) != 2) {
@@ -678,7 +684,7 @@ public:
 
     virtual ReadWriter* getWriter()
     {
-        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome, killIfTooSlow, emitInternalScore, internalScoreTag, ignoreAlignmentAdjustmentsForOm);
+        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome, killIfTooSlow, emitInternalScore, internalScoreTag, ignoreAlignmentAdjustmentsForOm, matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
     }
 
     virtual void close()
@@ -694,6 +700,10 @@ private:
     bool emitInternalScore;
     char internalScoreTag[3];
     bool ignoreAlignmentAdjustmentsForOm;
+    int matchReward;
+    int subPenalty;
+    int gapOpenPenalty;
+    int gapExtendPenalty;
 };
 
     ReadWriterSupplier*
@@ -704,8 +714,12 @@ ReadWriterSupplier::create(
     bool killIfTooSlow,
     bool emitInternalScore, 
     char *internalScoreTag,
-    bool ignoreAlignmentAdjustmentsForOm)
+    bool ignoreAlignmentAdjustmentsForOm,
+    int matchReward,
+    int subPenalty,
+    int gapOpenPenalty,
+    int gapExtendPenalty)
 {
-    return new SimpleReadWriterSupplier(format, dataSupplier, genome, killIfTooSlow, emitInternalScore, internalScoreTag, ignoreAlignmentAdjustmentsForOm);
+    return new SimpleReadWriterSupplier(format, dataSupplier, genome, killIfTooSlow, emitInternalScore, internalScoreTag, ignoreAlignmentAdjustmentsForOm, matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty);
 }
 

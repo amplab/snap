@@ -543,7 +543,7 @@ Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, In
                     *location = contigsByName[mid].beginningLocation;
                 }
                 if (index != NULL) {
-                    *index = InternalContigNumToInt(mid);
+                    *index = InternalContigNumToInt(contigsByName[mid].internalContigNumber);
                 }
                 return true;
             } else if (c < 0) {
