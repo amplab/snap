@@ -15708,7 +15708,7 @@ namespace ASELib
                     {
                         string specifier = getTumorAndDNASpecifier(tumor, dna);
 
-                        neededFields.Add(specifier + "is paired");
+                        neededFields.Add(specifier + " is paired");
                     } // dna
 
                 } // tumor

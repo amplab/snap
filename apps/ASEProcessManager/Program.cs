@@ -5509,14 +5509,16 @@ namespace ASEProcessManager
                 return;
             }
 
-            if (configuration.commandLineArgs.Any(_ => _ != "-m" && _ != "-d"))
+            if (configuration.commandLineArgs.Any(_ => _ != "-m" && _ != "-d" && _ != "-s"))
             {
-                Console.WriteLine("usage: ASEProcessManager {-configuration configurationFilename} {-d} {-m}");
+                Console.WriteLine("usage: ASEProcessManager {-configuration configurationFilename} {-d} {-m} {-s}");
                 Console.WriteLine("-d means to check dependencies.");
                 Console.WriteLine("-m means to check MD5s on downloaded files.");
+                Console.WriteLine("-s means to run stages that are for the SNAP paper rather than the ASE project.");
             }
 
             bool verifyMD5s = configuration.commandLineArgs.Any(_ => _ == "-m");
+            bool runSNAPStages = configuration.commandLineArgs.Any(_ => _ == "-s");
 
             //
             // Delete any existing scripts.
@@ -5743,27 +5745,62 @@ namespace ASEProcessManager
             processingStages.Add(new SummarizeCaseMetadataProcessingStage());
             processingStages.Add(new ConsolodateCaseMetadataProcessingStage());
             processingStages.Add(new ConsolodateCasePairednessProcessingStage());
-            processingStages.Add(new FASTQGenerationProcessingStage(false));
-            processingStages.Add(new FASTQGenerationProcessingStage(true));
-            processingStages.Add(new SNAPRealignmentProcessingStage(false));
-            //processingStages.Add(new SNAPRealignmentProcessingStage(true));
-            foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
+
+            if (runSNAPStages)
             {
-                if (aligner == ASETools.Aligner.SNAP)
+                processingStages.Add(new FASTQGenerationProcessingStage(false));
+                processingStages.Add(new FASTQGenerationProcessingStage(true));
+                processingStages.Add(new SNAPRealignmentProcessingStage(false));
+                //processingStages.Add(new SNAPRealignmentProcessingStage(true));
+                foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
                 {
-                    // We run SNAP on Windows
-                    continue;
-                }
-
-
-                foreach (var tumor in ASETools.BothBools)
-                {
-                    if (tumor)
+                    if (aligner == ASETools.Aligner.SNAP)
                     {
-                        continue;   // Not now
+                        // We run SNAP on Windows
+                        continue;
                     }
 
-                    processingStages.Add(new LinuxAlignerAlignmentStage(tumor, aligner));
+
+                    foreach (var tumor in ASETools.BothBools)
+                    {
+                        if (tumor)
+                        {
+                            continue;   // Not now
+                        }
+
+                        processingStages.Add(new LinuxAlignerAlignmentStage(tumor, aligner));
+                    }
+                }
+
+                foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
+                {
+                    processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
+                                                                                                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
+                }
+
+                foreach (var alignerPair in ASETools.allAlignerPairs)
+                {
+                    foreach (var tumor in ASETools.BothBools)
+                    {
+                        if (tumor)
+                        {
+                            continue;   // Not now
+                        }
+
+                        foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
+                        {
+                            if (variantCaller == ASETools.VariantCaller.Freebayes) continue;    // not now
+                            processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
+                        }
+                    }
+                }
+
+                foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
+                {
+                    foreach (var tumor in ASETools.BothBools)
+                    {
+                        processingStages.Add(new VennProcessingStage(tumor, variantCaller));
+                    }
                 }
             }
 
@@ -5771,37 +5808,6 @@ namespace ASEProcessManager
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.SNAP));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.BWA));
             //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.Bowtie));
-
-            foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
-            {
-                processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
-                //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
-            }
-
-            foreach (var alignerPair in ASETools.allAlignerPairs)
-            {
-                foreach (var tumor in ASETools.BothBools)
-                {
-                    if (tumor)
-                    {
-                        continue;   // Not now
-                    }
-
-                    foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
-                    {
-                        if (variantCaller == ASETools.VariantCaller.Freebayes) continue;    // not now
-                        processingStages.Add(new HappyProcessingStage(alignerPair, variantCaller, tumor));
-                    }
-                }
-            }
-
-            foreach (var variantCaller in ASETools.EnumUtil.GetValues<ASETools.VariantCaller>())
-            {
-                foreach (var tumor in ASETools.BothBools)
-                {
-                    processingStages.Add(new VennProcessingStage(tumor, variantCaller));
-                }
-            }
 
             //
             // Special check for empty concordance tarballs.
