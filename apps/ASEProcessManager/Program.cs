@@ -1129,7 +1129,7 @@ namespace ASEProcessManager
                         {
                             nWaitingForPrerequisites++;
                         }
-                        else if (case_.getDownloadedReadsFilename(tumor, dna) != "")
+                        else if (case_.getAllcountFilename(tumor, dna) != "")
                         {
                             nDone++;
                         }

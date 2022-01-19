@@ -15713,7 +15713,7 @@ namespace ASELib
 
                 } // tumor
 
-                var headerizedFile = new HeaderizedFile<CasePairedness>(inputFile, false, false /*fix this once you've run FixupPairedness*/, "", neededFields);
+                var headerizedFile = new HeaderizedFile<CasePairedness>(inputFile, false, true, "", neededFields);
                 List<CasePairedness> parsedMetadata;
                 headerizedFile.ParseFile(parser, out parsedMetadata);
 
