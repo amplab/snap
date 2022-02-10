@@ -150,7 +150,7 @@ AlignerOptions::usage()
             " -sid  Specifies the sort intermediate directory.  When SNAP is sorting, it aligns the reads in the order in which they come in, and writes\n"
             "       the aligned reads in batches to a temporary file.  When the aligning is done, it does a merge sort from the temporary file into the\n"
             "       final output file.  By default, the intermediate file is in the same directory as the output file, but for performance or space\n"
-            "       reasons, you might want to put it elsewhere.  If so, use this option.\n"            
+            "       reasons, you might want to put it elsewhere.  If so, use this option.\n"
             "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
             "  -S   suppress additional processing (sorted BAM output only)\n"
             "       i=index, d=duplicate marking\n"
@@ -168,6 +168,16 @@ AlignerOptions::usage()
             "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
 #endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
+            ,
+            commandLine,
+            maxDist,
+            maxDistForIndels,
+            maxHits,
+            minWeightToCheck,
+            MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT
+        );
+
+        WriteErrorMessage(
             "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
             "       bases from front and back of read respectively; default: back only (-C-+)\n"
             "  -=   use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
@@ -230,7 +240,7 @@ AlignerOptions::usage()
             "       value starting with X, Y or Z.  So, -is ZQ will cause SNAP to write ZQ:i:3 on a read with internal score 3.  Generally, the internal scores\n"
             "       are the same as the NM values, except that they contain penalties for soft clipping reads that hang over the end of contigs (but not for\n"
             "       soft clipping that's due to # quality scores or that was present in the input SAM/BAM file and retained due to -pc)\n"
-            "  -G-  disable affine gap scoring (default: true)\n"
+            "  -G-  disable affine gap scoring\n"
             "       Affine gap scoring parameters (works only when -G- is not used):\n"
             "   -gm cost for match (default: %u)\n"
             "   -gs cost for substitution (default: %u)\n"
@@ -249,16 +259,10 @@ AlignerOptions::usage()
             "  -fmb Force MAPQ below this value to zero.  By the strict definition of MAPQ a read with two equally good alignments should have MAPQ 3\n"
             "       Other aligners, however, will score these alignments at MAPQ 0 and some variant callers depend on that behavior.  Setting this will\n"
             "       force any MAPQ value at or below the parameter value to zero.  (default:%d)\n"
-            "  -hc Enable SNAP mode optimized for use with GATK HaplotypeCaller. (default: true)\n"
+            "  -hc Enable SNAP mode optimized for use with GATK HaplotypeCaller. (this is the default)\n"
             " -hc- Turn off optimizations specific to GATK HaplotypeCaller (e.g., when using the DRAGEN variant caller on SNAP aligned output)\n"
             "       In this mode, when a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.\n"
 		,
-            commandLine,
-            maxDist,
-            maxDistForIndels,
-            maxHits,
-			minWeightToCheck,
-            MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
 			extraSearchDepth,
 			expansionFactor,
 			DEFAULT_MIN_READ_LENGTH,
@@ -283,7 +287,7 @@ AlignerOptions::usage()
                 "parameters for the next alignment (including single or paired).  You may have as many of these\n"
                 "as you please.  If two consecutive alignments use the same index, it will not be reloaded.\n"
                 "So, for example, you could do 'snap-aligner single hg19-20 foo.fq -o foo.sam , paired hg19-20 end1.fq end2.fq -o paired.sam'\n"
-                "and it would not reload the index between the single and paired alignments.\n",
+                "and it would not reload the index between the single and paired alignments.\n"
                 "SNAP doesn't parse the options for later runs until the earlier ones have completed, so if you make\n"
                 "an error in one, it may take a while for you to notice.  So, be careful (or check back shortly after\n"
                 "you think each run will have completed).\n\n");

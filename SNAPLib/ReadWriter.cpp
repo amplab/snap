@@ -215,7 +215,7 @@ SimpleReadWriter::writeReads(
         used = 0;
 
         for (_int64 whichResult = 0; whichResult < nResults; whichResult++) {
-            int addFrontClipping = 0;
+             int addFrontClipping = 0;
             read->setAdditionalFrontClipping(results[whichResult].clippingForReadAdjustment);
             
             int cumulativeAddFrontClipping = 0, cumulativeAddBackClipping = 0;
@@ -243,7 +243,7 @@ SimpleReadWriter::writeReads(
                         : genome->getContigAtLocation(results[whichResult].location);
                     const Genome::Contig *newContig = results[whichResult].status == NotFound ? NULL
                         : genome->getContigAtLocation(results[whichResult].location + addFrontClipping);
-                    if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding() ||
+                    if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > newContig->beginningLocation + newContig->length - genome->getChromosomePadding() ||
                         nAdjustments > read->getDataLength()) {
                         //
                         // Altering this would push us over a contig boundary, or we're stuck in a loop.  Just give up on the read.
@@ -258,12 +258,10 @@ SimpleReadWriter::writeReads(
                             cumulativeAddFrontClipping += addFrontClipping;
                             if (results[whichResult].direction == FORWARD) {
                                 read->setAdditionalFrontClipping(-cumulativeAddFrontClipping);
-                            }
-                            else {
+                            } else {
                                 read->setAdditionalBackClipping(-cumulativeAddFrontClipping);
                             }
-                        }
-                        else { // Deletion
+                        } else { // Deletion
                             finalLocations[whichResult] = results[whichResult].location + addFrontClipping;
                         }
                     }
@@ -297,8 +295,7 @@ SimpleReadWriter::writeReads(
                         results[whichResult].score = -1;
                         results[whichResult].direction = FORWARD;
                         finalLocations[whichResult] = InvalidGenomeLocation;
-                    }
-                    else {
+                    } else {
                         if (addFrontClipping > 0) {
                             cumulativeAddFrontClipping += addFrontClipping;
                             read->setAdditionalFrontClipping(cumulativeAddFrontClipping);

@@ -1688,12 +1688,18 @@ BAMFormat::writeRead(
     {
         return false;
     }
+
+    if (extraBasesClippedBefore != 0) {
+        *o_addFrontClipping = extraBasesClippedBefore;
+        return false;
+    }
+
     if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(context.genome, ag, (char*)cigarBuf, cigarBufSize * sizeof(_uint32),
             clippedData, clippedQuality, clippedLength, score, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter,
             read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
             genomeLocation, direction == RC, useM, &editDistance, o_addFrontClipping, &refSpanFromCigar);
-        // Uncomment for debug
+
         if (editDistance == -1) {
             const char* read_data = read->getUnclippedData();
             const char* readId = read->getId();
@@ -1706,6 +1712,7 @@ BAMFormat::writeRead(
             }
             printf("\n");
         }
+
         if (*o_addFrontClipping != 0) {
             return false;
         }
@@ -1734,6 +1741,7 @@ BAMFormat::writeRead(
                 }
             }
         }
+
         if (!translateReadGroupFromSAM) {
             aux = NULL;
             auxLen = 0;
@@ -1743,8 +1751,7 @@ BAMFormat::writeRead(
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
         if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
             bamSize += 4 + strlen(read->getReadGroup());
-        }
-        else {
+        } else {
             bamSize += context.defaultReadGroupAuxLen;
         }
     }

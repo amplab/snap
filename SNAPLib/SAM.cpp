@@ -422,6 +422,7 @@ SAMReader::parseHeader(
                     }
                     if (foundID) break;
                 }
+
                 if (foundID) {
                     bool foundLB = false;
                     for (int i = 0; rgStart + i < endOfBuffer; i++) {
@@ -436,11 +437,13 @@ SAMReader::parseHeader(
                             rgSlot = newBuffer;
                             rg_slot_size = newSize;
                         }
+
                         if (rgStart[i] == 'L') {
                             if (rgStart + i + 2 >= endOfBuffer) {
                                 delete[] rgSlot;
                                 return false;
                             }
+
                             if (rgStart[i + 1] == 'B' && rgStart[i + 2] == ':') {
                                 for (int j = i + 3; rgStart + j < endOfBuffer; j++) {
                                     if (bytesUsed >= rg_slot_size) {
@@ -454,29 +457,30 @@ SAMReader::parseHeader(
                                         rgSlot = newBuffer;
                                         rg_slot_size = newSize;
                                     }
+
                                     if (rgStart[j] == '\t' || rgStart[j] == 0 || rgStart[j] == '\n' || rgStart[j] == ' ') {
                                         rgSlot[bytesUsed++] = '\t';
                                         foundLB = true;
                                         break;
-                                    }
-                                    else {
+                                    } else {
                                         rgSlot[bytesUsed++] = rgStart[j];
                                     }
-                                }
-                            }
-                        }
+                                } // for j
+                            } //if B:
+                        } // L
+
                         if (foundLB) {
                             break;
                         }
-                    }
-                }
+                    } // for i
+                } // if foundID
 
                 rgSlot[bytesUsed++] = '\0';
 
                 numRGLines++;
 
                 if (NULL != o_rgLines) {
-                    if (numRGLines + 1 >= n_rg_slots) {
+                    if ((_int64)numRGLines + 1 >= n_rg_slots) {
                         char* newRGLines = new char[n_rg_slots * rg_slot_size * 2];
                         memcpy(newRGLines, rgLines, sizeof(char) * n_rg_slots * rg_slot_size);
                         size_t* newRGLineOffsets = new size_t[n_rg_slots * 2];
@@ -492,12 +496,13 @@ SAMReader::parseHeader(
                 }
 
                 delete[] rgSlot;
-            }
+            } // RG
         } else {
             WriteErrorMessage("Unrecognized header line in SAM file.\n");
             delete[] lineBuffer;
             return false;
         }
+
 		char * p = strnchr(nextLineToProcess,'\n',endOfBuffer-nextLineToProcess);
 		if (p == NULL) {
             // no newline, look for null to truncate buffer
@@ -799,6 +804,7 @@ SAMReader::parseLocation(
             WriteErrorMessage("SAMReader: POS field too long.\n");
             soft_exit(1);
         }
+
         memcpy(posBuffer,field[posfield],fieldLength[posfield]);
         posBuffer[fieldLength[posfield]] = '\0';
         if (0 == sscanf(posBuffer,"%d",&oneBasedOffsetWithinContig)) {
@@ -817,7 +823,6 @@ SAMReader::parseLocation(
 
         return locationOfContig + oneBasedOffsetWithinContig - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
     } else {
-
         if (NULL != o_pos) {
             *o_pos = 0;
         }
@@ -890,6 +895,7 @@ SAMReader::getNextRead(
     if (NULL == flag) {
         flag = &local_flag;
     }
+
     do {
         char* buffer;
         _int64 bytes;
@@ -899,6 +905,7 @@ SAMReader::getNextRead(
                 return false;
             }
         }
+
         char *newLine = strnchr(buffer, '\n', bytes);
         if (NULL == newLine) {
             //
@@ -915,6 +922,7 @@ SAMReader::getNextRead(
             context.rgLines, context.numRGLines, context.rgLineOffsets);
         read->setBatch(data->getBatch());
         data->advance((newLine + 1) - buffer);
+
     } while ((context.ignoreSecondaryAlignments && ((*flag) & SAM_SECONDARY)) ||
              (context.ignoreSupplementaryAlignments && ((*flag) & SAM_SUPPLEMENTARY)));
 
@@ -943,6 +951,7 @@ SAMReader::createReadSupplierGenerator(
         if (reader == NULL) {
             return NULL;
         }
+
         ReadSupplierQueue *queue = new ReadSupplierQueue(reader);
         queue->startReaders();
         return queue;
@@ -1178,6 +1187,7 @@ SAMFormat::getWriterSupplier(
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag);
     }
+
     return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow, options->emitInternalScore, options->internalScoreTag, options->ignoreAlignmentAdjustmentsForOm,
         options->matchReward, options->subPenalty, options->gapOpenPenalty, options->gapExtendPenalty);
 }
@@ -1201,6 +1211,7 @@ SAMFormat::writeHeader(
 	for (int i = 0; i < argc; i++) {
 		commandLineSize += strlen(argv[i]) + 1;	// +1 is either a space or the terminating null
 	}
+
 	commandLine = new char[commandLineSize];
 	commandLine[0] = '\0';
 	for (int i = 0; i < argc; i++) {
@@ -1230,22 +1241,27 @@ SAMFormat::writeHeader(
             if (newline == NULL) {
                 newline = context.header + context.headerLength;
             }
+
             _ASSERT(newline - p >= 3);
             // skip @HD lines, and also @SQ lines if header does not match index
 			hasRG |= strncmp(p, "@RG", 3) == 0;
+
             if (strncmp(p, "@HD", 3) != 0 &&
                     (context.headerMatchesIndex || strncmp(p, "@SQ", 3) != 0) &&
                     strncmp(p, "@PG\tID:SNAP\t", 12) != 0) {
+
                 if (bytesConsumed + (newline - p) + 1 >= headerBufferSize) {
                     //WriteErrorMessage("SAMWriter: header buffer too small\n");
                     return false;
                 }
+
                 memcpy(header + bytesConsumed, p, (newline - p));
                 * (header + bytesConsumed + (newline - p)) = '\n';
                 bytesConsumed += (newline - p) + 1;
             }
             p = newline + 1;
         }
+
 		if (! hasRG) {
 			int n = snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "%s\n",
 				rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine);
@@ -1256,7 +1272,7 @@ SAMFormat::writeHeader(
 			bytesConsumed += n;
 		}
     }
-#ifndef SKIP_SQ_LINES
+
     if ((context.header == NULL || ! context.headerMatchesIndex) && context.genome != NULL && !omitSQLines) {
         // Write an @SQ line for each chromosome / contig in the genome
         int numContigs = context.genome->getNumContigs();
@@ -1275,7 +1291,6 @@ SAMFormat::writeHeader(
             }
         }
     }
-#endif // SKIP_SQ_LINES
 
     *headerActualSize = bytesConsumed;
     return true;
@@ -1599,6 +1614,7 @@ SAMFormat::writePairs(
         int addFrontClipping;
         do {
             addFrontClipping = 0;
+
             if (!createSAMLine(context.genome, data[whichRead], quality[whichRead], MAX_READ, contigName[whichRead], &contigIndex[whichRead],
                 flags[whichRead], positionInContig[whichRead], result->mapq[whichRead], contigName[1 - whichRead], &contigIndex[1 - whichRead],
                 positionInContig[1 - whichRead], templateLength[whichRead],
@@ -1611,6 +1627,7 @@ SAMFormat::writePairs(
             {
                 return false;
             }
+
             if (locations[whichRead] != InvalidGenomeLocation) {
                 if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 0)) {
                     cigar[whichRead] = computeCigarString(context.genome, ag, cigarBuf[whichRead], cigarBufSize, cigarBufWithClipping[whichRead], cigarBufWithClippingSize,
@@ -1741,6 +1758,7 @@ SAMFormat::writePairs(
             aux = NULL;
             auxLen = 0;
         }
+
         const char* rglineAux = "";
         int rglineAuxLen = 0;
         if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
@@ -2095,6 +2113,11 @@ SAMFormat::writeRead(
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection,
         &extraBasesClippedBefore, bpClippedBefore, bpClippedAfter, mateBpClippedBefore, mateBpClippedAfter))
     {
+        return false;
+    }
+
+    if (extraBasesClippedBefore != 0) {
+        *o_addFrontClipping = extraBasesClippedBefore;
         return false;
     }
 

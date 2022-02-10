@@ -1318,6 +1318,7 @@ Return Value:
                         //
                         genomeLocation += genomeLocationOffset;
 
+
                         agScore = agScore1 + agScore2;
 
                         //

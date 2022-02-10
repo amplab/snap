@@ -317,7 +317,6 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
     int contigNameBufferSize = 0;
     char *contigNameBuffer = NULL;
     size_t n;
-    size_t contigSize;
     char *curName;
     for (unsigned i = 0; i < nContigs; i++) {
         if (NULL == reallocatingFgetsGenericFile(&contigNameBuffer, &contigNameBufferSize, loadFile)) {	 
