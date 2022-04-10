@@ -101,7 +101,8 @@ AlignerOptions::AlignerOptions(
     emitALTAlignments(false),
     maxScoreGapToPreferNonALTAlignment(64),
     useSoftClipping(false),
-    flattenMAPQAtOrBelow(3)
+    flattenMAPQAtOrBelow(3),
+    attachAlignmentTimes(false)
 {
     if (forPairedEnd) {
         maxDist                 = 27;
@@ -262,6 +263,7 @@ AlignerOptions::usage()
             "  -hc Enable SNAP mode optimized for use with GATK HaplotypeCaller. (this is the default)\n"
             " -hc- Turn off optimizations specific to GATK HaplotypeCaller (e.g., when using the DRAGEN variant caller on SNAP aligned output)\n"
             "       In this mode, when a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.\n"
+            "  -at Attach AT:i: tags to each read showing the alignment time in microseconds.  For paired-end reads this is the time for the pair\n"
 		,
 			extraSearchDepth,
 			expansionFactor,
@@ -370,8 +372,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-h") == 0) {
+        } else if (strcmp(argv[n], "-h") == 0) {
             if (n + 1 < argc) {
                 maxHits = atoi(argv[n + 1]);
                 n++;
@@ -395,8 +396,7 @@ AlignerOptions::usage()
             fivePrimeEndBonus = 10;
             threePrimeEndBonus = 7;
             return true;
-        }
-        else if (strcmp(argv[n], "-fmb") == 0) {
+        } else if (strcmp(argv[n], "-fmb") == 0) {
             if (n + 1 < argc) {
                 n++;
                 flattenMAPQAtOrBelow = atoi(argv[n + 1]);
@@ -547,40 +547,32 @@ AlignerOptions::usage()
                 }
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-x") == 0) {
+        } else if (strcmp(argv[n], "-x") == 0) {
             explorePopularSeeds = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-f") == 0) {
+        } else if (strcmp(argv[n], "-f") == 0) {
             stopOnFirstHit = true;
             return true;
 #if     USE_DEVTEAM_OPTIONS
-        }
-        else if (strcmp(argv[n], "-I") == 0) {
+        } else if (strcmp(argv[n], "-I") == 0) {
             ignoreMismatchedIDs = true;
             return true;
 #ifdef  _MSC_VER
-        }
-        else if (strcmp(argv[n], "-B") == 0) {
+        } else if (strcmp(argv[n], "-B") == 0) {
             useTimingBarrier = true;
             return true;
 #endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
-        }
-        else if (strcmp(argv[n], "-M") == 0) {
+        } else if (strcmp(argv[n], "-M") == 0) {
             useM = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-=") == 0) {
+        } else if (strcmp(argv[n], "-=") == 0) {
             useM = false;
             return true;
-        }
-        else if (strcmp(argv[n], "-sa") == 0) {
+        } else if (strcmp(argv[n], "-sa") == 0) {
             ignoreSecondaryAlignments = false;
             return true;
-        }
-        else if (strcmp(argv[n], "-om") == 0) {
+        } else if (strcmp(argv[n], "-om") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-om requires an additional value\n");
                 return false;
@@ -598,8 +590,7 @@ AlignerOptions::usage()
             n++;
 
             return true;
-        }
-        else if (strcmp(argv[n], "-omax") == 0) {
+        } else if (strcmp(argv[n], "-omax") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-omax requires an additional value\n");
                 return false;
@@ -614,8 +605,7 @@ AlignerOptions::usage()
             n++;
 
             return true;
-        }
-        else if (strcmp(argv[n], "-sid") == 0) {
+        } else if (strcmp(argv[n], "-sid") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-sid requires an additional value\n");
                 return false;
@@ -629,8 +619,7 @@ AlignerOptions::usage()
             sortIntermediateDirectory = argv[n + 1];
             n++;
             return true;
-        }
-        else if (strcmp(argv[n], "-mpc") == 0) {
+        } else if (strcmp(argv[n], "-mpc") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-mpc requires an additional value\n");
                 return false;
@@ -646,8 +635,7 @@ AlignerOptions::usage()
             n++;
 
             return true;
-        }
-        else if (strcmp(argv[n], "-wbs") == 0) {
+        } else if (strcmp(argv[n], "-wbs") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-wbs requires an additional value\n");
                 return false;
@@ -955,6 +943,9 @@ AlignerOptions::usage()
             return true;
         } else if (strcmp(argv[n], "-nt") == 0) {
             noTruncation = true;
+            return true;
+        } else if (strcmp(argv[n], "-at") == 0) {
+            attachAlignmentTimes = true;
             return true;
         } else if (strcmp(argv[n], "-di") == 0) {
             dropIndexBeforeSort = true;

@@ -219,7 +219,8 @@ public:
 
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
         const Genome* genome, bool killIfTooSlowbool, bool emitInternalScore, char *internalScoreTag,
-        bool ignoreAlignmentAdjustmentsForOm, int matchReward, int subPenalty, int gapOpenPenalty, int gapExtendPenalty);
+        bool ignoreAlignmentAdjustmentsForOm, int matchReward, int subPenalty, int gapOpenPenalty, int gapExtendPenalty,
+        bool attachAlignmentTimes);
 
     virtual ~ReadWriterSupplier() {}
 };
@@ -814,7 +815,7 @@ private:
                 }
             }
         }
-};
+}; // class Read
 
 //
 // Reads that copy the memory for their strings.  They're less efficient than the base

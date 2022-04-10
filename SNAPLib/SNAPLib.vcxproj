@@ -192,6 +192,7 @@
     <ClInclude Include="GzipDataWriter.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="Histogram.h" />
+    <ClInclude Include="HitDepth.h" />
     <ClInclude Include="IntersectingPairedEndAligner.h" />
     <ClInclude Include="LandauVishkin.h" />
     <ClInclude Include="mapq.h" />
@@ -249,6 +250,7 @@
     <ClCompile Include="GzipDataWriter.cpp" />
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="Histogram.cpp" />
+    <ClCompile Include="HitDepth.cpp" />
     <ClCompile Include="IntersectingPairedEndAligner.cpp" />
     <ClCompile Include="LandauVishkin.cpp" />
     <ClCompile Include="mapq.cpp" />

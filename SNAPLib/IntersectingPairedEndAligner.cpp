@@ -64,7 +64,8 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
     extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), useAffineGap(useAffineGap_),
     maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), altAwareness(altAwareness_),
-    maxScoreGapToPreferNonAltAlignment(maxScoreGapToPreferNonAltAlignment_), matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), useSoftClip(useSoftClip_)
+    maxScoreGapToPreferNonAltAlignment(maxScoreGapToPreferNonAltAlignment_), matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), useSoftClip(useSoftClip_),
+    stopOnFirstHit(false)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -460,8 +461,7 @@ bool
             if (doesGenomeIndexHave64BitLocations) {
                 index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC],
                     hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
-            }
-            else {
+            } else {
                 index->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
             }
 
@@ -470,8 +470,7 @@ bool
                 int offset;
                 if (dir == FORWARD) {
                     offset = nextSeedToTest;
-                }
-                else {
+                } else {
                     offset = readLen[whichRead] - seedLen - nextSeedToTest;
                 }
 
@@ -479,13 +478,11 @@ bool
                     totalHashTableHits[whichRead][dir] += nHits[dir];
                     if (doesGenomeIndexHave64BitLocations) {
                         hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], beginsDisjointHitSet[dir]);
-                    }
-                    else {
+                    } else {
                         hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], beginsDisjointHitSet[dir]);
                     }
                     beginsDisjointHitSet[dir] = false;
-                }
-                else {
+                } else {
                     popularSeedsSkipped[whichRead]++;
                 }
             } // for each direction
@@ -497,8 +494,7 @@ bool
                 _ASSERT((nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1) >= (int)seedLen);
                 nextSeedToTest += (nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1);
                 _ASSERT(nextSeedToTest < nPossibleSeeds);   // We haven't run off the end of the read.
-            }
-            else {
+            } else {
                 nextSeedToTest += seedLen;
             }
         } // while we need to lookup seeds for this read

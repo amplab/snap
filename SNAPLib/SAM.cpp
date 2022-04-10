@@ -1110,16 +1110,19 @@ FileFormat::setupReaderContext(
     char* buffer = new char[strlen(options->rgLineContents) * 3]; // can't expend > 2x
     const char* from = options->rgLineContents;
     char* to = buffer;
+
     // skip @RG
     _ASSERT(strncmp(from, "@RG", 3) == 0);
     while (*from && *from != '\t') {
         from++;
     }
+
     while (*from) {
         if (!(from[0] == '\t' && from[1] && from[1] != '\t' && from[2] && from[2] != '\t' && from[3] == ':')) {
             WriteErrorMessage("Invalid @RG line: %s\n", options->rgLineContents);
             soft_exit(1);
         }
+
         bool keep = false;
         bool isID = false;
         for (const char* a = RGLineToAux; *a; a += 2) {
@@ -1129,6 +1132,7 @@ FileFormat::setupReaderContext(
                 break;
             }
         }
+
         if (keep) {
             if (bam) {
                 BAMAlignAux* aux = (BAMAlignAux*)to;
@@ -1189,7 +1193,7 @@ SAMFormat::getWriterSupplier(
     }
 
     return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow, options->emitInternalScore, options->internalScoreTag, options->ignoreAlignmentAdjustmentsForOm,
-        options->matchReward, options->subPenalty, options->gapOpenPenalty, options->gapExtendPenalty);
+        options->matchReward, options->subPenalty, options->gapOpenPenalty, options->gapExtendPenalty, options->attachAlignmentTimes);
 }
 
     bool
@@ -1569,6 +1573,7 @@ SAMFormat::writePairs(
     bool isSecondary,
     bool emitInternalScore,
     char *internalScoreTag,
+    bool attachAlignmentTime,
     int * writeOrder,
     int* cumulativePositiveAddFrontClipping,
     bool * secondReadLocationChanged,
@@ -1772,6 +1777,7 @@ SAMFormat::writePairs(
                 readGroupString = read->getReadGroup();
             }
         }
+
         const int internalScoreBufferSize = 100;    // Should be plenty for \tXX:i:%d
         char internalScoreBuffer[internalScoreBufferSize];
         if (emitInternalScore) {
@@ -1782,6 +1788,24 @@ SAMFormat::writePairs(
         } else {
             internalScoreBuffer[0] = '\0';
         }
+
+        const int alignmentTimeBufferSize = 100;    // Should be plenty for \tAT:i:%d
+        char alignmentTimeBuffer[alignmentTimeBufferSize];
+        if (attachAlignmentTime) {
+            int alignmentTimeInMicroseconds;
+            if (result->alignmentTimeInNanoseconds / 1000 > MAXINT32) {
+                alignmentTimeInMicroseconds = MAXINT32;
+            } else {
+                alignmentTimeInMicroseconds = (int)(result->alignmentTimeInNanoseconds / 1000);
+            }
+            int charsInAlignmentTime = snprintf(alignmentTimeBuffer, alignmentTimeBufferSize - 1, "\tAT:i:%d", alignmentTimeInMicroseconds);
+            if (charsInAlignmentTime >= alignmentTimeBufferSize) {
+                WriteErrorMessage("SAMFormat::writeRead overran internal buffer for alignment time tag, which is kind of surprising.  %d\n", charsInAlignmentTime);
+            }
+        } else {
+            alignmentTimeBuffer[0] = '\0';
+        }
+
 
         // QS
         int mqs = 0;
@@ -1811,7 +1835,7 @@ SAMFormat::writePairs(
             libraryString[0] = '\0';
         }
 
-        int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%d\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s%s\n",
+        int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%d\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s%s%s\n",
             (unsigned)qnameLen[whichRead], read->getId(),
             flags[whichRead],
             contigName[whichRead],
@@ -1827,6 +1851,7 @@ SAMFormat::writePairs(
             readGroupSeparator, readGroupString,
             nmString, rglineAuxLen, rglineAux,
             internalScoreBuffer,
+            alignmentTimeBuffer,
             mqsString,
             libraryString);
 
@@ -1869,6 +1894,8 @@ SAMFormat::writeRead(
     int internalScore,
     bool emitInternalScore,
     char *internalScoreTag,
+    bool attachAlignmentTime,
+    _int64 alignmentTimeInNanoseconds,
     int bpClippedBefore,
     int bpClippedAfter,
     bool hasMate,
@@ -1997,6 +2024,7 @@ SAMFormat::writeRead(
             readGroupString = read->getReadGroup();
         }
     }
+
     const int internalScoreBufferSize = 100;    // Should be plenty for \tXX:i:%d
     char internalScoreBuffer[internalScoreBufferSize];
     if (emitInternalScore) {
@@ -2008,7 +2036,22 @@ SAMFormat::writeRead(
         internalScoreBuffer[0] = '\0';
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
+    const int alignmentTimeBufferSize = 100;    // Should be plenty for AT:i:123456789
+    char alignmentTimeBuffer[alignmentTimeBufferSize];
+    if (attachAlignmentTime) {
+        _int64 alignmentTimeInMicroseconds = (alignmentTimeInNanoseconds + 500) / 1000;
+        if (alignmentTimeInMicroseconds >= MAXINT32) {  // MAXINT is about 2 billion, so this would be ~35 minutes for one read (pair)
+            alignmentTimeInMicroseconds = 0;
+        };
+        int charsInAligmentTime = snprintf(alignmentTimeBuffer, alignmentTimeBufferSize - 1, "\tAT:i:%d", (int)alignmentTimeInMicroseconds);
+        if (charsInAligmentTime >= alignmentTimeBufferSize) {
+            WriteErrorMessage("SAMFormat::writeRead overran internal buffer for alignment time tag, which is kind of surprising.  %d\n", charsInAligmentTime);
+        }
+    } else {
+        alignmentTimeBuffer[0] = '\0';
+    }
+
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s\n",
         (unsigned)qnameLen, read->getId(),
         flags,
         contigName,
@@ -2023,7 +2066,8 @@ SAMFormat::writeRead(
         aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "",
         readGroupSeparator, readGroupString,
         nmString, rglineAuxLen, rglineAux,
-        internalScoreBuffer);
+        internalScoreBuffer,
+        alignmentTimeBuffer);
 
     if (charsInString > bufferSpace) {
         //
@@ -2061,6 +2105,8 @@ SAMFormat::writeRead(
     int internalScore,
     bool emitInternalScore,
     char *internalScoreTag,
+    bool attachAlignmentTime,
+    _int64 alignmentTimeInNanoseconds,
     int bpClippedBefore,
     int bpClippedAfter,
     bool hasMate,
@@ -2215,12 +2261,26 @@ SAMFormat::writeRead(
         if (charsInInternalScore >= internalScoreBufferSize) {
             WriteErrorMessage("SAMFormat::writeRead overran internal buffer for internal score tag, which is kind of surprising.  %d\n", charsInInternalScore);
         }
-    }
-    else {
+    } else {
         internalScoreBuffer[0] = '\0';
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
+    const int alignmentTimeBufferSize = 100;    // Should be plenty for AT:i:123456789
+    char alignmentTimeBuffer[alignmentTimeBufferSize];
+    if (attachAlignmentTime) {
+        _int64 alignmentTimeInMicroseconds = (alignmentTimeInNanoseconds + 500) / 1000;
+        if (alignmentTimeInMicroseconds >= MAXINT32) {  // MAXINT is about 2 billion, so this would be ~35 minutes for one read (pair)
+            alignmentTimeInMicroseconds = 0;
+        };
+        int charsInAligmentTime = snprintf(alignmentTimeBuffer, alignmentTimeBufferSize - 1, "\tAT:i:%d", (int)alignmentTimeInMicroseconds);
+        if (charsInAligmentTime >= alignmentTimeBufferSize) {
+            WriteErrorMessage("SAMFormat::writeRead overran internal buffer for alignment time tag, which is kind of surprising.  %d\n", charsInAligmentTime);
+        }
+    } else {
+        alignmentTimeBuffer[0] = '\0';
+    }
+
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s\n",
         (unsigned)qnameLen, read->getId(),
         flags,
         contigName,
@@ -2235,7 +2295,8 @@ SAMFormat::writeRead(
         aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "",
         readGroupSeparator, readGroupString,
         nmString, rglineAuxLen, rglineAux,
-        internalScoreBuffer);
+        internalScoreBuffer,
+        alignmentTimeBuffer);
 
     if (charsInString > bufferSpace) {
         //

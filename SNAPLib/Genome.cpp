@@ -203,7 +203,7 @@ Genome::~Genome()
 Genome::saveToFile(const char *fileName) const
 {
     //
-    // Save file format is the number of bases, the number of contigs, followed by
+    // Save file format is the number of bases, the number of contigs and flags followed by
     //  the contigs themselves, rounded up to 4K, followed by the bases.
     //
 

@@ -70,6 +70,7 @@ struct SingleAlignmentResult {
     double          matchProbability;
     double          probabilityAllCandidates;
     unsigned        popularSeedsSkipped;
+    _int64          alignmentTimeInNanoseconds;    // Only filled in when the -at option is selected
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
@@ -119,6 +120,8 @@ struct PairedAlignmentResult {
     bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
     bool agForcedSingleAlignerCall;             // Did we call the single aligner only because affine gap asked us to?  
     _int64 nanosInAlignTogether;
+    _int64 alignmentTimeInNanoseconds;    // Only filled in when the -at option is selected
+
     unsigned nLVCalls;
     unsigned nSmallHits;
 
@@ -154,6 +157,7 @@ struct PairedAlignmentResult {
         nanosInAlignTogether = other.nanosInAlignTogether;
         nLVCalls = other.nLVCalls;
         nSmallHits = other.nSmallHits;
+        alignmentTimeInNanoseconds = other.alignmentTimeInNanoseconds;
         return *this;
     }
 };

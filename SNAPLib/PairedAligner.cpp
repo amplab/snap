@@ -711,9 +711,10 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
             }
 
 
-#if     TIME_HISTOGRAM
-            _int64 startTime = timeInNanos();
-#endif // TIME_HISTOGRAM
+            _int64 startTime;
+            if (TIME_HISTOGRAM || options->attachAlignmentTimes) {
+                startTime = timeInNanos();
+            }
 
             _int64 nSecondaryResults;
             _int64 nPairedCandidatesForAffineGap;
@@ -782,13 +783,24 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
                 stats->millisAligning += (alignFinishedTime - readFinishedTime);
             }
 
+            _int64 runTime;
+            if (TIME_HISTOGRAM || options->attachAlignmentTimes) {
+                runTime = timeInNanos() - startTime;
+
+                if (options->attachAlignmentTimes) {
+                    if (runTime > 0) {
+                        results[0].alignmentTimeInNanoseconds = runTime;
+                    } else {
+                        results[0].alignmentTimeInNanoseconds = 0;
+                    }
+                } // attachAlignmentTimes
+            } // if we're fine-grained timing reads
+
 #if     TIME_HISTOGRAM
-            _int64 runTime = timeInNanos() - startTime;
             if (runTime < 0) { // For reasons that I really don't understand, this seems to run backwards sometimes.  Just ignore the sample when it does.
                 stats->backwardsTimeStamps++;
                 stats->totalBackwardsTimeStamps += runTime;
-            }
-            else {
+            } else {
                 int timeBucket = min(30, cheezyLogBase2(runTime));
                 stats->countByTimeBucket[timeBucket] += 2;
                 stats->nanosByTimeBucket[timeBucket] += runTime;
@@ -797,17 +809,16 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
                     if (results[0].status[whichRead] == NotFound) {
                         stats->countOfUnaligned++;
                         stats->timeOfUnaligned += runTime / 2;
-                    }
-                    else {
+                    } else {
                         stats->countByMAPQ[results[0].mapq[whichRead]]++;
                         stats->timeByMAPQ[results[0].mapq[whichRead]] += runTime / 2;
 
                         int score = __min(results[0].score[whichRead], 30);
                         stats->countByNM[score]++;
                         stats->timeByNM[score] += runTime / 2;
-                    }
-                }
-        }
+                    } // aligned/not aligner
+                } // which read in the pair
+        } // if we got a good time
 #endif // TIME_HISTOGRAM
 
             if (forceSpacing && isOneLocation(results[0].status[0]) != isOneLocation(results[0].status[1])) {
@@ -837,6 +848,8 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
                         firstIsPrimary = false;
                     }
                     i--;
+                } else if (options->attachAlignmentTimes) {
+                    results[i].alignmentTimeInNanoseconds = runTime;
                 }
             }
 
@@ -850,6 +863,8 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
                         singleResults[whichRead][whichAlignment] = singleResults[whichRead][nSingleSecondaryResults[whichRead] - 1];
                         nSingleSecondaryResults[whichRead]--;
                         whichAlignment--;
+                    } else if (options->attachAlignmentTimes) {
+                        singleResults[whichRead]->alignmentTimeInNanoseconds = runTime;
                     }
                 }
             }
@@ -882,8 +897,7 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
                         readIdxInBatch++;
                     }
                 }
-            }
-            else {
+            } else {
                 stats->filtered += 2;
             }
 

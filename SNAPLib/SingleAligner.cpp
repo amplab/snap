@@ -234,9 +234,11 @@ SingleAlignerContext::runIterationThreadImpl(Read *& read)
             continue;
         }
 
-#if     TIME_HISTOGRAM
-        _int64 startTime = timeInNanos();
-#endif // TIME_HISTOGRAM
+        _int64 startTime;
+
+        if (TIME_HISTOGRAM || options->attachAlignmentTimes) {
+            startTime = timeInNanos();
+        }
 
         _int64 nSecondaryResults = 0;
 
@@ -271,8 +273,16 @@ SingleAlignerContext::runIterationThreadImpl(Read *& read)
             stats->millisAligning += (alignFinishedTime - readFinishedTime);            
         }
 
+        _int64 runTime;
+
+        if (TIME_HISTOGRAM || options->attachAlignmentTimes) {
+            runTime = timeInNanos() - startTime;
+            if (runTime < 0) {
+                runTime = 0;
+            }
+        }
+
 #if     TIME_HISTOGRAM
-        _int64 runTime = timeInNanos() - startTime;
         int timeBucket = min(30, cheezyLogBase2(runTime));
         stats->countByTimeBucket[timeBucket]++;
         stats->nanosByTimeBucket[timeBucket] += runTime;
@@ -286,6 +296,9 @@ SingleAlignerContext::runIterationThreadImpl(Read *& read)
             // Remove any reads that don't pass the filter, then send the remainder down to the writer.
             //
             for (int i = 0; i <= nSecondaryResults; i++) {
+                if (options->attachAlignmentTimes) {
+                    alignmentResults[i].alignmentTimeInNanoseconds = runTime;
+                }
                 if (!options->passFilter(read, alignmentResults[i].status, false, i != 0 || !containsPrimary)) {
                     if (i == 0) {
                         containsPrimary = false;

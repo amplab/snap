@@ -29,7 +29,8 @@ Revision History:
 #include "Genome.h"
 #include "Read.h"
 
-#define INSTRUMENTATION_FOR_PAPER 0 // Turn this on to generate raw data about hit sets and their intersections for the paper
+#define INSTRUMENTATION_FOR_PAPER 0     // Turn this on to generate raw data about hit sets and their intersections for the paper
+#define HIT_DEPTH_COUNTING 0            // This is a special piece of code that generates information about seeding for an entire genome.
 
 #if INSTRUMENTATION_FOR_PAPER
 
@@ -142,6 +143,7 @@ struct AlignerOptions : public AbstractOptions
 	bool				altAwareness;
     int                 maxScoreGapToPreferNonALTAlignment;
     bool                emitALTAlignments;
+    bool                attachAlignmentTimes;
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

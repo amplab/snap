@@ -34,6 +34,7 @@ Revision History:
 #include "CommandProcessor.h"
 #include "Error.h"
 #include "Compat.h"
+#include "HitDepth.h"
 
 const char *SNAP_VERSION = "2.0.2.dev.1";
 
@@ -46,6 +47,12 @@ static void usage()
 		"   single   align single-end reads\n"
 		"   paired   align paired-end reads\n"
 		"   daemon   run in daemon mode--accept commands remotely\n"
+#if HIT_DEPTH_COUNTING
+		"   depth    compute the minimum hit count for any seed\n"
+		"            that uniquely identifies a correct alignment\n"
+		"            for every locus in a set of contigs\n"
+#endif // HIT_DEPTH_COUNTING
+
 		"Type a command without arguments to see its help.\n");
 }
 
@@ -76,6 +83,12 @@ void ProcessNonDaemonCommands(int argc, const char **argv) {
 			_ASSERT(nArgsConsumed > 0);
 			i += nArgsConsumed;
 		}
+
+#if HIT_DEPTH_COUNTING
+	} else if (strcmp(argv[1], "depth")) {
+		CountHitDepth(argc - 1, argv + 1);
+#endif // HIT_DEPTH_COUNTING
+
 	} else {
 		WriteErrorMessage("Invalid command: %s\n\n", argv[1]);
 		usage();
@@ -166,6 +179,11 @@ void ProcessTopLevelCommands(int argc, const char **argv)
 #if TIME_HISTOGRAM
 	fprintf(stderr, "TIME_HISTOGRAM is compiled in.\n");
 #endif // TIME_HISTOGRAM
+
+#if HIT_DEPTH_COUNTING
+	fprintf(stderr, "HIT_DEPTH_COUNTING is compiled in\n");
+#endif // HIT_DEPTH_COUNTING
+
 	InitializeSeedSequencers();
 
 	if (argc < 2) {
@@ -178,11 +196,6 @@ void ProcessTopLevelCommands(int argc, const char **argv)
 	} else {
 		ProcessNonDaemonCommands(argc, argv);
 	}
-
-#if TIME_HISTOGRAM
-fclose(BJBSlowFASTQFile[0]);
-fclose(BJBSlowFASTQFile[1]);
-#endif
 }
 
 NamedPipe *CommandPipe = NULL;

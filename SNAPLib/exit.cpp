@@ -32,7 +32,6 @@ Revision History:
 //
 void soft_exit_no_print(int n)
 {
-
     exit(n);
 }
 

@@ -226,6 +226,7 @@ private:
     bool            useSoftClip;
     int             maxScoreGapToPreferNonAltAlignment;
     int             minBigIndelSize;    // We only see indels of this size or bigger if they're hinted by seed hits.
+    bool            stopOnFirstHit;
 
 
     // Affine gap scoring parameters

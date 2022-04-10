@@ -95,14 +95,15 @@ public:
         const ReaderContext& context, LandauVishkinWithCigar * lv, AffineGapVectorizedWithCigar * ag, 
         bool useAffineGap, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t* qnameLen, Read ** reads, GenomeLocation* locations, PairedAlignmentResult* result,
-        bool isSecondary, bool emitInternalScore, char *internalScoreTag, int * writeOrder, 
+        bool isSecondary, bool emitInternalScore, char *internalScoreTag, bool attachAlignmentTime, int * writeOrder, 
         int* cumulativePositiveAddFrontClipping, bool * secondReadLocationChanged, bool * outOfSpace) const = 0;
 
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool supplementaryAlignment, int* o_addFrontClipping, 
-        int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
+        int internalScore, bool emitInternalScore, char *internalScoreTag, bool attachAlignmentTime, _int64 alignmentTimeInNanoseconds,
+        int bpClippedBefore = 0, int bpClippedAfter = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false, int mateBpClippedBefore = 0, int mateBpClippedAfter = 0) const = 0; 
@@ -111,7 +112,8 @@ public:
         const ReaderContext& context, AffineGapVectorizedWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool supplementaryAlignment, int* o_addFrontClipping,
-        int score, int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
+        int score, int internalScore, bool emitInternalScore, char *internalScoreTag, bool attachAlignmentTime, _int64 alignmentTimeInNanoseconds,
+        int bpClippedBefore = 0, int bpClippedAfter = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false, int mateBpClippedBefore = 0, int mateBpClippedAfter = 0) const = 0;

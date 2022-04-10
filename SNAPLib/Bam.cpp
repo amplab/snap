@@ -831,14 +831,15 @@ public:
         const ReaderContext& context, LandauVishkinWithCigar * lv, AffineGapVectorizedWithCigar * ag, 
         bool useAffineGap, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t* qnameLen, Read ** reads, GenomeLocation* locations, PairedAlignmentResult* result,
-        bool isSecondary, bool emitInternalScore, char *internalScoreTag, int * writeOrder,
+        bool isSecondary, bool emitInternalScore, char *internalScoreTag, bool attachAlignmentTime, int * writeOrder,
         int* cumulativePositiveAddFrontClipping, bool * secondReadLocationChanged, bool * outOfSpace) const;
 
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool supplementaryAlignment, int * o_addFrontClipping,
-        int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
+        int internalScore, bool emitInternalScore, char *internalScoreTag, bool attachAlignmentTime, _int64 alignmentTimeInNanoseconds,
+        int bpClippedBefore = 0, int bpClippedAfter = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false, int mateBpClippedBefore = 0, int mateBpClippedAfter = 0) const;
@@ -847,7 +848,8 @@ public:
         const ReaderContext& context, AffineGapVectorizedWithCigar * ag, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool supplementaryAlignment, int * o_addFrontClipping,
-        int score, int internalScore, bool emitInternalScore, char *internalScoreTag, int bpClippedBefore = 0, int bpClippedAfter = 0,
+        int score, int internalScore, bool emitInternalScore, char *internalScoreTag, bool attachAlignmentTime, _int64 alignmentTimeInNanoseconds,
+        int bpClippedBefore = 0, int bpClippedAfter = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false, int mateBpClippedBefore = 0, int mateBpClippedAfter = 0) const;
@@ -951,7 +953,9 @@ BAMFormat::getWriterSupplier(
         dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag, gzipSupplier);
     }
 
-    return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow, options->emitInternalScore, options->internalScoreTag, options->ignoreAlignmentAdjustmentsForOm, options->matchReward, options->subPenalty, options->gapOpenPenalty, options->gapExtendPenalty);
+    return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow, options->emitInternalScore, options->internalScoreTag, 
+                                      options->ignoreAlignmentAdjustmentsForOm, options->matchReward, options->subPenalty, 
+                                      options->gapOpenPenalty, options->gapExtendPenalty, options->attachAlignmentTimes);
 }
 
     bool
@@ -1032,6 +1036,7 @@ BAMFormat::writePairs(
     bool isSecondary,
     bool emitInternalScore,
     char *internalScoreTag,
+    bool attachAlignmentTime,
     int * writeOrder,
     int * cumulativePositiveAddFrontClipping,
     bool * secondReadLocationChanged,
@@ -1107,18 +1112,15 @@ BAMFormat::writePairs(
                             cigarOps[whichRead] = 0;
                             editDistance[whichRead] = -1;
                             result->direction[whichRead] = FORWARD;
-                        }
-                        else {
+                        } else {
                             if (addFrontClipping < 0) { // Insertion (soft-clip)
                                 cumulativePositiveAddFrontClipping[firstOrSecond] += addFrontClipping;
                                 if (result->direction[whichRead] == FORWARD) {
                                     reads[whichRead]->setAdditionalFrontClipping(-cumulativePositiveAddFrontClipping[firstOrSecond]);
-                                }
-                                else {
+                                } else {
                                     reads[whichRead]->setAdditionalBackClipping(-cumulativePositiveAddFrontClipping[firstOrSecond]);
                                 }
-                            }
-                            else { // Deletion
+                            } else { // Deletion
                                 locations[whichRead] += addFrontClipping;
                             }
                         }
@@ -1143,8 +1145,7 @@ BAMFormat::writePairs(
                             cigarOps[whichRead] = 0;
                             editDistance[whichRead] = -1;
                             result->direction[whichRead] = FORWARD;
-                        }
-                        else {
+                        } else {
                             if (addFrontClipping > 0) {
                                 cumulativePositiveAddFrontClipping[firstOrSecond] += addFrontClipping;
                                 reads[whichRead]->setAdditionalFrontClipping(cumulativePositiveAddFrontClipping[firstOrSecond]);
@@ -1224,7 +1225,7 @@ BAMFormat::writePairs(
         // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
         // this plus some asserts below.
         //
-        bamSize += 8 + 4 + (emitInternalScore ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score field (which is 32 bits rather than the 8 used in NM)
+        bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
         bamSize += 7; // extra space to store mate quality score for duplicate marking
         if (bamSize > bufferSpace) {
             *outOfSpace = true;
@@ -1328,6 +1329,18 @@ BAMFormat::writePairs(
             auxLen += (unsigned)in->size();
         }
 
+        if (attachAlignmentTime) {
+            BAMAlignAux* in = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
+            in->tag[0] = 'A';  in->tag[1] = 'T'; in->val_type = 'i';
+            if (result->alignmentTimeInNanoseconds / 1000 > MAXINT32) {
+                *(_int32*)in->value() = MAXINT32;
+            } else {
+                *(_int32*)in->value() = (_int32)(result->alignmentTimeInNanoseconds / 1000);    // It's in microseconds in the BAM
+            }
+            _ASSERT(in->size() == 7);   // Known above in the bamSize += line
+            auxLen += (unsigned)in->size();
+        }
+
         // QS
         int result = 0;
         _uint8* p = (_uint8*)quality[1 - whichRead];
@@ -1388,6 +1401,8 @@ BAMFormat::writeRead(
     int internalScore, 
     bool emitInternalScore, 
     char *internalScoreTag,
+    bool attachAlignmentTime,
+    _int64 alignmentTimeInNanoseconds,
     int bpClippedBefore,
     int bpClippedAfter, 
     bool hasMate,
@@ -1497,10 +1512,11 @@ BAMFormat::writeRead(
     // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
     // this plus some asserts below.
     //
-    bamSize += 8 + 4 + (emitInternalScore ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score field (which is 32 bits rather than the 8 used in NM)
+    bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
     if (bamSize > bufferSpace) {
         return false;
     }
+
     BAMAlignment* bam = (BAMAlignment*) buffer;
     bam->block_size = (int)bamSize - 4;
     bam->refID = OriginalContigNumToInt(contigIndex);
@@ -1595,6 +1611,18 @@ BAMFormat::writeRead(
         auxLen += (unsigned)in->size();
     }
 
+    if (attachAlignmentTime) {
+        BAMAlignAux* in = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
+        in->tag[0] = 'A';  in->tag[1] = 'T'; in->val_type = 'i';
+        if (alignmentTimeInNanoseconds / 1000 > MAXINT32) {
+            *(_int32*)in->value() = MAXINT32;
+        } else {
+            *(_int32*)in->value() = (_int32)(alignmentTimeInNanoseconds / 1000);    // It's in microseconds in the BAM
+        }
+        _ASSERT(in->size() == 7);   // Known above in the bamSize += line
+        auxLen += (unsigned)in->size();
+    }
+
     // LB
     if (read->getLibrary() != NULL) {
         if ((char*)bam->firstAux() + auxLen + 4 + read->getLibraryLength() > buffer + bufferSpace) {
@@ -1636,6 +1664,8 @@ BAMFormat::writeRead(
     int internalScore,
     bool emitInternalScore,
     char *internalScoreTag,
+    bool attachAlignmentTime,
+    _int64 alignmentTimeInNanoseconds,
     int bpClippedBefore,
     int bpClippedAfter,
     bool hasMate,
@@ -1766,7 +1796,7 @@ BAMFormat::writeRead(
     // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
     // this plus some asserts below.
     //
-    bamSize += 8 + 4 + (emitInternalScore ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score field (which is 32 bits rather than the 8 used in NM)
+    bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
     if (bamSize > bufferSpace) {
         return false;
     }
@@ -1804,18 +1834,20 @@ BAMFormat::writeRead(
     bam->read_name()[qnameLen] = 0;
     memcpy(bam->cigar(), cigarBuf, cigarOps * 4);
     BAMAlignment::encodeSeq(bam->seq(), data, fullLength);
+
     for (unsigned i = 0; i < fullLength; i++) {
         quality[i] -= '!';
     }
+
     memcpy(bam->qual(), quality, fullLength);
     if (aux != NULL && auxLen > 0) {
         if (((char*)bam->firstAux()) + auxLen > buffer + bufferSpace) {
             return false;
         }
+
         if (!translateReadGroupFromSAM) {
             memcpy(bam->firstAux(), aux, auxLen);
-        }
-        else {
+        } else {
             // hack, build just RG field from SAM opt field
             BAMAlignAux* auxData = bam->firstAux();
             auxData->tag[0] = 'R';
@@ -1826,6 +1858,7 @@ BAMFormat::writeRead(
             auxLen -= 1; // RG:Z:xxx -> RGZxxx\0
         }
     }
+
     // RG
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
         if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
@@ -1836,8 +1869,7 @@ BAMFormat::writeRead(
             rg->tag[0] = 'R'; rg->tag[1] = 'G'; rg->val_type = 'Z';
             strcpy((char*)rg->value(), read->getReadGroup());
             auxLen += (unsigned)rg->size();
-        }
-        else {
+        } else {
             if ((char*)bam->firstAux() + auxLen + context.defaultReadGroupAuxLen > buffer + bufferSpace) {
                 return false;
             }
@@ -1845,12 +1877,14 @@ BAMFormat::writeRead(
             auxLen += context.defaultReadGroupAuxLen;
         }
     }
+
     // PG
     BAMAlignAux* pg = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
     pg->tag[0] = 'P'; pg->tag[1] = 'G'; pg->val_type = 'Z';
     strcpy((char*)pg->value(), "SNAP");
     _ASSERT(pg->size() == 8);   // Known above in the bamSize += line
     auxLen += (unsigned)pg->size();
+
     // NM
     BAMAlignAux* nm = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
     nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'C';
@@ -1862,6 +1896,19 @@ BAMFormat::writeRead(
         BAMAlignAux *in = (BAMAlignAux*)(auxLen + (char *)bam->firstAux());
         in->tag[0] = internalScoreTag[0];  in->tag[1] = internalScoreTag[1]; in->val_type = 'i';
         *(_int32*)in->value() = (flags & SAM_UNMAPPED) ? -1 : internalScore;
+        _ASSERT(in->size() == 7);   // Known above in the bamSize += line
+        auxLen += (unsigned)in->size();
+    }
+
+    // AT
+    if (attachAlignmentTime) {
+        BAMAlignAux* in = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
+        in->tag[0] = 'A';  in->tag[1] = 'T'; in->val_type = 'i';
+        if (alignmentTimeInNanoseconds / 1000 > MAXINT32) {
+            *(_int32*)in->value() = MAXINT32;
+        } else {
+            *(_int32*)in->value() = (_int32)(alignmentTimeInNanoseconds / 1000);    // It's in microseconds in the BAM
+        }
         _ASSERT(in->size() == 7);   // Known above in the bamSize += line
         auxLen += (unsigned)in->size();
     }
