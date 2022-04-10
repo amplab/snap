@@ -273,137 +273,289 @@ bool _DumpAlignments = false;
 #endif  // _DEBUG
 
     bool
-BaseAligner::AlignRead(
-        Read                    *inputRead,
-        SingleAlignmentResult   *primaryResult,
-        SingleAlignmentResult   *firstALTResult,
-        int                      maxEditDistanceForSecondaryResults,
-        _int64                   secondaryResultBufferSize,
-        _int64                  *nSecondaryResults,
-        _int64                   maxSecondaryResults,
-        SingleAlignmentResult   *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
-        _int64                   maxCandidatesForAffineGapBufferSize,
-        _int64                  *nCandidatesForAffineGap,
-        SingleAlignmentResult   *candidatesForAffineGap, // Alignment candidates that need to be rescored using affine gap
-        bool                     useHamming
-    )
-/*++
+        BaseAligner::AlignRead(
+            Read* inputRead,
+            SingleAlignmentResult* primaryResult,
+            SingleAlignmentResult* firstALTResult,
+            int                      maxEditDistanceForSecondaryResults,
+            _int64                   secondaryResultBufferSize,
+            _int64* nSecondaryResults,
+            _int64                   maxSecondaryResults,
+            SingleAlignmentResult* secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+            _int64                   maxCandidatesForAffineGapBufferSize,
+            _int64* nCandidatesForAffineGap,
+            SingleAlignmentResult* candidatesForAffineGap, // Alignment candidates that need to be rescored using affine gap
+            bool                     useHamming
+        )
+        /*++
 
-Routine Description:
+        Routine Description:
 
-    Align a particular read, possibly constraining the search around a given location.
+            Align a particular read, possibly constraining the search around a given location.
 
-Arguments:
+        Arguments:
 
-    read                                - the read to align
-    primaryResult                       - the best alignment result found
-    maxEditDistanceForSecondaryResults  - How much worse than the primary result should we look?
-    secondaryResultBufferSize           - the size of the secondaryResults buffer.  If provided, it must be at least maxK * maxSeeds * 2.
-    nRescondaryResults                  - returns the number of secondary results found
-    maxSecondaryResults                 - limit the number of secondary results to this
-    secondaryResults                    - returns the secondary results
+            read                                - the read to align
+            primaryResult                       - the best alignment result found
+            maxEditDistanceForSecondaryResults  - How much worse than the primary result should we look?
+            secondaryResultBufferSize           - the size of the secondaryResults buffer.  If provided, it must be at least maxK * maxSeeds * 2.
+            nRescondaryResults                  - returns the number of secondary results found
+            maxSecondaryResults                 - limit the number of secondary results to this
+            secondaryResults                    - returns the secondary results
 
 
-Return Value:
+        Return Value:
 
-    true if there was enough space in secondaryResults, false otherwise
+            true if there was enough space in secondaryResults, false otherwise
 
---*/
-{
+        --*/
+    {
 #if _DEBUG
-    const size_t genomeLocationBufferSize = 200;
-    char genomeLocationBuffer[genomeLocationBufferSize];
+        const size_t genomeLocationBufferSize = 200;
+        char genomeLocationBuffer[genomeLocationBufferSize];
 #endif // _DEBUG
 
-    bool overflowedSecondaryResultsBuffer = false;
-    memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
+        bool overflowedSecondaryResultsBuffer = false;
+        memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
 
-    if (NULL != nSecondaryResults) {
-        *nSecondaryResults = 0;
-    }
+        if (NULL != nSecondaryResults) {
+            *nSecondaryResults = 0;
+        }
 
-    firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
-    highestWeightListChecked = 0;
+        firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
+        highestWeightListChecked = 0;
 
-    scoresForAllAlignments.bestScore = scoresForNonAltAlignments.bestScore = TooBigScoreValue;
+        scoresForAllAlignments.bestScore = scoresForNonAltAlignments.bestScore = TooBigScoreValue;
 
-    unsigned maxSeedsToUse;
-    if (0 != maxSeedsToUseFromCommandLine) {
-        maxSeedsToUse = maxSeedsToUseFromCommandLine;
-    } else {
-        maxSeedsToUse = (int)(NUM_DIRECTIONS * maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength()); 
-    }
+        unsigned maxSeedsToUse;
+        if (0 != maxSeedsToUseFromCommandLine) {
+            maxSeedsToUse = maxSeedsToUseFromCommandLine;
+        } else {
+            maxSeedsToUse = (int)(NUM_DIRECTIONS * maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength());
+        }
 
-    primaryResult->location = InvalidGenomeLocation; // Value to return if we don't find a location.
-    primaryResult->direction = FORWARD;              // So we deterministically print the read forward in this case.
-    primaryResult->score = UnusedScoreValue;
-    primaryResult->status = NotFound;
-    primaryResult->clippingForReadAdjustment = 0;
-    primaryResult->usedAffineGapScoring = false;
-    primaryResult->basesClippedBefore = 0;
-    primaryResult->basesClippedAfter = 0;
-    primaryResult->agScore = 0;
-    primaryResult->seedOffset = 0;
-    primaryResult->supplementary = false;
+        primaryResult->location = InvalidGenomeLocation; // Value to return if we don't find a location.
+        primaryResult->direction = FORWARD;              // So we deterministically print the read forward in this case.
+        primaryResult->score = UnusedScoreValue;
+        primaryResult->status = NotFound;
+        primaryResult->clippingForReadAdjustment = 0;
+        primaryResult->usedAffineGapScoring = false;
+        primaryResult->basesClippedBefore = 0;
+        primaryResult->basesClippedAfter = 0;
+        primaryResult->agScore = 0;
+        primaryResult->seedOffset = 0;
+        primaryResult->supplementary = false;
 
-    unsigned lookupsThisRun = 0;
+        unsigned lookupsThisRun = 0;
 
-    popularSeedsSkipped = 0;
-    nAddedToHashTable = 0;
+        popularSeedsSkipped = 0;
+        nAddedToHashTable = 0;
 
-    //
-    // A bitvector for used seeds, indexed on the starting location of the seed within the read.
-    //
-    if (inputRead->getDataLength() > maxReadSize) {
-        WriteErrorMessage("BaseAligner:: got too big read (%d > %d)\n" 
-                          "Increase MAX_READ_LENGTH at the beginning of Read.h and recompile\n", inputRead->getDataLength(), maxReadSize);
-        soft_exit(1);
-    }
-
-    if ((int)inputRead->getDataLength() < seedLen) {
         //
-        // Too short to have any seeds, it's hopeless.
-        // No need to finalize secondary results, since we don't have any.
+        // A bitvector for used seeds, indexed on the starting location of the seed within the read.
         //
-        return true;
-    }
+        if (inputRead->getDataLength() > maxReadSize) {
+            WriteErrorMessage("BaseAligner:: got too big read (%d > %d)\n"
+                "Increase MAX_READ_LENGTH at the beginning of Read.h and recompile\n", inputRead->getDataLength(), maxReadSize);
+            soft_exit(1);
+        }
+
+        if ((int)inputRead->getDataLength() < seedLen) {
+            //
+            // Too short to have any seeds, it's hopeless.
+            // No need to finalize secondary results, since we don't have any.
+            //
+            return true;
+        }
 
 #ifdef TRACE_ALIGNER
-    printf("Aligning read '%.*s':\n%.*s\n%.*s\n", inputRead->getIdLength(), inputRead->getId(), inputRead->getDataLength(), inputRead->getData(),
+        printf("Aligning read '%.*s':\n%.*s\n%.*s\n", inputRead->getIdLength(), inputRead->getId(), inputRead->getDataLength(), inputRead->getData(),
             inputRead->getDataLength(), inputRead->getQuality());
 #endif
 
 #ifdef  _DEBUG
-    if (_DumpAlignments) {
-        printf("BaseAligner: aligning read ID '%.*s', data '%.*s' %s\n", inputRead->getIdLength(), inputRead->getId(), inputRead->getDataLength(), inputRead->getData(), useHamming ? "Hamming" : "");
-    }
+        if (_DumpAlignments) {
+            printf("BaseAligner: aligning read ID '%.*s', data '%.*s' %s\n", inputRead->getIdLength(), inputRead->getId(), inputRead->getDataLength(), inputRead->getData(), useHamming ? "Hamming" : "");
+        }
 #endif  // _DEBUG
 
-    //
-    // Clear out the seed used array.
-    //
-    memset(seedUsed, 0, (inputRead->getDataLength() + 7) / 8);
+        //
+        // Clear out the seed used array.
+        //
+        memset(seedUsed, 0, (inputRead->getDataLength() + 7) / 8);
 
-    unsigned readLen = inputRead->getDataLength();
-    const char *readData = inputRead->getData();
-    const char *readQuality = inputRead->getQuality();
-    unsigned countOfNs = 0;
-    for (unsigned i = 0; i < readLen; i++) {
-        char baseByte = readData[i];
-        char complement = rcTranslationTable[baseByte];
-        rcReadData[readLen - i - 1] = complement;
-        rcReadQuality[readLen - i - 1] = readQuality[i];
-        reversedRead[FORWARD][readLen - i - 1] = baseByte;
-        reversedRead[RC][i] = complement;
-        countOfNs += nTable[baseByte];
-    }
+        unsigned readLen = inputRead->getDataLength();
+        const char* readData = inputRead->getData();
+        const char* readQuality = inputRead->getQuality();
+        unsigned countOfNs = 0;
+        for (unsigned i = 0; i < readLen; i++) {
+            char baseByte = readData[i];
+            char complement = rcTranslationTable[baseByte];
+            rcReadData[readLen - i - 1] = complement;
+            rcReadQuality[readLen - i - 1] = readQuality[i];
+            reversedRead[FORWARD][readLen - i - 1] = baseByte;
+            reversedRead[RC][i] = complement;
+            countOfNs += nTable[baseByte];
+        }
 
-    if (countOfNs > maxK) {
-        nReadsIgnoredBecauseOfTooManyNs++;
-        // No need to finalize secondary results, since we don't have any.
+        if (countOfNs > maxK) {
+            nReadsIgnoredBecauseOfTooManyNs++;
+            // No need to finalize secondary results, since we don't have any.
+            return true;
+        }
+#if 1
+        //
+        // The bad aligner works by finding one seed in the middle of the read, scoring a few hits (from both forward and RC) and taking the best one.
+        // If the seed has an N in it, then we don't align the read.
+        //
+
+        Read reverseComplimentRead;
+        Read* read[NUM_DIRECTIONS];
+        read[FORWARD] = inputRead;
+        read[RC] = &reverseComplimentRead;
+        read[RC]->init(NULL, 0, rcReadData, rcReadQuality, readLen);
+
+        _int64        nHits[NUM_DIRECTIONS];                // Number of times this seed hits in the genome
+        const GenomeLocation* hits[NUM_DIRECTIONS];         // The actual hits (of size nHits)
+        GenomeLocation singletonHits[NUM_DIRECTIONS];       // Storage for single hits (this is required for 64 bit genome indices, since they might use fewer than 8 bytes internally)
+        const unsigned* hits32[NUM_DIRECTIONS];
+
+        firstALTResult->status = NotFound;  // We don't do ALTs.  We're a bad aligner.
+
+        int seedLocation = readLen / 2 - seedLen / 2;
+        if (seedLocation < 0 || seedLocation + seedLen >= readLen) {
+            // Couldn't fit the seed
+            return true;
+        }
+
+        if (!Seed::DoesTextRepresentASeed(read[FORWARD]->getData() + seedLocation, seedLen)) {
+            //
+            // There's an N or something.  Give up on the read.
+            //
+            return true;
+        }
+
+        Seed seed(read[FORWARD]->getData() + seedLocation, seedLen);
+
+        if (doesGenomeIndexHave64BitLocations) {
+            genomeIndex->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], &singletonHits[FORWARD], &singletonHits[RC]);
+        } else {
+            genomeIndex->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
+        }
+
+        //
+        // Start scoring hits, alternating between forward and rc.  Start from the highest hit in the array because the SNAP index
+        // is sorted backwards (don't ask), meaning that the later hits have the lower GenomeOffsets, which in turn are more likely
+        // to be in primary contigs than in other stuff.
+        //
+        // Ignore ALTs altogether.
+        //
+
+        int nHitsConsidered = 0;
+        bool lookForwardNext = true;
+
+        int bestScore = maxK + 1;
+        int secondBestScore = maxK + 2;
+        int secondBestCount = 0;
+        GenomeLocation bestAlignmentLocation = InvalidGenomeLocation;
+        int bestAlignmentDirection = FORWARD;
+        _int64 nextHitToConsider[NUM_DIRECTIONS] = { nHits[FORWARD] - 1, nHits[RC] - 1 };
+        int nextDirectionToConsider = FORWARD;
+
+        if (nextHitToConsider[FORWARD] + nextHitToConsider[RC] > maxSeedsToUse) {
+            //
+            // Too many hits.  Skip this read.
+            //
+            return true;
+        }
+
+    while (nHitsConsidered < maxSeedsToUse) {
+        if (nextHitToConsider[FORWARD] < 0 && nextHitToConsider[RC] < 0) {
+            break;
+        }
+
+        //
+        // If we're out of one direction, switch back to the other.
+        //
+        if (nextHitToConsider[nextDirectionToConsider] == -1) {
+            nextDirectionToConsider = 1 - nextDirectionToConsider;
+            continue;
+        }
+
+        GenomeLocation locationToScore = (doesGenomeIndexHave64BitLocations ? hits[nextDirectionToConsider][nextHitToConsider[nextDirectionToConsider]] : hits32[nextDirectionToConsider][nextHitToConsider[nextDirectionToConsider]]) - seedLocation;
+        nextHitToConsider[nextDirectionToConsider]--;
+
+        if (genome->isGenomeLocationALT(locationToScore)) {
+            nextHitToConsider[nextDirectionToConsider]--;
+            continue;
+        }
+
+        Read* readToScore = read[nextDirectionToConsider];
+        const char* referenceData = genome->getSubstring(locationToScore, readToScore->getDataLength() + maxK);
+
+        if (NULL == referenceData) {
+            //
+            // Ran off the end of a contig.
+            //
+            nextHitToConsider[nextDirectionToConsider]--;
+            nextDirectionToConsider = 1 - nextDirectionToConsider;
+            continue;
+        }
+
+        int score = landauVishkin->computeEditDistance(referenceData, readToScore->getDataLength() + maxK, readToScore->getData(), readToScore->getDataLength(), bestScore + 1);
+        nHitsConsidered++;
+
+        if (score == ScoreAboveLimit) {
+            nextHitToConsider[nextDirectionToConsider]--;
+            nextDirectionToConsider = 1 - nextDirectionToConsider;
+            continue;
+        }
+
+        if (score < bestScore) {
+            if (secondBestScore == bestScore) {
+                secondBestCount++;
+            } else {
+                secondBestCount = 1;
+            }
+
+            secondBestScore = bestScore;
+            bestScore = score;
+            bestAlignmentLocation = locationToScore;
+            bestAlignmentDirection = nextDirectionToConsider;
+        } else if (score < secondBestScore) {
+            secondBestCount = 1;
+            secondBestScore = score;
+        } else if (score == secondBestScore) {
+            secondBestCount++;
+        }
+
+        nextHitToConsider[nextDirectionToConsider]--;
+        nextDirectionToConsider = 1 - nextDirectionToConsider;
+    } // while we might still be scoring something
+
+    if (bestScore > maxK) {
+        //
+        // Didn't align.
+        //
         return true;
     }
 
+    primaryResult->location = bestAlignmentLocation; 
+    primaryResult->direction = bestAlignmentDirection;
+    primaryResult->score = bestScore;
+    primaryResult->mapq = (bestScore == secondBestScore) ? 0 : ((bestScore + 1 < secondBestScore) ? 70 : computeMAPQ(1, 1 - .01 * secondBestCount, bestScore, 0));
+
+
+    if (primaryResult->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
+        primaryResult->status = SingleHit;
+    } else {
+        primaryResult->status = MultipleHits;
+    }
+
+    return true;
+
+
+#else 1
     //
     // Block off any seeds that would contain an N.
     //
@@ -764,6 +916,8 @@ Return Value:
 
     finalizeSecondaryResults(read[FORWARD], primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, primaryResult->score);
     return true;
+
+#endif // 1
 }
 
     void

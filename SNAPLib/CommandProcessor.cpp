@@ -35,7 +35,7 @@ Revision History:
 #include "Error.h"
 #include "Compat.h"
 
-const char *SNAP_VERSION = "2.0.2.dev.1";
+const char *SNAP_VERSION = "2.0.2.BAD";
 
 static void usage()
 {
@@ -163,6 +163,7 @@ void RunDaemonMode(int argc, const char **argv)
 void ProcessTopLevelCommands(int argc, const char **argv)
 {
 	fprintf(stderr, "Welcome to SNAP version %s.\n\n", SNAP_VERSION);       // Can't use WriteStatusMessage, because we haven't parsed args yet to determine if -hdp is specified.  Just stick with stderr.
+	fprintf(stderr, "***WARNING*** This version of SNAP has intentionally bad aligners.  It's intended to be used as a baseline for a paper.  You probably shouldn't use it.\n");
 #if TIME_HISTOGRAM
 	fprintf(stderr, "TIME_HISTOGRAM is compiled in.\n");
 #endif // TIME_HISTOGRAM

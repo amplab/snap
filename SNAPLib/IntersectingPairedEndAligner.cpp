@@ -188,6 +188,14 @@ IntersectingPairedEndAligner::align(
 	)
 {
     maxK = maxK_;
+
+    //
+    // For the bad aligner, we just skip this level (we're not doing affine gap at all).
+    //
+    return alignLandauVishkin(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize,
+        nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead,
+        singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap);
+
     if (!useAffineGap) {
         //
         // Version with no affine gap scoring
@@ -195,8 +203,7 @@ IntersectingPairedEndAligner::align(
         return alignLandauVishkin(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize,
 	        nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead,
 	        singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap);
-    }
-    else {
+    } else {
         //
         // Perform seeding, set intersection, LV alignment and identify promising candidates for affine gap scoring
         //
@@ -294,14 +301,8 @@ bool
     *nSingleEndSecondaryResultsForSecondRead = 0;
     *nLVCandidatesForAffineGap = 0;
 
-    int maxSeeds;
-    if (numSeedsFromCommandLine != 0) {
-        maxSeeds = (int)numSeedsFromCommandLine;
-    }
-    else {
-        maxSeeds = (int)(max(read0->getDataLength(), read1->getDataLength()) * seedCoverage / index->getSeedLength());
-    }
-
+    int maxSeeds = 1;
+ 
 #ifdef  _DEBUG
     if (_DumpAlignments) {
         printf("\nIntersectingAligner aligning reads '%*.s' and '%.*s' with data '%.*s' and '%.*s'\n", read0->getIdLength(), read0->getId(), read1->getIdLength(), read1->getId(), read0->getDataLength(), read0->getData(), read1->getDataLength(), read1->getData());
@@ -404,7 +405,41 @@ bool
     // Phase 1: do the hash table lookups for each of the seeds for each of the reads and add them to the hit sets.
     //
 
+    GenomeLocation singleHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+#if 0 // bad aligner unfinished code
+        int seedLocation = readLen[whichRead] / 2 - seedLen / 2;
+
+        if (!Seed::DoesTextRepresentASeed(reads[whichRead][FORWARD]->getData() + seedLocation, seedLen)) {
+            //
+            // Just give up on these reads.
+            //
+            return true;
+        }
+
+        Seed seed(reads[whichRead][FORWARD]->getData() + seedLocation, seedLen);
+        //
+        // Find all instances of this seed in the genome.
+        //
+        _int64 nHits[NUM_DIRECTIONS];
+        const GenomeLocation* hits[NUM_DIRECTIONS];
+        const unsigned* hits32[NUM_DIRECTIONS];
+
+        if (doesGenomeIndexHave64BitLocations) {
+            index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], &singleHit[whichRead][FORWARD], &singleHit[whichRead][RC]);
+        } else {
+            index->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
+        }
+    } // for each read (seed lookup)
+#endif // 0
+
+    //
+    // Phase 2: find locations to score (look at the last n hits of each read and see if they're near enough to hits of the neighbor to score)
+    //
+    for (int direction = FORWARD; direction <= RC; direction++) {   // direction of read 0
+
+    }
+
         int nextSeedToTest = 0;
         unsigned wrapCount = 0;
         int nPossibleSeeds = (int)readLen[whichRead] - seedLen + 1;
