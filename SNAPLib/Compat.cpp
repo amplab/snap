@@ -143,7 +143,27 @@ _int64 timeInNanos()
 
     LARGE_INTEGER perfCount;
     QueryPerformanceCounter(&perfCount);
-    return perfCount.QuadPart * 1000000000 / performanceFrequency;
+    const _int64 billion = 1000000000;  // ns / s
+
+    //
+    // We have to be careful here to avoid _int64 overflow and resulting madness.
+    //
+    // If QPC returns t and QPF returns f, then we're trying to compute t * billion / f.
+    // However, f is typically, say, 10^7.  So if we just used that expression then we'd
+    // wrap every 2^64 / 10^(7+9) seconds, i.e., ~1844s or twice/hour.  That's not OK.
+    // 
+    // Conversely, if we used t * (billion/f) then if f doesn't go evenly into a billion
+    // we'd have a rate error, which is bad and subtle.
+    //
+    // Instead, if we define F as floor(billion/f) (the whole part of ticks/ns), and r as billion%f (the remainder) 
+    // then we have (in real math) timeInNanos() = t * floor(billion/f) + t * (r/f).
+    // The first term wraps every 2^64 ns, which is ~584 years and furthermore is an integer
+    // since both t and floor(billion/f) are integers, so we don't need to worry about it.  The second term will wrap
+    // less often, since r/f < 1.  To do it in integer math, we just reverse the parens and so have as our final
+    // formula timeInNanos() = t * floor(billion/f) + (t*r)/f.
+    //
+
+    return perfCount.QuadPart * (billion / performanceFrequency) + (perfCount.QuadPart * billion % performanceFrequency) / performanceFrequency;
 }
 
 void AcquireUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock) {
