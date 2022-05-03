@@ -18184,7 +18184,7 @@ namespace ASELib
 
         } // FindSAMLinesInNameSortedSAMFile
 
-        public static void WriteLineToMultipleStreams(IEnumerable<StreamWriter> streams, string line)
+        public static void WriteLineToMultipleStreams(IEnumerable<StreamWriter> streams, string line = "")
         {
             foreach (var stream in streams)
             {
