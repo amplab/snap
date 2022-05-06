@@ -16123,7 +16123,7 @@ namespace ASELib
             process.WaitForExit();
 
             return output;
-        } // RunProcessAndGetOutput
+        } // RunProcessAndGetOutputRedirectingInput
 
 
 #if false
