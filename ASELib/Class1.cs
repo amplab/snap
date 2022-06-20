@@ -3706,16 +3706,19 @@ namespace ASELib
         {
             var timeInSeconds = (stopwatch.ElapsedMilliseconds + 500) / 1000;
             var result = "";
+            bool displayedSomething = false;
             if (timeInSeconds >= secondsInDay)
             {
                 result += (timeInSeconds / secondsInDay) + "d ";
                 timeInSeconds %= secondsInDay;
+                displayedSomething = true;
             }
 
-            if (timeInSeconds >= secondsInHour)
+            if (timeInSeconds >= secondsInHour || displayedSomething)
             {
                 result += (timeInSeconds / secondsInHour) + ":";
                 timeInSeconds %= secondsInHour;
+                displayedSomething = true;
             }
 
             result += String.Format("{0:00}", timeInSeconds / secondsInMinute) + ":" + String.Format("{0:00}", timeInSeconds % secondsInMinute);
