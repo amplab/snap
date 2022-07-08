@@ -1196,6 +1196,7 @@ Return Value:
                                 readLen, scoreLimitForThisElement, &score1, NULL, NULL, &matchProb1, &score1Gapless);
                             agScore1 += (seedLen - readLen);
                         }
+
                         if (score1Gapless != ScoreAboveLimit) {
                             int limitLeft = scoreLimitForThisElement - score1Gapless;
                             if (seedOffset != 0) {
@@ -1236,8 +1237,7 @@ Return Value:
                                         &basesClippedAfter,
                                         &score1,
                                         &matchProb1);
-                                }
-                                else {
+                                } else {
                                     agScore1 = affineGap->computeScore(data + tailStart,
                                         textLen,
                                         readToScore->getData() + tailStart,
@@ -1275,8 +1275,7 @@ Return Value:
                                             &basesClippedBefore,
                                             &score2,
                                             &matchProb2);
-                                    }
-                                    else {
+                                    } else {
                                         agScore2 = reverseAffineGap->computeScore(data + seedOffset,
                                             seedOffset + limitLeft,
                                             reversedRead[elementToScore->direction] + readLen - seedOffset,
@@ -1365,6 +1364,7 @@ Return Value:
                     if (useHamming && matchProbability <= elementToScore->matchProbabilityForBestScore) {
                         continue;
                     }
+
                     if (elementToScore->bestScore < score || (elementToScore->bestScore == score && matchProbability <= elementToScore->matchProbabilityForBestScore)) {
                     // if (matchProbability <= elementToScore->matchProbabilityForBestScore) {
 						//
@@ -1456,8 +1456,7 @@ Return Value:
                             anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer,
                             maxCandidatesForAffineGapBufferSize, nCandidatesForAffineGap, candidatesForAffineGap, extraSearchDepth);
                     }
-                }
-                else {
+                } else {
                     scoresForAllAlignments.updateBestScore(genomeLocation, origGenomeLocation, score, usedAffineGapScoring, agScore, matchProbability, lvScoresAfterBestFound, elementToScore,
                         secondaryResults, nSecondaryResults, secondaryResultBufferSize,
                         anyNearbyCandidatesAlreadyScored, maxEditDistanceForSecondaryResults, overflowedSecondaryBuffer,
@@ -1690,8 +1689,7 @@ BaseAligner::alignAffineGap(
             double newProbabilityALT = firstALTResult->matchProbability;
             scoresForAllAlignments.updateProbabilityOfAllMatches(oldProbabilityBestResultALT);
             scoresForAllAlignments.updateProbabilityOfBestMatch(newProbabilityALT);
-        }
-        else {
+        } else {
             scoresForAllAlignments.updateProbabilityOfAllMatches(oldProbabilityBestResult);
             scoresForAllAlignments.updateProbabilityOfBestMatch(newProbability);
         }
@@ -1763,8 +1761,7 @@ BaseAligner::alignAffineGap(
     ScoreSet* scoreSetToEmit;
     if ((!altAwareness) || scoresForNonAltAlignments.bestScore > scoresForAllAlignments.bestScore + maxScoreGapToPreferNonAltAlignment) {
         scoreSetToEmit = &scoresForAllAlignments;
-    }
-    else {
+    } else {
         scoreSetToEmit = &scoresForNonAltAlignments;
     }
 
@@ -1777,8 +1774,7 @@ BaseAligner::alignAffineGap(
         scoresForAllAlignments.fillInSingleAlignmentResult(firstALTResult, firstALTResult->popularSeedsSkipped);
 
         firstALTResult->supplementary = true;
-    }
-    else {
+    } else {
         firstALTResult->status = NotFound;
     }
 
@@ -1834,6 +1830,7 @@ BaseAligner::findElement(
     while (NULL != lookedUpElement && lookedUpElement->baseGenomeLocation != highOrderGenomeLocation) {
         lookedUpElement = lookedUpElement->next;
     }
+
     *hashTableElement = lookedUpElement;
     return lookedUpElement != NULL;
 }
@@ -2003,6 +2000,7 @@ Return Value:
             // affineGap->~AffineGap();
             affineGap->~AffineGapVectorized();
         }
+
         if (NULL != reverseAffineGap) {
             // reverseAffineGap->~AffineGap();
             reverseAffineGap->~AffineGapVectorized();
@@ -2024,6 +2022,7 @@ Return Value:
         if (NULL != affineGap) {
             delete affineGap;
         }
+
         if (NULL != reverseAffineGap) {
             delete reverseAffineGap;
         }
@@ -2058,8 +2057,8 @@ Return Value:
             BigDealloc(hitsPerContigCounts);
             hitsPerContigCounts = NULL;
         }
-    }
-}
+    } // !bigAllocator
+} // ~BaseAligner
 
 BaseAligner::HashTableElement::HashTableElement()
 {
@@ -2157,7 +2156,13 @@ void BaseAligner::ScoreSet::updateBestScore(
                                 SingleAlignmentResult* candidatesForAffineGap,
                                 unsigned extraSearchDepth)
 {
-    bool seenNewBestScore = (agScore > bestScoreAGScore) || (bestScoreAGScore == agScore && matchProbability > probabilityOfBestCandidate);
+    bool seenNewBestScore;
+
+    if (useAffineGap) {
+        seenNewBestScore = (agScore > bestScoreAGScore) || (bestScoreAGScore == agScore && matchProbability > probabilityOfBestCandidate);
+    } else {
+        seenNewBestScore = (score < bestScore) || (score == bestScore && matchProbability > probabilityOfBestCandidate);
+    }
 
     if (seenNewBestScore) {
         if (bestScore >= score) {
@@ -2306,12 +2311,12 @@ void BaseAligner::ScoreSet::fillInSingleAlignmentResult(SingleAlignmentResult* r
 
     if (result->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
         result->status = SingleHit;
-    }
-    else {
+    } else {
         result->status = MultipleHits;
     }
+
     result->probabilityAllCandidates = probabilityOfAllCandidates;
-}
+} // ScoreSet::fillInSingleAlignmentResult
 
     void
 BaseAligner::Candidate::init()
@@ -2379,9 +2384,11 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
     } else {
         maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / seedLen);
     }
+
     size_t candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
     size_t hashTableElementPoolSize = (_int64)maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
     size_t contigCounters;
+
     if (maxSecondaryAlignmentsPerContig > 0) {
         contigCounters = sizeof(HitsPerContigCounts)* index->getGenome()->getNumContigs();
     } else {
@@ -2406,7 +2413,7 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         sizeof(HashTableAnchor) * candidateHashTablesSize * 2           + // candidate hash table (both)
         sizeof(HashTableElement) * ((_int64)maxSeedsToUse + 1)          + // weight lists
         sizeof(unsigned) * extraSearchDepth;                              // hitCountByExtraSearchDepth
-}
+} // getBigAllocatorReservation
 
     void 
 BaseAligner::finalizeSecondaryResults(

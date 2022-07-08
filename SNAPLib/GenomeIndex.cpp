@@ -454,13 +454,20 @@ GenomeIndex::runIndexer(
     _int64 start = timeInMillis();
     const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altOptInList, nAltOptIn, altOptOutList, nAltOptOut, maxSizeForAutomaticALT, autoALT,
         altLiftoverContigNames, altLiftoverContigFlags, altLiftoverProjContigNames, altLiftoverProjContigOffsets, altLiftoverProjCigar, nAltLiftover);
+
     if (NULL == genome) {
         WriteErrorMessage("Unable to read FASTA file\n");
         soft_exit(1);
     }
+
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
 
-	WriteStatusMessage("Genome has %d contigs, of which %d are ALTs\n", genome->getNumContigs(), genome->getNumALTContigs());
+    const int commafiedBufferSize = 40;
+    char contigCountBuffer[commafiedBufferSize];
+    char altContigCountBuffer[commafiedBufferSize];
+
+	WriteStatusMessage("Genome has %s contigs, of which %s are ALTs\n", FormatUIntWithCommas(genome->getNumContigs(), contigCountBuffer, commafiedBufferSize), 
+                        FormatUIntWithCommas(genome->getNumALTContigs(), altContigCountBuffer, commafiedBufferSize));
 
     GenomeDistance nBases = genome->getCountOfBases();
 
@@ -472,8 +479,11 @@ GenomeIndex::runIndexer(
     genome = NULL;  // It's deleted by BuildIndexToDirectory.
 
     _int64 end = timeInMillis();
-    WriteStatusMessage("Index build and save took %llds (%lld bases/s)\n",
-           (end - start) / 1000, nBases / max((end - start) / 1000, (_int64) 1)); 
+
+    char rateBuffer[commafiedBufferSize];
+    WriteStatusMessage("Index build and save took %llds (%s bases/s)\n",
+        (end - start) / 1000,
+        FormatUIntWithCommas(nBases / max((end - start) / 1000, (_int64)1), rateBuffer, commafiedBufferSize));
 }
 
 //
@@ -666,15 +676,23 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 //                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
     }
 
-    WriteStatusMessage("%lld(%lld%%) seeds occur more than once, total of %lld(%lld%%) genome locations are not unique, %lld(%lld%%) bad seeds, %lld both complements used %lld no string\n",
-        seedsWithMultipleOccurrences,
+    const int commafiedBufferSize = 40;
+    char seedsWithMultipleOccurrencesBuffer[commafiedBufferSize];
+    char genomeLocationsInOverflowTableBuffer[commafiedBufferSize];
+    char badSeedBuffer[commafiedBufferSize];
+    char bothComplementsBuffer[commafiedBufferSize];
+    char noStringBuffer[commafiedBufferSize];
+
+    WriteStatusMessage("%s(%lld%%) seeds occur more than once, total of %s(%lld%%) genome locations are not unique, %s(%lld%%) bad seeds, %s both complements used %s no string\n",
+        FormatUIntWithCommas(seedsWithMultipleOccurrences, seedsWithMultipleOccurrencesBuffer, commafiedBufferSize),
         (seedsWithMultipleOccurrences * 100) / countOfBases,
-        genomeLocationsInOverflowTable,
+        FormatUIntWithCommas(genomeLocationsInOverflowTable, genomeLocationsInOverflowTableBuffer, commafiedBufferSize),
         genomeLocationsInOverflowTable * 100 / countOfBases,
-        nonSeeds,
+        FormatUIntWithCommas(nonSeeds, badSeedBuffer, commafiedBufferSize),
         (nonSeeds * 100) / countOfBases,
-        bothComplementsUsed,
-        noBaseAvailable);
+        FormatUIntWithCommas(bothComplementsUsed, bothComplementsBuffer, commafiedBufferSize),
+        FormatUIntWithCommas(noBaseAvailable, noStringBuffer, commafiedBufferSize)
+        );
 
     WriteStatusMessage("Hash table build took %llds\n",(timeInMillis() + 500 - start) / 1000);
 
@@ -854,8 +872,16 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                     }
 
 					if (timeInMillis() - lastPrintTime > 60 * 1000) {
-						WriteStatusMessage("%lld/%lld duplicate seeds, %lld/%lld backpointers, %d/%d hash tables processed\n", 
-							duplicateSeedsProcessed, seedsWithMultipleOccurrences, nBackpointersProcessed, genomeLocationsInOverflowTable,
+                        char doneDuplicateSeedsBuffer[commafiedBufferSize];
+                        char totalDuplicateSeedsBuffer[commafiedBufferSize];
+                        char doneBackpointersBuffer[commafiedBufferSize];
+                        char totalBackpointersBuffer[commafiedBufferSize];
+
+						WriteStatusMessage("%s/%s duplicate seeds, %s/%s backpointers, %d/%d hash tables processed\n", 
+                            FormatUIntWithCommas(duplicateSeedsProcessed, doneDuplicateSeedsBuffer, commafiedBufferSize),
+                            FormatUIntWithCommas(seedsWithMultipleOccurrences, totalDuplicateSeedsBuffer, commafiedBufferSize),
+                            FormatUIntWithCommas(nBackpointersProcessed, doneBackpointersBuffer, commafiedBufferSize),
+                            FormatUIntWithCommas(genomeLocationsInOverflowTable, totalBackpointersBuffer, commafiedBufferSize),
 							whichHashTable, nHashTables);
 						lastPrintTime = timeInMillis();
 					}
@@ -1350,7 +1376,12 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 				_int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
 
 				if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds)/printBatchSize) {
-					WriteStatusMessage("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
+                    const int commafiedBufferSize = 40;
+                    char basesProcessedBuffer[commafiedBufferSize];
+                    char countOfBasesBuffer[commafiedBufferSize];
+
+					WriteStatusMessage("Bias computation: %s / %s\n", FormatUIntWithCommas((basesProcessed/printBatchSize)*printBatchSize, basesProcessedBuffer, commafiedBufferSize), 
+                                       FormatUIntWithCommas((_int64)countOfBases, countOfBasesBuffer, commafiedBufferSize));
 				}
 				unrecordedSkippedSeeds= 0;  // We've now recorded them.
 			}
@@ -1360,7 +1391,12 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
         _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[i].nUsed + unrecordedSkippedSeeds);
 
         if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - batches[i].nUsed - unrecordedSkippedSeeds)/printBatchSize) {
-            WriteStatusMessage("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
+            const int commafiedBufferSize = 40;
+            char basesProcessedBuffer[commafiedBufferSize];
+            char countOfBasesBuffer[commafiedBufferSize];
+
+            WriteStatusMessage("Bias computation: %s / %s\n", FormatUIntWithCommas((basesProcessed / printBatchSize) * printBatchSize, basesProcessedBuffer, commafiedBufferSize),
+                FormatUIntWithCommas((_int64)countOfBases, countOfBasesBuffer, commafiedBufferSize));
         }
 
         unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.
@@ -1479,7 +1515,11 @@ GenomeIndex::indexSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBat
 		_int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + stats->unrecordedSkippedSeeds);
 
 		if ((unsigned)(newNBasesProcessed / printPeriod) > (unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - stats->unrecordedSkippedSeeds) / printPeriod)) {
-			WriteStatusMessage("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, context->genome->getCountOfBases());
+            const int commafiedBufferSize = 40;
+            char progressBuffer[commafiedBufferSize];
+            char totalBuffer[commafiedBufferSize];
+			WriteStatusMessage("Indexing %s / %s\n", FormatUIntWithCommas((newNBasesProcessed / printPeriod) * printPeriod, progressBuffer,commafiedBufferSize), 
+                                FormatUIntWithCommas(context->genome->getCountOfBases(), totalBuffer, commafiedBufferSize));
 		}
 		stats->unrecordedSkippedSeeds = 0;
 		batches[whichHashTable].clear();
