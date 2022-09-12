@@ -144,6 +144,7 @@ struct AlignerOptions : public AbstractOptions
     int                 maxScoreGapToPreferNonALTAlignment;
     bool                emitALTAlignments;
     bool                attachAlignmentTimes;
+    bool                preserveFASTQComments;
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

@@ -924,7 +924,8 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
 
     }   // while we have a read pair
 
-    stats->lvCalls = aligner->getLocationsScored();
+    stats->lvCalls = aligner->getLocationsScoredWithLandauVishkin();
+    stats->affineGapCalls = aligner->getLocationsScoredWithAffineGap();
 
     allocator->checkCanaries();
 

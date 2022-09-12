@@ -360,6 +360,7 @@ AlignerContext::beginIteration()
     readerContext.genome = index != NULL ? index->getGenome() : NULL;
     readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
     readerContext.ignoreSupplementaryAlignments = options->ignoreSecondaryAlignments;   // Maybe we should split them out
+    readerContext.preserveFASTQComments = options->preserveFASTQComments;
     DataSupplier::ExpansionFactor = options->expansionFactor;
 
     typeSpecificBeginIteration();
@@ -544,16 +545,24 @@ AlignerContext::printStats()
     );
 
     if (NULL != perfFile) {
-        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%0.2f%%\t%lld\tt%.0f\n",
+        fprintf(perfFile, "maxHits\tmaxDist\t%% reads not useless\t%% reads single hit\t%% reads multi hit\t%% reads not found\tLV calls\taffine gap calls\t%% aligned as pairs\ttotal reads\treads/s\n");
+
+        char lvBuf[strBufLen];
+        char agBuf[strBufLen];
+        char totalReadsBuf[strBufLen];
+        char timePerReadBuf[strBufLen];
+
+        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%s\t%0.2f%%\t%s\t%s\n",
                 maxHits_, maxDist_, 
                 100.0 * (stats->totalReads - stats->uselessReads) / max(stats->totalReads, (_int64) 1),
 				100.0 * stats->singleHits / stats->totalReads,
 				100.0 * stats->multiHits / stats->totalReads,
 				100.0 * stats->notFound / stats->totalReads,
-                stats->lvCalls,
-				100.0 * stats->alignedAsPairs / stats->totalReads,
-                stats->totalReads,
-                (1000.0 * (stats->totalReads - stats->uselessReads)) / max(alignTime, (_int64)1));
+                FormatUIntWithCommas(stats->lvCalls, lvBuf, strBufLen),
+                FormatUIntWithCommas(stats->affineGapCalls, agBuf, strBufLen),
+                100.0 * stats->alignedAsPairs / stats->totalReads,
+                FormatUIntWithCommas(stats->totalReads, totalReadsBuf, strBufLen),
+                FormatUIntWithCommas((1000 * (stats->totalReads - stats->uselessReads)) / max(alignTime, (_int64)1), timePerReadBuf, strBufLen));
 
         fprintf(perfFile,"\n");
     }

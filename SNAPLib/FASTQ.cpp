@@ -272,8 +272,25 @@ FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpda
     }
 
     const char *id = lines[0] + 1; // The '@' on the first line is not part of the ID
+    const char* whitespace;
     const char* space = strnchr(id, ' ', lineLengths[0] - 1);
-    readToUpdate->init(id, space != NULL ? (unsigned) (space - id) : (unsigned) lineLengths[0] - 1, lines[1], lines[3], lineLengths[1]);
+    const char* comment = NULL;
+    if (context.preserveFASTQComments) {
+        const char* tab = strnchr(id, '\t', lineLengths[0] - 1);
+        if (tab != NULL && space != NULL && tab < space || space == NULL) {
+            whitespace = tab;
+        } else {
+            whitespace = space;
+        }
+
+        if (whitespace != NULL) {
+            comment = whitespace + 1;
+        }
+    } else {
+        whitespace = space;
+    }
+
+    readToUpdate->init(id, whitespace != NULL ? (unsigned)(whitespace - id) : (unsigned)lineLengths[0] - 1, lines[1], lines[3], lineLengths[1], comment, (comment == NULL) ? 0 : (unsigned)(lines[0] + lineLengths[0] - comment));
     readToUpdate->clip(context.clipping);
     readToUpdate->setBatch(data->getBatch());
     readToUpdate->setReadGroup(context.defaultReadGroup);

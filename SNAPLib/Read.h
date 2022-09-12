@@ -97,6 +97,7 @@ struct ReaderContext
     bool                paired;
     bool                ignoreSecondaryAlignments;   // Should we just ignore reads with the Secondary Alignment bit set?
     bool                ignoreSupplementaryAlignments;  // Should we just ignore reads with the Supplementary Alignment bit set?
+    bool                preserveFASTQComments;
     const char*         header; // allocated buffer for header
     size_t              headerLength; // length of string
     size_t              headerBytes; // bytes used for header in file
@@ -236,7 +237,8 @@ public:
             upcaseForwardRead(NULL), auxiliaryData(NULL), auxiliaryDataLength(0),
             readGroup(NULL), library(NULL), libraryLength(0), originalAlignedLocation(-1), originalMAPQ(-1), originalSAMFlags(0),
             originalFrontClipping(0), originalBackClipping(0), originalFrontHardClipping(0), originalBackHardClipping(0),
-            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0), additionalFrontClipping(0), additionalBackClipping(0)
+            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0), additionalFrontClipping(0), additionalBackClipping(0),
+            FASTQComment(NULL)
         {}
 
         Read(const Read& other) :  localBufferAllocationOffset(0)
@@ -263,6 +265,8 @@ public:
         {
             id = other.id;
             idLength = other.idLength;
+            FASTQComment = other.FASTQComment;
+            FASTQCommentLength = other.FASTQCommentLength;
             frontClippedLength = other.frontClippedLength;
             dataLength = other.dataLength;
             externalData = other.externalData;
@@ -377,9 +381,11 @@ public:
                 unsigned i_idLength,
                 const char *i_data, 
                 const char *i_quality, 
-                unsigned i_dataLength)
+                unsigned i_dataLength,
+                const char *i_FASTQComment,
+                unsigned i_FASTQCommentLength)
         {
-            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
+            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0, false, i_FASTQComment, i_FASTQCommentLength);
         }
 
         void init(
@@ -398,7 +404,9 @@ public:
                 const char *        i_originalRNEXT,
                 unsigned            i_originalRNEXTLength,
                 unsigned            i_originalPNEXT,
-                bool                allUpper = false)
+                bool                allUpper = false,
+                const char *        i_FASTQComment = NULL,
+                unsigned            i_FASTQCommentLength = 0)
         {
             id = i_id;
             idLength = i_idLength;
@@ -421,6 +429,8 @@ public:
             originalRNEXTLength = i_originalRNEXTLength;
             originalPNEXT = i_originalPNEXT;
             currentReadDirection = FORWARD;
+            FASTQComment = i_FASTQComment;
+            FASTQCommentLength = i_FASTQCommentLength;
 
             if (dataLength > MAX_READ_LENGTH) {
                 WriteErrorMessage("Saw a read of length %d while SNAP is compiled with a maximum length of %d. Please use smaller reads or change the value of MAX_READ_LENGTH in SNAPLib/Read.h and recompile SNAP.  Read ID: %.*s\n",
@@ -463,11 +473,13 @@ public:
             }
         }
 
-        // For efficiency, this class holds id, data and quality pointers that are
+        // For efficiency, this class holds id, data, quality and FASTQComment pointers that are
         // *NOT* guaranteed to be to null-terminated strings; use the the length fields
         // to figure out how far to read into these strings.
         inline const char *getId() const {return id;}
         inline unsigned getIdLength() const {return idLength;}
+        inline const char* getFASTQComment() const { return FASTQComment; }
+        inline unsigned getFASTQCommentLength() const { return FASTQCommentLength; }
         inline const char *getData() const {return data;}
         inline const char *getUnclippedData() const {return unclippedData;}
         inline const char *getQuality() const {return quality;}
@@ -715,6 +727,8 @@ private:
         ReadClippingType clippingState;
         int additionalFrontClipping;
         int additionalBackClipping;
+        const char *FASTQComment;
+        unsigned FASTQCommentLength;
 
         //
         // Alignment data that was in the read when it was read from a file.  While this should probably also be the place to put
@@ -824,9 +838,9 @@ private:
 //
 class ReadWithOwnMemory : public Read {
 public:
-    ReadWithOwnMemory() : Read(), extraBuffer(NULL), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL), auxBuffer(NULL) {}
+    ReadWithOwnMemory() : Read(), extraBuffer(NULL) {}
 
-    ReadWithOwnMemory(const Read &baseRead) {
+    ReadWithOwnMemory(const Read &baseRead) : extraBuffer(NULL) {
         set(baseRead);
     }
     
@@ -842,6 +856,12 @@ private:
     void set(const Read &baseRead)
     {
         // allocate space in ownBuffer if possible; id/aux might need extraBuffer
+        char* idBuffer;
+        char* FASTQCommentBuffer;
+        char* dataBuffer;
+        char* qualityBuffer;
+        char* auxBuffer;
+
         dataBuffer = ownBuffer;
         int ownBufferUsed = baseRead.getUnclippedLength() + 1;
         qualityBuffer = ownBuffer + ownBufferUsed;
@@ -849,27 +869,46 @@ private:
         unsigned auxLen;
         bool auxSam;
         char* aux = baseRead.getAuxiliaryData(&auxLen, &auxSam);
+        FASTQCommentBuffer = NULL;
+
         if (baseRead.getIdLength() + 1 < sizeof(ownBuffer) - ownBufferUsed) {
             idBuffer = ownBuffer + ownBufferUsed;
             ownBufferUsed += baseRead.getIdLength() + 1;
         } else {
             idBuffer = NULL;
         }
+
+        if (baseRead.getFASTQComment() != NULL && baseRead.getFASTQCommentLength() + 1 < sizeof(ownBuffer) - ownBufferUsed) {
+            FASTQCommentBuffer = ownBuffer + ownBufferUsed;
+            ownBufferUsed += baseRead.getFASTQCommentLength() + 1;
+        }
+
         if (auxLen > 0 && auxLen < sizeof(ownBuffer) - ownBufferUsed) {
             auxBuffer = ownBuffer + ownBufferUsed;
             ownBufferUsed += auxLen;
         } else {
             auxBuffer = NULL;
         }
-        if (idBuffer == NULL || (auxLen > 0 && auxBuffer == NULL)) {
-            extraBuffer = new char[(idBuffer == NULL ? baseRead.getIdLength() + 1 : 0) + auxLen];
+
+        if (idBuffer == NULL || auxLen > 0 && auxBuffer == NULL || FASTQCommentBuffer == NULL && baseRead.getFASTQComment() != NULL) {
+            extraBuffer = new char[(idBuffer == NULL ? baseRead.getIdLength() + 1 : 0) + auxLen + 
+                ((FASTQCommentBuffer == NULL && baseRead.getFASTQComment() != NULL) ? baseRead.getFASTQCommentLength() + 1 : 0)];
+
             int extraBufferUsed = 0;
+
             if (idBuffer == NULL) {
                 idBuffer = extraBuffer;
                 extraBufferUsed += baseRead.getIdLength() + 1;
             }
+
             if (auxLen > 0 && auxBuffer == NULL) {
                 auxBuffer = extraBuffer + extraBufferUsed;
+                extraBufferUsed += auxLen;
+            }
+
+            if (FASTQCommentBuffer == NULL && baseRead.getFASTQComment() != NULL) {
+                FASTQCommentBuffer = extraBuffer + extraBufferUsed;
+                extraBufferUsed += baseRead.getFASTQCommentLength() + 1;
             }
         } else {
             extraBuffer = NULL;
@@ -884,8 +923,14 @@ private:
 
         memcpy(qualityBuffer,baseRead.getUnclippedQuality(),baseRead.getUnclippedLength());
         qualityBuffer[baseRead.getUnclippedLength()] = '\0';
+
+        if (baseRead.getFASTQComment() != NULL) {
+            memcpy(FASTQCommentBuffer, baseRead.getFASTQComment(), baseRead.getFASTQCommentLength());
+            FASTQCommentBuffer[baseRead.getFASTQCommentLength()] = '\0';
+
+        }
     
-        init(idBuffer,baseRead.getIdLength(),dataBuffer,qualityBuffer,baseRead.getUnclippedLength());
+        init(idBuffer,baseRead.getIdLength(),dataBuffer,qualityBuffer,baseRead.getUnclippedLength(), FASTQCommentBuffer, baseRead.getFASTQCommentLength());
 		clip(baseRead.getClippingState());
 
         setReadGroup(baseRead.getReadGroup());
@@ -904,11 +949,6 @@ private:
     char ownBuffer[MAX_READ_LENGTH * 2 + 1000]; // internal buffer for copied data
     char* extraBuffer; // extra buffer if internal buffer not big enough
 
-    // should all point into ownBuffer or extraBuffer
-    char *idBuffer;
-    char *dataBuffer;
-    char *qualityBuffer;
-    char *auxBuffer;
 };
 
 extern const unsigned DEFAULT_MIN_READ_LENGTH;

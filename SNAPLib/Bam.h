@@ -141,7 +141,7 @@ struct BAMAlignment
     static _uint8 SeqToCode[256];
     static const char* CodeToCigar;
     static _uint8 CigarToCode[256];
-    static _uint8 CigarCodeToRefBase[9];
+    static _uint8 CigarCodeToRefBase[16]; // Only first 9 are used.  The remainder are here to avoid a compiler warning.
     static int GetCigarOpCode(_uint32 op) { return op & 0xf; }
     static int GetCigarOpCount(_uint32 op) { return op >> 4; }
     
@@ -275,7 +275,7 @@ struct BAMAlignAux
 
     size_t      size()
     {
-        return val_type == STRING_VAL_TYPE ? strlen((const char*) value()) + 4
+        return (val_type == STRING_VAL_TYPE || val_type == HEX_VAL_TYPE) ? strlen((const char*) value()) + 4
             : val_type == ARRAY_VAL_TYPE ? size(arrayValType(), count())
             : size(val_type);
     }

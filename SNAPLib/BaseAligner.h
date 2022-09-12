@@ -105,7 +105,8 @@ public:
     //
 
     _int64 getNHashTableLookups() const {return nHashTableLookups;}
-    _int64 getLocationsScored() const {return nLocationsScored;}
+    _int64 getLocationsScoredWithLandauVishkin() const { return nLocationsScoredWithLandauVishkin; }
+    _int64 getLocationsScoredWithAffineGap() const { return nLocationsScoredWithAffineGap; }
     _int64 getNHitsIgnoredBecauseOfTooHighPopularity() const {return nHitsIgnoredBecauseOfTooHighPopularity;}
     _int64 getNReadsIgnoredBecauseOfTooManyNs() const {return nReadsIgnoredBecauseOfTooManyNs;}
     _int64 getNIndelsMerged() const {return nIndelsMerged;}
@@ -179,7 +180,8 @@ private:
     char rcTranslationTable[256];
 
     _int64 nHashTableLookups;
-    _int64 nLocationsScored;
+    _int64 nLocationsScoredWithLandauVishkin;
+    _int64 nLocationsScoredWithAffineGap;
     _int64 nHitsIgnoredBecauseOfTooHighPopularity;
     _int64 nReadsIgnoredBecauseOfTooManyNs;
     _int64 nIndelsMerged;
@@ -381,7 +383,6 @@ private:
     ScoreSet scoresForNonAltAlignments;
     //unsigned scoreLimit;
     unsigned minScoreThreshold; // used in affine gap to elide scoring of missed seed hits
-    unsigned lvScores;
     unsigned lvScoresAfterBestFound;
     unsigned affineGapScores;
     unsigned affineGapScoresAfterBestFound;

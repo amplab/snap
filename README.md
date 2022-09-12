@@ -32,7 +32,7 @@ SNAP has a one page [Quick Start Guide](https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSw
 
 SNAP runs on Windows, Linux and OSX.
 
-For Windows, we provide a Visual C++ project, `snap.sln`. Requirements:
+For Windows, we provide a Visual C++ solution, `snap.sln`. Requirements:
 - Visual Studio 2022
 
 When you build it, you will have to set it to build for x64, not "Any CPU" or 32 bit.

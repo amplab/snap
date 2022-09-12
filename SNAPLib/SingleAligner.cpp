@@ -334,7 +334,10 @@ SingleAlignerContext::runIterationThreadImpl(Read *& read)
         } else {
             stats->filtered++;
         }
-    }
+    } // while we have a read to align
+
+    stats->lvCalls = aligner->getLocationsScoredWithLandauVishkin();
+    stats->affineGapCalls = aligner->getLocationsScoredWithAffineGap();
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
  

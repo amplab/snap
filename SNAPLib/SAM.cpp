@@ -480,7 +480,7 @@ SAMReader::parseHeader(
                 numRGLines++;
 
                 if (NULL != o_rgLines) {
-                    if ((_int64)numRGLines + 1 >= n_rg_slots) {
+                    if ((_int64)numRGLines + 1 >= (_int64)n_rg_slots) {
                         char* newRGLines = new char[n_rg_slots * rg_slot_size * 2];
                         memcpy(newRGLines, rgLines, sizeof(char) * n_rg_slots * rg_slot_size);
                         size_t* newRGLineOffsets = new size_t[n_rg_slots * 2];
@@ -685,9 +685,10 @@ SAMReader::getReadFromLine(
             while (n > 0 && (field[OPT][n-1] == '\n' || field[OPT][n-1] == '\r')) {
                 n--;
             }
+
             read->setAuxiliaryData(field[OPT], n);
             char* rgFromAux = NULL;
-            int rgFromAuxLen = 0;
+            size_t rgFromAuxLen = 0;
             for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextFieldSeparator(p, field[OPT] + fieldLength[OPT])) {
                 if (strncmp(p, "RG:Z:", 5) == 0) {
                     rgFromAux = p + 5;
@@ -697,13 +698,14 @@ SAMReader::getReadFromLine(
                     break;
                 }
             }
+
             // LB
             if (rgLines != NULL) {
                 // get library for read group
                 for (int i = 0; i < numRGLines; i++) {
                     char* rgStart = rgLines + rgLineOffsets[i];
                     char* rgEnd = strchr(rgStart, '\t');
-                    int rgLen = (int)(rgEnd - rgStart);
+                    size_t rgLen = rgEnd - rgStart;
                     if (rgFromAuxLen != rgLen) continue;
                     if (!strncmp(rgFromAux, rgStart, rgLen)) {
                         char* lbStart = rgEnd + 1;
@@ -714,9 +716,9 @@ SAMReader::getReadFromLine(
                         }
                     }
                 }
-            }
-        }
-    }
+            } // rgLines != NULL
+        } // field[OPT] != NULL
+    } // NULL != read
 
     if (NULL != alignmentResult) {
         if (_flag & SAM_UNMAPPED) {
@@ -1440,6 +1442,8 @@ SAMFormat::createSAMLine(
     unsigned& basesClippedAfter,
     unsigned& mateBasesClippedBefore,
     unsigned& mateBasesClippedAfter,
+    const char*& FASTQComment,
+    unsigned &FASTQCommentLength,
     // input data
     size_t& qnameLen,
     Read * read,
@@ -1478,6 +1482,14 @@ SAMFormat::createSAMLine(
 
     if (0 == qnameLen) {
         qnameLen = read->getIdLength();
+    }
+
+    if (read->getFASTQComment() == NULL || read->getFASTQCommentLength() == 0) {
+        FASTQComment = "";
+        FASTQCommentLength = 0;
+    } else {
+        FASTQComment = read->getFASTQComment();
+        FASTQCommentLength = read->getFASTQCommentLength();
     }
 
     //
@@ -1582,33 +1594,35 @@ SAMFormat::writePairs(
 
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ * 2;
-    char cigarBuf[2][cigarBufSize];
+    char cigarBuf[NUM_READS_PER_PAIR][cigarBufSize];
 
     const int cigarBufWithClippingSize = MAX_READ * 2 + 32;
-    char cigarBufWithClipping[2][cigarBufWithClippingSize];
+    char cigarBufWithClipping[NUM_READS_PER_PAIR][cigarBufWithClippingSize];
 
-    int flags[2] = {0, 0};
-    const char *contigName[2] = {"*", "*"};
-    OriginalContigNum contigIndex[2] = { OriginalContigNum(-1), OriginalContigNum(-1)};
-    GenomeDistance positionInContig[2] = {0, 0};
-    const char *mateContigName[2] = {"*", "*"};
-    OriginalContigNum mateContigIndex[2] = { OriginalContigNum(-1), OriginalContigNum(-1)};
-    GenomeDistance matePositionInContig[2] = {0, 0};
-    const char *cigar[2] = {"*", "*"};
-    _int64 templateLength[2] = {0, 0};
-    int refSpanFromCigar[2] = {0, 0};
+    int flags[NUM_READS_PER_PAIR] = {0, 0};
+    const char *contigName[NUM_READS_PER_PAIR] = {"*", "*"};
+    OriginalContigNum contigIndex[NUM_READS_PER_PAIR] = { OriginalContigNum(-1), OriginalContigNum(-1)};
+    GenomeDistance positionInContig[NUM_READS_PER_PAIR] = {0, 0};
+    const char *mateContigName[NUM_READS_PER_PAIR] = {"*", "*"};
+    OriginalContigNum mateContigIndex[NUM_READS_PER_PAIR] = { OriginalContigNum(-1), OriginalContigNum(-1)};
+    GenomeDistance matePositionInContig[NUM_READS_PER_PAIR] = {0, 0};
+    const char *cigar[NUM_READS_PER_PAIR] = {"*", "*"};
+    _int64 templateLength[NUM_READS_PER_PAIR] = {0, 0};
+    int refSpanFromCigar[NUM_READS_PER_PAIR] = {0, 0};
 
-    char data[2][MAX_READ];
-    char quality[2][MAX_READ];
+    char data[NUM_READS_PER_PAIR][MAX_READ];
+    char quality[NUM_READS_PER_PAIR][MAX_READ];
 
-    const char* clippedData[2];
-    const char* clippedQuality[2];
-    unsigned fullLength[2];
-    unsigned clippedLength[2];
-    unsigned basesClippedBefore[2];
-    unsigned basesClippedAfter[2];
-    GenomeDistance extraBasesClippedBefore[2];   // Clipping added if we align before the beginning of a chromosome
-    int editDistance[2] = {-1, -1};
+    const char* clippedData[NUM_READS_PER_PAIR];
+    const char* clippedQuality[NUM_READS_PER_PAIR];
+    unsigned fullLength[NUM_READS_PER_PAIR];
+    unsigned clippedLength[NUM_READS_PER_PAIR];
+    unsigned basesClippedBefore[NUM_READS_PER_PAIR];
+    unsigned basesClippedAfter[NUM_READS_PER_PAIR];
+    GenomeDistance extraBasesClippedBefore[NUM_READS_PER_PAIR];   // Clipping added if we align before the beginning of a chromosome
+    int editDistance[NUM_READS_PER_PAIR] = {-1, -1};
+    const char* FASTQComment[NUM_READS_PER_PAIR];
+    unsigned FASTQCommentLength[NUM_READS_PER_PAIR];
 
     // Create SAM entry and compute CIGAR
     for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {
@@ -1624,7 +1638,7 @@ SAMFormat::writePairs(
                 flags[whichRead], positionInContig[whichRead], result->mapq[whichRead], contigName[1 - whichRead], &contigIndex[1 - whichRead],
                 positionInContig[1 - whichRead], templateLength[whichRead],
                 fullLength[whichRead], clippedData[whichRead], clippedQuality[whichRead], clippedLength[whichRead], basesClippedBefore[whichRead], basesClippedAfter[whichRead],
-                basesClippedBefore[1 - whichRead], basesClippedAfter[1 - whichRead], qnameLen[whichRead], reads[whichRead], 
+                basesClippedBefore[1 - whichRead], basesClippedAfter[1 - whichRead], FASTQComment[whichRead], FASTQCommentLength[whichRead], qnameLen[whichRead], reads[whichRead], 
                 result->status[whichRead], locations[whichRead], result->direction[whichRead], isSecondary, result->supplementary[whichRead], useM,
                 true, firstInPair, result->alignedAsPair, reads[1 - whichRead], result->status[1 - whichRead], locations[1 - whichRead], result->direction[1 - whichRead], 
                 &extraBasesClippedBefore[whichRead], result->basesClippedBefore[whichRead], result->basesClippedAfter[whichRead], 
@@ -1810,7 +1824,7 @@ SAMFormat::writePairs(
         // QS
         int mqs = 0;
         _uint8* p = (_uint8*)quality[1 - whichRead];
-        for (int i = 0; i < fullLength[1 - whichRead]; i++) {
+        for (unsigned i = 0; i < fullLength[1 - whichRead]; i++) {
             int q = *p++;
             q -= '!';
             // Picard MarkDup uses a score threshold of 15 (default)
@@ -1835,7 +1849,7 @@ SAMFormat::writePairs(
             libraryString[0] = '\0';
         }
 
-        int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%d\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s%s%s\n",
+        int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%d\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s%s%s%s%.*s\n",
             (unsigned)qnameLen[whichRead], read->getId(),
             flags[whichRead],
             contigName[whichRead],
@@ -1853,7 +1867,10 @@ SAMFormat::writePairs(
             internalScoreBuffer,
             alignmentTimeBuffer,
             mqsString,
-            libraryString);
+            libraryString,
+            (FASTQCommentLength[whichRead] == 0) ? "" : "\t",
+            FASTQCommentLength[whichRead],
+            FASTQComment[whichRead]);
 
         if (charsInString > bufferSpace) {
             //
@@ -1869,8 +1886,8 @@ SAMFormat::writePairs(
             spaceUsed[firstOrSecond] = charsInString;
         }
 
-        buffer += spaceUsed[firstOrSecond];
-        bufferSpace -= spaceUsed[firstOrSecond];
+        buffer += charsInString;
+        bufferSpace -= charsInString;
     }
     return true;
 }
@@ -1939,12 +1956,15 @@ SAMFormat::writeRead(
     unsigned basesClippedAfter, mateBasesClippedAfter;
     int editDistance = -1;
 
+    const char* FASTQComment;
+    unsigned FASTQCommentLength;
+
     *o_addFrontClipping = 0;
 
 	if (!createSAMLine(context.genome, data, quality, MAX_READ, contigName, &contigIndex,
         flags, positionInContig, mapQuality, matecontigName, &mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedQuality, clippedLength, basesClippedBefore, basesClippedAfter, mateBasesClippedBefore, mateBasesClippedAfter,
-        qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
+        FASTQComment, FASTQCommentLength, qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection, 
         &extraBasesClippedBefore, bpClippedBefore, bpClippedAfter, mateBpClippedBefore, mateBpClippedAfter))
     {
@@ -2051,7 +2071,7 @@ SAMFormat::writeRead(
         alignmentTimeBuffer[0] = '\0';
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s\n",
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s%s%.*s\n",
         (unsigned)qnameLen, read->getId(),
         flags,
         contigName,
@@ -2067,7 +2087,11 @@ SAMFormat::writeRead(
         readGroupSeparator, readGroupString,
         nmString, rglineAuxLen, rglineAux,
         internalScoreBuffer,
-        alignmentTimeBuffer);
+        alignmentTimeBuffer,
+        (FASTQCommentLength == 0) ? "" : "\t",
+        FASTQCommentLength,
+        FASTQComment
+       );
 
     if (charsInString > bufferSpace) {
         //
@@ -2150,12 +2174,15 @@ SAMFormat::writeRead(
     unsigned basesClippedAfter, mateBasesClippedAfter;
     int editDistance = -1;
 
+    const char* FASTQComment;
+    unsigned FASTQCommentLength;
+
     *o_addFrontClipping = 0;
 
     if (!createSAMLine(context.genome, data, quality, MAX_READ, contigName, &contigIndex,
         flags, positionInContig, mapQuality, matecontigName, &mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedQuality, clippedLength, basesClippedBefore, basesClippedAfter, mateBasesClippedBefore, mateBasesClippedAfter,
-        qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
+        FASTQComment, FASTQCommentLength, qnameLen, read, result, genomeLocation, direction, secondaryAlignment, supplementaryAlignment, useM,
         hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection,
         &extraBasesClippedBefore, bpClippedBefore, bpClippedAfter, mateBpClippedBefore, mateBpClippedAfter))
     {
@@ -2163,7 +2190,7 @@ SAMFormat::writeRead(
     }
 
     if (extraBasesClippedBefore != 0) {
-        *o_addFrontClipping = extraBasesClippedBefore;
+        *o_addFrontClipping = (int)extraBasesClippedBefore;
         return false;
     }
 
@@ -2280,7 +2307,7 @@ SAMFormat::writeRead(
         alignmentTimeBuffer[0] = '\0';
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s\n",
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%llu\t%d\t%s\t%s\t%llu\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s%s%s%.*s\n",
         (unsigned)qnameLen, read->getId(),
         flags,
         contigName,
@@ -2296,7 +2323,10 @@ SAMFormat::writeRead(
         readGroupSeparator, readGroupString,
         nmString, rglineAuxLen, rglineAux,
         internalScoreBuffer,
-        alignmentTimeBuffer);
+        alignmentTimeBuffer,
+        (FASTQCommentLength == 0) ? "" : "\t",
+        FASTQCommentLength,
+        FASTQComment);
 
     if (charsInString > bufferSpace) {
         //
@@ -3936,14 +3966,14 @@ SAMDupMarkFilter::onNextBatch(
             // Copy over read offsets for those reads that will be duplicate marked in the next batch
             //
             VariableSizeVector<OffsetInfo> nextBatchOffsets;
-            for (size_t i = unfinishedRunStart; i < offsets.size(); i++) {
+            for (_int64 i = unfinishedRunStart; i < offsets.size(); i++) {
                 OffsetInfo oinfo(offsets[i].offset - offsets[unfinishedRunStart].offset, offsets[i].isDuplicate);
                 nextBatchOffsets.push_back(oinfo);
             }
 
             offsets.clear();
 
-            for (size_t i = 0; i < nextBatchOffsets.size(); i++) {
+            for (_int64 i = 0; i < nextBatchOffsets.size(); i++) {
                 offsets.push_back(nextBatchOffsets[i]);
             }
             nextBatchOffsets.clear();

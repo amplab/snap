@@ -164,6 +164,7 @@ int main(int argc, char * argv[])
     readerContext.genome = genome;
     readerContext.ignoreSecondaryAlignments = true;
     readerContext.ignoreSupplementaryAlignments = true;
+    readerContext.preserveFASTQComments = false;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
 	readerContext.headerBytes = 0;

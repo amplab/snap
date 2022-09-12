@@ -177,9 +177,13 @@ public:
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
-    virtual _int64 getLocationsScored() const {
-         return nLocationsScored;
-     }
+    virtual _int64 getLocationsScoredWithLandauVishkin() const {
+        return nLocationsScoredLandauVishkin;
+    }
+
+    virtual _int64 getLocationsScoredWithAffineGap() const {
+        return nLocationsScoredAffineGap;
+    }
 
     void setMinSpacing(int minSpacing_) {
         minSpacing = minSpacing_;
@@ -216,7 +220,8 @@ private:
     unsigned        maxSpacing;
     unsigned        seedLen;
     bool            doesGenomeIndexHave64BitLocations;
-    _int64          nLocationsScored;
+    _int64          nLocationsScoredLandauVishkin;
+    _int64          nLocationsScoredAffineGap;
     bool            noUkkonen;
     bool            noOrderedEvaluation;
 	bool			noTruncation;

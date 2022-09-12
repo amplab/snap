@@ -50,6 +50,7 @@ struct AlignerStats : public AbstractStats
     _int64 notFound;
     _int64 alignedAsPairs;
     _int64 lvCalls;
+    _int64 affineGapCalls;
     _int64 millisReading;
     _int64 millisAligning;
     _int64 millisWriting;

@@ -270,6 +270,8 @@ public:
             unsigned& basesClippedAfter,
             unsigned& mateBasesClippedBefore,
             unsigned& mateBasesClippedAfter,
+            const char*& FASTQComment,
+            unsigned& FASTQCommentLength,
             // input data
             size_t& qnameLen,
             Read * read,

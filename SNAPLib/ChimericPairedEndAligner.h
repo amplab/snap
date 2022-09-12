@@ -101,8 +101,12 @@ public:
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
-    virtual _int64 getLocationsScored() const {
-        return underlyingPairedEndAligner->getLocationsScored() + singleAligner->getLocationsScored();
+    virtual _int64 getLocationsScoredWithLandauVishkin() const {
+        return underlyingPairedEndAligner->getLocationsScoredWithLandauVishkin() + singleAligner->getLocationsScoredWithLandauVishkin();
+    }
+
+    virtual _int64 getLocationsScoredWithAffineGap() const {
+        return underlyingPairedEndAligner->getLocationsScoredWithAffineGap() + singleAligner->getLocationsScoredWithAffineGap();
     }
 
 private:

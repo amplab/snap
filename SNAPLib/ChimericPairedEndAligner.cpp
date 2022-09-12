@@ -120,7 +120,7 @@ ChimericPairedEndAligner::~ChimericPairedEndAligner()
 }
 
 #ifdef _DEBUG
-extern bool _DumpAlignments;
+extern volatile bool _DumpAlignments;
 #endif // _DEBUG
 
 
@@ -302,7 +302,7 @@ bool ChimericPairedEndAligner::align(
                 if (scoreLimitLeft < 0) {
                     break;
                 }
-                int maxKForRead = __min(maxKSingleEnd, __min(result->score[r], scoreLimitLeft));
+                int maxKForRead = __min((int)maxKSingleEnd, __min(result->score[r], scoreLimitLeft));
                 singleAligner->setMaxK(maxKForRead);
             }
 

@@ -77,5 +77,6 @@ public:
     {
     }
 
-    virtual _int64 getLocationsScored() const  = 0;
+    virtual _int64 getLocationsScoredWithLandauVishkin() const = 0;   
+    virtual _int64 getLocationsScoredWithAffineGap() const = 0;
 };

@@ -100,7 +100,7 @@ protected:
         size_t          validBytes;
         unsigned        nBytesThatMayBeginARead;
         bool            isEOF;
-        unsigned        offset;     // How far has the consumer gotten in current buffer
+        size_t          offset;     // How far has the consumer gotten in current buffer
         _int64          fileOffset;
         _uint32         batchID;
         int             holds;
@@ -521,7 +521,7 @@ ReadBasedDataReader::advance(
     _int64 bytes)
 {
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
-    _ASSERT(info->validBytes >= info->offset && bytes >= 0 && bytes <= info->validBytes - info->offset);
+    _ASSERT(info->validBytes >= info->offset && bytes >= 0 && bytes <= (_int64)info->validBytes - (_int64)info->offset);
     info->offset += __min(info->validBytes - info->offset, (unsigned)__max((_int64)0, bytes));
 }
 
