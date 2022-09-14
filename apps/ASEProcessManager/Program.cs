@@ -958,11 +958,19 @@ namespace ASEProcessManager
             {
             }
 
-            static GetCaseFile[] getCaseFiles = { _ => _.tumor_rna_allcount_filename, _ => _.normal_rna_file_id == "" ? _.tumor_rna_allcount_filename : _.normal_rna_file_id };
+            static GetCaseFile[] getCaseFiles = { _ => _.tumor_rna_allcount_filename, _ => _.normal_rna_file_id == "" ? _.tumor_rna_allcount_filename : _.normal_rna_allcount_filename };
             static GetOneOffFile[] getOneOffFiles = { _ => _.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename };
             static GetCaseFile[] getOutputFile = { _ => _.isoform_read_counts_filename };
 
         } // ExtractIsoformReadCountsProcessingStage
+
+        class GeneExpressionFractionProcessingStage : PerCaseProcessingStage
+        {
+            public GeneExpressionFractionProcessingStage(StateOfTheWorld stateOfTheWorld) : base("Gene Expression Fraction", "ComputeGeneExpressionFraction.exe", "", getCaseFiles, null, getOutputFile) { }
+
+            static GetCaseFile[] getCaseFiles = { _ => _.tumor_rna_allcount_filename, _ => _.normal_rna_file_id == "" ? _.tumor_rna_allcount_filename : _.normal_rna_allcount_filename };
+            static GetCaseFile[] getOutputFile = { _ => _.gene_expression_fraction_filename };
+        } // GeneExpressionFractionProcessingStage
 
         class MAFConfigurationProcessingStage : ProcessingStage 
         {
@@ -5745,6 +5753,7 @@ namespace ASEProcessManager
             processingStages.Add(new SummarizeCaseMetadataProcessingStage());
             processingStages.Add(new ConsolodateCaseMetadataProcessingStage());
             processingStages.Add(new ConsolodateCasePairednessProcessingStage());
+            processingStages.Add(new GeneExpressionFractionProcessingStage(stateOfTheWorld));
 
             if (runSNAPStages)
             {
@@ -6005,7 +6014,7 @@ namespace ASEProcessManager
 
             Console.WriteLine();
             Console.WriteLine("Downloading " + ASETools.SizeToUnits((ulong)bytesToDownload) + "B in " + allFilesToDownload.Count() + " files.");
-            Console.WriteLine("ASEProcessManager took " + ASETools.ElapsedTimeInSeconds(stopwatch) + " and finished at " + DateTime.Now.ToLocalTime().ToString());
+            Console.WriteLine("ASEProcessManager took " + ASETools.ElapsedTime(stopwatch) + " and finished at " + DateTime.Now.ToLocalTime().ToString());
         }
     }
 }

@@ -227,6 +227,7 @@ namespace CheckDone
                 HandleFilename(case_.variant_phasing_filename, "VariantPhasing", fileTypesToUse);
                 HandleFilename(case_.vcf_statistics_filename, "VCFStatistics", fileTypesToUse);
                 HandleFilename(case_.read_statictics_filename, "ReadStatictics", fileTypesToUse);
+                HandleFilename(case_.gene_expression_fraction_filename, "GeneExpressionFraction", fileTypesToUse);
 
                 foreach (var tumor in ASETools.BothBools)
                 {

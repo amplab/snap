@@ -63,7 +63,7 @@ namespace SampleFastqWithKnownSize
             var outputs = new StreamWriter[nInputs];
 
             inputs[0] = ASETools.CreateStreamReaderWithRetryCompressedBasedOnFilename(args[2]);
-            outputs[0] = ASETools.CreateStreamWriterWithRetry(nInputs == 1 ? args[3] : args[4]);
+            outputs[0] = ASETools.CreateStreamWriterWithRetry((nInputs == 1) ? args[3] : args[4]);
 
             if (nInputs == 2)
             {

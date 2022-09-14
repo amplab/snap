@@ -1163,6 +1163,8 @@ namespace ASELib
             {
                 genesByName = genesByName_;
 
+                long totalBasesInCodingRegions = 0;
+
                 foreach (var geneEntry in genesByName)
                 {
                     var gene = geneEntry.Value;
@@ -1172,11 +1174,18 @@ namespace ASELib
                     }
 
                     genesByChromosome[gene.chromosome].Add(gene);
+                    totalBasesInCodingRegions += gene.codingSizeOfLargestIsoform();
+                }
+
+                foreach (var hugoSymbol in genesByName.Select(_ => _.Key))
+                {
+                    fractionOfOverallExomeByGene.Add(hugoSymbol, (double)genesByName[hugoSymbol].codingSizeOfLargestIsoform() / totalBasesInCodingRegions);
                 }
             }
 
             public Dictionary<string, GeneLocationInfo> genesByName;
             public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
+            public readonly Dictionary<string, double> fractionOfOverallExomeByGene = new Dictionary<string, double>();
         } // GeneLocationsByNameAndChromosome
 
         public class GeneMap
@@ -1634,39 +1643,12 @@ namespace ASELib
             public string variant_phasing_filename = "";
             public string vcf_statistics_filename = "";
             public string read_statictics_filename = "";
+            public string gene_expression_fraction_filename = "";
 
             public Dictionary<Aligner, Dictionary<bool, RealignmentFiles>> realignments = new Dictionary<Aligner, Dictionary<bool, RealignmentFiles>>();    // aligner->tumor->file set
             public Dictionary<AlignerPair, Dictionary<VariantCaller, Dictionary<bool, ConcordanceFiles>>> concordance = new Dictionary<AlignerPair, Dictionary<VariantCaller, Dictionary<bool, ConcordanceFiles>>>();
             public Dictionary<VariantCaller, Dictionary<bool, PerVariantCallerFiles>> perVariantCaller = new Dictionary<VariantCaller, Dictionary<bool, PerVariantCallerFiles>>();
-#if false
-            public string snap_realigned_normal_dna_filename = "";
-            public string snap_realigned_normal_dna_bai_filename = "";
-            public string snap_realigned_tumor_dna_filename = "";
-            public string snap_realigned_tumor_dna_bai_filename = "";
-            public string snap_realigned_normal_dna_statictics_filename = "";
-            public string snap_realigned_tumor_dna_statictics_filename = "";
-            public string snap_realigned_normal_freebayes_vcf_filename = "";
-            public string snap_realigned_normal_freebayes_vcf_idx_filename = "";
-            public string snap_realigned_normal_haplotype_caller_vcf_filename = "";
-            public string bowtie_realigned_normal_dna_filename = "";
-            public string bowtie_realigned_normal_dna_bai_filename = "";
-            public string bowtie_realigned_tumor_dna_filename = "";
-            public string bowtie_realigned_tumor_dna_bai_filename = "";
-            public string bowtie_realigned_normal_dna_statictics_filename = "";
-            public string bowtie_realigned_tumor_dna_statictics_filename = "";
-            public string bowtie_realigned_normal_freebayes_vcf_filename = "";
-            public string bowtie_realigned_normal_feeebayes_vcf_idx_filename = "";
-            public string bowtie_realigned_normal_haplotype_caller_vcf_filename = "";
-            public string BWA_realigned_normal_dna_filename = "";
-            public string BWA_realigned_normal_dna_bai_filename = "";
-            public string BWA_realigned_tumor_dna_filename = "";
-            public string BWA_realigned_tumor_dna_bai_filename = "";
-            public string BWA_realigned_normal_dna_statictics_filename = "";
-            public string BWA_realigned_tumor_dna_statictics_filename = "";
-            public string BWA_realigned_normal_feeebayes_vcf_filename = "";
-            public string BWA_realigned_normal_freebayes_vcf_idx_filename = "";
-            public string BWA_realigned_normal_haplotype_caller_vcf_filename = "";
-#endif // false
+
             public string normal_dna_fastq_filename = "";
             public string normal_dna_fastq_second_end_filename = "";
             public string tumor_dna_fastq_filename = "";
@@ -1750,32 +1732,8 @@ namespace ASELib
             public long variant_phasing_size = 0;
             public long vcf_statistics_size = 0;
             public long read_statictics_size = 0;
-#if false
-            public long snap_realigned_normal_dna_size = 0;
-            public long snap_realigned_normal_dna_bai_size = 0;
-            public long snap_realigned_tumor_dna_size = 0;
-            public long snap_realigned_tumor_dna_bai_size = 0;
-            public long snap_realigned_normal_dna_statictics_size = 0;
-            public long snap_realigned_tumor_dna_statictics_size = 0;
-            public long snap_realigned_normal_freebayes_vcf_size = 0;
-            public long snap_realigned_normal_freebayes_vcf_idx_size = 0;
-            public long bowtie_realigned_normal_dna_size = 0;
-            public long bowtie_realigned_normal_dna_bai_size = 0;
-            public long bowtie_realigned_tumor_dna_size = 0;
-            public long bowtie_realigned_tumor_dna_bai_size = 0;
-            public long bowtie_realigned_normal_dna_statictics_size = 0;
-            public long bowtie_realigned_tumor_dna_statictics_size = 0;
-            public long bowtie_realigned_normal_freebayes_vcf_size = 0;
-            public long bowtie_realigned_normal_freebayes_vcf_idx_size = 0;
-            public long bwa_realigned_normal_dna_size = 0;
-            public long bwa_realigned_normal_dna_bai_size = 0;
-            public long bwa_realigned_tumor_dna_size = 0;
-            public long bwa_realigned_tumor_dna_bai_size = 0;
-            public long bwa_realigned_normal_dna_statictics_size = 0;
-            public long bwa_realigned_tumor_dna_statictics_size = 0;
-            public long bwa_realigned_normal_freebayes_vcf_size = 0;
-            public long bwa_realigned_normal_freebayes_vcf_idx_size = 0;
-#endif // false
+            public long gene_expression_fraction_size = 0;
+
             public long normal_dna_fastq_size = 0;
             public long normal_dna_fastq_second_end_size = 0;
             public long tumor_dna_fastq_size = 0;
@@ -2128,6 +2086,7 @@ namespace ASELib
                     derivedFileTypes.Add(new DerivedFileType("Variant Phasing", c => c.variant_phasing_filename, (c, v) => c.variant_phasing_filename = v, variantPhasingExtension, c => c.case_id, c => c.variant_phasing_size, (c, v) => c.variant_phasing_size = v));
                     derivedFileTypes.Add(new DerivedFileType("VCF Statistics", c => c.vcf_statistics_filename, (c, v) => c.vcf_statistics_filename = v, vcfStatisticsExtension, c => c.normal_dna_file_id, c => c.vcf_statistics_size, (c, v) => c.vcf_statistics_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Read Statistics", c => c.read_statictics_filename, (c, v) => c.read_statictics_filename = v, readStatisticsExtension, c => c.case_id, c => c.read_statictics_size, (c, v) => c.read_statictics_size = v));
+                    derivedFileTypes.Add(new DerivedFileType("Gene Expression Fraction", c => c.gene_expression_fraction_filename, (c, v) => c.gene_expression_fraction_filename = v, geneExpressionFractionExtension, c => c.case_id, c => c.gene_expression_fraction_size, (c, v) => c.gene_expression_fraction_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ", c => c.normal_dna_fastq_filename, (c, v) => c.normal_dna_fastq_filename = v, normalFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_size, (c, v) => c.normal_dna_fastq_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Normal DNA FASTQ Second End", c => c.normal_dna_fastq_second_end_filename, (c, v) => c.normal_dna_fastq_second_end_filename = v, normalSecondEndFastqExtension, c => c.normal_dna_file_id, c => c.normal_dna_fastq_second_end_size, (c, v) => c.normal_dna_fastq_second_end_size = v));
                     derivedFileTypes.Add(new DerivedFileType("Tumor DNA FASTQ", c => c.tumor_dna_fastq_filename, (c, v) => c.tumor_dna_fastq_filename = v, tumorFastqExtension, c => c.tumor_dna_file_id, c => c.tumor_dna_fastq_size, (c, v) => c.tumor_dna_fastq_size = v));
@@ -3809,7 +3768,7 @@ namespace ASELib
         {
             if (!pathname.Contains('\\'))
             {
-                throw new FormatException();
+                return ".";
             }
 
             return pathname.Substring(0, pathname.LastIndexOf('\\'));
@@ -4005,6 +3964,7 @@ namespace ASELib
         public const string cisRegulatoryMutationsByVAFFilename = "CisRegulatoryMutationsByVAF.txt";
         public const string cisRegulatoryMutationsInKnownRegionsExtension = ".cis_regulatory_mutations_in_known_regions.txt";
         public const string readStatisticsExtension = ".read_statistics";
+        public const string geneExpressionFractionExtension = ".gene_expression_fraction.txt";
 #if false
         public const string snapRealignedNormalDNAExtension = ".snap-normal-dna.bam";
         public const string snapRealignedNormalDNABaiExtension = ".snap-normal-dna.bam.bai";
@@ -6788,6 +6748,12 @@ namespace ASELib
             {
                 mean = mean_;
                 stddev = stdDev_;
+            }
+
+            public MeanAndStdDev(RunningMeanAndStdDev running)
+            {
+                mean = running.getMeanAndStdDev().mean;
+                stddev = running.getMeanAndStdDev().stddev;
             }
 
             public readonly double mean;
@@ -9823,7 +9789,7 @@ namespace ASELib
 
             public bool NMKnown()
             {
-                return (optionalFields.Any(_ => _.StartsWith("NM:i:")));
+                return optionalFields.Any(_ => _.StartsWith("NM:i:"));
             }
 
             public int NM()
@@ -9836,6 +9802,22 @@ namespace ASELib
 
                 return Convert.ToInt32(NMField[0].Substring(5));
             } // NM
+
+            public bool ZQKnown()
+            {
+                return optionalFields.Any(_ => _.StartsWith("ZQ:i:"));
+            }
+
+            public int ZQ()
+            {
+                var ZQField = optionalFields.Where(_ => _.StartsWith("ZQ:i:")).ToList();
+                if (ZQField.Count != 1)
+                {
+                    throw new Exception("SAMLine.ZQ: line does not have exactly one ZQ:i: field");
+                }
+
+                return Convert.ToInt32(ZQField[0].Substring(5));
+            } // ZQ
 
             public string posWithCommas()
             {
@@ -17869,6 +17851,55 @@ namespace ASELib
                 return retVal;
             }
         } // VennResults
+
+        public class GeneExpressionFraction
+        {
+            public GeneExpressionFraction(string i_hugo_symbol, double tumorFraction, double normalFraction, double tumorFractionNormalized, double normalFractionNormalized)
+            {
+                Hugo_symbol = i_hugo_symbol;
+                expressionByTumor.Add(true, tumorFraction);
+                expressionByTumor.Add(false, normalFraction);
+                normalizedExpressionByTumor.Add(true, tumorFractionNormalized);
+                normalizedExpressionByTumor.Add(false, normalFractionNormalized);
+            }
+
+            public static Dictionary<string, GeneExpressionFraction> LoadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (inputFile == null)
+                {
+                    return null;
+                }
+                var wantedFields = new List<string>();
+                wantedFields.Add("Hugo symbol");
+                wantedFields.Add("Tumor Expression Fraction");
+                wantedFields.Add("Normal Expression Fraction");
+                wantedFields.Add("Normalized Tumor Fraction");
+                wantedFields.Add("Normalized Normal Fraction");
+
+                var headerizedFile = new HeaderizedFile<GeneExpressionFraction>(inputFile, false, true, "", wantedFields);
+
+                List<GeneExpressionFraction> output;
+
+                headerizedFile.ParseFile(Parse, out output);
+
+                var retVal = new Dictionary<string, GeneExpressionFraction>();  // Gene->expression fraction (the fraction of total HQ mapped RNA reads that map to this gene for tumor & normal)
+                output.ForEach(_ => retVal.Add(_.Hugo_symbol, _));
+
+                return retVal;
+            }
+
+            static GeneExpressionFraction Parse(HeaderizedFile<GeneExpressionFraction>.FieldGrabber fieldGrabber)
+            {
+                return new GeneExpressionFraction(ConvertToNonExcelString(fieldGrabber.AsString("Hugo symbol")), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Tumor Expression Fraction"), 
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normal Expression Fraction"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normalized Tumor Fraction"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normalized Normal Fraction"));
+            }
+
+            public readonly string Hugo_symbol;
+            public Dictionary<bool, double> expressionByTumor = new Dictionary<bool, double>();
+            public Dictionary<bool, double> normalizedExpressionByTumor = new Dictionary<bool, double>();   // fration of mapped RNA read bases for this gene divided by the size of the gene
+        } // GeneExpressionFraction
 
         public class SingleConcordanceResult    // for SNV or indel
         {
