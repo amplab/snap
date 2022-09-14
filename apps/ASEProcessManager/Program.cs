@@ -5813,11 +5813,6 @@ namespace ASEProcessManager
                 }
             }
 
-
-            //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.SNAP));
-            //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.BWA));
-            //processingStages.Add(new VCFIndexingProcessingStage(ASETools.Aligner.Bowtie));
-
             //
             // Special check for empty concordance tarballs.
             //

@@ -1,4 +1,5 @@
 ﻿using MathNet.Numerics;
+using MathNet.Numerics.Integration;
 using System;
 using System.CodeDom;
 using System.Collections.Generic;
@@ -71,6 +72,7 @@ namespace ASELib
             alignerName.Add(Aligner.GEM, "GEM");
             //#endif // useGEM
             alignerName.Add(Aligner.Dragen, "Dragen");
+            alignerName.Add(Aligner.Minimap2, "Minimap2");
 
             foreach (var alignerA in EnumUtil.GetValues<Aligner>())
             {
@@ -3985,6 +3987,7 @@ namespace ASELib
         public const string BWARealignedNormalDNAStatisticsExtension = ".bwa-normal-dna-statictics.txt";
         public const string BWARealignedTumorDNAStatisticsExtension = ".bwa-tumor-dna-statictics.txt";
 #endif // false
+
         public const string normalFastqExtension = ".normal_1.fastq";
         public const string normalSecondEndFastqExtension = ".normal_2.fastq";
         public const string tumorFastqExtension = ".tumor_1.fastq";
@@ -4028,6 +4031,7 @@ namespace ASELib
             //#endif // useGEM
             Novoalign,
             Dragen,
+            Minimap2,
         };
 
         public enum EndCount
@@ -7930,7 +7934,7 @@ namespace ASELib
                 }
 
                 var fields = metadata[0].Split(' ');
-                if (fields.Count() < 2 || fields[0] != "5")
+                if (fields.Count() < 2 || fields[0] != "7")
                 {
                     Console.WriteLine("Genome.load: Wrong version or corrupt snap index in directory " + snapIndexDirectory);
                     return false;
@@ -7964,7 +7968,7 @@ namespace ASELib
 
                 fields = line.Split(' ');
 
-                if (fields.Count() != 2)
+                if (fields.Count() < 2)
                 {
                     Console.WriteLine("Genome.load: wrong field count on genome header line in file " + genomeFilename);
                     return false;
@@ -7986,13 +7990,13 @@ namespace ASELib
                         }
 
                         fields = line.Split(' ');
-                        if (fields.Count() != 2)
+                        if (fields.Count() != 9)
                         {
                             Console.WriteLine("Genome.load: corrupt contig line in " + genomeFilename);
                             return false;
                         }
 
-                        var contig = formatContig(fields[1]);
+                        var contig = formatContig(fields[7]);
 
                         if (contigsByName.ContainsKey(contig))
                         {
@@ -9492,6 +9496,18 @@ namespace ASELib
                 return retVal;
             }
 
+            static public void ReadSAMLinesFromFile(StreamReader inputFile, Action<SAMLine> processLine)
+            {
+                string rawLine;
+                while (null != (rawLine = inputFile.ReadLine()))
+                {
+                    if (!rawLine.StartsWith("@"))
+                    {
+                        processLine(new SAMLine(rawLine));
+                    }
+                }
+            } // ReadSAMLinesFromFile
+
             public static SAMLine attemptSAMLine(string rawline)
             {
                 try
@@ -9506,6 +9522,8 @@ namespace ASELib
 
             public SAMLine(string rawline)
             {
+                line = rawline;
+
                 var fields = rawline.Split('\t');
 
                 if (fields.Count() < 11)
@@ -9819,11 +9837,35 @@ namespace ASELib
                 return Convert.ToInt32(ZQField[0].Substring(5));
             } // ZQ
 
+            public bool ATKnown()
+            {
+                return (optionalFields.Any(_ => _.StartsWith("AT:i:")));
+            }
+
+            public int AT()
+            {
+                var ATField = optionalFields.Where(_ => _.StartsWith("AT:i:")).ToList();
+                if (ATField.Count != 1)
+                {
+                    throw new Exception("SAMLine.AT: line does not have exactly one AT:i: field");
+                }
+
+                return Convert.ToInt32(ATField[0].Substring(5));
+            } // AT
+
             public string posWithCommas()
             {
                 return NumberWithCommas(pos);
             }
 
+            public string decoratedQname() // qname with /1 or /2 if it's a paired-end read
+            {
+                if ((flag & FirstSegment) != 0) { return qname + "/1"; }
+                if ((flag & LastSegment) != 0) { return qname + "/2"; }
+                return qname;
+            }
+
+            public readonly string line;    // The whole unparsed line
             public readonly string qname;
             public readonly int flag;
             public readonly string rname;
@@ -18218,6 +18260,33 @@ namespace ASELib
 
         } // FindSAMLinesInNameSortedSAMFile
 
+
+        public class PearsonR  // compute the pearson correlation coefficient of two samples
+        {
+            public PearsonR() { }
+            public void addSamplePair(double x, double y)
+            {
+                n++;
+                sumOfX += x;
+                sumOfY += y;
+                sumOfX2 += x * x;
+                sumOfY2 += y * y;
+                sumOfXY += x * y;
+            }
+
+            public double r()
+            {
+                return (sumOfXY - sumOfX * sumOfY / n) / (Math.Sqrt(sumOfX2 - sumOfX * sumOfX / n ) * Math.Sqrt(sumOfY2 - sumOfY * sumOfY / n));
+            }
+
+            long n = 0;
+            double sumOfX = 0;
+            double sumOfY = 0;
+            double sumOfX2 = 0;
+            double sumOfY2 = 0;
+            double sumOfXY = 0;
+        } // PearsonR
+
         public static void WriteLineToMultipleStreams(IEnumerable<StreamWriter> streams, string line = "")
         {
             foreach (var stream in streams)
@@ -18233,6 +18302,7 @@ namespace ASELib
                 stream.Write(line);
             }
         } // WriteToMultipleStreams
+
 
     } // ASETools
 
