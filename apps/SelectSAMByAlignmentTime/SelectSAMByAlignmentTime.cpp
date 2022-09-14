@@ -22,10 +22,7 @@ _int64 totalLinesSkipped = 0;
 const size_t threadChunkSize = 100 * 1024 * 1024;	// How much a thread processes at at time.
 const size_t readAheadAmount = (size_t)10 * 1024 * 1024 * 1024;
 
-//
-// This is just copied from SNAPLib
-//
-int cheezyLogBase2(_int64 value)
+int cheezyLogBase2(_int64 value) // rounds down
 {
 	int retVal = 0;
 	value /= 2; // Since 2^0 = 1; we'll also define cheezyLogBase2(x) = 0 where x<= 0.
@@ -36,150 +33,130 @@ int cheezyLogBase2(_int64 value)
 	return retVal;
 }
 
-class TimingHistogram {
+class Histogram {
 public:
-	TimingHistogram() {}
-
-	void addSample(_int64 time) {
-		int logTime = cheezyLogBase2(time);
-		int whichBucket = logTime >= nBuckets ? nBuckets - 1 : logTime;
-
-		bucket[whichBucket].count++;
-		bucket[whichBucket].totalTimeInUs += time;
-	}
-
-	void printHistogram(FILE* outfile) {
-		fprintf(outfile, "time (us)\tcount\ttotal time (us)\tcumulative count\tcumulative time (us)\tpdf count\tpdf time\tcdf count\tcdf time\n");
-
-		_int64 totalCount = 0, totalTimeInUs = 0;
-		int maxUsedBucket = 0;
-		for (int i = 0; i < nBuckets; i++) {
-			totalCount += bucket[i].count;
-			totalTimeInUs += bucket[i].totalTimeInUs;
-
-			if (bucket[i].count > 0) {
-				maxUsedBucket = i;
-			}
+	//
+	// Increment is ignored for log scale.  For log scale, it's the log of the value, not of value-minValue.
+	//
+	Histogram(_int64 maxKeyValue_, bool logScale_) : maxKeyValue(maxKeyValue_), logScale(logScale_), nBadValues(0)
+	{
+		if (logScale) {
+			nBuckets = cheezyLogBase2(maxKeyValue) + 1;
+		} else {
+			nBuckets = maxKeyValue + 1;
 		}
 
-		_int64 cumulativeCount = 0, cumulativeTimeInUs = 0;
-		for (int i = 0; i <= maxUsedBucket; i++) {
-			cumulativeCount += bucket[i].count;
-			cumulativeTimeInUs += bucket[i].totalTimeInUs;
-
-			fprintf(outfile, "%lld\t%lld\t%lld\t%lld\t%lld\t%f\t%f\t%f\t%f\t\n",
-				(_int64)1 << i, bucket[i].count, bucket[i].totalTimeInUs, cumulativeCount, cumulativeTimeInUs,
-				(double)bucket[i].count / totalCount, (double)bucket[i].totalTimeInUs / totalTimeInUs,
-				(double)cumulativeCount / totalCount, (double)cumulativeTimeInUs / totalTimeInUs);
-		}
-
-		fprintf(outfile, "\ntotal count %lld, total time in us %lld\n", totalCount, totalTimeInUs);
-	} // printHistogram
-
-	void mergeInto(TimingHistogram* peer) {
-		for (int i = 0; i < nBuckets; i++) {
-			peer->bucket[i].count += bucket[i].count;
-			peer->bucket[i].totalTimeInUs += bucket[i].totalTimeInUs;
-		}
-	} // mergeInto
-
-
-private:
-	static const int nBuckets = 26;
-
-	struct Bucket {
-		Bucket() : count(0), totalTimeInUs(0) {}
-
-		_int64		count;
-		_int64		totalTimeInUs;
-	};
-
-	Bucket bucket[nBuckets];
-}; // TimingHistogram
-
-class LinearHistogram {
-public:
-	LinearHistogram(int minBucket_, int maxBucket_) {
-		minBucket = minBucket_;
-		maxBucket = maxBucket_;
-
-		if (minBucket > maxBucket) {
-			fprintf(stderr, "LinearHistogram: minBucket can't be bigger than maxBucket\n");
-			exit(1);
-		}
-
-		bucket = new Bucket[maxBucket - minBucket + 1];
+		buckets = new Bucket[nBuckets];
 	} // ctor
 
-	~LinearHistogram() {
-		delete[] bucket;
+	~Histogram() {
+		delete[] buckets;
 	}
 
-	void addValue(int whichBucket, _int64 timeInUs) {
-		if (whichBucket < minBucket || whichBucket > maxBucket) {
-			fprintf(stderr, "LinearHistogram: value outside range.\n");
+	void mergeInto(Histogram* peer) {
+		if (maxKeyValue != peer->maxKeyValue || logScale != peer->logScale || nBuckets != peer->nBuckets) {
+			fprintf(stderr, "Histogram: trying to merge two non-conforming Histograms\n");
 			exit(1);
 		}
 
-		bucket[whichBucket - minBucket].count++;
-		bucket[whichBucket - minBucket].totalTimeInUs += timeInUs;
-	} // addValue
-
-	void mergeInto(LinearHistogram* peer) {
-		if (peer->minBucket != minBucket || peer->maxBucket != maxBucket) {
-			fprintf(stderr, "trying to merge LinearHistograms of different shapes\n");
-			exit(1);
+		for (int i = 0; i < nBuckets; i++) {
+			peer->buckets[i].count += buckets[i].count;
+			peer->buckets[i].totalValue += buckets[i].totalValue;
 		}
 
-		for (int i = 0; i <= maxBucket - minBucket; i++) {
-			peer->bucket[i].count += bucket[i].count;
-			peer->bucket[i].totalTimeInUs += bucket[i].totalTimeInUs;
-		}
+		peer->nBadValues += nBadValues;
 	} // mergeInto
 
-	void printHistogram(FILE* outfile) {
-		fprintf(outfile, "value\tcount\ttotal time (us)\tcumulative count\tcumulative time (us)\tpdf count\tpdf time\tcdf count\tcdf time\n");
-
-		_int64 totalCount = 0, totalTimeInUs = 0;
-		int maxUsedBucket = 0;
-		for (int i = 0; i <= maxBucket - minBucket; i++) {
-			totalCount += bucket[i].count;
-			totalTimeInUs += bucket[i - minBucket].totalTimeInUs;
-
-			if (bucket[i].count > 0) {
-				maxUsedBucket = i;
+	void addValue(int key, int value) {
+		int whichBucket;
+		if (key < 0) {
+			whichBucket = 0;
+		} else if (key > maxKeyValue) {
+			whichBucket = nBuckets - 1;
+		} else {
+			if (logScale) {
+				whichBucket = cheezyLogBase2(key);
+			} else {
+				whichBucket = key;
 			}
 		}
 
-		_int64 cumulativeCount = 0, cumulativeTimeInUs = 0;
-		for (int i = 0; i <= maxUsedBucket; i++) {
-			cumulativeCount += bucket[i].count;
-			cumulativeTimeInUs += bucket[i].totalTimeInUs;
+		_ASSERT(whichBucket >= 0 && whichBucket < nBuckets);
 
-			fprintf(outfile, "%d\t%lld\t%lld\t%lld\t%lld\t%f\t%f\t%f\t%f\t\n",
-				i + minBucket, bucket[i].count, bucket[i].totalTimeInUs, cumulativeCount, cumulativeTimeInUs,
-				(double)bucket[i].count / totalCount, (double)bucket[i].totalTimeInUs / totalTimeInUs,
-				(double)cumulativeCount / totalCount, (double)cumulativeTimeInUs / totalTimeInUs);
+		buckets[whichBucket].count++;
+		buckets[whichBucket].totalValue += value;
+	}
+
+	void noteBadValue()
+	{
+		nBadValues++;
+	}
+
+	void print(FILE* outfile, bool includeMean) 
+	{
+		if (includeMean) {
+			fprintf(outfile, "Key (rounded down)\tcount\ttotal value\tpdf count\tpdf total\tcdf count\tcdf value\tmean value\n");
+		} else {
+			fprintf(outfile, "Key (rounded down)\tcount\ttotal value\tpdf count\tpdf total\tcdf count\tcdf value\n");
+		}
+		_int64 totalCount = 0;
+		_int64 grandTotal = 0;
+
+		for (int i = 0; i < nBuckets; i++) {
+			totalCount += buckets[i].count;
+			grandTotal += buckets[i].totalValue;
 		}
 
-		fprintf(outfile, "\ntotal count %lld, total time in us %lld\n", totalCount, totalTimeInUs);
-	} // printHistogram
+		_int64 runningCount = 0;
+		_int64 runningTotal = 0;
+
+		for (int i = 0; i < nBuckets; i++) {
+			runningCount += buckets[i].count;
+			runningTotal += buckets[i].totalValue;
+
+			if (includeMean) {
+				fprintf(outfile, "%d\t%lld\t%lld\t%f\t%f\t%f\t%f\t%lld\n",
+					logScale ? (1 << i) :i, buckets[i].count, buckets[i].totalValue,
+					(double)buckets[i].count / totalCount, (double)buckets[i].totalValue / grandTotal,
+					(double)runningCount / totalCount, (double)runningTotal / grandTotal,
+					(buckets[i].count == 0) ? 0 : buckets[i].totalValue / buckets[i].count);
+			} else {
+				fprintf(outfile, "%d\t%lld\t%lld\t%f\t%f\t%f\t%f\n",
+					logScale ? (1 << i) : i, buckets[i].count, buckets[i].totalValue,
+					(double)buckets[i].count / totalCount, (double)buckets[i].totalValue / grandTotal,
+					(double)runningCount / totalCount, (double)runningTotal / grandTotal);
+			} // include total
+		} // for each bucket
+
+		if (nBadValues > 0) {
+			fprintf(outfile, "%lld bad (negative time) values were ignored.\n", nBadValues);
+		}
+	} // print
 
 private:
-	int minBucket, maxBucket;
+	int nBuckets;
+	int maxKeyValue;
+	bool logScale;
+	_int64 nBadValues;
 
 	struct Bucket {
-		Bucket() : count(0), totalTimeInUs(0) {}
+		Bucket() : count(0), totalValue(0) {}
 
-		_int64		count;
-		_int64		totalTimeInUs;
+		_int64	count;
+		_int64 totalValue;
 	};
 
-	Bucket* bucket;
+	Bucket* buckets;
+};
 
-}; //
+const int alignmentTimeHistogramMaxValue = 2 * 1024 * 1024;	// 2-ish seconds in microseconds
+const int MAPQHistogramMaxValue = 70;			// The histogram is one bigger than this, the last value being "unaligned"
+const int EditDistanceHistogramMaxValue = 80;	// The histogram is one bigger than this, the last value being "unaligned"
 
-TimingHistogram g_timingHistogram[1];
+Histogram global_alignmentTimeHistogram(alignmentTimeHistogramMaxValue, true);
+Histogram global_MAPQHistogram(MAPQHistogramMaxValue + 1, false);
+Histogram global_editDistanceHistogram(EditDistanceHistogramMaxValue + 1, false);
+
 
 class OutputBlock {
 public:
@@ -248,25 +225,20 @@ DWORD WorkerThread(PVOID param) {
 	int readBufferSize = threadChunkSize + 100000;
 	char* readBuffer = new char[readBufferSize];
 
+	Histogram alignmentTimeHistogram(alignmentTimeHistogramMaxValue, true);
+	Histogram MAPQHistogram(MAPQHistogramMaxValue + 1, false);
+	Histogram editDistanceHistogram(EditDistanceHistogramMaxValue + 1, false);
+
 	HANDLE hInputFile = CreateFileA(inputFileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
 	if (INVALID_HANDLE_VALUE == hInputFile) {
 		fprintf(stderr, "Unable to open %s, %d\n", inputFileName, GetLastError());
 		exit(1);
 	}
 
-	TimingHistogram timingHistogram[1];
-
 	for (;;) {
 		_int64 readOffset = InterlockedAdd64(&NextFileOffsetToProcess, threadChunkSize) - threadChunkSize;
 		if (readOffset > fileSize) {
-			InterlockedAdd64(&totalLinesProcessed, linesProcessed);
-			InterlockedAdd64(&totalLinesSkipped, linesSkipped);
-
-			EnterCriticalSection(CriticalSection);
-			timingHistogram->mergeInto(g_timingHistogram);
-			LeaveCriticalSection(CriticalSection);
-			
-			return 0;
+			break;
 		}
 
 		if (WAIT_OBJECT_0 != WaitForSingleObject(readerThrottle, INFINITE)) {
@@ -312,15 +284,7 @@ DWORD WorkerThread(PVOID param) {
 				// The last chunk didn't include a whole line.  We're done.
 				//
 				delete block;
-
-				InterlockedAdd64(&totalLinesProcessed, linesProcessed);
-				InterlockedAdd64(&totalLinesSkipped, linesSkipped);
-
-				EnterCriticalSection(CriticalSection);
-				timingHistogram->mergeInto(g_timingHistogram);
-				LeaveCriticalSection(CriticalSection);
-
-				return 0;
+				break;
 			}
 		}
 
@@ -338,15 +302,56 @@ DWORD WorkerThread(PVOID param) {
 				memcpy(block->data + block->dataSize, line, endOfLine - line);
 				block->dataSize += endOfLine - line;
 			} else {
-				//
-				// Look for the AT tag, "\tAT:i:"
-				//
 				linesProcessed++; // don't count headers
 
+								  //
+				// Find the flag and MAPQ fields.  flag is after the first tab and MAPQ after the 4th
+				//
+				const char* current = line;
+				while (*current != '\t' && current < endOfLine - 1) {
+					current++;
+				}
+				
+				if (current >= endOfLine - 1) {
+					fprintf(stderr, "Malformed SAM line with no tabs\n");
+					continue;
+				}
+
+				int flags = atoi(current + 1);
+
+				int nTabsSeen = 1;
+				current++;
+
+				while (nTabsSeen < 4) {
+					while (*current != '\t' && current < endOfLine - 1) {
+						current++;
+					}
+
+					if (current >= endOfLine - 1) {
+						fprintf(stderr, "Malformed SAM line with too few tabs\n");
+						exit(1);	// feh
+					}
+
+					nTabsSeen++;
+					current++;
+				}
+
+				int mapq = atoi(current);
+
+				bool unaligned = (flags & 0x4) != 0;
+
+				int alignmentTime;
+				int editDistance;
+
+				//
+				// Look for the AT tag, "\tAT:i:" and the NM tag, "\tNM:i:"
+				//
+
 				bool foundAT = false;
-				for (const char* current = line; current < endOfLine - 7; current++) {	// -7 leaves space for \tAT:i: at least one digit and then something after (tab or newline)
+				bool foundNM = false;
+				for (; current < endOfLine - 7; current++) {	// -7 leaves space for \tAT:i: at least one digit and then something after (tab or newline)
 					if (current[0] == '\t' && current[1] == 'A' && current[2] == 'T' && current[3] == ':' && current[4] == 'i' && current[5] == ':') {
-						int alignmentTime = atoi(current + 6);
+						alignmentTime = atoi(current + 6);
 
 						if (alignmentTime < minTimeToExclude || alignmentTime > maxTimeToExclude) {
 							memcpy(block->data + block->dataSize, line, endOfLine - line);
@@ -355,11 +360,18 @@ DWORD WorkerThread(PVOID param) {
 							linesSkipped++;
 						}
 
-						timingHistogram->addSample(alignmentTime);
-
 						foundAT = true;
-						break;	// out of the loop looking for AT
-					} // if we're at AT:i:
+						if (foundNM || unaligned) {
+							break;
+						}
+					} else if (!unaligned && current[0] == '\t' && current[1] == 'N' && current[2] == 'M' && current[3] == ':' && current[4] == 'i' && current[5] == ':') {
+						editDistance = atoi(current + 6);
+
+						foundNM = true;
+						if (foundAT) {
+							break;
+						}
+					}
 				} // walking the line
 
 				if (!foundAT) {
@@ -368,8 +380,23 @@ DWORD WorkerThread(PVOID param) {
 					memcpy(buffer, line, bytesToPrint);
 					buffer[bytesToPrint] = '\0';
 					fprintf(stderr, "Found line without an AT tag, first bit: %s\n", buffer);
+					exit(1);
 				}
 
+				if (alignmentTime < 0) {
+					alignmentTimeHistogram.noteBadValue();
+					MAPQHistogram.noteBadValue();
+					editDistanceHistogram.noteBadValue();
+				} else {
+					alignmentTimeHistogram.addValue(alignmentTime, alignmentTime);
+					if (unaligned) {
+						MAPQHistogram.addValue(MAPQHistogramMaxValue + 1, alignmentTime);
+						editDistanceHistogram.addValue(EditDistanceHistogramMaxValue + 1, alignmentTime);
+					} else {
+						MAPQHistogram.addValue(mapq, alignmentTime);
+						editDistanceHistogram.addValue(editDistance, alignmentTime);
+					}
+				}
 
 			} // not a header line
 
@@ -389,24 +416,33 @@ DWORD WorkerThread(PVOID param) {
 		}
 	} // for ever
 
-	return 0;	// NOTREACHED but needed for the compiler to be happy
+	InterlockedAdd64(&totalLinesProcessed, linesProcessed);
+	InterlockedAdd64(&totalLinesSkipped, linesSkipped);
+
+	EnterCriticalSection(CriticalSection);
+	alignmentTimeHistogram.mergeInto(&global_alignmentTimeHistogram);
+	MAPQHistogram.mergeInto(&global_MAPQHistogram);
+	editDistanceHistogram.mergeInto(&global_editDistanceHistogram);
+	LeaveCriticalSection(CriticalSection);
+
+	return 0;	
 }
 
 void usage()
 {
-	fprintf(stderr, "usage: SelectSAMByAlignmentTime inputFile outputFile minTimeToExclude {maxTimeToExclude}\n");
+	fprintf(stderr, "usage: SelectSAMByAlignmentTime inputFile outputFile histogramFile minTimeToExclude {maxTimeToExclude}\n");
 	exit(1);
 } // usage
 
 int main(int argc, char **argv)
 {
-	if (argc != 4 && argc != 5) {
+	if (argc != 5 && argc != 6) {
 		usage();
 	}
 
-	minTimeToExclude = atoi(argv[3]);
-	if (argc >= 5) {
-		maxTimeToExclude = atoi(argv[4]);
+	minTimeToExclude = atoi(argv[4]);
+	if (argc >= 6) {
+		maxTimeToExclude = atoi(argv[5]);
 	}
 
 	if (minTimeToExclude < 0 || minTimeToExclude >= maxTimeToExclude) {
@@ -450,6 +486,12 @@ int main(int argc, char **argv)
 	HANDLE hOutputFile = CreateFileA(argv[2], GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (INVALID_HANDLE_VALUE == hOutputFile) {
 		fprintf(stderr, "Unable to open output file %s, %d\n", argv[2], GetLastError());
+		exit(1);
+	}
+
+	FILE* histogramFile;
+	if (0 != fopen_s(&histogramFile, argv[3], "w")) {
+		fprintf(stderr, "Unable to open histogram file '%s'\n", argv[3]);
 		exit(1);
 	}
 
@@ -517,7 +559,16 @@ int main(int argc, char **argv)
 
 	printf("\nSkipped %lld of %lld reads in %llds\n", totalLinesSkipped, totalLinesProcessed, (GetTickCount64() - startTime) / 1000);
 
-	g_timingHistogram->printHistogram(stdout);
+	fprintf(histogramFile, "Histogram of alignment times:\n");
+	global_alignmentTimeHistogram.print(histogramFile, false);
+
+	fprintf(histogramFile, "\n\nHistogram of alignment time by edit distance (max value is unaligned):\n");
+	global_editDistanceHistogram.print(histogramFile, true);
+
+	fprintf(histogramFile, "\n\nHistogram of alignment time by MAPQ (max value is unaligned):\n");
+	global_MAPQHistogram.print(histogramFile, true);
+
+	fclose(histogramFile);
 
 	CloseHandle(hOutputFile);
 

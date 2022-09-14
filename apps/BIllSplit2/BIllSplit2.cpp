@@ -74,8 +74,6 @@ int main(int argc, const char** argv)
     }
 
 
-    HANDLE hMapping = NULL;
-    LPVOID baseAddress = NULL;
     const char* writeStartLine = NULL;
     const char* currentLine = NULL;
     const char* endAddress = NULL;
@@ -85,7 +83,8 @@ int main(int argc, const char** argv)
 
     _int64 nBytesRead = 0;
 
-    DWORD maxMappingSize = 512 * 1024 * 1024;
+    DWORD maxReadSize = 512 * 1024 * 1024;
+    char* buffer = new char[maxReadSize];
 
     LARGE_INTEGER liFileSize;
     if (!GetFileSizeEx(hInputFile, &liFileSize)) {
@@ -96,24 +95,21 @@ int main(int argc, const char** argv)
     _int64 fileSize = liFileSize.QuadPart;
 
     while (nBytesRead < fileSize) {
-        if (hMapping == NULL) {
-            hMapping = CreateFileMapping(hInputFile, NULL, PAGE_READONLY, 0, 0, NULL);
-            if (NULL == hMapping) {
-                fprintf(stderr, "Unable to create mapping of input file, %d\n", GetLastError());
+        if (endAddress == NULL) {
+            DWORD bytesReadThisRead;
+            if (!ReadFile(hInputFile, buffer, maxReadSize, &bytesReadThisRead, NULL)) {
+                fprintf(stderr, "ReadFile failed, %d\n", GetLastError());
                 exit(1);
             }
 
-            LARGE_INTEGER mappingBaseOffset;
-            mappingBaseOffset.QuadPart = nBytesRead;
-
-            baseAddress = MapViewOfFileEx(hMapping, FILE_MAP_READ, mappingBaseOffset.HighPart, mappingBaseOffset.LowPart, 0, NULL);
-            if (NULL == baseAddress) {
-                fprintf(stderr, "Unable to map view of input file, %d.  Offset 0x%llx\n", GetLastError(), mappingBaseOffset.QuadPart);
+            if (bytesReadThisRead == 0) {
+                fprintf(stderr, "ReadFile completed successfully with no bytes read\n");
                 exit(1);
             }
 
-            currentLine = writeStartLine = (const char*)baseAddress;
-            endAddress = currentLine + __min(maxMappingSize, fileSize - nBytesRead);
+            endAddress = buffer + bytesReadThisRead;
+
+            currentLine = writeStartLine = buffer;
         }
 
         while (currentLine < endAddress && *currentLine != '\n') {
@@ -141,24 +137,12 @@ int main(int argc, const char** argv)
             //
             WriteToOutputFile(outputFilenameBase, &nextOutputFileNumber, &hOutputFile, writeStartLine, endAddress);
 
-            if (!UnmapViewOfFile(baseAddress)) {
-                fprintf(stderr, "Unable to UnmapViewOfFile, %d\n", GetLastError());
-                exit(1);
-            }
-
-            baseAddress = NULL;
             currentLine = endAddress = writeStartLine = NULL;
-
-            CloseHandle(hMapping);
-            hMapping = NULL;
         } 
     } // still have file to go
 
     if (nLinesInCurrentOutputFile != 0) {
         WriteToOutputFile(outputFilenameBase, &nextOutputFileNumber, &hOutputFile, writeStartLine, endAddress);
-
-        UnmapViewOfFile(baseAddress);
-        CloseHandle(hMapping);
     }
 
     if (hOutputFile != INVALID_HANDLE_VALUE) {

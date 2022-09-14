@@ -21,10 +21,9 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{90a1e5b9-1fae-4797-a68b-d6992c470770}</ProjectGuid>
-    <RootNamespace>BIllSplit2</RootNamespace>
+    <ProjectGuid>{38eee85c-559d-4d6a-b2c7-cd3d29d1e258}</ProjectGuid>
+    <RootNamespace>RemoveSlashesFromReadNames</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>BillSplit2</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -140,7 +139,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="BIllSplit2.cpp" />
+    <ClCompile Include="RemoveSlashesFromReadNames.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

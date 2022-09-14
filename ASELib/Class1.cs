@@ -3645,6 +3645,36 @@ namespace ASELib
             return "" + (stopwatch.ElapsedMilliseconds + 500) / 1000 + "s";
         }
 
+        public const int secondsInMinute = 60;
+        public const int minutesInHour = 60;
+        public const int hoursInDay = 24;
+        public const int secondsInHour = secondsInMinute * minutesInHour;
+        public const int secondsInDay = hoursInDay * secondsInHour;
+
+        public static string ElapsedTime(Stopwatch stopwatch)
+        {
+            var timeInSeconds = (stopwatch.ElapsedMilliseconds + 500) / 1000;
+            var result = "";
+            bool displayedSomething = false;
+            if (timeInSeconds >= secondsInDay)
+            {
+                result += (timeInSeconds / secondsInDay) + "d ";
+                timeInSeconds %= secondsInDay;
+                displayedSomething = true;
+            }
+
+            if (timeInSeconds >= secondsInHour || displayedSomething)
+            {
+                result += (timeInSeconds / secondsInHour) + ":";
+                timeInSeconds %= secondsInHour;
+                displayedSomething = true;
+            }
+
+            result += String.Format("{0:00}", timeInSeconds / secondsInMinute) + ":" + String.Format("{0:00}", timeInSeconds % secondsInMinute);
+
+            return result;
+        }
+
         public static string ShareFromPathname(string pathname)
         {
             //
@@ -9684,6 +9714,11 @@ namespace ASELib
                 return (flag & Unmapped) == Unmapped;
             }
 
+            public bool isUnmappedOrMapq0()
+            {
+                return mapq == 0 || isUnmapped();
+            }
+
             public bool isRC()
             {
                 return (flag & RC) == RC;
@@ -15252,6 +15287,31 @@ namespace ASELib
             return String.Format("{0:n0}", value);
         }
 
+        public static string Percentage(long numerator, long denominator, int nDecimalPlaces = 0)
+        {
+            string retVal = "" + ((numerator * 100) / denominator);
+
+            if (nDecimalPlaces != 0)
+            {
+                retVal += ".";
+                long multiplier = 1;
+                var formatString = "{0:";
+
+                for (int i = 0; i < nDecimalPlaces; i++)
+                {
+                    multiplier *= 10;
+                    formatString += "0";
+                }
+
+                formatString += "}";
+
+                retVal += String.Format(formatString, (((numerator * 100) % denominator) * multiplier) / denominator);  
+            }
+
+            retVal += "%";
+            return retVal;
+        }
+
         public static void ComputeConfidenceInterval(IEnumerable<double> enumerableValues, double desiredConfidence, out double mean, out double range)
         {
             //
@@ -15947,6 +16007,44 @@ namespace ASELib
             return output;
         } // RunProcessAndGetOutput
 
+        public delegate void StringConsumer(string stringToConsume);
+        public static void RunProcess(string binaryName, string commandLine, StringConsumer stringConsumer, string workingDirectory = null)
+        {
+            var output = new List<string>();
+
+            var startInfo = new ProcessStartInfo(binaryName, commandLine);
+
+            if (workingDirectory != null)
+            {
+                startInfo.WorkingDirectory = workingDirectory;
+            }
+
+            startInfo.UseShellExecute = false;
+            startInfo.RedirectStandardOutput = true;
+
+            Process process;
+            try
+            {
+                process = Process.Start(startInfo);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error trying to start process " + binaryName);
+                Console.WriteLine("Exception message: " + e.Message);
+
+                throw e;
+            }
+
+            string outputLine;
+            while (null != (outputLine = process.StandardOutput.ReadLine()))
+            {
+                stringConsumer(outputLine);
+            }
+
+            process.WaitForExit();
+        } // RunProcess
+
+
         static void InputThread(Process process, string inputFilename)
         {
             var inputData = File.ReadAllBytes(inputFilename); // If you want to do this for giant files, it could be in chunks.
@@ -15997,7 +16095,7 @@ namespace ASELib
             process.WaitForExit();
 
             return output;
-        } // RunProcessAndGetOutput
+        } // RunProcessAndGetOutputRedirectingInput
 
 
 #if false
@@ -18058,6 +18156,7 @@ namespace ASELib
 
         } // FindSAMLinesInNameSortedSAMFile
 
+
         public class PearsonR  // compute the pearson correlation coefficient of two samples
         {
             public PearsonR() { }
@@ -18083,6 +18182,23 @@ namespace ASELib
             double sumOfY2 = 0;
             double sumOfXY = 0;
         } // PearsonR
+
+        public static void WriteLineToMultipleStreams(IEnumerable<StreamWriter> streams, string line = "")
+        {
+            foreach (var stream in streams)
+            {
+                stream.WriteLine(line);
+            }
+        } // WriteLineToMultipleStreams
+
+        public static void WriteToMultipleStreams(IEnumerable<StreamWriter> streams, string line)
+        {
+            foreach (var stream in streams)
+            {
+                stream.Write(line);
+            }
+        } // WriteToMultipleStreams
+
 
     } // ASETools
 
