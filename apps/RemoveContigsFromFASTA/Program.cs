@@ -20,12 +20,16 @@ namespace RemoveContigsFromFASTA
             long emittedLines = 0;
             long inputContigs = 0;
             long outputContigs = 0;
+            bool removeALTs = false;
 
-            if (args.Count() != 2)
+            if (args.Count() != 2 && (args.Count() != 3 || args[2] != "-a"))
             {
-                Console.WriteLine("Usage: RemoveContigsFromFASTA inputFile outputFile");
+                Console.WriteLine("Usage: RemoveContigsFromFASTA inputFile outputFile {-a}");
+                Console.WriteLine("-a means to remove ALTs (contigs whose name starts with HLA- or contains _alt, regardless of case)");
                 return;
             }
+
+            removeALTs = args.Count() > 2 && args[2] == "-a";
 
             var inputFile = ASETools.CreateStreamReaderWithRetry(args[0]);
             var outputFile = ASETools.CreateStreamWriterWithRetry(args[1]);
@@ -48,7 +52,14 @@ namespace RemoveContigsFromFASTA
                     inputContigs++;
 
                     currentContig = inputLine.Substring(1);
-                    skipping = currentContig.Contains("_"); // Could generalize this if you cared
+                    if (removeALTs)
+                    {
+                        skipping = currentContig.ToLower().StartsWith("hla-") || currentContig.ToLower().Contains("_alt");  // Contains rather than EndsWith because there's extra junk on the contig line
+                    }
+                    else
+                    {
+                        skipping = currentContig.Contains("_"); // Could generalize this if you cared
+                    }
 
                     if (!skipping)
                     {

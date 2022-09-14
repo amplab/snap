@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.29613.14
+# Visual Studio Version 17
+VisualStudioVersion = 17.1.32210.238
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{76E127A5-2247-4A10-9DC8-59518C7C6636}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -341,6 +341,12 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SeedSweep", "apps\SeedSweep\SeedSweep.csproj", "{33850ACE-1BC0-464A-84EE-178DA1F28C6D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SNAPAlignmentStatistics", "apps\SNAPAlignmentStatistics\SNAPAlignmentStatistics.csproj", "{0646457B-DC6F-4DF4-AAD7-D7B46F15BA1F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeasureSecondaryAlignmentDistributuion", "apps\MeasureSecondaryAlignmentDistributuion\MeasureSecondaryAlignmentDistributuion.csproj", "{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SelectSAMByAlignmentTime", "apps\SelectSAMByAlignmentTime\SelectSAMByAlignmentTime.vcxproj", "{CAC85C32-99D5-4163-8B62-2645486D2497}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CorrelateAlignmentTime", "apps\CorrelateAlignmentTime\CorrelateAlignmentTime.csproj", "{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -2670,6 +2676,54 @@ Global
 		{0646457B-DC6F-4DF4-AAD7-D7B46F15BA1F}.Release|Win32.Build.0 = Release|Any CPU
 		{0646457B-DC6F-4DF4-AAD7-D7B46F15BA1F}.Release|x64.ActiveCfg = Release|x64
 		{0646457B-DC6F-4DF4-AAD7-D7B46F15BA1F}.Release|x64.Build.0 = Release|x64
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Debug|Win32.Build.0 = Debug|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Debug|x64.ActiveCfg = Debug|x64
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Debug|x64.Build.0 = Debug|x64
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Release|Win32.ActiveCfg = Release|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Release|Win32.Build.0 = Release|Any CPU
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Release|x64.ActiveCfg = Release|x64
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E}.Release|x64.Build.0 = Release|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Debug|Any CPU.Build.0 = Debug|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Debug|Mixed Platforms.ActiveCfg = Debug|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Debug|Mixed Platforms.Build.0 = Debug|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Debug|Win32.ActiveCfg = Debug|Win32
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Debug|Win32.Build.0 = Debug|Win32
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Debug|x64.ActiveCfg = Debug|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Debug|x64.Build.0 = Debug|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Release|Any CPU.ActiveCfg = Release|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Release|Any CPU.Build.0 = Release|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Release|Mixed Platforms.ActiveCfg = Release|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Release|Mixed Platforms.Build.0 = Release|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Release|Win32.ActiveCfg = Release|Win32
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Release|Win32.Build.0 = Release|Win32
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Release|x64.ActiveCfg = Release|x64
+		{CAC85C32-99D5-4163-8B62-2645486D2497}.Release|x64.Build.0 = Release|x64
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Debug|Win32.Build.0 = Debug|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Debug|x64.ActiveCfg = Debug|x64
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Debug|x64.Build.0 = Debug|x64
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Release|Win32.ActiveCfg = Release|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Release|Win32.Build.0 = Release|Any CPU
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Release|x64.ActiveCfg = Release|x64
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -2824,6 +2878,9 @@ Global
 		{BCC92DD4-728F-4673-998B-31476991B617} = {8A997C3A-0C72-402F-A1CA-049275DEF194}
 		{33850ACE-1BC0-464A-84EE-178DA1F28C6D} = {2A30EDE4-9D00-4B4F-973E-128538E8A81C}
 		{0646457B-DC6F-4DF4-AAD7-D7B46F15BA1F} = {2A30EDE4-9D00-4B4F-973E-128538E8A81C}
+		{CF48D1F7-64BB-4983-BB7A-6FC2DBD1808E} = {2A30EDE4-9D00-4B4F-973E-128538E8A81C}
+		{CAC85C32-99D5-4163-8B62-2645486D2497} = {2A30EDE4-9D00-4B4F-973E-128538E8A81C}
+		{D8EFF84B-F9DB-4E2E-AEC0-6C7242AE2ABA} = {2A30EDE4-9D00-4B4F-973E-128538E8A81C}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {54B8FD8D-AD1B-41AD-8132-0137B5CB61DA}
