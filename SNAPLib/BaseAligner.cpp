@@ -59,6 +59,7 @@ BaseAligner::BaseAligner(
     bool            i_noUkkonen,
     bool            i_noOrderedEvaluation,
     bool			i_noTruncation,
+    bool            i_noEditDistance,
     bool            i_useAffineGap,
     bool            i_ignoreAlignmentAdjustmentsForOm,
 	bool            i_altAwareness,
@@ -79,7 +80,7 @@ BaseAligner::BaseAligner(
         maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
-        noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
+        noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation), noEditDistance(i_noEditDistance),
 		useAffineGap(i_useAffineGap), matchReward(i_matchReward), subPenalty(i_subPenalty), 
         gapOpenPenalty(i_gapOpenPenalty), gapExtendPenalty(i_gapExtendPenalty),
         minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
@@ -628,8 +629,7 @@ Return Value:
                     }
                 }
 
-                _int64 limit = min(nHits[direction], (_int64)maxHitsToConsider);
- 
+                _int64 limit = min(nHits[direction], (_int64)maxHitsToConsider); 
 
                 for (unsigned i = 0; i < limit; i++) {
                     //
@@ -1205,7 +1205,7 @@ Return Value:
 
                     if (!useHamming && (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit)) {
                         // Check if affine gap must be called
-                        if (useAffineGap && ((score1 + score2) > maxKForSameAlignment) && elementToScore->lowestPossibleScore <= scoresForAllAlignments.bestScore) {
+                        if (useAffineGap && ((score1 + score2 > maxKForSameAlignment && elementToScore->lowestPossibleScore <= scoresForAllAlignments.bestScore) || noEditDistance)) {
                             score1 = 0;  score2 = 0;  agScore1 = seedLen; agScore2 = 0;
                             usedAffineGapScoring = true;
                             nLocationsScoredWithAffineGap++;

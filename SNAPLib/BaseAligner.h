@@ -55,6 +55,7 @@ public:
         bool            i_noUkkonen,
         bool            i_noOrderedEvaluation,
 		bool			i_noTruncation,
+        bool            i_noEditDistance,
         bool            i_useAffineGap,           
         bool            i_ignoreAlignmentAdjustmentsForOm,
 		bool			i_altAwareness,
@@ -444,6 +445,7 @@ private:
     bool     noUkkonen;
     bool     noOrderedEvaluation;
 	bool     noTruncation;
+    bool     noEditDistance;
     bool     useAffineGap;
     bool     ignoreAlignmentAdjustmentsForOm;
     bool     doesGenomeIndexHave64BitLocations;

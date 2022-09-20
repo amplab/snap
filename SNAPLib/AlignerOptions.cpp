@@ -74,6 +74,7 @@ AlignerOptions::AlignerOptions(
     noUkkonen(false),
     noOrderedEvaluation(false),
 	noTruncation(false),
+    noEditDistance(false),
     useAffineGap(true),
     matchReward(1),
     subPenalty(4),
@@ -227,6 +228,9 @@ AlignerOptions::usage()
             "       down execution without improving alignments.\n"
             "  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
             "       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
+            "  -ne  Don't try edit distance scoring before doing affine gap.  This option is to evaluate the aligner and isn't\n"
+            "       intended to be used for ordinary alignments.  It may change alignment results somewhat, but we have not\n"
+            "       evaluated its effect on correctness.\n"
             " -wbs  Write buffer size in megabytes.  Don't specify this unless you've gotten an error message saying to make it bigger.  Default 16.\n"
             "  -di  Drop the index after aligning and before sorting.  This frees up memory for the sort at the expense of not having the index loaded for your next run.\n"
             " -kts  Kill if too slow.  Monitor our progress and kill ourself if we're not moving fast enough.  This is intended for use on machines\n"
@@ -946,6 +950,9 @@ AlignerOptions::usage()
             return true;
         } else if (strcmp(argv[n], "-nt") == 0) {
             noTruncation = true;
+            return true;
+        } else if (strcmp(argv[n], "-ne") == 0) {
+            noEditDistance = true;
             return true;
         } else if (strcmp(argv[n], "-at") == 0) {
             attachAlignmentTimes = true;

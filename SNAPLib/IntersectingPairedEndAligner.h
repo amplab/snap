@@ -56,6 +56,7 @@ public:
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
 		bool		  noTruncation_,
+        bool          noEditDistance_,
         bool          useAffineGap_,
         bool          ignoreAlignmentAdjustmentsForOm_,
 		bool		  altAwareness_,
@@ -225,6 +226,7 @@ private:
     bool            noUkkonen;
     bool            noOrderedEvaluation;
 	bool			noTruncation;
+    bool            noEditDistance;
     bool            useAffineGap;
     bool            ignoreAlignmentAdjustmentsForOm;
 	bool			altAwareness;

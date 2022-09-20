@@ -292,6 +292,7 @@ AlignerContext::initialize()
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
 	noTruncation = options->noTruncation;
+    noEditDistance = options->noEditDistance;
     ignoreAlignmentAdjustmentForOm = options->ignoreAlignmentAdjustmentsForOm;
 	altAwareness = options->altAwareness;
     emitALTAlignments = options->emitALTAlignments;

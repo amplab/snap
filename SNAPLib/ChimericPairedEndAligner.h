@@ -43,6 +43,7 @@ public:
         bool                noUkkonen,
         bool                noOrderedEvaluation,
 		bool				noTruncation,
+        bool                noEditDistance,
         bool                useAffineGap,
         bool                ignoreAlignmentAdjustmentsForOm,
 		bool                altAwareness,

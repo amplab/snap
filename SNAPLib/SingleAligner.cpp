@@ -157,6 +157,7 @@ SingleAlignerContext::runIterationThreadImpl(Read *& read)
             noUkkonen,
             noOrderedEvaluation,
 			noTruncation,
+            noEditDistance,
             useAffineGap,
             ignoreAlignmentAdjustmentForOm,
 			altAwareness,

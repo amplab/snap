@@ -51,6 +51,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
 		bool          noTruncation_,
+        bool          noEditDistance_,
         bool          useAffineGap_,    
         bool          ignoreAlignmentAdjustmentsForOm_,
 		bool		  altAwareness_,
@@ -62,8 +63,8 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         bool          useSoftClip_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxKForIndels(maxKForIndels_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
-    extraSearchDepth(extraSearchDepth_), nLocationsScoredLandauVishkin(0), nLocationsScoredAffineGap(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), useAffineGap(useAffineGap_),
-    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), altAwareness(altAwareness_),
+    extraSearchDepth(extraSearchDepth_), nLocationsScoredLandauVishkin(0), nLocationsScoredAffineGap(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), noEditDistance(noEditDistance_), 
+    useAffineGap(useAffineGap_), maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), altAwareness(altAwareness_),
     maxScoreGapToPreferNonAltAlignment(maxScoreGapToPreferNonAltAlignment_), matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), useSoftClip(useSoftClip_),
     stopOnFirstHit(false)
 {
@@ -196,8 +197,7 @@ IntersectingPairedEndAligner::align(
         return alignLandauVishkin(read0, read1, result, firstALTResult, maxEditDistanceForSecondaryResults, secondaryResultBufferSize,
 	        nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead,
 	        singleEndSecondaryResults, maxLVCandidatesForAffineGapBufferSize, nLVCandidatesForAffineGap, lvCandidatesForAffineGap);
-    }
-    else {
+    } else {
         //
         // Perform seeding, set intersection, LV alignment and identify promising candidates for affine gap scoring
         //
@@ -2286,8 +2286,7 @@ doneScoring:
     ScoreSet* scoreSetToEmit;
     if ((!altAwareness) || scoresForNonAltAlignments.bestPairScore > scoresForAllAlignments.bestPairScore + maxScoreGapToPreferNonAltAlignment) {
         scoreSetToEmit = &scoresForAllAlignments;
-    }
-    else {
+    } else {
         scoreSetToEmit = &scoresForNonAltAlignments;
     }
 
@@ -2322,8 +2321,7 @@ doneScoring:
         result->probabilityAllPairs = 0.0;
 
 
-    }
-    else {
+    } else {
         scoreSetToEmit->fillInResult(result, popularSeedsSkipped);
         if (altAwareness && scoreSetToEmit == &scoresForNonAltAlignments &&
             (scoresForAllAlignments.bestResultGenomeLocation[0] != scoresForNonAltAlignments.bestResultGenomeLocation[0] ||
@@ -2336,8 +2334,7 @@ doneScoring:
             {
                 firstALTResult->supplementary[whichRead] = true;
             }
-        }
-        else {
+        } else {
             for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++)
             {
                 firstALTResult->status[whichRead] = NotFound;
@@ -2392,8 +2389,7 @@ doneScoring:
                 scoreSetToEmit->bestPairScore = __min(scoreSetToEmit->bestPairScore, secondaryResults[i].score[0] + secondaryResults[i].score[1]);
             }
         }
-    }
-    else {
+    } else {
         for (int i = 0; i < *nSecondaryResults; i++) {
             for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
                 secondaryResults[i].scorePriorToClipping[whichRead] = secondaryResults[i].score[whichRead];
@@ -2408,8 +2404,7 @@ doneScoring:
 
             secondaryResults[i] = secondaryResults[(*nSecondaryResults) - 1];
             (*nSecondaryResults)--;
-        }
-        else {
+        } else {
             i++;
         }
     }
@@ -2583,8 +2578,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     // 
     if (result->usedGaplessClipping[0] || result->usedGaplessClipping[1]) {
         scoreLimit = scoreLimitALT = MAX_K - 1;
-    }
-    else {
+    } else {
         scoreLimit = scoreLimitALT = maxK + extraSearchDepth;
     }
 
@@ -2599,7 +2593,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     double oldPairProbabilityBestResultALT = (firstALTResult->status[0] != NotFound) ? firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1] : 0.0;
 
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-        if (result->usedGaplessClipping[r] || result->score[r] > maxKForSameAlignment) {
+        if (result->usedGaplessClipping[r] || result->score[r] > maxKForSameAlignment || noEditDistance) {
             //
             // Use affine gap scoring to determine if bases need to be clipped
             //
@@ -2607,6 +2601,7 @@ IntersectingPairedEndAligner::alignAffineGap(
             if (!result->usedGaplessClipping[r]) {
                 scoreLimit = __max(scoreLimit, result->score[r]);
             }
+
             scoreLocationWithAffineGap(r, result->direction[r], result->origLocation[r],
 	            result->seedOffset[r], scoreLimit, &result->score[r], &result->matchProbability[r],
 	            &genomeOffset[r], &result->basesClippedBefore[r], &result->basesClippedAfter[r], &result->agScore[r], &result->refSpan[r]);
@@ -2627,6 +2622,7 @@ IntersectingPairedEndAligner::alignAffineGap(
                     if (!firstALTResult->usedGaplessClipping[r]) {
                         scoreLimitALT = __max(scoreLimitALT, firstALTResult->score[r]);
                     }
+
                     scoreLocationWithAffineGap(r, firstALTResult->direction[r], firstALTResult->origLocation[r],
                         firstALTResult->seedOffset[r], scoreLimitALT, &firstALTResult->score[r], &firstALTResult->matchProbability[r],
                         &genomeOffset[r], &firstALTResult->basesClippedBefore[r], &firstALTResult->basesClippedAfter[r], &firstALTResult->agScore[r], &firstALTResult->refSpan[r]);
@@ -2634,8 +2630,7 @@ IntersectingPairedEndAligner::alignAffineGap(
                     if (firstALTResult->score[r] != ScoreAboveLimit) {
                         firstALTResult->location[r] = firstALTResult->origLocation[r] + genomeOffset[r];
                         scoreLimitALT -= firstALTResult->score[r];
-                    }
-                    else {
+                    } else {
                         firstALTResult->status[r] = NotFound;
                     }
 
@@ -2652,7 +2647,7 @@ IntersectingPairedEndAligner::alignAffineGap(
             }
         } else {
             //
-            // Skip affine gap scoring for reads we know that LV and affine gap will agree on the alignment
+            // Skip affine gap scoring for reads we know that LV and affine gap will agree on the alignment (and we're not evaluating without this optimization)
             //
             result->usedAffineGapScoring[r] = false;
             skipAffineGap[r] = true;
@@ -2717,8 +2712,7 @@ IntersectingPairedEndAligner::alignAffineGap(
             double newPairProbabilityALT = firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1];
             scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResultALT);
             scoresForAllAlignments.updateProbabilityOfBestPair(newPairProbabilityALT, false); // false parameter needed because newPairProbabilityALT is already added to total probability in updateBestHit above
-        }
-        else {
+        } else {
             scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResult);
             scoresForAllAlignments.updateProbabilityOfBestPair(newPairProbability);
         }

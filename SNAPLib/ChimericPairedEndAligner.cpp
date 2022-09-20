@@ -51,6 +51,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         bool                noUkkonen,
         bool                noOrderedEvaluation,
 		bool				noTruncation,
+        bool                noEditDistance,
         bool                useAffineGap_,
         bool                ignoreAlignmentAdjustmentsForOm,
 		bool				altAwareness,
@@ -80,7 +81,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK / 2  /* allocate half to each end instead of letting it float like when they're aligned together */, maxReadSize,
                                                 maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, 
-                                                noUkkonen, noOrderedEvaluation, noTruncation, useAffineGap, 
+                                                noUkkonen, noOrderedEvaluation, noTruncation, noEditDistance, useAffineGap, 
                                                 ignoreAlignmentAdjustmentsForOm, altAwareness, emitALTAlignments, maxScoreGapToPreferNonAltAlignment,
                                                 maxSecondaryAlignmentsPerContig, &lv, &reverseLV,
                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, fivePrimeEndBonus, threePrimeEndBonus,

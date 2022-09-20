@@ -120,6 +120,7 @@ struct AlignerOptions : public AbstractOptions
     bool                noUkkonen;
     bool                noOrderedEvaluation;
 	bool				noTruncation;
+    bool                noEditDistance;
     bool                useAffineGap;
     bool                useSoftClipping;
     unsigned            matchReward;
