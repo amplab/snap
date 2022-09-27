@@ -48,39 +48,36 @@ using std::min;
 #endif
 
 BaseAligner::BaseAligner(
-    GenomeIndex    *i_genomeIndex,
-    unsigned        i_maxHitsToConsider,
-    unsigned        i_maxK,
-    unsigned        i_maxReadSize,
-    unsigned        i_maxSeedsToUseFromCommandLine,
-    double          i_maxSeedCoverage,
-    unsigned        i_minWeightToCheck,
-    unsigned        i_extraSearchDepth,
-    bool            i_noUkkonen,
-    bool            i_noOrderedEvaluation,
-    bool			i_noTruncation,
-    bool            i_noEditDistance,
-    bool            i_useAffineGap,
-    bool            i_ignoreAlignmentAdjustmentsForOm,
-	bool            i_altAwareness,
-    bool            i_emitALTAlignments,
-    int             i_maxScoreGapToPreferNonAltAlignment,
-	int             i_maxSecondaryAlignmentsPerContig,
-    LandauVishkin<1>*i_landauVishkin,
-    LandauVishkin<-1>*i_reverseLandauVishkin,
-    unsigned             i_matchReward,
-    unsigned             i_subPenalty,
-    unsigned             i_gapOpenPenalty,
-    unsigned             i_gapExtendPenalty,
-    unsigned             i_fivePrimeEndBonus,
-    unsigned             i_threePrimeEndBonus,
-    AlignerStats   *i_stats,
-    BigAllocator   *allocator) :
+    GenomeIndex             *i_genomeIndex,
+    unsigned                 i_maxHitsToConsider,
+    unsigned                 i_maxK,
+    unsigned                 i_maxReadSize,
+    unsigned                 i_maxSeedsToUseFromCommandLine,
+    double                   i_maxSeedCoverage,
+    unsigned                 i_minWeightToCheck,
+    unsigned                 i_extraSearchDepth,
+    DisabledOptimizations    i_disabledOptimizations,
+    bool                     i_useAffineGap,
+    bool                     i_ignoreAlignmentAdjustmentsForOm,
+	bool                     i_altAwareness,
+    bool                     i_emitALTAlignments,
+    int                      i_maxScoreGapToPreferNonAltAlignment,
+	int                      i_maxSecondaryAlignmentsPerContig,
+    LandauVishkin<1>        *i_landauVishkin,
+    LandauVishkin<-1>       *i_reverseLandauVishkin,
+    unsigned                 i_matchReward,
+    unsigned                 i_subPenalty,
+    unsigned                 i_gapOpenPenalty,
+    unsigned                 i_gapExtendPenalty,
+    unsigned                 i_fivePrimeEndBonus,
+    unsigned                 i_threePrimeEndBonus,
+    AlignerStats            *i_stats,
+    BigAllocator            *allocator) :
         genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
         maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
-        noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation), noEditDistance(i_noEditDistance),
+        disabledOptimizations(i_disabledOptimizations),
 		useAffineGap(i_useAffineGap), matchReward(i_matchReward), subPenalty(i_subPenalty), 
         gapOpenPenalty(i_gapOpenPenalty), gapExtendPenalty(i_gapExtendPenalty),
         minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
@@ -104,9 +101,7 @@ Arguments:
                           hits).  Once we've looked up this many seeds, we just score what we've got.
     i_maxSeedCoverage   - The maximum number of seeds to use expressed as readSize/seedSize
     i_extraSearchDepth  - How deeply beyond bestScore do we search?
-    i_noUkkonen         - Don't use Ukkonen's algorithm (i.e., don't reduce the max edit distance depth as we score candidates)
-    i_noOrderedEvaluation-Don't order evaluating the reads by the hit count in order to drive down the max edit distance more quickly
-	i_noTruncation       - Don't truncate searches based on count of disjoint seed misses
+    i_disabledOptimizations - optimizations disabled for aligner measurements
     i_useAffineGap      - Use affine gap scoring for seed extension
     i_ignoreAlignmentAdjustmentsForOm - When a read score is adjusted because of soft clipping for being near the end of a contig, don't use the adjusted score when computing what to keep for -om
     i_maxSecondaryAlignmentsPerContig - Maximum secondary alignments per contig; -1 means don't limit this
@@ -650,12 +645,12 @@ Return Value:
                     bool candidateIsALT = altAwareness && genome->isGenomeLocationALT(genomeLocationOfThisHit);
 
                     if (NULL != hashTableElement) {
-                        if (!noOrderedEvaluation) {     // If noOrderedEvaluation, just leave them all on the one-hit weight list so they get evaluated in whatever order
+                        if (!disabledOptimizations.noOrderedEvaluation) {     // If noOrderedEvaluation, just leave them all on the one-hit weight list so they get evaluated in whatever order
                             incrementWeight(hashTableElement);
                         }
                         candidate->seedOffset = offset;
                         _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
-                    } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit(candidateIsALT) || noTruncation) {
+                    } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit(candidateIsALT) || disabledOptimizations.noTruncation) {
                             _ASSERT(offset <= readLen - seedLen);
                             allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                 offset, &candidate, &hashTableElement);
@@ -820,7 +815,7 @@ BaseAligner::scoreLocationWithAffineGap(
         //
         // Try banded affine-gap when pattern is long and band needed is small
         //
-        if (patternLen >= (3 * (2 * (int)scoreLimit + 1))) {
+        if (patternLen >= (3 * (2 * (int)scoreLimit + 1)) && !disabledOptimizations.noBandedAffineGap) {
             agScore1 = affineGap->computeScoreBanded(data + tailStart,
                 textLen,
                 readToScore->getData() + tailStart,
@@ -834,8 +829,7 @@ BaseAligner::scoreLocationWithAffineGap(
                 &score1,
                 &matchProb1,
                 true);
-        }
-        else {
+        } else {
             agScore1 = affineGap->computeScore(data + tailStart,
                 textLen,
                 readToScore->getData() + tailStart,
@@ -853,6 +847,7 @@ BaseAligner::scoreLocationWithAffineGap(
 
         agScore1 += (seedLen - readLen);
     }
+
     if (score1 != ScoreAboveLimit) {
         if (seedOffset != 0) {
             int limitLeft = scoreLimit - score1;
@@ -860,7 +855,7 @@ BaseAligner::scoreLocationWithAffineGap(
             //
             // Try banded affine-gap when pattern is long and band needed is small
             //
-            if (patternLen >= (3 * (2 * limitLeft + 1))) {
+            if (patternLen >= (3 * (2 * limitLeft + 1)) && !disabledOptimizations.noBandedAffineGap) {
                 agScore2 = reverseAffineGap->computeScoreBanded(data + seedOffset,
                     seedOffset + limitLeft,
                     reversedRead[direction] + readLen - seedOffset,
@@ -873,8 +868,7 @@ BaseAligner::scoreLocationWithAffineGap(
                     basesClippedBefore,
                     &score2,
                     &matchProb2);
-            }
-            else {
+            } else {
                 agScore2 = reverseAffineGap->computeScore(data + seedOffset,
                     seedOffset + limitLeft,
                     reversedRead[direction] + readLen - seedOffset,
@@ -897,8 +891,7 @@ BaseAligner::scoreLocationWithAffineGap(
                 *agScore = -1;
             }
         }
-    }
-    else {
+    } else {
         *score = ScoreAboveLimit;
         *genomeLocationOffset = 0;
         *agScore = -1;
@@ -911,13 +904,12 @@ BaseAligner::scoreLocationWithAffineGap(
         *matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
 
         *agScore = agScore1 + agScore2;
-    }
-    else {
+    } else {
         *score = ScoreAboveLimit;
         *agScore = -1;
         *matchProbability = 0.0;
     }
-}
+} // BaseAligner::scoreLocationWithAffineGap
 
     bool
 BaseAligner::score(
@@ -1030,7 +1022,7 @@ Return Value:
         }
 
 
-        if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > max(scoreLimit(true), scoreLimit(false)) && !noTruncation) || forceResult) {
+        if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > max(scoreLimit(true), scoreLimit(false)) && !disabledOptimizations.noTruncation) || forceResult) {
             if (weightListToCheck < minWeightToCheck) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
@@ -1205,7 +1197,7 @@ Return Value:
 
                     if (!useHamming && (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit)) {
                         // Check if affine gap must be called
-                        if (useAffineGap && ((score1 + score2 > maxKForSameAlignment && elementToScore->lowestPossibleScore <= scoresForAllAlignments.bestScore) || noEditDistance)) {
+                        if (useAffineGap && ((score1 + score2 > maxKForSameAlignment && elementToScore->lowestPossibleScore <= scoresForAllAlignments.bestScore) || disabledOptimizations.noEditDistance)) {
                             score1 = 0;  score2 = 0;  agScore1 = seedLen; agScore2 = 0;
                             usedAffineGapScoring = true;
                             nLocationsScoredWithAffineGap++;
@@ -1215,7 +1207,7 @@ Return Value:
                                 //
                                 // Try banded affine-gap when pattern is long and band needed is small
                                 //
-                                if (patternLen >= (3 * (2 * scoreLimitForThisElement + 1))) {
+                                if (patternLen >= (3 * (2 * scoreLimitForThisElement + 1)) && !disabledOptimizations.noBandedAffineGap) {
                                     agScore1 = affineGap->computeScoreBanded(data + tailStart,
                                         textLen,
                                         readToScore->getData() + tailStart,
@@ -1253,7 +1245,7 @@ Return Value:
                                     //
                                     // Try banded affine-gap when pattern is long and band needed is small
                                     //
-                                    if (patternLen >= (3 * (2 * limitLeft + 1))) {
+                                    if (patternLen >= (3 * (2 * limitLeft + 1)) && !disabledOptimizations.noBandedAffineGap) {
                                         agScore2 = reverseAffineGap->computeScoreBanded(data + seedOffset,
                                             seedOffset + limitLeft,
                                             reversedRead[elementToScore->direction] + readLen - seedOffset,
@@ -1610,8 +1602,7 @@ BaseAligner::alignAffineGap(
 
             if (firstALTResult->score != ScoreAboveLimit) {
                 firstALTResult->location = firstALTResult->origLocation + genomeOffset;
-            }
-            else {
+            } else {
                 firstALTResult->status = NotFound;
             }
 
@@ -2540,7 +2531,7 @@ BaseAligner::finalizeSecondaryResults(
     int
 BaseAligner::scoreLimit(bool forALT) 
 {
-    if (noUkkonen) {
+    if (disabledOptimizations.noUkkonen) {
         return __min(MAX_K - 1, maxK + extraSearchDepth); // We're testing the value of truncating our searches by not doing so.
     }
 

@@ -34,36 +34,33 @@ extern volatile bool _DumpAlignments;    // From BaseAligner.cpp
 #endif  // _DEBUG
 
 IntersectingPairedEndAligner::IntersectingPairedEndAligner(
-        GenomeIndex  *index_,
-        unsigned      maxReadSize_,
-        unsigned      maxHits_,
-        unsigned      maxK_,
-        unsigned      maxKForIndels_,
-        unsigned      numSeedsFromCommandLine_,
-        double        seedCoverage_,
-        int           minSpacing_,                 // Minimum distance to allow between the two ends.
-        unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
-        unsigned      maxBigHits_,
-        unsigned      extraSearchDepth_,
-        unsigned      maxCandidatePoolSize,
-        int           maxSecondaryAlignmentsPerContig_,
-        BigAllocator  *allocator,
-        bool          noUkkonen_,
-        bool          noOrderedEvaluation_,
-		bool          noTruncation_,
-        bool          noEditDistance_,
-        bool          useAffineGap_,    
-        bool          ignoreAlignmentAdjustmentsForOm_,
-		bool		  altAwareness_,
-        unsigned      maxScoreGapToPreferNonAltAlignment_,
-        unsigned      matchReward_,
-        unsigned      subPenalty_,
-        unsigned      gapOpenPenalty_,
-        unsigned      gapExtendPenalty_,
-        bool          useSoftClip_) :
+        GenomeIndex             *index_,
+        unsigned                 maxReadSize_,
+        unsigned                 maxHits_,
+        unsigned                 maxK_,
+        unsigned                 maxKForIndels_,
+        unsigned                 numSeedsFromCommandLine_,
+        double                   seedCoverage_,
+        int                      minSpacing_,                 // Minimum distance to allow between the two ends.
+        unsigned                 maxSpacing_,                 // Maximum distance to allow between the two ends.
+        unsigned                 maxBigHits_,
+        unsigned                 extraSearchDepth_,
+        unsigned                 maxCandidatePoolSize,
+        int                      maxSecondaryAlignmentsPerContig_,
+        BigAllocator            *allocator,
+        DisabledOptimizations    disabledOptimizations_,
+        bool                     useAffineGap_,    
+        bool                     ignoreAlignmentAdjustmentsForOm_,
+		bool		             altAwareness_,
+        unsigned                 maxScoreGapToPreferNonAltAlignment_,
+        unsigned                 matchReward_,
+        unsigned                 subPenalty_,
+        unsigned                 gapOpenPenalty_,
+        unsigned                 gapExtendPenalty_,
+        bool                     useSoftClip_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxKForIndels(maxKForIndels_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
-    extraSearchDepth(extraSearchDepth_), nLocationsScoredLandauVishkin(0), nLocationsScoredAffineGap(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), noEditDistance(noEditDistance_), 
+    extraSearchDepth(extraSearchDepth_), nLocationsScoredLandauVishkin(0), nLocationsScoredAffineGap(0), disabledOptimizations(disabledOptimizations_),
     useAffineGap(useAffineGap_), maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), altAwareness(altAwareness_),
     maxScoreGapToPreferNonAltAlignment(maxScoreGapToPreferNonAltAlignment_), matchReward(matchReward_), subPenalty(subPenalty_), gapOpenPenalty(gapOpenPenalty_), gapExtendPenalty(gapExtendPenalty_), useSoftClip(useSoftClip_),
     stopOnFirstHit(false)
@@ -249,8 +246,8 @@ IntersectingPairedEndAligner::align(
     }
 }
 
-bool
-    IntersectingPairedEndAligner::alignLandauVishkin(
+    bool
+IntersectingPairedEndAligner::alignLandauVishkin(
         Read* read0,
         Read* read1,
         PairedAlignmentResult* result,
@@ -611,7 +608,7 @@ bool
             GenomeLocation previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
             while (lastGenomeLocationForReadWithMoreHits + maxSpacing >= lastGenomeLocationForReadWithFewerHits && !outOfMoreHitsLocations) {
 				unsigned bestPossibleScoreForReadWithMoreHits;
-				if (noTruncation) {
+				if (disabledOptimizations.noTruncation) {
 					bestPossibleScoreForReadWithMoreHits = 0;
 				} else {
 					bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
@@ -653,7 +650,7 @@ bool
             //
 			int bestPossibleScoreForReadWithFewerHits;
 			
-			if (noTruncation) {
+			if (disabledOptimizations.noTruncation) {
 				bestPossibleScoreForReadWithFewerHits = 0;
 			} else {
 				bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
@@ -681,7 +678,7 @@ bool
                 // If we have noOrderedEvaluation set, just stick everything on list 0, regardless of what it really is.  This will cause us to
                 // evaluate the candidates in more-or-less inverse genome order.
                 //
-                int bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
+                int bestPossibleScore = disabledOptimizations.noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
 
                 scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits, whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
                                                                                 lastSeedOffsetForReadWithFewerHits, bestPossibleScoreForReadWithFewerHits,
@@ -1636,8 +1633,7 @@ IntersectingPairedEndAligner::alignHamming(
             if (doesGenomeIndexHave64BitLocations) {
                 index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC],
                     hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
-            }
-            else {
+            } else {
                 index->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
             }
 
@@ -1646,8 +1642,7 @@ IntersectingPairedEndAligner::alignHamming(
                 int offset;
                 if (dir == FORWARD) {
                     offset = nextSeedToTest;
-                }
-                else {
+                } else {
                     offset = readLen[whichRead] - seedLen - nextSeedToTest;
                 }
 
@@ -1655,13 +1650,11 @@ IntersectingPairedEndAligner::alignHamming(
                     totalHashTableHits[whichRead][dir] += nHits[dir];
                     if (doesGenomeIndexHave64BitLocations) {
                         hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], beginsDisjointHitSet[dir]);
-                    }
-                    else {
+                    } else {
                         hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], beginsDisjointHitSet[dir]);
                     }
                     beginsDisjointHitSet[dir] = false;
-                }
-                else {
+                } else {
                     popularSeedsSkipped[whichRead]++;
                 }
             } // for each direction
@@ -1673,8 +1666,7 @@ IntersectingPairedEndAligner::alignHamming(
                 _ASSERT((nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1) >= (int)seedLen);
                 nextSeedToTest += (nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1);
                 _ASSERT(nextSeedToTest < nPossibleSeeds);   // We haven't run off the end of the read.
-            }
-            else {
+            } else {
                 nextSeedToTest += seedLen;
             }
         } // while we need to lookup seeds for this read
@@ -1702,8 +1694,7 @@ IntersectingPairedEndAligner::alignHamming(
         if (whichSetPair == 0) {
             setPair[0] = hashTableHitSets[0][FORWARD];
             setPair[1] = hashTableHitSets[1][RC];
-        }
-        else {
+        } else {
             setPair[0] = hashTableHitSets[0][RC];
             setPair[1] = hashTableHitSets[1][FORWARD];
         }
@@ -1782,10 +1773,9 @@ IntersectingPairedEndAligner::alignHamming(
             GenomeLocation previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
             while (lastGenomeLocationForReadWithMoreHits + maxSpacing >= lastGenomeLocationForReadWithFewerHits && !outOfMoreHitsLocations) {
                 unsigned bestPossibleScoreForReadWithMoreHits;
-                if (noTruncation) {
+                if (disabledOptimizations.noTruncation) {
                     bestPossibleScoreForReadWithMoreHits = 0;
-                }
-                else {
+                } else {
                     bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
                 }
 
@@ -1824,10 +1814,9 @@ IntersectingPairedEndAligner::alignHamming(
             //
             int bestPossibleScoreForReadWithFewerHits;
 
-            if (noTruncation) {
+            if (disabledOptimizations.noTruncation) {
                 bestPossibleScoreForReadWithFewerHits = 0;
-            }
-            else {
+            } else {
                 bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
             }
 
@@ -1853,7 +1842,7 @@ IntersectingPairedEndAligner::alignHamming(
                 // If we have noOrderedEvaluation set, just stick everything on list 0, regardless of what it really is.  This will cause us to
                 // evaluate the candidates in more-or-less inverse genome order.
                 //
-                int bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
+                int bestPossibleScore = disabledOptimizations.noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
 
                 scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits, whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
                     lastSeedOffsetForReadWithFewerHits, bestPossibleScoreForReadWithFewerHits,
@@ -2593,7 +2582,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     double oldPairProbabilityBestResultALT = (firstALTResult->status[0] != NotFound) ? firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1] : 0.0;
 
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-        if (result->usedGaplessClipping[r] || result->score[r] > maxKForSameAlignment || noEditDistance) {
+        if (result->usedGaplessClipping[r] || result->score[r] > maxKForSameAlignment || disabledOptimizations.noEditDistance) {
             //
             // Use affine gap scoring to determine if bases need to be clipped
             //
@@ -3021,7 +3010,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGapLiftover(
     //
     // Try banded affine-gap when pattern is long and band needed is small
     //
-    if (patternLen >= (3 * (2 * (int)scoreLimit + 1))) {
+    if (patternLen >= (3 * (2 * (int)scoreLimit + 1)) && !disabledOptimizations.noBandedAffineGap) {
         agScore1 = affineGap->computeScoreBanded(data,
             textLen,
             readToScore->getData(),
@@ -3036,8 +3025,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGapLiftover(
             &matchProb1,
             useSoftClip,
             useAltLiftover);
-    }
-    else {
+    } else {
         agScore1 = affineGap->computeScore(data,
             textLen,
             readToScore->getData(),
@@ -3062,7 +3050,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGapLiftover(
         //
         // Try banded affine-gap when pattern is long and band needed is small
         //
-        if (patternLen >= (3 * (2 * limitLeft + 1))) {
+        if (patternLen >= (3 * (2 * limitLeft + 1)) && !disabledOptimizations.noBandedAffineGap) {
             agScore2 = reverseAffineGap->computeScoreBanded(data + readLen - textRem,
 	            readLen - textRem,
 	            reversedRead[whichRead][direction] + *basesClippedAfter,
@@ -3077,8 +3065,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGapLiftover(
 	            &matchProb2,
                 useSoftClip,
                 useAltLiftover);
-        }
-        else {
+        } else {
             agScore2 = reverseAffineGap->computeScore(data + readLen - textRem,
 	            readLen - textRem,
 	            reversedRead[whichRead][direction] + *basesClippedAfter,
@@ -3101,16 +3088,14 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGapLiftover(
 	        *score = ScoreAboveLimit;
 	        *genomeLocationOffset = 0;
 	        *agScore = -1;
-        }
-        else {
+        } else {
             *score = score2;
             *agScore = agScore2;
             *matchProbability = matchProb2;
             *genomeLocationOffset =  *basesClippedAfter + *genomeLocationOffset - textRem;
             *genomeSpan = (readLen - textRem - *genomeLocationOffset);
         }
-    }
-    else {
+    } else {
         *score = ScoreAboveLimit;
         *genomeLocationOffset = 0;
         *agScore = -1;
@@ -3179,7 +3164,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
         //
         // Try banded affine-gap when pattern is long and band needed is small
         //
-        if (patternLen >= (3 * (2 * (int)scoreLimit + 1))) {
+        if (patternLen >= (3 * (2 * (int)scoreLimit + 1)) && !disabledOptimizations.noBandedAffineGap) {
             agScore1 = affineGap->computeScoreBanded(data + tailStart,
                 textLen,
                 readToScore->getData() + tailStart,
@@ -3222,7 +3207,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
             //
             // Try banded affine-gap when pattern is long and band needed is small
             //
-            if (patternLen >= (3 * (2 * limitLeft + 1))) {
+            if (patternLen >= (3 * (2 * limitLeft + 1)) && !disabledOptimizations.noBandedAffineGap) {
                 agScore2 = reverseAffineGap->computeScoreBanded(data + seedOffset,
 	                seedOffset + limitLeft,
 	                reversedRead[whichRead][direction] + readLen - seedOffset,
@@ -3300,7 +3285,7 @@ IntersectingPairedEndAligner::scoreLocation(
     bool                *usedGaplessClipping,
     int                 *genomeSpan)
 {
-    if (noUkkonen) {
+    if (disabledOptimizations.noUkkonen) {
         scoreLimit = maxK + extraSearchDepth;
     }
 
@@ -3396,7 +3381,7 @@ IntersectingPairedEndAligner::scoreLocationWithHammingDistance(
     int*                 scoreGapless)
 {
 
-    if (noUkkonen) {
+    if (disabledOptimizations.noUkkonen) {
         scoreLimit = maxK + extraSearchDepth;
     }
 

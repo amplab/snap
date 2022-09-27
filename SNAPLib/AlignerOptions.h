@@ -72,6 +72,21 @@ struct SNAPFile {
     static bool generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, bool paired, bool isInput);
 };
 
+//
+// A place to stick all of the various optimization diable flags that are here to test aligner
+// performance.
+//
+struct DisabledOptimizations {
+    DisabledOptimizations() : noUkkonen(false), noOrderedEvaluation(false), noTruncation(false), noEditDistance(false), noBandedAffineGap(false)
+    {}
+
+    bool                noUkkonen;
+    bool                noOrderedEvaluation;
+    bool				noTruncation;
+    bool                noEditDistance;
+    bool                noBandedAffineGap;
+}; // DisabledOptimizations
+
 struct AlignerOptions : public AbstractOptions
 {
     AlignerOptions(const char* i_commandLine, bool forPairedEnd = false);
@@ -117,10 +132,7 @@ struct AlignerOptions : public AbstractOptions
     int                 flattenMAPQAtOrBelow;
     bool                preserveClipping;
     float               expansionFactor;
-    bool                noUkkonen;
-    bool                noOrderedEvaluation;
-	bool				noTruncation;
-    bool                noEditDistance;
+    DisabledOptimizations disabledOptimizations;
     bool                useAffineGap;
     bool                useSoftClipping;
     unsigned            matchReward;

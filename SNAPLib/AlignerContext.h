@@ -112,10 +112,7 @@ public:
     const char                         **argv;
     const char                          *version;
     FILE                                *perfFile;
-    bool                                 noUkkonen;
-    bool                                 noOrderedEvaluation;
-	bool								 noTruncation;
-    bool                                 noEditDistance;
+    DisabledOptimizations                disabledOptimizations;
     bool                                 useAffineGap;
     bool                                 ignoreAlignmentAdjustmentForOm;
 	bool								 altAwareness;

@@ -37,6 +37,7 @@ Revision History:
 #include "directions.h"
 #include "GenomeIndex.h"
 #include "AlignmentAdjuster.h"
+#include "AlignerOptions.h"
 
 extern bool doAlignerPrefetch;
 
@@ -44,34 +45,31 @@ class BaseAligner {
 public:
 
     BaseAligner(
-        GenomeIndex    *i_genomeIndex, 
-        unsigned        i_maxHitsToConsider, 
-        unsigned        i_maxK,
-        unsigned        i_maxReadSize,
-        unsigned        i_maxSeedsToUse,
-        double          i_maxSeedCoverage,
-		unsigned        i_minWeightToCheck,
-        unsigned        i_extraSearchDepth,
-        bool            i_noUkkonen,
-        bool            i_noOrderedEvaluation,
-		bool			i_noTruncation,
-        bool            i_noEditDistance,
-        bool            i_useAffineGap,           
-        bool            i_ignoreAlignmentAdjustmentsForOm,
-		bool			i_altAwareness,
-        bool            i_emitALTAlignments,
-        int             i_maxScoreGapToPreferNonAltAlignment,
-		int             i_maxSecondaryAlignmentsPerContig,
-        LandauVishkin<1>*i_landauVishkin = NULL,
-        LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
-        unsigned        i_matchReward = 1,
-        unsigned        i_subPenalty = 4,
-        unsigned        i_gapOpenPenalty = 6,
-        unsigned        i_gapExtendPenalty = 1,
-        unsigned        i_fivePrimeEndBonus = 10,
-        unsigned        i_threePrimeEndBonus = 5,
-        AlignerStats   *i_stats = NULL,
-        BigAllocator    *allocator = NULL);
+        GenomeIndex             *i_genomeIndex, 
+        unsigned                 i_maxHitsToConsider, 
+        unsigned                 i_maxK,
+        unsigned                 i_maxReadSize,
+        unsigned                 i_maxSeedsToUse,
+        double                   i_maxSeedCoverage,
+		unsigned                 i_minWeightToCheck,
+        unsigned                 i_extraSearchDepth,
+        DisabledOptimizations    i_disabledOptimizations,
+        bool                     i_useAffineGap,           
+        bool                     i_ignoreAlignmentAdjustmentsForOm,
+		bool			         i_altAwareness,
+        bool                     i_emitALTAlignments,
+        int                      i_maxScoreGapToPreferNonAltAlignment,
+		int                      i_maxSecondaryAlignmentsPerContig,
+        LandauVishkin<1>        *i_landauVishkin = NULL,
+        LandauVishkin<-1>       *i_reverseLandauVishkin = NULL,
+        unsigned                 i_matchReward = 1,
+        unsigned                 i_subPenalty = 4,
+        unsigned                 i_gapOpenPenalty = 6,
+        unsigned                 i_gapExtendPenalty = 1,
+        unsigned                 i_fivePrimeEndBonus = 10,
+        unsigned                 i_threePrimeEndBonus = 5,
+        AlignerStats            *i_stats = NULL,
+        BigAllocator            *allocator = NULL);
 
     virtual ~BaseAligner();
 
@@ -431,25 +429,22 @@ private:
     void incrementWeight(HashTableElement *element);
     void prefetchHashTableBucket(GenomeLocation genomeLocation, Direction direction);
 
-    const Genome *genome;
-    GenomeIndex *genomeIndex;
-    unsigned seedLen;
-    unsigned maxHitsToConsider;
-    unsigned maxK;
-    unsigned maxReadSize;
-    unsigned maxSeedsToUseFromCommandLine; // Max number of seeds to look up in the hash table
-    double   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
-    unsigned minWeightToCheck;
-    unsigned extraSearchDepth;
-    unsigned numWeightLists;
-    bool     noUkkonen;
-    bool     noOrderedEvaluation;
-	bool     noTruncation;
-    bool     noEditDistance;
-    bool     useAffineGap;
-    bool     ignoreAlignmentAdjustmentsForOm;
-    bool     doesGenomeIndexHave64BitLocations;
-    int      maxSecondaryAlignmentsPerContig;
+    const Genome            *genome;
+    GenomeIndex             *genomeIndex;
+    unsigned                 seedLen;
+    unsigned                 maxHitsToConsider;
+    unsigned                 maxK;
+    unsigned                 maxReadSize;
+    unsigned                 maxSeedsToUseFromCommandLine; // Max number of seeds to look up in the hash table
+    double                   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
+    unsigned                 minWeightToCheck;
+    unsigned                 extraSearchDepth;
+    unsigned                 numWeightLists;
+    DisabledOptimizations    disabledOptimizations;
+    bool                     useAffineGap;
+    bool                     ignoreAlignmentAdjustmentsForOm;
+    bool                     doesGenomeIndexHave64BitLocations;
+    int                      maxSecondaryAlignmentsPerContig;
 
     struct HitsPerContigCounts {
         _int64  epoch;          // Used hashTableEpoch, for the same reason

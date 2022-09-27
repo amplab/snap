@@ -374,8 +374,7 @@ bool PairedAlignerContext::initialize()
     intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
     quicklyDropUnpairedReads = options2->quicklyDropUnpairedReads;
-    noUkkonen = options->noUkkonen;
-    noOrderedEvaluation = options->noOrderedEvaluation;
+    disabledOptimizations = options->disabledOptimizations;
     inferSpacing = options2->inferSpacing;
     maxSeedsSingleEnd = options2->maxSeedsSingleEnd;
     minScoreRealignment = options2->minScoreRealignment;
@@ -583,8 +582,8 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
     
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, maxDistForIndels, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, 
-                                                                noEditDistance, useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment,
+                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, disabledOptimizations, 
+                                                                useAffineGap, ignoreAlignmentAdjustmentForOm, altAwareness, maxScoreGapToPreferNonALTAlignment,
                                                                 matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, useSoftClipping);
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
@@ -597,10 +596,7 @@ void PairedAlignerContext::runIterationThreadImpl(Read **reads)
 		minWeightToCheck,
         forceSpacing,
         extraSearchDepth,
-        noUkkonen,
-        noOrderedEvaluation,
-		noTruncation,
-        noEditDistance,
+        disabledOptimizations,
         useAffineGap,
         ignoreAlignmentAdjustmentForOm,
 		altAwareness,

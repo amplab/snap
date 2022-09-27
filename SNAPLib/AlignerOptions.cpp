@@ -7,7 +7,6 @@ Module Name:
 Abstract:
 
     Common parameters for running single & paired alignment.
-    Common parameters for running single & paired alignment.
 
 Authors:
 
@@ -71,10 +70,6 @@ AlignerOptions::AlignerOptions(
     maxSecondaryAlignmentsPerContig(-1),    // -1 means don't limit
     preserveClipping(false),
     expansionFactor(1.0),
-    noUkkonen(false),
-    noOrderedEvaluation(false),
-	noTruncation(false),
-    noEditDistance(false),
     useAffineGap(true),
     matchReward(1),
     subPenalty(4),
@@ -231,6 +226,8 @@ AlignerOptions::usage()
             "  -ne  Don't try edit distance scoring before doing affine gap.  This option is to evaluate the aligner and isn't\n"
             "       intended to be used for ordinary alignments.  It may change alignment results somewhat, but we have not\n"
             "       evaluated its effect on correctness.\n"
+            " -nb   Don't use the banded affine gap optimization.  This option is to evaluate the aligner and will just\n"
+            "       result in slower alignments.\n"
             " -wbs  Write buffer size in megabytes.  Don't specify this unless you've gotten an error message saying to make it bigger.  Default 16.\n"
             "  -di  Drop the index after aligning and before sorting.  This frees up memory for the sort at the expense of not having the index loaded for your next run.\n"
             " -kts  Kill if too slow.  Monitor our progress and kill ourself if we're not moving fast enough.  This is intended for use on machines\n"
@@ -943,16 +940,19 @@ AlignerOptions::usage()
             SetToLowSchedulingPriority();
             return true;
         } else if (strcmp(argv[n], "-nu") == 0) {
-            noUkkonen = true;
+            disabledOptimizations.noUkkonen = true;
             return true;
         } else if (strcmp(argv[n], "-no") == 0) {
-            noOrderedEvaluation = true;
+            disabledOptimizations.noOrderedEvaluation = true;
             return true;
         } else if (strcmp(argv[n], "-nt") == 0) {
-            noTruncation = true;
+            disabledOptimizations.noTruncation = true;
             return true;
         } else if (strcmp(argv[n], "-ne") == 0) {
-            noEditDistance = true;
+            disabledOptimizations.noEditDistance = true;
+            return true;
+        } else if (strcmp(argv[n], "-nb") == 0) {
+            disabledOptimizations.noBandedAffineGap = true;
             return true;
         } else if (strcmp(argv[n], "-at") == 0) {
             attachAlignmentTimes = true;

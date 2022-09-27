@@ -39,33 +39,30 @@ class IntersectingPairedEndAligner : public PairedEndAligner
 {
 public:
     IntersectingPairedEndAligner(
-        GenomeIndex  *index_,
-        unsigned      maxReadSize_,
-        unsigned      maxHits_,
-        unsigned      maxK_,
-        unsigned      maxKForIndels_,
-        unsigned      maxSeedsFromCommandLine_,
-        double        seedCoverage_,
-        int           minSpacing_,                 // Minimum distance to allow between the two ends.
-        unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
-        unsigned      maxBigHits_,
-        unsigned      extraSearchDepth_,
-        unsigned      maxCandidatePoolSize,
-        int           maxSecondaryAlignmentsPerContig_,
-        BigAllocator  *allocator,
-        bool          noUkkonen_,
-        bool          noOrderedEvaluation_,
-		bool		  noTruncation_,
-        bool          noEditDistance_,
-        bool          useAffineGap_,
-        bool          ignoreAlignmentAdjustmentsForOm_,
-		bool		  altAwareness_,
-        unsigned      maxScoreGapToPreferNonAltAlignment_,
-        unsigned      matchReward_,
-        unsigned      subPenalty_,
-        unsigned      gapOpenPenalty_,
-        unsigned      gapExtendPenalty,
-        bool          useSoftClip_);
+        GenomeIndex             *index_,
+        unsigned                 maxReadSize_,
+        unsigned                 maxHits_,
+        unsigned                 maxK_,
+        unsigned                 maxKForIndels_,
+        unsigned                 maxSeedsFromCommandLine_,
+        double                   seedCoverage_,
+        int                      minSpacing_,                 // Minimum distance to allow between the two ends.
+        unsigned                 maxSpacing_,                 // Maximum distance to allow between the two ends.
+        unsigned                 maxBigHits_,
+        unsigned                 extraSearchDepth_,
+        unsigned                 maxCandidatePoolSize,
+        int                      maxSecondaryAlignmentsPerContig_,
+        BigAllocator            *allocator,
+        DisabledOptimizations    disabledOptimizations_,
+        bool                     useAffineGap_,
+        bool                     ignoreAlignmentAdjustmentsForOm_,
+		bool		             altAwareness_,
+        unsigned                 maxScoreGapToPreferNonAltAlignment_,
+        unsigned                 matchReward_,
+        unsigned                 subPenalty_,
+        unsigned                 gapOpenPenalty_,
+        unsigned                 gapExtendPenalty,
+        bool                     useSoftClip_);
 
      void setLandauVishkin(
         LandauVishkin<1> *landauVishkin_,
@@ -205,35 +202,32 @@ private:
                                unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
                                int maxSecondaryAlignmentsPerContig);
 
-    GenomeIndex *   index;
-    const Genome *  genome;
-    GenomeDistance  genomeSize;
-    unsigned        maxReadSize;
-    unsigned        maxHits;
-    unsigned        maxBigHits;
-    int             extraSearchDepth;
-    int             maxK;
-    int             maxKForIndels;
-    unsigned        numSeedsFromCommandLine;
-    double          seedCoverage;
-    static const unsigned MAX_MAX_SEEDS = 30;
-    int             minSpacing;
-    unsigned        maxSpacing;
-    unsigned        seedLen;
-    bool            doesGenomeIndexHave64BitLocations;
-    _int64          nLocationsScoredLandauVishkin;
-    _int64          nLocationsScoredAffineGap;
-    bool            noUkkonen;
-    bool            noOrderedEvaluation;
-	bool			noTruncation;
-    bool            noEditDistance;
-    bool            useAffineGap;
-    bool            ignoreAlignmentAdjustmentsForOm;
-	bool			altAwareness;
-    bool            useSoftClip;
-    int             maxScoreGapToPreferNonAltAlignment;
-    int             minBigIndelSize;    // We only see indels of this size or bigger if they're hinted by seed hits.
-    bool            stopOnFirstHit;
+    GenomeIndex *           index;
+    const Genome *          genome;
+    GenomeDistance          genomeSize;
+    unsigned                maxReadSize;
+    unsigned                maxHits;
+    unsigned                maxBigHits;
+    int                     extraSearchDepth;
+    int                     maxK;
+    int                     maxKForIndels;
+    unsigned                numSeedsFromCommandLine;
+    double                  seedCoverage;
+    static const unsigned   MAX_MAX_SEEDS = 30;
+    int                     minSpacing;
+    unsigned                maxSpacing;
+    unsigned                seedLen;
+    bool                    doesGenomeIndexHave64BitLocations;
+    _int64                  nLocationsScoredLandauVishkin;
+    _int64                  nLocationsScoredAffineGap;
+    DisabledOptimizations   disabledOptimizations;
+    bool                    useAffineGap;
+    bool                    ignoreAlignmentAdjustmentsForOm;
+	bool			        altAwareness;
+    bool                    useSoftClip;
+    int                     maxScoreGapToPreferNonAltAlignment;
+    int                     minBigIndelSize;    // We only see indels of this size or bigger if they're hinted by seed hits.
+    bool                    stopOnFirstHit;
 
 
     // Affine gap scoring parameters

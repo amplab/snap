@@ -289,10 +289,7 @@ AlignerContext::initialize()
     maxDist_ = options->maxDist;
     maxDistForIndels_ = options->maxDistForIndels;
     extraSearchDepth = options->extraSearchDepth;
-    noUkkonen = options->noUkkonen;
-    noOrderedEvaluation = options->noOrderedEvaluation;
-	noTruncation = options->noTruncation;
-    noEditDistance = options->noEditDistance;
+    disabledOptimizations = options->disabledOptimizations;
     ignoreAlignmentAdjustmentForOm = options->ignoreAlignmentAdjustmentsForOm;
 	altAwareness = options->altAwareness;
     emitALTAlignments = options->emitALTAlignments;
