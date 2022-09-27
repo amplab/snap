@@ -1068,7 +1068,9 @@ int AffineGapVectorizedWithCigar::computeGlobalScoreNormalized(const char* text,
     if (patternLen >= (3 * (2 * k + 1))) {
         score = computeGlobalScoreBanded(text, (int)textLen, pattern, quality, (int)patternLen, k, MAX_READ_LENGTH, bamBuf, bamBufLen,
                                          useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
-        if (score < 0 || score > k) {
+        // The banded affine gap version can give unexpected results when it is unable to find an alignment within the band.
+        // The conditions below are some cases used to detect failed banded affine gap
+        if (score < 0 || score > k || (o_tailIns != NULL && *o_tailIns >= patternLen)) {
             score = computeGlobalScore(text, (int)textLen, pattern, quality, (int)patternLen, k, bamBuf, bamBufLen,
                                        useM, BAM_CIGAR_OPS, &bamBufUsed, o_netDel, o_tailIns);
         }
