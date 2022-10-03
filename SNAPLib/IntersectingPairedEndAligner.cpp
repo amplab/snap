@@ -91,6 +91,10 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
 
     genome = index->getGenome();
     genomeSize = genome->getCountOfBases();
+    
+    if (disabledOptimizations.noMaxKForIndel) {
+        maxK = maxKForIndels;
+    }
 }
 
 IntersectingPairedEndAligner::~IntersectingPairedEndAligner()
@@ -620,7 +624,8 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                 }
 
                 scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]].init(
-                                lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits, lastSeedOffsetForReadWithMoreHits);
+                                lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits,
+                      lastSeedOffsetForReadWithMoreHits, &disabledOptimizations, maxKForIndels);
 
 #ifdef _DEBUG
                 if (_DumpAlignments) {
@@ -734,9 +739,9 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                 scoringMateCandidates[whichSetPair][top].largestBigIndelDetected = __max(spread, scoringMateCandidates[whichSetPair][top].largestBigIndelDetected);
 #if _DEBUG
                 if (_DumpAlignments) {
-                    fprintf(stderr,"Set largest big indel detected to %lld, %lld for set pair %d mate candidates %d and %d\n", 
-                            scoringMateCandidates[whichSetPair][bottom].largestBigIndelDetected, scoringMateCandidates[whichSetPair][top].largestBigIndelDetected,
-                            whichSetPair, bottom, top);
+                    fprintf(stderr, "Set largest big indel detected to %lld, %lld for set pair %d mate candidates %d and %d\n",
+                        scoringMateCandidates[whichSetPair][bottom].largestBigIndelDetected, scoringMateCandidates[whichSetPair][top].largestBigIndelDetected,
+                        whichSetPair, bottom, top);
                 }
 #endif // DEBUG
                 top++;
@@ -754,6 +759,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
             }
         } // While we're still considering candidates in one set pair.
     } // for each set pair
+
 
     //
     // Now do the fewer end candidates.  This works the same way as the loop above (except they're not segregated by set pair).
@@ -1784,7 +1790,8 @@ IntersectingPairedEndAligner::alignHamming(
                     soft_exit(1);
                 }
                 scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]].init(
-                    lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits, lastSeedOffsetForReadWithMoreHits);
+                    lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits,
+                    lastSeedOffsetForReadWithMoreHits, &disabledOptimizations, maxKForIndels);
 
 #ifdef _DEBUG
                 if (_DumpAlignments) {

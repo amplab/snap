@@ -1216,8 +1216,7 @@ BAMFormat::writePairs(
         if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
             if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
                 bamSize += 4 + strlen(read->getReadGroup());
-            }
-            else {
+            } else {
                 bamSize += context.defaultReadGroupAuxLen;
             }
         }
@@ -1295,11 +1294,12 @@ BAMFormat::writePairs(
         auxLen += (unsigned)mq->size();
 
         if (NULL != spaceUsed) {
-            spaceUsed[firstOrSecond] = bamSize;
+            spaceUsed[firstOrSecond] = bam->block_size +4;
         }
 
-        buffer += bamSize;
-        bufferSpace -= bamSize;
+        _ASSERT(bufferSpace >= bam->block_size + 4);
+        buffer += bam->block_size + 4;
+        bufferSpace -= bam->block_size + 4;
 
         // debugging: _ASSERT(0 == memcmp(bam->firstAux()->tag, "RG", 2) && 0 == memcmp(bam->firstAux()->next()->tag, "PG", 2) && 0 == memcmp(bam->firstAux()->next()->next()->tag, "NM", 2));
         bam->validate();
@@ -1520,8 +1520,6 @@ BAMFormat::buildAUX(
             const char* FASTQComment,
             unsigned FASTQCommentLength)
 {
-
-
     if (aux != NULL && auxLen > 0) {
         if (((char*)bam->firstAux()) + auxLen > buffer + bufferSpace) {
             return false;
@@ -1564,6 +1562,7 @@ BAMFormat::buildAUX(
     if ((char*)bam->firstAux() + auxLen + 8 > buffer + bufferSpace) {
         return false;
     }
+
     BAMAlignAux* pg = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
     pg->tag[0] = 'P'; pg->tag[1] = 'G'; pg->val_type = 'Z';
     strcpy((char*)pg->value(), "SNAP");
@@ -1574,6 +1573,7 @@ BAMFormat::buildAUX(
     if ((char*)bam->firstAux() + auxLen + 4 > buffer + bufferSpace) {
         return false;
     }
+
     BAMAlignAux* nm = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
     nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'C';
     *(_uint8*)nm->value() = (_uint8)editDistance;

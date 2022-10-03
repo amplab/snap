@@ -954,6 +954,9 @@ AlignerOptions::usage()
         } else if (strcmp(argv[n], "-nb") == 0) {
             disabledOptimizations.noBandedAffineGap = true;
             return true;
+        } else if (strcmp(argv[n], "-ni") == 0) {
+            disabledOptimizations.noMaxKForIndel = true;
+            return true;
         } else if (strcmp(argv[n], "-at") == 0) {
             attachAlignmentTimes = true;
             return true;

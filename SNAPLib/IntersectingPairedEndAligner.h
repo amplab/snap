@@ -579,7 +579,7 @@ private:
         int                     lvIndels;
         int                     refSpan;
 
-        void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
+        void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_, DisabledOptimizations *disabledOptimizations, unsigned maxKForIndels) {
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
             bestPossibleScore = bestPossibleScore_;
             seedOffset = seedOffset_;
@@ -593,7 +593,7 @@ private:
             basesClippedAfter = 0;
             agScore = 0;
             lvIndels = 0;
-            largestBigIndelDetected = 0;
+            largestBigIndelDetected = disabledOptimizations->noMaxKForIndel ? maxKForIndels : 0;
             refSpan = 0;
         }
 

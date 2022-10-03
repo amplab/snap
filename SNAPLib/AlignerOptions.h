@@ -77,7 +77,7 @@ struct SNAPFile {
 // performance.
 //
 struct DisabledOptimizations {
-    DisabledOptimizations() : noUkkonen(false), noOrderedEvaluation(false), noTruncation(false), noEditDistance(false), noBandedAffineGap(false)
+    DisabledOptimizations() : noUkkonen(false), noOrderedEvaluation(false), noTruncation(false), noEditDistance(false), noBandedAffineGap(false), noMaxKForIndel(false)
     {}
 
     bool                noUkkonen;
@@ -85,6 +85,7 @@ struct DisabledOptimizations {
     bool				noTruncation;
     bool                noEditDistance;
     bool                noBandedAffineGap;
+    bool                noMaxKForIndel;
 }; // DisabledOptimizations
 
 struct AlignerOptions : public AbstractOptions
