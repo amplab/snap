@@ -85,7 +85,28 @@ const int MaxReadLength = MAX_READ_LENGTH;
 
 class Read;
 
-enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};
+enum ClippingType { NoClipping, ClipFront, ClipBack, ClipFrontAndBack };
+
+struct ReadClippingType
+{
+    ReadClippingType(ClippingType clippingType_)
+    {
+        clippingType = clippingType_;
+        minPhredToClip = '#';
+        maxPhredToClip = '#';
+    }
+
+    ReadClippingType()
+    {
+        clippingType = NoClipping;
+        minPhredToClip = '#';
+        maxPhredToClip = '#';
+    }
+
+    ClippingType clippingType;
+    char minPhredToClip;
+    char maxPhredToClip;
+};
 
 struct ReaderContext
 {
@@ -544,7 +565,7 @@ public:
         { auxiliaryData = data; auxiliaryDataLength = len; }
 
         void clip(ReadClippingType clipping, bool maintainOriginalClipping = false) {
-            if (clipping == clippingState) {
+            if (clipping.clippingType == clippingState) {
                 //
                 // Already in the right state.
                 //
@@ -563,9 +584,9 @@ public:
             //
             // First clip from the back.
             //
-            if (ClipBack == clipping || ClipFrontAndBack == clipping) {
+            if (ClipBack == clipping.clippingType || ClipFrontAndBack == clipping.clippingType) {
                 unsigned backClipping = 0;
-                while (dataLength > 0 && quality[dataLength - 1] == '#') {
+                while (dataLength > 0 && quality[dataLength - 1] >= clipping.minPhredToClip && quality[dataLength - 1] <= clipping.maxPhredToClip) {
                     dataLength--;
                     backClipping++;
                 }
@@ -578,9 +599,9 @@ public:
             //
             // Then clip from the beginning.
             //
-            if (ClipFront == clipping || ClipFrontAndBack == clipping) {
+            if (ClipFront == clipping.clippingType || ClipFrontAndBack == clipping.clippingType) {
                 frontClippedLength = 0;
-                while (frontClippedLength < dataLength && quality[frontClippedLength] == '#') {
+                while (frontClippedLength < dataLength && quality[frontClippedLength] >= clipping.minPhredToClip && quality[frontClippedLength] <= clipping.maxPhredToClip) {
                     frontClippedLength++;
                 }
 
@@ -595,9 +616,10 @@ public:
             data += frontClippedLength;
             quality += frontClippedLength;
  
-            clippingState = clipping;
+            clippingState = clipping.clippingType;
         };
         
+#if 0   // This is unused
         unsigned countOfTrailing2sInQuality() const {   // 2 here is represented in Phred+33, or ascii '#'
             unsigned count = 0;
             while (count < dataLength && quality[dataLength - 1 - count] == '#') {
@@ -606,6 +628,7 @@ public:
             return count;
         }
 
+#endif // 0
         unsigned countOfNs() const {
             unsigned count = 0;
             for (unsigned i = 0; i < dataLength; i++) {
@@ -724,7 +747,7 @@ private:
         unsigned dataLength;
         unsigned unclippedLength;
         unsigned frontClippedLength;
-        ReadClippingType clippingState;
+        ClippingType clippingState;
         int additionalFrontClipping;
         int additionalBackClipping;
         const char *FASTQComment;

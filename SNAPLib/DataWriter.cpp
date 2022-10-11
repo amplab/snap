@@ -500,8 +500,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
 #endif
                     write->used = 0;
                     write->logicalUsed = 0;
-                }
-                else if (bytesRead < write->used) {
+                } else if (bytesRead < write->used) {
                     batches[current].used = write->used - bytesRead;
                     batches[current].logicalUsed = batches[current].used;
                     if (batches[current].used > batches[current].bufferSize) {
@@ -518,8 +517,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
 #ifdef VALIDATE_WRITE
                         fprintf(stderr, "2-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
 #endif
-                    }
-                    else {
+                    } else {
                         memcpy(batches[current].buffer, write->buffer + bytesRead, batches[current].used);
                     }
                     write->used = n;

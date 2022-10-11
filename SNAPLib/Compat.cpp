@@ -773,13 +773,18 @@ WindowsAsyncFile::Writer::beginWrite(
     writeBuffer = buffer;
     writeLength = length;
     writeOffset = offset;
+
     if (bytesWritten == NULL) {
         writeBytesWritten = &writeBytesWrittenBuffer;
     } else {
         writeBytesWritten = bytesWritten;
     }
-   
-    squirrel = *((int*)buffer);
+
+    if (length < sizeof(int)) {
+        squirrel = 0;
+    } else {
+        squirrel = *((int*)buffer);
+    }
 
     ResetEvent(hWriteStartedEvent);
 
@@ -792,7 +797,7 @@ WindowsAsyncFile::Writer::beginWrite(
 
     if (!weAreWriter) {
         //
-        // Someone else owns the queue and will start out write.
+        // Someone else owns the queue and will start our write.
         //
         return true;
     }
@@ -886,6 +891,7 @@ WindowsAsyncFile::Writer::waitForCompletion()
             soft_exit(1);
         }   
 
+
         *writeBytesWritten = 0;
 
         for (_int64 i = 0; i < nLapsActive; i++) {
@@ -897,7 +903,7 @@ WindowsAsyncFile::Writer::waitForCompletion()
             *writeBytesWritten += nBytesTransferred;
         }
 
-        xassert(squirrel == *((int*)writeBuffer));
+        xassert(writeLength < sizeof(int) || squirrel == *((int*)writeBuffer));
         writing = false;
         nLapsActive = 0;
 

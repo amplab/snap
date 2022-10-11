@@ -789,8 +789,6 @@ BAMReader::getReadFromLine(
     if (NULL != flag) {
         *flag = bam->FLAG;
     }
-
-
 }
 
     char*
@@ -932,18 +930,23 @@ BAMFormat::getWriterSupplier(
     FileEncoder* gzipEncoder = NULL;
     if (options->sortOutput) {
         char *tempFileName = DataWriterSupplier::generateSortIntermediateFilePathName(options); // leaked
-        // todo: make markDuplicates optional?
 
         DataWriter::FilterSupplier* filters = gzipSupplier;
         if (!options->noIndex) {
             size_t len = strlen(options->outputFile.fileName);
             char* indexFileName = (char*)malloc(5 + len); // leaked
+            if (NULL == indexFileName) {
+                WriteErrorMessage("BAMFormat::getWriterSupplier: Out of memory allocating indexFileName\n");
+                soft_exit(1);
+                return NULL; // notreached, just here to suppress the compiler warning for use of indexFileName
+            }
+
             strcpy(indexFileName, options->outputFile.fileName);
             strcpy(indexFileName + len, ".bai");
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
-        }
+        } // ! noIndex
 
-        if (! options->noDuplicateMarking) {
+        if (!options->noDuplicateMarking) {
             filters = DataWriterSupplier::bamMarkDuplicates(genome)->compose(filters);
         }
 
@@ -1195,6 +1198,7 @@ BAMFormat::writePairs(
                 warningPrinted = true;
                 WriteErrorMessage("warning: translating optional data from SAM->BAM is not yet implemented, optional data will not appear in BAM\n");
             }
+
             if (read->getReadGroup() == READ_GROUP_FROM_AUX) {
                 for (char* p = aux; p != NULL && p < aux + auxLen; p = SAMReader::skipToBeyondNextFieldSeparator(p, aux + auxLen)) {
                     if (strncmp(p, "RG:Z:", 5) == 0) {
@@ -1207,11 +1211,13 @@ BAMFormat::writePairs(
                     }
                 }
             }
+
             if (!translateReadGroupFromSAM) {
                 aux = NULL;
                 auxLen = 0;
             }
         }
+
         size_t bamSize = BAMAlignment::size((unsigned)qnameLen[whichRead] + 1, cigarOps[whichRead], fullLength[whichRead], !translateReadGroupFromSAM ? auxLen : auxLen - 1);
         if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
             if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
@@ -1237,6 +1243,7 @@ BAMFormat::writePairs(
             *outOfSpace = true;
             return false;
         }
+
         BAMAlignment* bam = (BAMAlignment*)buffer;
         bam->block_size = (int)bamSize - 4;
         bam->refID = OriginalContigNumToInt(contigIndex[whichRead]);
@@ -1244,6 +1251,7 @@ BAMFormat::writePairs(
             WriteErrorMessage("Can't write read to BAM file because aligned position (or mate position) within contig > 2^31, which is the limit for the BAM format.\n");
             soft_exit(1);
         }
+
         bam->pos = (int)(positionInContig[whichRead] - 1);
 
         if (qnameLen[whichRead] > 254) {
@@ -1256,6 +1264,7 @@ BAMFormat::writePairs(
         for (int i = 0; i < cigarOps[whichRead]; i++) {
             refLength += BAMAlignment::CigarCodeToRefBase[cigarBuf[whichRead][i] & 0xf] * (cigarBuf[whichRead][i] >> 4);
         }
+
         bam->bin = locations[whichRead] != InvalidGenomeLocation ? BAMAlignment::reg2bin((int)positionInContig[whichRead] - 1, (int)positionInContig[whichRead] - 1 + refLength) :
             // unmapped is at mate's position, length 1
             locations[1 - whichRead] != InvalidGenomeLocation ? BAMAlignment::reg2bin((int)matePositionInContig[whichRead] - 1, (int)matePositionInContig[whichRead]) :
@@ -1273,25 +1282,26 @@ BAMFormat::writePairs(
         BAMAlignment::encodeSeq(bam->seq(), data[whichRead], fullLength[whichRead]);
 
         memcpy(bam->qual(), quality[whichRead], fullLength[whichRead]);
+
+        // QS (this is only for paired-end reads, so it's not in buildAUX).  MUST do this before buildAUX(), because otherwise buildAUX() can use up the whole buffer leaving us nothing for QS
+        int QSresult = 0;
+        _uint8* p = (_uint8*)quality[1 - whichRead];
+        for (unsigned i = 0; i < fullLength[1 - whichRead]; i++) {
+            int q = *p++;
+            // Picard MarkDup uses a score threshold of 15 (default)
+            QSresult += (q >= 15) ? (q != 255) * q : 0; // avoid branch?
+        }
+        BAMAlignAux* mq = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
+        mq->tag[0] = 'Q'; mq->tag[1] = 'S'; mq->val_type = 'i';
+        *(_int32*)mq->value() = QSresult;
+        _ASSERT(mq->size() == 7);   // Known above in the bamSize += line
+        auxLen += (unsigned)mq->size();
+
         if (!buildAUX(context, bam, reads[whichRead], aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance[whichRead], result->scorePriorToClipping[whichRead],
             emitInternalScore, internalScoreTag, flags[whichRead], attachAlignmentTime, result->alignmentTimeInNanoseconds, FASTQComment[whichRead], FASTQCommentLength[whichRead])) {
             *outOfSpace = true;
             return false;
         }
-
-        // QS (this is only for paired-end reads, so it's not in buildAUX)
-        int result = 0;
-        _uint8* p = (_uint8*)quality[1 - whichRead];
-        for (unsigned i = 0; i < fullLength[1 - whichRead]; i++) {
-            int q = *p++;
-            // Picard MarkDup uses a score threshold of 15 (default)
-            result += (q >= 15) ? (q != 255) * q : 0; // avoid branch?
-        }
-        BAMAlignAux* mq = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
-        mq->tag[0] = 'Q'; mq->tag[1] = 'S'; mq->val_type = 'i';
-        *(_int32*)mq->value() = result;
-        _ASSERT(mq->size() == 7);   // Known above in the bamSize += line
-        auxLen += (unsigned)mq->size();
 
         if (NULL != spaceUsed) {
             spaceUsed[firstOrSecond] = bam->block_size +4;
@@ -1303,7 +1313,8 @@ BAMFormat::writePairs(
 
         // debugging: _ASSERT(0 == memcmp(bam->firstAux()->tag, "RG", 2) && 0 == memcmp(bam->firstAux()->next()->tag, "PG", 2) && 0 == memcmp(bam->firstAux()->next()->next()->tag, "NM", 2));
         bam->validate();
-    }
+    } // for each read
+
     return true;
 }
 
@@ -1461,12 +1472,14 @@ BAMFormat::writeRead(
         WriteErrorMessage("BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
         soft_exit(1);
     }
+
     bam->l_read_name = (_uint8)qnameLen + 1;
     bam->MAPQ = mapQuality;
     int refLength = cigarOps > 0 ? 0 : fullLength;
     for (int i = 0; i < cigarOps; i++) {
         refLength += BAMAlignment::CigarCodeToRefBase[cigarBuf[i] & 0xf] * (cigarBuf[i] >> 4);
     }
+
     bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin((int)positionInContig-1, (int)positionInContig-1 + refLength) :
 		// unmapped is at mate's position, length 1
 		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin((int)matePositionInContig-1, (int)matePositionInContig) :
@@ -1485,12 +1498,15 @@ BAMFormat::writeRead(
     for (unsigned i = 0; i < fullLength; i++) {
         quality[i] -= '!';
     }
+
     memcpy(bam->qual(), quality, fullLength);
 
     if (!buildAUX(context, bam, read, aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance, internalScore, emitInternalScore, internalScoreTag, flags, attachAlignmentTime, alignmentTimeInNanoseconds,
         FASTQComment, FASTQCommentLength)) {
         return false;
     }
+
+    _ASSERT(bam->block_size + 4 <= bufferSpace);
 
     if (NULL != spaceUsed) {
         *spaceUsed = bam->block_size + 4; // +4 because the size of the block_size field itself is not included in block_size
@@ -1666,106 +1682,109 @@ BAMFormat::buildAUX(
             fc->tag[0] = thisComment[0]; fc->tag[1] = thisComment[1]; fc->val_type = thisComment[3];
 
             switch (thisComment[3]) {
-            default: {
-                WriteErrorMessage("This is a bug in SNAP; a FASTQ comment passed the syntax check but still didn't have a valid type ('%c').  Read ID %.*s, FASTQ comment %.*s.  Please report this to the SNAP devlopers by filing a bug on github.\n",
-                    thisComment[3], read->getIdLength(), read->getId(), FASTQCommentLength, FASTQComment);
-                soft_exit(1);
-
-                break;  // NOTREACHED. Just to keep the compiler happy
-            } // default
-
-            case 'A': {
-                //
-                // Should probably check that this is a printable character, but that's too annoying.
-                //
-                if (charsThisComment != 6) {
-                    WriteErrorMessage("Invalid A tag in FASTQ comment (wrong length).  Read ID %.*s, comment %.*s\n", read->getIdLength(), read->getId(), FASTQCommentLength, FASTQComment);
+                default: {
+                    WriteErrorMessage("This is a bug in SNAP; a FASTQ comment passed the syntax check but still didn't have a valid type ('%c').  Read ID %.*s, FASTQ comment %.*s.  Please report this to the SNAP devlopers by filing a bug on github.\n",
+                        thisComment[3], read->getIdLength(), read->getId(), FASTQCommentLength, FASTQComment);
                     soft_exit(1);
-                }
 
-                ((char*)fc)[3] = thisComment[5];
-                auxLen += 4;
-                bam->block_size += 4;
-                break;
-            } // A
+                    break;  // NOTREACHED. Just to keep the compiler happy
+                } // default
 
-            case 'i': {
-                if ((char*)bam->firstAux() + auxLen + 7 > buffer + bufferSpace) {
-                    return false;
-                }
+                case 'A': {
+                    if ((char*)bam->firstAux() + auxLen + 4 > buffer + bufferSpace) {
+                        return false;
+                    }
 
-                const size_t maxDigits = 11;    // -1000000000 is the most digits for a number that fits in int32
-                if (charsThisComment < 6 || charsThisComment > 5 + maxDigits) {
-                    WriteErrorMessage("Invalid i tag in FASTQ comment (wrong number of value digits).  Read ID %.*s, comment %.*s\n", read->getIdLength(), read->getId(), FASTQCommentLength, FASTQComment);
-                    soft_exit(1);
-                }
-
-                for (int i = 5; i < charsThisComment; i++) {
-                    if ((thisComment[i] < '0' || thisComment[i] > '9') && (i != 5 || thisComment[i] != '-')) {
-                        WriteErrorMessage("Invalid i tag in FASTQ comment (some value characters aren't digits).  Read ID %.*s, comment %.*s\n", read->getIdLength(), read->getId(), FASTQCommentLength, FASTQComment);
+                    //
+                    // Should probably check that this is a printable character, but that's too annoying.
+                    //
+                    if (charsThisComment != 6) {
+                        WriteErrorMessage("Invalid A tag in FASTQ comment (wrong length).  Read ID %.*s, comment %.*s\n", read->getIdLength(), read->getId(), FASTQCommentLength, FASTQComment);
                         soft_exit(1);
                     }
-                } // each digit in value
 
-                //
-                // Deal with the non-null-terminatedness of our input
-                //
-                char buffer[maxDigits + 1];
-                memcpy(buffer, thisComment + 5, charsThisComment - 5);   // This is OK because of the size check above
-                buffer[charsThisComment - 5] = '\0';
+                    ((char*)fc)[3] = thisComment[5];
+                    auxLen += 4;
+                    bam->block_size += 4;
+                    break;
+                } // A
 
-                int value = atoi(buffer);
-                memcpy((char*)bam->firstAux() + auxLen + 3, &value, sizeof(value));
+                case 'i': {
+                    if ((char*)bam->firstAux() + auxLen + 7 > buffer + bufferSpace) {
+                        return false;
+                    }
 
-                auxLen += 7;
-                bam->block_size += 7;
-                break;
-            } // i
+                    const size_t maxDigits = 11;    // -1000000000 is the most digits for a number that fits in int32
+                    if (charsThisComment < 6 || charsThisComment > 5 + maxDigits) {
+                        WriteErrorMessage("Invalid i tag in FASTQ comment (wrong number of value digits).  Read ID %.*s, comment %.*s\n", read->getIdLength(), read->getId(), FASTQCommentLength, FASTQComment);
+                        soft_exit(1);
+                    }
 
-            case'f': {
-                if ((char*)bam->firstAux() + auxLen + sizeof(float) > buffer + bufferSpace) {
-                    return false;
-                }
+                    for (int i = 5; i < charsThisComment; i++) {
+                        if ((thisComment[i] < '0' || thisComment[i] > '9') && (i != 5 || thisComment[i] != '-')) {
+                            WriteErrorMessage("Invalid i tag in FASTQ comment (some value characters aren't digits).  Read ID %.*s, comment %.*s\n", read->getIdLength(), read->getId(), FASTQCommentLength, FASTQComment);
+                            soft_exit(1);
+                        }
+                    } // each digit in value
 
-                //
-                // Don't syntax check this.
-                //
-                size_t bufferLen = charsThisComment - 5 + 1;
-                char* buffer = new char[bufferLen];
-                memcpy(buffer, thisComment + 5, charsThisComment - 5);   // This is OK because we allocated buffer to be big enough
-                buffer[bufferLen - 1] = '\0';
+                    //
+                    // Deal with the non-null-terminatedness of our input
+                    //
+                    char buffer[maxDigits + 1];
+                    memcpy(buffer, thisComment + 5, charsThisComment - 5);   // This is OK because of the size check above
+                    buffer[charsThisComment - 5] = '\0';
 
-                float value = (float)atof(buffer);
-                memcpy((char*)bam->firstAux() + auxLen + 3, &value, sizeof(value));
+                    int value = atoi(buffer);
+                    memcpy((char*)bam->firstAux() + auxLen + 3, &value, sizeof(value));
 
-                delete[] buffer;
-                buffer = NULL;
+                    auxLen += 7;
+                    bam->block_size += 7;
+                    break;
+                } // i
 
-                auxLen += 3 + sizeof(value);
-                bam->block_size += 3 + sizeof(value);
-                break;
-            } // f
+                case'f': {
+                    if ((char*)bam->firstAux() + auxLen + 3 + sizeof(float) >= buffer + bufferSpace) {
+                        return false;
+                    }
 
-            case 'Z':
-            case 'H':   // H is just a string where the value is required to be hex digits.  We don't actually check that here
-            {
-                if ((char*)bam->firstAux() + auxLen + charsThisComment - 5 + 1 > buffer + bufferSpace) {
-                    return false;
-                }
+                    //
+                    // Don't syntax check this.
+                    //
+                    size_t bufferLen = charsThisComment - 5 + 1;
+                    char* buffer = new char[bufferLen];
+                    memcpy(buffer, thisComment + 5, charsThisComment - 5);   // This is OK because we allocated buffer to be big enough
+                    buffer[bufferLen - 1] = '\0';
 
-                memcpy((char*)bam->firstAux() + auxLen + 3, thisComment + 5, charsThisComment - 5);
-                ((char*)bam->firstAux())[auxLen + 3 + charsThisComment - 5] = '\0';
+                    float value = (float)atof(buffer);
+                    memcpy((char*)bam->firstAux() + auxLen + 3, &value, sizeof(value));
 
-                auxLen += 3 + charsThisComment - 5 + 1;
-                bam->block_size += 3 + charsThisComment - 5 + 1;
-                break;
-            } // Z & H
+                    delete[] buffer;
+                    buffer = NULL;
 
-            case 'B': {
-                WriteErrorMessage("FASTQ Comments with B (array) type aren't supported for BAM output.  Try SAM output or dropping -pfc\n");
-                soft_exit(1);
-            } // B
+                    auxLen += 3 + sizeof(value);
+                    bam->block_size += 3 + sizeof(value);
+                    break;
+                } // f
 
+                case 'Z':
+                case 'H':   // H is just a string where the value is required to be hex digits.  We don't actually check that here
+                {
+                    if ((char*)bam->firstAux() + auxLen + 3 + charsThisComment - 5 + 1 > buffer + bufferSpace) {
+                        return false;
+                    }
+
+                    memcpy((char*)bam->firstAux() + auxLen + 3, thisComment + 5, charsThisComment - 5);
+                    ((char*)bam->firstAux())[auxLen + 3 + charsThisComment - 5] = '\0';
+
+                    auxLen += 3 + charsThisComment - 5 + 1;
+                    bam->block_size += 3 + charsThisComment - 5 + 1;
+                    break;
+                } // Z & H
+
+                case 'B': {
+                    WriteErrorMessage("FASTQ Comments with B (array) type aren't supported for BAM output.  Try SAM output or dropping -pfc\n");
+                    soft_exit(1);
+                } // B
             } // switch (type)
 
             charsConsumed += charsThisComment;
@@ -1948,12 +1967,14 @@ BAMFormat::writeRead(
         WriteErrorMessage("BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
         soft_exit(1);
     }
+
     bam->l_read_name = (_uint8)qnameLen + 1;
     bam->MAPQ = mapQuality;
     int refLength = cigarOps > 0 ? 0 : fullLength;
     for (int i = 0; i < cigarOps; i++) {
         refLength += BAMAlignment::CigarCodeToRefBase[cigarBuf[i] & 0xf] * (cigarBuf[i] >> 4);
     }
+
     bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin((int)positionInContig - 1, (int)positionInContig - 1 + refLength) :
         // unmapped is at mate's position, length 1
         mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin((int)matePositionInContig - 1, (int)matePositionInContig) :
@@ -1979,6 +2000,8 @@ BAMFormat::writeRead(
         FASTQComment, FASTQCommentLength)) {
         return false;
     }
+
+    _ASSERT(bam->block_size + 4 <= bufferSpace);
  
     if (NULL != spaceUsed) {
         *spaceUsed = bam->block_size + 4; // +4 because the size of the block_size field itself is not included in block_size

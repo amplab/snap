@@ -178,6 +178,8 @@ AlignerOptions::usage()
         WriteErrorMessage(
             "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
             "       bases from front and back of read respectively; default: back only (-C-+)\n"
+            "  -cc  Specifies the min and max quality score to clip in Phred 33 format.  Must be followed by\n"
+            "       two characters.  The default is ##.\n"
             "  -=   use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
             "  -pf  specify the name of a file to contain the run speed\n"
             "  -hp  Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
@@ -981,22 +983,41 @@ AlignerOptions::usage()
 
             if ('-' == argv[n][2]) {
                 if ('-' == argv[n][3]) {
-                    clipping = NoClipping;
+                    clipping.clippingType = NoClipping;
                 } else {
-                    clipping = ClipBack;
+                    clipping.clippingType = ClipBack;
                 }
             } else {
                 if ('-' == argv[n][3]) {
-                    clipping = ClipFront;
+                    clipping.clippingType = ClipFront;
                 } else {
-                    clipping = ClipFrontAndBack;
+                    clipping.clippingType = ClipFrontAndBack;
                 }
             }
             return true;
-        }
-        else if (strcmp(argv[n], "-A-") == 0) {
+        } else if (strcmp(argv[n], "-A-") == 0) {
             altAwareness = false;
             return true;
+        } else if (strcmp(argv[n], "-cc") == 0) {
+            if (n + 1 < argc) {
+                if (strlen(argv[n + 1]) != 2 || argv[n + 1][0] < '!' || argv[n + 1][0] > '~' || argv[n + 1][1] < '!' || argv[n + 1][1] > '~') {
+                    WriteErrorMessage("Must specify the min and max quality scores to clip after -cc as exactly two characters between ! and ~ inclusive in ASCII.\n");
+                    return false;
+                }
+                if (argv[n + 1][0] > argv[n + 1][1]) {
+                    WriteErrorMessage("The min quality score after -cc must be less than or equal to the max.\n");
+                    return false;
+                }
+
+                clipping.minPhredToClip = argv[n + 1][0];
+                clipping.maxPhredToClip = argv[n + 1][1];
+
+                n++;
+                return true;
+            } else {
+                WriteErrorMessage("Must specify the min and max quality scores to clip after -cc\n");
+                return false;
+            }
         } else if (strcmp(argv[n], "-ea") == 0) {
             emitALTAlignments = true;
             return true;

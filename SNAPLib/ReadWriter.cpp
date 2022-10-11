@@ -540,8 +540,7 @@ SimpleReadWriter::writePairs(
                             location = InvalidGenomeLocation;
                             singleResults[whichRead][whichAlignment].score = -1;
                             singleResults[whichRead][whichAlignment].direction = FORWARD;
-                        }
-                        else {
+                        } else {
                             if (addFrontClipping < 0) { // Insertion (soft-clip)
                                 cumulativePositiveAddFrontClipping += addFrontClipping;
                                 if (singleResults[whichRead][whichAlignment].direction == FORWARD) {

@@ -337,6 +337,7 @@ GzipCompressWorker::compressChunk(
         }
         * (_uint16*) (toBuffer + 16) = (_uint16) (toUsed - 1);
     }
+
     return toUsed;
 }
 
@@ -394,6 +395,7 @@ GzipWriterFilter::onNextBatch(
         }
         return min<long long>(fromUsed, bytes);
     }
+
     // do compress buffer synchronously in-place
     if (manager == NULL) {
         manager = new GzipCompressWorkerManager(supplier);
@@ -403,15 +405,17 @@ GzipWriterFilter::onNextBatch(
         manager->initialize(encoder);
         manager->configure(worker, 0, 1);
     }
+
     encoder->setupEncode(-1);
     manager->beginStep();
     worker->step();
     manager->finishStep();
     writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
     if (fromBufferUsed != NULL) {
-        *fromBufferUsed = min<long long>(fromUsed, bytes);
+        *fromBufferUsed = fromUsed;
     }
-    return min<long long>(fromUsed, bytes);
+
+    return fromUsed;
 }
 
     GzipWriterFilterSupplier*
