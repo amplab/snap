@@ -6812,6 +6812,11 @@ namespace ASELib
                 return max;
             }
 
+            public double getStandardError()
+            {
+                return getMeanAndStdDev().stddev / Math.Sqrt((double)n);
+            }
+
             int n = 0;
             double total = 0;
             double totalOfSquares = 0;

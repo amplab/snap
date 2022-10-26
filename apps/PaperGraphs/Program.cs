@@ -69,7 +69,7 @@ namespace PaperGraphs
             }
 
             outputFile.WriteLine();
-            outputFile.WriteLine(sample + " seed size sweep");
+            outputFile.WriteLine(datasetToName[sample] + " seed size sweep");
             outputFile.WriteLine("seed size\ttime\tmean F1\tSNV F1\tindel F1");
 
             foreach (var seedSize in seedSizesToRun)
@@ -97,12 +97,22 @@ namespace PaperGraphs
 
 
         static int nDigits = 4;
+        static Dictionary<string, string> datasetToName = new Dictionary<string, string>();
 
         static void Main(string[] args)
         {
 
 
             string[] dataSets = { "ERR194146", "ERR194147" , "hg001", "hg002", "hg003", "hg004", "hg005", "hg006", "hg007",  };
+            datasetToName.Add("ERR194146", "146");
+            datasetToName.Add("ERR194147", "147");
+            datasetToName.Add("hg001", "hg1");
+            datasetToName.Add("hg002", "hg2");
+            datasetToName.Add("hg003", "hg3");
+            datasetToName.Add("hg004", "hg4");
+            datasetToName.Add("hg005", "hg5");
+            datasetToName.Add("hg006", "hg6");
+            datasetToName.Add("hg007", "hg7");
 
             Dictionary<string, Dictionary<ASETools.Aligner, Result>> resultsByDataSetAndAligner = new Dictionary<string, Dictionary<ASETools.Aligner, Result>>();
             Dictionary<string, Dictionary<ASETools.Aligner, List<Result>>> replicasByDataSetAndAligner = new Dictionary<string, Dictionary<ASETools.Aligner, List<Result>>>();
@@ -114,11 +124,14 @@ namespace PaperGraphs
             aligners.Add(ASETools.Aligner.BWA);
             aligners.Add(ASETools.Aligner.GEM);
             aligners.Add(ASETools.Aligner.Bowtie);
+            aligners.Add(ASETools.Aligner.Minimap2);
 
+            int nReplicasForErrorBar = 4;   // This doesn't count the base run
 
-            int nTotal = 0;
+        int nTotal = 0;
             int nWithTimings = 0;
             int nWithConcordance = 0;
+            int nWithErrorBars = 0;
 
             foreach (var dataSet in dataSets) {
                 resultsByDataSetAndAligner.Add(dataSet, new Dictionary<ASETools.Aligner, Result>());
@@ -182,6 +195,11 @@ namespace PaperGraphs
                                 replicas.Add(replica);
                             }
                         } // replica filename  
+
+                        if (replicas.Count() >= nReplicasForErrorBar && null != timings)
+                        {
+                            nWithErrorBars++;
+                        }
                     } // if main timing file exists
 
                     var concordanceFilename = concordanceDirectory + dataSet + "." + ASETools.alignerName[aligner].ToLower() + (aligner == ASETools.Aligner.Bowtie ? "_s1000" : (aligner == ASETools.Aligner.Dragen ? "3.8" : "")) + ".dragen3.8VC.concordance.tar";
@@ -198,7 +216,7 @@ namespace PaperGraphs
                 } // aligner
             } // dataSet
 
-            Console.WriteLine("Of " + nTotal + " possible runs, " + nWithTimings + " have timings and " + nWithConcordance + " have concordance");             
+            Console.WriteLine("Of " + nTotal + " possible runs, " + nWithTimings + " have timings, " + nWithConcordance + " have concordance, and " + nWithErrorBars + " have timing error bars.");             
 
             var outputFile = ASETools.CreateStreamWriterWithRetry(@"d:\temp\Aligner Concordance and Timings.txt");
             if (null == outputFile)
@@ -226,7 +244,7 @@ namespace PaperGraphs
 
             foreach (var dataSet in dataSets)
             {
-                outputFile.Write(dataSet);
+                outputFile.Write(datasetToName[dataSet]);
                 foreach (var aligner in aligners)
                 {
                     outputFile.Write("\t");
@@ -318,7 +336,7 @@ namespace PaperGraphs
 
             foreach (var dataSet in dataSets)
             {
-                outputFile.Write(dataSet);
+                outputFile.Write(datasetToName[dataSet]);
                 foreach (var aligner in aligners)
                 {
                     var concordance = resultsByDataSetAndAligner[dataSet][aligner].concordance;
@@ -376,7 +394,7 @@ namespace PaperGraphs
 
             foreach (var dataSet in dataSets)
             {
-                outputFile.Write(dataSet);
+                outputFile.Write(datasetToName[dataSet]);
 
                 // Load & Align
                 foreach (var aligner in aligners)
@@ -429,7 +447,7 @@ namespace PaperGraphs
                     var timing = resultsByDataSetAndAligner[dataSet][aligner].runTiming;
                     var replicas = resultsByDataSetAndAligner[dataSet][aligner].replicas;
 
-                    if (timing != null && replicas.Count() >= 4)
+                    if (timing != null && replicas.Count() >= nReplicasForErrorBar)
                     {
                         var times = replicas.Select(_ => ((double)_.alignTime + _.loadingTime) / 3600 / 24).ToList();
                         times.Add(((double)timing.alignTime + timing.loadingTime) / 3600/ 24);
@@ -477,7 +495,7 @@ namespace PaperGraphs
 
             foreach (var dataSet in dataSets)
             {
-                outputFile.Write(dataSet);
+                outputFile.Write(datasetToName[dataSet]);
                 var snapTiming = resultsByDataSetAndAligner[dataSet][ASETools.Aligner.SNAP].runTiming;
 
                 foreach (var aligner in aligners)
@@ -527,7 +545,7 @@ namespace PaperGraphs
                 // Write the graph headers
                 //
                 outputFile.WriteLine();
-                outputFile.WriteLine("Scatter graphs for " + dataSet);
+                outputFile.WriteLine("Scatter graphs for " + datasetToName[dataSet]);
                 foreach (var scatterGraph in scatterGraphs)
                 {
                     outputFile.Write("\t" + scatterGraph.name + "\t");

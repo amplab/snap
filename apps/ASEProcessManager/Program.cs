@@ -5156,6 +5156,11 @@ namespace ASEProcessManager
                 filesToDownload = null;
                 nDone = nAddedToScript = nWaitingForPrerequisites = 0;
 
+                if (aligner == ASETools.Aligner.Dragen)
+                {
+                    return; // Dragen's script is wrong somehow, and we don't need it now.
+                }
+
                 //ASETools.Case.ColumnGetter getOutput;
                 //ASETools.Case.ColumnGetter getOutputBai;
                 //ASETools.Case.ColumnGetter getOutputStatictics;
@@ -5255,11 +5260,22 @@ namespace ASEProcessManager
                             case ASETools.Aligner.Dragen:
                                 if (paired)
                                 {
-                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1 " + localInputFile + " -2 " + localSecondInputFile + " --output-directory /mnt/d/temp  --output-file-prefix " + case_.getDNAFileIdByTumor(tumor) + ".Dragen_realigned\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1 " + localInputFile + " -2 " + localSecondInputFile + " --output-directory /mnt/d/temp  --output-file-prefix " + samFileName + "\n");
                                 } 
                                 else
                                 {
-                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1 " + localInputFile + " --output-directory /mnt/d/temp  --output-file-prefix " + case_.getDNAFileIdByTumor(tumor) + ".Dragen_realigned\n");
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/dragen-os -r /mnt/d/sequence/indices/dragen-38 -1 " + localInputFile + " --output-directory /mnt/d/temp  --output-file-prefix " + samFileName + "\n");
+                                }
+                                break;
+
+                            case ASETools.Aligner.Minimap2:
+                                if (paired)
+                                {
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/minimap2 -a -ax sr -t 16 -F 1000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' /mnt/d/sequence/indices/Homo_sapiens_assembly38.mmi " + localInputFile + " " + localSecondInputFile + " > " + samFileName + "\n");
+                                } 
+                                else
+                                {
+                                    linuxScriptWriter.Write(@"/mnt/d/gdc/bin/minimap2 -a -ax sr -t 16 -F 1000 -R '@RG\tID:4\tLB:" + case_.getDNAFileIdByTumor(tumor) + @"\tPL:ILLUMINA\tSM:20\tPU:unit1' /mnt/d/sequence/indices/Homo_sapiens_assembly38.mmi " + localInputFile + " > " + samFileName + "\n");
                                 }
                                 break;
 
@@ -5769,7 +5785,6 @@ namespace ASEProcessManager
                         continue;
                     }
 
-
                     foreach (var tumor in ASETools.BothBools)
                     {
                         if (tumor)
@@ -5783,7 +5798,7 @@ namespace ASEProcessManager
 
                 foreach (var aligner in ASETools.EnumUtil.GetValues<ASETools.Aligner>())
                 {
-                    processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
+                    // BJB off for now processingStages.Add(new HaplotypeCallerProcessingStage(aligner, false));   // No tumor for now.
                                                                                                 //processingStages.Add(new RealignedFreebayesProcessingStage(aligner)); // Need to make this take a tumor parameter if we ever get there
                 }
 
