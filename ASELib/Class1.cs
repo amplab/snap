@@ -18308,6 +18308,26 @@ namespace ASELib
             }
         } // WriteToMultipleStreams
 
+        public static int cheezyLog2(long value)
+        {
+            if (value < 0)
+            {
+                throw new ArgumentException("cheezyLog2: value may not be negavive: " + value);
+            }
+
+            int retVal = 0;
+            value = value >> 1; // Because log2(1) == 0 (this also makes 0 go into 0)
+
+            while (value > 0)
+            {
+                value = value >> 1;
+                retVal++;
+            }
+
+            return retVal;
+        } // cheezyLog2
+
+
 
     } // ASETools
 

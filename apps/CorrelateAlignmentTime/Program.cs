@@ -13,24 +13,6 @@ namespace CorrelateAlignmentTime
 {
     internal class Program
     {
-        static int cheezyLog2(int value)
-        {
-            if (value < 0)
-            {
-                throw new ArgumentException("cheezyLog2: value may not be negavive: " + value);
-            }
-
-            int retVal = 0;
-            value = value >> 1; // Because log2(1) == 0 (this also makes 0 go into 0)
-
-            while (value > 0)
-            {
-                value = value >> 1;
-                retVal++;
-            }
-
-            return retVal;
-        } // cheezyLog2
 
 
         static void Main(string[] args)
@@ -92,7 +74,7 @@ namespace CorrelateAlignmentTime
             //
 
             const int maxTimeInUs = 1024 * 1024;    // Anything over this we'll just treat as 1s
-            int nBuckets = cheezyLog2(maxTimeInUs) + 1;
+            int nBuckets = ASETools.cheezyLog2(maxTimeInUs) + 1;
             long[,] counts = new long[nBuckets, nBuckets];
             var unmatchedReads = new Dictionary<string, ASETools.SAMLine>[nInputFiles];
 
@@ -151,9 +133,9 @@ namespace CorrelateAlignmentTime
                                     times[j] = samLines[j].AT();
                                 } // input files
 
-                                counts[Math.Min(cheezyLog2(times[0]), nBuckets - 1), Math.Min(cheezyLog2(times[1]), nBuckets - 1)]++;
+                                counts[Math.Min(ASETools.cheezyLog2(times[0]), nBuckets - 1), Math.Min(ASETools.cheezyLog2(times[1]), nBuckets - 1)]++;
                                 pearsonR.addSamplePair(times[0], times[1]);
-                                pearsonROfLogTime.addSamplePair(Math.Min(cheezyLog2(times[0]), nBuckets - 1), Math.Min(cheezyLog2(times[1]), nBuckets - 1));
+                                pearsonROfLogTime.addSamplePair(Math.Min(ASETools.cheezyLog2(times[0]), nBuckets - 1), Math.Min(ASETools.cheezyLog2(times[1]), nBuckets - 1));
 
                                 unmatchedReads[1 - i].Remove(samLine.decoratedQname());
 
