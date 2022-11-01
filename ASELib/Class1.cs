@@ -16527,6 +16527,8 @@ namespace ASELib
                 List<string> currentContig = null;
                 string currentContigName = null;
 
+
+
                 while (null != (nextLine = inputFile.ReadLine()))
                 {
                     if (nextLine.StartsWith(">"))
@@ -16551,6 +16553,8 @@ namespace ASELib
                 }
 
                 addContig(currentContigName, currentContig);
+
+                totalSize = contigs.Select(_ => (long)_.Value.Length).Sum();
             }
 
             void addContig(string contigName, List<string> contigStrings)
@@ -16578,6 +16582,7 @@ namespace ASELib
                 }
 
                 contigs.Add(contigName, contig);
+                contigList.Add(new NameAndBases(contigName, contig));
             }
 
             public static FASTA loadFromFile(string inputFilename)
@@ -16593,8 +16598,6 @@ namespace ASELib
 
                 return retVal;
             }
-
-            Dictionary<string, char[]> contigs = new Dictionary<string, char[]>();
 
             static public bool compare(FASTA one, FASTA two)
             {
@@ -16642,13 +16645,47 @@ namespace ASELib
                 }
 
                 return equal;
-
-
             }
+
+            public void getRandomLocation(out string contigName, out int offsetInContig)
+            {
+                var remainingOffset = getRandomLong(random, totalSize);
+
+                for (int i = 0; i < contigs.Count(); i++)
+                {
+                    if (contigList[i].bases.Length > remainingOffset)
+                    {
+                        contigName = contigList[i].name;
+                        offsetInContig = (int)(remainingOffset + 1);   // +1 because contig offsets are 1-based (feh).  Cast is OK because contig sizes are ints
+                        return;
+                    }
+
+                    remainingOffset -= contigList[i].bases.Length;
+                }
+
+                throw new Exception("ASELib.FASTA.getRandomLocation: notreached");
+            } // getRandomLocation
+
+            public readonly Dictionary<string, char[]> contigs = new Dictionary<string, char[]>();
+
+            class NameAndBases
+            {
+                public NameAndBases(string name_, char[] bases_)
+                {
+                    name = name_;
+                    bases = bases_;
+                }
+
+                public string name;
+                public char[] bases;
+            };
+            List<NameAndBases> contigList = new List<NameAndBases>();
+
+            static Random random = new Random();
+            public readonly long totalSize;
         } // FASTA
 
         public delegate V MergeDictionaryValues<V>(V one, V two);
-
 
         public static void MergeDictionaries<K, V>(Dictionary<K, V> into, Dictionary<K, V> from, MergeDictionaryValues<V> mergeFunction)
         {
@@ -18327,7 +18364,15 @@ namespace ASELib
             return retVal;
         } // cheezyLog2
 
+        static long getRandomLong(Random random, long maxValue)    // This is a bad implementation and doesn't give really uniform coverage.  Sue me.
+        {
+            if (maxValue <= int.MaxValue)
+            {
+                return random.Next((int)maxValue);
+            }
 
+            return (random.Next(int.MaxValue) + ((long)1 << 32) * random.Next(int.MaxValue)) % maxValue;
+        } // getRandom
 
     } // ASETools
 
