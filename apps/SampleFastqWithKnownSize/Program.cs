@@ -57,6 +57,13 @@ namespace SampleFastqWithKnownSize
             if (nInputs == 2 && (nToEmit % 2 != 0 || nInTotal % 2 != 0))
             {
                 Console.WriteLine("You have paired-end reads and an odd number of total reads or reads to emit, which doesn't make sense.");
+                if (nInTotal % 2 != 0)
+                {
+                    return;
+                }
+
+                Console.WriteLine("Adding one to the to-emit value to make it work.");
+                nToEmit++;
             }
 
             var inputs = new StreamReader[nInputs];

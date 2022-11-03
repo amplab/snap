@@ -380,6 +380,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimulateLongReadsAsFASTA", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemapReadsToRef", "apps\RemapReadsToRef\RemapReadsToRef.csproj", "{AD928A5E-9047-4704-A894-14C106B894F9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CollectResults", "apps\CollectResults\CollectResults.csproj", "{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2980,6 +2982,22 @@ Global
 		{AD928A5E-9047-4704-A894-14C106B894F9}.Release|Win32.Build.0 = Release|Any CPU
 		{AD928A5E-9047-4704-A894-14C106B894F9}.Release|x64.ActiveCfg = Release|x64
 		{AD928A5E-9047-4704-A894-14C106B894F9}.Release|x64.Build.0 = Release|x64
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Debug|Win32.Build.0 = Debug|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Debug|x64.ActiveCfg = Debug|x64
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Debug|x64.Build.0 = Debug|x64
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Release|Win32.ActiveCfg = Release|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Release|Win32.Build.0 = Release|Any CPU
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Release|x64.ActiveCfg = Release|x64
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -3151,6 +3169,7 @@ Global
 		{28D916A5-F075-4E0C-97A7-DD7E4412BCB6} = {0C125683-BB72-4C29-9660-4590A2FD9C7B}
 		{608582B9-C8E5-4B42-A841-3501C55C2EE9} = {0C125683-BB72-4C29-9660-4590A2FD9C7B}
 		{AD928A5E-9047-4704-A894-14C106B894F9} = {0C125683-BB72-4C29-9660-4590A2FD9C7B}
+		{D0A57073-8210-4346-BCF8-AD6EA0AF79A2} = {0C125683-BB72-4C29-9660-4590A2FD9C7B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {54B8FD8D-AD1B-41AD-8132-0137B5CB61DA}

@@ -9495,7 +9495,10 @@ namespace ASELib
                 string rawLine;
                 while (null != (rawLine = inputFile.ReadLine()))
                 {
-                    retVal.Add(new SAMLine(rawLine));
+                    if (!rawLine.StartsWith("@"))   // Skip header lines
+                    {
+                        retVal.Add(new SAMLine(rawLine));
+                    }
                 }
 
                 return retVal;
@@ -9533,7 +9536,7 @@ namespace ASELib
 
                 if (fields.Count() < 11)
                 {
-                    throw new FormatException();
+                    throw new Exception("SAMLine: rawLine doesn't have enough fields: " + rawline);
                 }
 
                 qname = fields[0];
@@ -18067,6 +18070,11 @@ namespace ASELib
                 var summaryFilename = sampleName + ".summary.csv";
                 var tempDirectory = @"d:\temp\extractedTarballs\";
 
+                if (!Directory.Exists(tempDirectory))
+                {
+                    Directory.CreateDirectory(tempDirectory);
+                }
+
                 ExtractFileFromTarball(tarballFilename, summaryFilename, tempDirectory);
 
                 var extractedFilename = tempDirectory + summaryFilename;
@@ -18373,6 +18381,10 @@ namespace ASELib
 
             return (random.Next(int.MaxValue) + ((long)1 << 32) * random.Next(int.MaxValue)) % maxValue;
         } // getRandom
+
+        public static readonly string[] GIABMachines = { "air-k28-13", "air-k28-14", "air-k28-15", "air-k28-16", "air-k28-17", "air-k28-18", "air-k28-19", "air-k28-20", "air-k28-21", "air-k28-22",
+                                                         "air-k28-23", "air-k28-24", "air-k28-27", "air-k28-28", "air-k28-29", "air-k28-30", "air-k28-31", "air-k28-32", "air-k28-33", "air-k28-34",
+                                                         "air-k28-35", "air-k28-36", "air-k28-37", "air-k28-38", "air-k28-39", "air-k28-40", "air-k28-41", "air-k28-42",};
 
     } // ASETools
 

@@ -55,18 +55,19 @@ namespace SimulateLongReadsAsFASTA
                 qualityString += "M";   // A good quality (since we know it's actually perfect)
             }
 
+
             while ((double)totalBasesEmitted < inputFasta.totalSize * coverage)
             {
-                string contigName;
-                int contigOffset;
+                string sourceContigName;
+                int sourceContigOffset;
 
                 //
                 // Find a random location that doesn't hang off the end of the contig
                 //
                 do
                 {
-                    inputFasta.getRandomLocation(out contigName, out contigOffset);
-                } while (inputFasta.contigs[contigName].Length <= contigOffset + readLength);
+                    inputFasta.getRandomLocation(out sourceContigName, out sourceContigOffset);
+                } while (inputFasta.contigs[sourceContigName].Length <= sourceContigOffset + readLength);
 
                 var outputFilename = args[1] + "_" + outputFASTANumber + ".fasta";
                 var outputFile = nullFASTA ? System.IO.StreamWriter.Null : ASETools.CreateStreamWriterWithRetry(outputFilename);
@@ -76,14 +77,16 @@ namespace SimulateLongReadsAsFASTA
                     return;
                 }
 
-                outputFile.WriteLine(">" + contigName + "_" + contigOffset);
+                var generatedContigName = sourceContigName + "_" + sourceContigOffset + "_n" + outputFASTANumber;   // We attach the number to avoid randomly having duplicates.
 
-                outputFastq.WriteLine("@" + contigName + "_" + contigOffset);
+                outputFile.WriteLine(">" + generatedContigName);
+
+                outputFastq.WriteLine("@" + generatedContigName);
 
                 string outputLine = "";
-                for (int i = contigOffset - 1; i <= contigOffset + readLength - 1; i++) // -1 is because contigs are 1 based, but the array is 0 based (feh)
+                for (int i = sourceContigOffset - 1; i <= sourceContigOffset + readLength - 1; i++) // -1 is because contigs are 1 based, but the array is 0 based (feh)
                 {
-                    outputLine += inputFasta.contigs[contigName][i];
+                    outputLine += inputFasta.contigs[sourceContigName][i];
                     if (outputLine.Length >= 100)
                     {
                         outputFile.WriteLine(outputLine);
