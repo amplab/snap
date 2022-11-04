@@ -9578,7 +9578,7 @@ namespace ASELib
                     qual += "2";
                 }
 
-                //try
+                if (seq != "*")
                 {
                     cigarAllClipping = true;
 
@@ -9669,11 +9669,7 @@ namespace ASELib
                                 break;
                         } // switch over character in the CIGAR string
                     } // while over the CIGAR string
-                }  /*catch (Exception e) 
-                {
-                    Console.WriteLine("SAMLine.SAMLine: error parsing cigar string " + cigar + " for read " + rawline);
-                    throw e;
-                } // catch */
+                }  // If seq isn't elided (which minimap2 does)
 
                 basesOfReferenceMapped = currentPos - pos;
 
