@@ -373,6 +373,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MakeOptimizationGraph", "apps\MakeOptimizationGraph\MakeOptimizationGraph.csproj", "{19E2B70D-F8D3-4073-954E-31A0CA6D1587}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "InfoGain", "InfoGain", "{0C125683-BB72-4C29-9660-4590A2FD9C7B}"
+	ProjectSection(SolutionItems) = preProject
+		scripts\run_infogain_alignment.cmd = scripts\run_infogain_alignment.cmd
+		scripts\run_infogain_sim.cmd = scripts\run_infogain_sim.cmd
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LongReadCoverage", "apps\LongReadCoverage\LongReadCoverage.csproj", "{28D916A5-F075-4E0C-97A7-DD7E4412BCB6}"
 EndProject

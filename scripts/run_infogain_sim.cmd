@@ -13,4 +13,4 @@ for %%r in (longread_*fasta) do call d:\temp\run_infogain_alignment %%r %2
 
 
 cd /d d:\temp
-rd /s /q d:\temp\InfogainTemp
+rem rd /s /q d:\temp\InfogainTemp

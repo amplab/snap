@@ -17,26 +17,57 @@ namespace RemapReadsToRef
 {
     internal class Program
     {
-        static int getRemappedPos(int pos, ASETools.SAMLine mappedLongRead)
+        static int getRemappedPos(int posRelativeToLongRead, ASETools.SAMLine mappedLongRead)
         {
-            if (pos == 0)
+            if (posRelativeToLongRead == 0)
             {
                 return 0;
             }
 
-            int currentPos = mappedLongRead.pos;
-            int remainingOffset = pos;
+            var cigar = ASETools.ParseCIGARString(mappedLongRead.cigar);
 
-            //
-            // Walk the cigar string of mappedLongRead and use that to adjust.
-            //
-            int offsetInCigar = 0;
-            while (offsetInCigar < mappedLongRead.cigar.Length)
+            if (cigar.Count() == 0)
             {
+                return 0;   // This is a "*" cigar string, which typically means unmapped.
+            }
+            
+            int currentPos = 0;
+            int remainingOffset = posRelativeToLongRead;
 
+            for (int indexInCigar = 0; indexInCigar < cigar.Count(); indexInCigar++)
+            {
+                switch (cigar[indexInCigar].type)
+                {
+                    case ASETools.CIGARType.Match:
+                    case ASETools.CIGARType.Unequal:
+                    case ASETools.CIGARType.Equal:
+
+                        var amount = Math.Min(cigar[indexInCigar].count, remainingOffset);
+                        currentPos += amount;
+                        remainingOffset -= amount;
+                        break;
+
+                }
+            }
+        } // getRemappedPos
+
+        static string convertContigToRef(string mappedLongReadContig)
+        {
+            //
+            // The long reads have names like contig_offset_n#.  So, just take up to the first _
+            //
+            if (mappedLongReadContig == "*")
+            {
+                return "*";
             }
 
-        } // getRemappedPos
+            if (mappedLongReadContig == "=")
+            {
+                return "=";
+            }
+
+            return mappedLongReadContig.Substring(0, mappedLongReadContig.IndexOf("_"));
+        }
 
         static string rewriteSAMLine(ASETools.SAMLine samLine, string readnamePrefix, ASETools.SAMLine mappedLongRead)
         {
@@ -73,21 +104,14 @@ namespace RemapReadsToRef
                     outputLine += "*\t";
                 } else
                 {
-                    outputLine += mappedLongRead.rname + "\t";
+                    outputLine += convertContigToRef(mappedLongRead.rname) + "\t";
                 }
 
                 // POS MAPQ CIGAR (in some cases CIGAR should be rewritten, but we'll just not bother)
                 outputLine += getRemappedPos(samLine.pos, mappedLongRead) + "\t" + samLine.mapq + "\t" + samLine.cigar + "\t";
 
                 // RNEXT
-                if (samLine.rnext == "=" || samLine.rnext == "*")
-                {
-                    outputLine += samLine.rnext + "\t";
-                }
-                else
-                {
-                    outputLine += mappedLongRead.rname + "\t";
-                }
+                outputLine += convertContigToRef(samLine.rnext);
 
                 // PNEXT 
                 outputLine += getRemappedPos(samLine.pnext, mappedLongRead) + "\t";

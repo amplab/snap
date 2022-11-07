@@ -9486,6 +9486,71 @@ namespace ASELib
             return (int)phred - 33;
         }
 
+        public enum CIGARType { Match, Insertion, Deletion, Skipped, SoftClip, HardClip, Padding, Equal, Unequal };
+        public class CIGARElement
+        {
+            public CIGARElement(int count_, CIGARType type_)
+            {
+                count = count_;
+                type = type_;
+            }
+
+            public readonly int count;
+            public readonly CIGARType type;
+        } // CIGARElement
+
+        static public List<CIGARElement> ParseCIGARString(string cigarString)
+        {
+
+            var retVal = new List<CIGARElement>();
+            if (cigarString == "*")
+            {
+                return retVal;
+            }
+
+            int offsetInString = 0;
+            while (offsetInString < cigarString.Length)
+            {
+                int value = GetNextNumberFromString(cigarString.Substring(offsetInString));
+                if (value <= 0)
+                {
+                    throw new Exception("ParseCIGARString: non-posititve value from cigar string: " + cigarString);
+                }
+
+                while (offsetInString < cigarString.Length && cigarString[offsetInString] >= '0' && cigarString[offsetInString] <= '9')
+                {
+                    offsetInString++;
+                }
+
+                if (offsetInString >= cigarString.Length)
+                {
+                    throw new Exception("ParseCIGARString: Cigar string ended with number but no type: " + cigarString);
+                }
+
+                switch (cigarString[offsetInString])
+                {
+                    case 'M': retVal.Add(new CIGARElement(value, CIGARType.Match)); break;
+                    case 'I': retVal.Add(new CIGARElement(value, CIGARType.Insertion)); break;
+                    case 'D': retVal.Add(new CIGARElement(value, CIGARType.Deletion)); break;
+                    case 'N': retVal.Add(new CIGARElement(value, CIGARType.Skipped)); break;
+                    case 'S': retVal.Add(new CIGARElement(value, CIGARType.SoftClip)); break;
+                    case 'H': retVal.Add(new CIGARElement(value, CIGARType.HardClip)); break;
+                    case 'P': retVal.Add(new CIGARElement(value, CIGARType.Padding)); break;
+                    case '=': retVal.Add(new CIGARElement(value, CIGARType.Equal)); break;
+                    case 'X': retVal.Add(new CIGARElement(value, CIGARType.Unequal)); break;
+                    default: throw new Exception("ParseCIGARString: Cigar string contains unknown operation type '" + cigarString[offsetInString] + "' from string: " + cigarString);
+                } // switch
+
+                offsetInString++;   // For operation type
+            } // while we have elements in the string
+
+            if (retVal.Count() == 0)
+            {
+                throw new Exception("ParseCIGARString: didn't find anything in cigar string: " + cigarString);
+            }
+            return retVal;
+        } // ParseCIGARString
+
         public class SAMLine
         {
             static public List<SAMLine> ReadFromFile(StreamReader inputFile)
