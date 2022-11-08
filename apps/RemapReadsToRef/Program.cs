@@ -36,19 +36,59 @@ namespace RemapReadsToRef
 
             for (int indexInCigar = 0; indexInCigar < cigar.Count(); indexInCigar++)
             {
+                if (remainingOffset < 0)
+                {
+                    throw new Exception("greRemappedPos: remaining offset < 0: " + posRelativeToLongRead + " " + mappedLongRead.cigar);
+                }
+
+                if (remainingOffset == 0)
+                {
+                    break;
+                }
+
+                var amount = Math.Min(cigar[indexInCigar].count, remainingOffset);
+
                 switch (cigar[indexInCigar].type)
                 {
                     case ASETools.CIGARType.Match:
                     case ASETools.CIGARType.Unequal:
                     case ASETools.CIGARType.Equal:
 
-                        var amount = Math.Min(cigar[indexInCigar].count, remainingOffset);
                         currentPos += amount;
                         remainingOffset -= amount;
                         break;
 
-                }
-            }
+                    case ASELib.ASETools.CIGARType.Insertion:
+                    case ASETools.CIGARType.SoftClip:
+                        //
+                        // Bases in an insertion or soft clip do not correspond to bases in the referece, so we eat the
+                        // bases in the read without advancing in the reference.
+                        //
+                        remainingOffset -= amount;
+                        break;
+
+                    case ASETools.CIGARType.Deletion:
+                        //
+                        // A deletion is bases in the reference that don't correspond to references in the read, 
+                        // so we move along in the reference without using any bases in the read.
+                        //
+                        currentPos += cigar[indexInCigar].count; // NOT amount: we might have a deletion bigger than the remaining bases in the read (i.e., 10M10D3M)
+                        break;
+
+                    case ASETools.CIGARType.HardClip:
+                        //
+                        // In a hard clip the bases are deleted from the read and don't correspond to the reference, so
+                        // we just ignore the cigar entry entirely.
+                        //
+                        break;
+
+                    default:
+                        throw new Exception("Unimplemented CIGAR string type: " + mappedLongRead.cigar);
+
+                } // switch (cigar[indexInCigar].type)
+            } // for each cigar element
+
+            return currentPos + posRelativeToLongRead;
         } // getRemappedPos
 
         static string convertContigToRef(string mappedLongReadContig)
@@ -196,11 +236,13 @@ namespace RemapReadsToRef
                 var shortReadsFile = ASETools.CreateStreamReaderWithRetryCompressedBasedOnFilename(shortReadFilaname);
                 var shortReads = ASETools.SAMLine.ReadFromFile(shortReadsFile);
 
+                
+
                 shortReadsFile.Close();
 
                 foreach (var shortRead in shortReads)
                 {
-                    
+                    //outputFile.WriteLine(rewriteSAMLine(shortReadm )
                 }
             }
 
