@@ -24,6 +24,8 @@ namespace RemapReadsToRef
                 return 0;
             }
 
+            posRelativeToLongRead--; // Because it's 1-based.
+
             var cigar = ASETools.ParseCIGARString(mappedLongRead.cigar);
 
             if (cigar.Count() == 0)
@@ -88,26 +90,8 @@ namespace RemapReadsToRef
                 } // switch (cigar[indexInCigar].type)
             } // for each cigar element
 
-            return currentPos + posRelativeToLongRead;
+            return currentPos + mappedLongRead.pos;
         } // getRemappedPos
-
-        static string convertContigToRef(string mappedLongReadContig)
-        {
-            //
-            // The long reads have names like contig_offset_n#.  So, just take up to the first _
-            //
-            if (mappedLongReadContig == "*")
-            {
-                return "*";
-            }
-
-            if (mappedLongReadContig == "=")
-            {
-                return "=";
-            }
-
-            return mappedLongReadContig.Substring(0, mappedLongReadContig.IndexOf("_"));
-        }
 
         static string rewriteSAMLine(ASETools.SAMLine samLine, string readnamePrefix, ASETools.SAMLine mappedLongRead)
         {
@@ -144,14 +128,21 @@ namespace RemapReadsToRef
                     outputLine += "*\t";
                 } else
                 {
-                    outputLine += convertContigToRef(mappedLongRead.rname) + "\t";
+                    outputLine += mappedLongRead.rname + "\t";
                 }
 
                 // POS MAPQ CIGAR (in some cases CIGAR should be rewritten, but we'll just not bother)
                 outputLine += getRemappedPos(samLine.pos, mappedLongRead) + "\t" + samLine.mapq + "\t" + samLine.cigar + "\t";
 
                 // RNEXT
-                outputLine += convertContigToRef(samLine.rnext);
+                if (samLine.rnext == "*" || samLine.rnext == "=")
+                {
+                    outputLine += samLine.rnext + "\t";
+                }
+                else
+                {
+                    outputLine += mappedLongRead.rname + "\t";
+                }
 
                 // PNEXT 
                 outputLine += getRemappedPos(samLine.pnext, mappedLongRead) + "\t";
@@ -201,7 +192,7 @@ namespace RemapReadsToRef
                 return;
             }
 
-            var longReads = ASETools.SAMLine.ReadFromFile(longreadInputFile);
+            var longReads = ASETools.SAMLine.ReadFromFile(longreadInputFile, true, true);
             var longReadsByName = new Dictionary<string, ASETools.SAMLine>();
             longReads.ForEach(_ => longReadsByName.Add(_.qname, _));    // These are unique because in addition to source contig and offset, they have a serial number appended to their name (i.e., _n#)
 
@@ -229,22 +220,65 @@ namespace RemapReadsToRef
             longreadInputFile.Close();
             outputFile.WriteLine("@PG\tID:RemapReadsToRef\tPN:RemapReadsToRef\tCL:RemapReadsToRef.exe " + commandLine);
 
-            int inputFileNumber = 0;
+            var nShortReadSets = Directory.EnumerateFiles(ASETools.GetDirectoryFromPathname(shortReadFilenameTemplate), ASETools.GetFileNameFromPathname(shortReadFilenameTemplate)).Count();
+            int nPerDot;
+            ASETools.PrintMessageAndNumberBar("Processing", "long reads", nShortReadSets, out nPerDot);
+
+            int nProcessed = 0;
+            long nShortReads = 0;
+
+            bool rcNoticePrinted = false;
 
             foreach (var shortReadFilaname in Directory.EnumerateFiles(ASETools.GetDirectoryFromPathname(shortReadFilenameTemplate), ASETools.GetFileNameFromPathname(shortReadFilenameTemplate)))
             {
+                //
+                // This assumes that there will be a short 
+                // Do the dot before actually processing it, so that we don't have to handle printing the dot when all the short reads are unmapped.
+                //
+                nProcessed++;
+                if (nProcessed % nPerDot == 0)
+                {
+                    Console.Write(".");
+                }
+
                 var shortReadsFile = ASETools.CreateStreamReaderWithRetryCompressedBasedOnFilename(shortReadFilaname);
                 var shortReads = ASETools.SAMLine.ReadFromFile(shortReadsFile);
 
-                
+                nShortReads += shortReads.Count();
+
+                if (shortReads.All(_ => _.isUnmapped()))
+                {
+                    //
+                    // Probably a long read of all Ns or something.  Don't bother writing them out.
+                    //
+                    continue;
+                }
+
+                //
+                // The RNAME of any mapped read should be the same as the QNAME of the long read to which it's mapped.
+                //
+                var aMappedRead = shortReads.Where(_ => !_.isUnmapped()).First();
+
+                var longRead = longReadsByName[aMappedRead.rname];
+
+                if (!rcNoticePrinted && longRead.isRC())
+                {
+                    Console.WriteLine("Long read " + longRead.qname + " is mapped RC");
+                    rcNoticePrinted = true;
+                }
 
                 shortReadsFile.Close();
 
                 foreach (var shortRead in shortReads)
                 {
-                    //outputFile.WriteLine(rewriteSAMLine(shortReadm )
+                    outputFile.WriteLine(rewriteSAMLine(shortRead, longRead.qname + "_", longRead));
                 }
-            }
+            } // for each short read file
+
+            outputFile.Close();
+
+            Console.WriteLine();
+            Console.WriteLine("Processed " + nShortReads + " short reads mapped to " + longReadsByName.Count() + " long reads in " + ASETools.ElapsedTime(timer));
 
         } // Main
     } // Program

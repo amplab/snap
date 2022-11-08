@@ -9553,7 +9553,7 @@ namespace ASELib
 
         public class SAMLine
         {
-            static public List<SAMLine> ReadFromFile(StreamReader inputFile)
+            static public List<SAMLine> ReadFromFile(StreamReader inputFile, bool skipData = false, bool skipSupplementaryAndSecondary = false)
             {
                 var retVal = new List<SAMLine>();
 
@@ -9562,21 +9562,25 @@ namespace ASELib
                 {
                     if (!rawLine.StartsWith("@"))   // Skip header lines
                     {
-                        retVal.Add(new SAMLine(rawLine));
+                        var line = new SAMLine(rawLine, skipData);
+                        if (!skipSupplementaryAndSecondary || (!line.isSupplementaryAlignment() && !line.isSecondaryAlignment()))
+                        {
+                            retVal.Add(line);
+                        }
                     }
                 }
 
                 return retVal;
             }
 
-            static public void ReadSAMLinesFromFile(StreamReader inputFile, Action<SAMLine> processLine)
+            static public void ReadSAMLinesFromFile(StreamReader inputFile, Action<SAMLine> processLine, bool skipData = false)
             {
                 string rawLine;
                 while (null != (rawLine = inputFile.ReadLine()))
                 {
                     if (!rawLine.StartsWith("@"))
                     {
-                        processLine(new SAMLine(rawLine));
+                        processLine(new SAMLine(rawLine, skipData));
                     }
                 }
             } // ReadSAMLinesFromFile
@@ -9593,9 +9597,8 @@ namespace ASELib
                 }
             }
 
-            public SAMLine(string rawline)
+            public SAMLine(string rawline, bool skipData = false)
             {
-                line = rawline;
 
                 var fields = rawline.Split('\t');
 
@@ -9613,8 +9616,20 @@ namespace ASELib
                 rnext = fields[6];
                 pnext = Convert.ToInt32(fields[7]);
                 tlen = Convert.ToInt32(fields[8]);
-                seq = fields[9];
-                qual = fields[10];
+                if (skipData)
+                {
+                    line = null;
+                    seq = null;
+                    qual = null;
+                    seqIfMappedForward = null;
+                }
+                else
+                {
+                    line = rawline;
+                    seq = fields[9];
+                    qual = fields[10];
+                }
+
                 optionalFields = new string[fields.Count() - 11];
                 for (int i = 11; i < fields.Count(); i++)
                 {
@@ -9635,134 +9650,141 @@ namespace ASELib
                 int cigarElementStart = 0;
                 int cigarElementLength = 0;
 
-                //
-                // A small number of reads are incorrectly formatted with |qual| < |seq|.  Just pad them out with 2's.
-                //
-                while (qual.Length < seq.Length)
+                if (!skipData)
                 {
-                    qual += "2";
-                }
-
-                if (seq != "*")
-                {
-                    cigarAllClipping = true;
-
-                    while (offsetInCigarString < cigar.Count())
+                    //
+                    // A small number of reads are incorrectly formatted with |qual| < |seq|.  Just pad them out with 2's.
+                    //
+                    while (qual.Length < seq.Length)
                     {
-                        switch (cigar[offsetInCigarString])
-                        {
-                            case 'M':
-                            case 'I':
-                            case '=':
-                            case 'X':
-                                offsetInCigarString++;  // Consume the M, I, = or X
-                                int count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
-
-                                if (0 == count)
-                                {
-                                    throw new FormatException();
-                                }
-
-                                for (int i = 0; i < count; i++)
-                                {
-                                    mappedBases.Add(currentPos, seq[offsetInSeq]);
-                                    mappedQual.Add(currentPos, PhredToInt(qual[offsetInSeq]));
-
-                                    currentPos++;
-                                    offsetInSeq++;
-                                }
-
-                                // reset cigar element information
-                                cigarElementLength = 0;
-                                cigarElementStart = offsetInCigarString;
-
-                                nonclippedBases += count;
-                                cigarAllClipping = false;
-
-                                break;
-
-                            case 'D':
-                                offsetInCigarString++;  // Consume the D
-                                count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
-
-                                if (0 == count)
-                                {
-                                    throw new FormatException();
-                                }
-
-                                for (int i = 0; i < count; i++)
-                                {
-                                    mappedBases.Add(currentPos, 'N'); // Add placeholder for DEL
-                                    mappedQual.Add(currentPos, 70);     // Just use a high quality for a missing base
-                                    currentPos++;
-                                }
-
-                                // reset cigar element information
-                                cigarElementLength = 0;
-                                cigarElementStart = offsetInCigarString;
-
-                                cigarAllClipping = false;
-
-                                break;
-
-                            case 'N':
-                            case 'H':
-                                offsetInCigarString++;  // Consume the N or H
-                                count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
-
-                                // skip region. Reset
-                                currentPos += count;
-
-                                cigarElementLength = 0;
-                                cigarElementStart = offsetInCigarString;
-                                break;
-
-                            case 'S':
-                                offsetInCigarString++;  // Consume the S
-                                count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
-
-                                // skip region. Reset
-                                offsetInSeq += count;
-
-                                cigarElementLength = 0;
-                                cigarElementStart = offsetInCigarString;
-                                break;
-
-                            default:
-                                offsetInCigarString++;
-                                cigarElementLength++;
-                                break;
-                        } // switch over character in the CIGAR string
-                    } // while over the CIGAR string
-                }  // If seq isn't elided (which minimap2 does)
-
-                basesOfReferenceMapped = currentPos - pos;
-
-                if (isRC())
-                {
-                    seqIfMappedForward = "";
-                    for (int i = seq.Length - 1; i >= 0; i--)
-                    {
-                        switch (seq[i])
-                        {
-                            case 'A': seqIfMappedForward += "T";
-                                break;
-                            case 'C': seqIfMappedForward += "G";
-                                break;
-                            case 'G': seqIfMappedForward += "C";
-                                break;
-                            case 'T': seqIfMappedForward += "A";
-                                break;
-                            default:
-                                seqIfMappedForward += "N";
-                                break;
-                        }
+                        qual += "2";
                     }
-                } // it it's RC
-                else
-                {
-                    seqIfMappedForward = seq;
-                }
+
+                    if (seq != "*")
+                    {
+                        cigarAllClipping = true;
+
+                        while (offsetInCigarString < cigar.Count())
+                        {
+                            switch (cigar[offsetInCigarString])
+                            {
+                                case 'M':
+                                case 'I':
+                                case '=':
+                                case 'X':
+                                    offsetInCigarString++;  // Consume the M, I, = or X
+                                    int count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+
+                                    if (0 == count)
+                                    {
+                                        throw new FormatException();
+                                    }
+
+                                    for (int i = 0; i < count; i++)
+                                    {
+                                        mappedBases.Add(currentPos, seq[offsetInSeq]);
+                                        mappedQual.Add(currentPos, PhredToInt(qual[offsetInSeq]));
+
+                                        currentPos++;
+                                        offsetInSeq++;
+                                    }
+
+                                    // reset cigar element information
+                                    cigarElementLength = 0;
+                                    cigarElementStart = offsetInCigarString;
+
+                                    nonclippedBases += count;
+                                    cigarAllClipping = false;
+
+                                    break;
+
+                                case 'D':
+                                    offsetInCigarString++;  // Consume the D
+                                    count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+
+                                    if (0 == count)
+                                    {
+                                        throw new FormatException();
+                                    }
+
+                                    for (int i = 0; i < count; i++)
+                                    {
+                                        mappedBases.Add(currentPos, 'N'); // Add placeholder for DEL
+                                        mappedQual.Add(currentPos, 70);     // Just use a high quality for a missing base
+                                        currentPos++;
+                                    }
+
+                                    // reset cigar element information
+                                    cigarElementLength = 0;
+                                    cigarElementStart = offsetInCigarString;
+
+                                    cigarAllClipping = false;
+
+                                    break;
+
+                                case 'N':
+                                case 'H':
+                                    offsetInCigarString++;  // Consume the N or H
+                                    count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+
+                                    // skip region. Reset
+                                    currentPos += count;
+
+                                    cigarElementLength = 0;
+                                    cigarElementStart = offsetInCigarString;
+                                    break;
+
+                                case 'S':
+                                    offsetInCigarString++;  // Consume the S
+                                    count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+
+                                    // skip region. Reset
+                                    offsetInSeq += count;
+
+                                    cigarElementLength = 0;
+                                    cigarElementStart = offsetInCigarString;
+                                    break;
+
+                                default:
+                                    offsetInCigarString++;
+                                    cigarElementLength++;
+                                    break;
+                            } // switch over character in the CIGAR string
+                        } // while over the CIGAR string
+                    }  // If seq isn't elided (which minimap2 does)
+
+                    basesOfReferenceMapped = currentPos - pos;
+
+                    if (isRC())
+                    {
+                        seqIfMappedForward = "";
+                        for (int i = seq.Length - 1; i >= 0; i--)
+                        {
+                            switch (seq[i])
+                            {
+                                case 'A':
+                                    seqIfMappedForward += "T";
+                                    break;
+                                case 'C':
+                                    seqIfMappedForward += "G";
+                                    break;
+                                case 'G':
+                                    seqIfMappedForward += "C";
+                                    break;
+                                case 'T':
+                                    seqIfMappedForward += "A";
+                                    break;
+                                default:
+                                    seqIfMappedForward += "N";
+                                    break;
+                            }
+                        }
+                    } // it it's RC
+                    else
+                    {
+                        seqIfMappedForward = seq;
+                    }
+                } // skipData
             } // SAMLine
 
             //
@@ -15669,8 +15691,75 @@ namespace ASELib
                         output = "N" + output;
                         break;
 
+                    case 'U':
+                    case 'u':
+                        output = "A" + output;
+                        break;
+
+                    case 'R':
+                    case 'r':
+                        //
+                        // purine
+                        //
+                        output = "Y" + output;
+                        break;
+
+                    case 'Y':
+                    case 'y':
+                        //
+                        // Pyrimadine
+                        //
+                        output = "R" + output;
+                        break;
+
+                    case 'K':
+                    case 'k':
+                        //
+                        // Ketone (G, T or U)
+                        //
+                        output = "M" + output;
+                        break;
+
+                    case 'M':
+                    case 'm':
+                        //
+                        // Amino group (A or C)
+                        //
+                        output = "K" + output;
+                        break;
+
+                    case 'S':
+                    case 's':
+                        //
+                        // Strong interaction (C or G)
+                        //
+                        output = "S" + output;
+                        break;
+
+                    case 'W':
+                    case 'w':
+                        //
+                        // Weak interaction (A, T or U)
+                        output = "S" + output;
+                        break;
+
+                    case 'B':
+                    case 'b':
+                    case 'D':
+                    case 'd':
+                    case 'H':
+                    case 'h':
+                    case 'V':
+                    case 'v':
+                    case '*':
+                        //
+                        // These are the not-X codes (plus whatever * is).  Not clear how to RC them, so they turn into N.
+                        //
+                        output = "N" + output;
+                        break;
+
                     default:
-                        throw new Exception("ReverseCompliment: input contains non-base (or N): " + input);
+                        throw new Exception("ReverseCompliment: input contains non-base (or N): " + input[i] + " from line " + input);
                 } // switch
             } // for
 
