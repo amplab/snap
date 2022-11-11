@@ -374,8 +374,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MakeOptimizationGraph", "ap
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "InfoGain", "InfoGain", "{0C125683-BB72-4C29-9660-4590A2FD9C7B}"
 	ProjectSection(SolutionItems) = preProject
-		scripts\run_haplotype_caller_sampled = scripts\run_haplotype_caller_sampled
-		scripts\run_happy_sampled = scripts\run_happy_sampled
+		scripts\run_haplotype_caller_sampled.sh = scripts\run_haplotype_caller_sampled.sh
+		scripts\run_happy_sampled.sh = scripts\run_happy_sampled.sh
 		scripts\run_infogain_alignment.cmd = scripts\run_infogain_alignment.cmd
 		scripts\run_infogain_sim.cmd = scripts\run_infogain_sim.cmd
 		scripts\sample_and_run.cmd = scripts\sample_and_run.cmd
@@ -394,6 +394,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimulateShortReads", "apps\SimulateShortReads\SimulateShortReads.csproj", "{EBB36E47-ED95-454B-9EF5-5C242CA454E5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckBasesInSAM", "apps\CheckBasesInSAM\CheckBasesInSAM.csproj", "{2BE32485-3D46-4E79-8943-869E9350D007}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CheckBasesInSAM2", "apps\CheckBasesInSAM2\CheckBasesInSAM2.vcxproj", "{51718DEB-E0EC-4305-93AC-7A18FEEEE644}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -3059,6 +3061,22 @@ Global
 		{2BE32485-3D46-4E79-8943-869E9350D007}.Release|Win32.Build.0 = Release|Any CPU
 		{2BE32485-3D46-4E79-8943-869E9350D007}.Release|x64.ActiveCfg = Release|x64
 		{2BE32485-3D46-4E79-8943-869E9350D007}.Release|x64.Build.0 = Release|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Debug|Any CPU.Build.0 = Debug|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Debug|Mixed Platforms.ActiveCfg = Debug|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Debug|Mixed Platforms.Build.0 = Debug|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Debug|Win32.ActiveCfg = Debug|Win32
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Debug|Win32.Build.0 = Debug|Win32
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Debug|x64.ActiveCfg = Debug|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Debug|x64.Build.0 = Debug|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Release|Any CPU.ActiveCfg = Release|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Release|Any CPU.Build.0 = Release|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Release|Mixed Platforms.ActiveCfg = Release|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Release|Mixed Platforms.Build.0 = Release|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Release|Win32.ActiveCfg = Release|Win32
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Release|Win32.Build.0 = Release|Win32
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Release|x64.ActiveCfg = Release|x64
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -3234,6 +3252,7 @@ Global
 		{BA82243A-D837-4875-BB25-52CD8B47EFF7} = {0C125683-BB72-4C29-9660-4590A2FD9C7B}
 		{EBB36E47-ED95-454B-9EF5-5C242CA454E5} = {0C125683-BB72-4C29-9660-4590A2FD9C7B}
 		{2BE32485-3D46-4E79-8943-869E9350D007} = {810358B4-EEB8-4258-B3AA-7305C5B7A00F}
+		{51718DEB-E0EC-4305-93AC-7A18FEEEE644} = {810358B4-EEB8-4258-B3AA-7305C5B7A00F}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {54B8FD8D-AD1B-41AD-8132-0137B5CB61DA}

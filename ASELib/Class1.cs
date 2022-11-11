@@ -15740,6 +15740,7 @@ namespace ASELib
                     case 'w':
                         //
                         // Weak interaction (A, T or U)
+                        //
                         output = "S" + output;
                         break;
 
