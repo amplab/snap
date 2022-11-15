@@ -11,7 +11,7 @@ namespace CollectResults
 {
     internal class Program
     {
-        static string nonInfogainFilenamePrefix = "mason_hg3_";
+        static string nonInfogainFilenamePrefix = "simulated_hg3_neat_shortreads_sampled_";  
         static string nonInfogainFilenamePostfix = "x.concordance.tar";
 
         static int getCoverageFromPathname(string pathname)
