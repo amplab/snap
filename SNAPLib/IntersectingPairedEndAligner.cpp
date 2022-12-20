@@ -174,16 +174,16 @@ IntersectingPairedEndAligner::align(
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
         _int64                *nSecondaryResults,
-        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        PairedAlignmentResult *secondaryResults,                            // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
         _int64                 singleSecondaryBufferSize,
         _int64                 maxSecondaryResultsToReturn,
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        _int64                maxLVCandidatesForAffineGapBufferSize,
+        SingleAlignmentResult *singleEndSecondaryResults,                   // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64                 maxLVCandidatesForAffineGapBufferSize,
         _int64				  *nLVCandidatesForAffineGap,
-        PairedAlignmentResult *lvCandidatesForAffineGap, // Landau-Vishkin candidates that need to be rescored using affine gap
-        _int64				  maxSingleCandidatesForAffineGapBufferSize,
+        PairedAlignmentResult *lvCandidatesForAffineGap,                    // Landau-Vishkin candidates that need to be rescored using affine gap
+        _int64				   maxSingleCandidatesForAffineGapBufferSize,
         _int64                *nSingleCandidatesForAffineGapFirstRead,
         _int64                *nSingleCandidatesForAffineGapSecondRead,
         SingleAlignmentResult *singleCandidatesForAffineGap,
@@ -252,22 +252,22 @@ IntersectingPairedEndAligner::align(
 
     bool
 IntersectingPairedEndAligner::alignLandauVishkin(
-        Read* read0,
-        Read* read1,
-        PairedAlignmentResult* result,
-        PairedAlignmentResult* firstALTResult,
-        int                    maxEditDistanceForSecondaryResults,
-        _int64                 secondaryResultBufferSize,
-        _int64* nSecondaryResults,
-        PairedAlignmentResult* secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-        _int64                 singleSecondaryBufferSize,
-        _int64                 maxSecondaryResultsToReturn,
-        _int64* nSingleEndSecondaryResultsForFirstRead,
-        _int64* nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult* singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        _int64                 maxLVCandidatesForAffineGapBufferSize,
-        _int64* nLVCandidatesForAffineGap,
-        PairedAlignmentResult* lvCandidatesForAffineGap
+        Read*                   read0,
+        Read*                   read1,
+        PairedAlignmentResult*   result,
+        PairedAlignmentResult*  firstALTResult,
+        int                     maxEditDistanceForSecondaryResults,
+        _int64                  secondaryResultBufferSize,
+        _int64*                 nSecondaryResults,
+        PairedAlignmentResult*  secondaryResults,                           // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        _int64                  singleSecondaryBufferSize,
+        _int64                  maxSecondaryResultsToReturn,
+        _int64*                 nSingleEndSecondaryResultsForFirstRead,
+        _int64*                 nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult*  singleEndSecondaryResults,                  // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        _int64                  maxLVCandidatesForAffineGapBufferSize,
+        _int64*                 nLVCandidatesForAffineGap,
+        PairedAlignmentResult*  lvCandidatesForAffineGap
 )
 {
 #if INSTRUMENTATION_FOR_PAPER
@@ -888,7 +888,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                     //
 
                     //
-                    // If we haven't yet scored this mate, or we've scored it and not gotten an answer, but had a higher score limit than we'd
+                    // If we haven't yet scored this mate, or we've scored it and not gotten an answer, but had a lower score limit than we'd
                     // use now, score it.
                     //
                     int mateScoreLimit = scoreLimit - fewerEndScore;
@@ -1438,21 +1438,21 @@ IntersectingPairedEndAligner::alignLandauVishkin(
 //
     bool
 IntersectingPairedEndAligner::alignHamming(
-    Read * read0,
-    Read * read1,
+    Read *                  read0,
+    Read *                  read1,
     PairedAlignmentResult * result,
     PairedAlignmentResult * firstALTResult,
-    int                    maxEditDistanceForSecondaryResults,
-    _int64                 secondaryResultBufferSize,
-    _int64 * nSecondaryResults,
+    int                     maxEditDistanceForSecondaryResults,
+    _int64                  secondaryResultBufferSize,
+    _int64 *                nSecondaryResults,
     PairedAlignmentResult * secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-    _int64                 singleSecondaryBufferSize,
-    _int64                 maxSecondaryResultsToReturn,
-    _int64 * nSingleEndSecondaryResultsForFirstRead,
-    _int64 * nSingleEndSecondaryResultsForSecondRead,
+    _int64                  singleSecondaryBufferSize,
+    _int64                  maxSecondaryResultsToReturn,
+    _int64 *                nSingleEndSecondaryResultsForFirstRead,
+    _int64 *                nSingleEndSecondaryResultsForSecondRead,
     SingleAlignmentResult * singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-    _int64                 maxLVCandidatesForAffineGapBufferSize,
-    _int64 * nLVCandidatesForAffineGap,
+    _int64                  maxLVCandidatesForAffineGapBufferSize,
+    _int64 *                nLVCandidatesForAffineGap,
     PairedAlignmentResult * lvCandidatesForAffineGap
 )
 {
@@ -1880,7 +1880,7 @@ IntersectingPairedEndAligner::alignHamming(
 
 
     //
-    // Phase 3: score and merge the candidates we've found using Laundau-Vishkin (edit distance, not affine gap).
+    // Phase 3: score and merge the candidates we've found using Hamming (no indels, just count the differing bases).
     //
     int currentBestPossibleScoreList = 0;
 
@@ -1889,7 +1889,7 @@ IntersectingPairedEndAligner::alignHamming(
     // 
     //
     while (currentBestPossibleScoreList <= maxUsedBestPossibleScoreList &&
-        currentBestPossibleScoreList <= extraSearchDepth + min(maxK, max(   // Never look for worse than our worst interesting score
+            currentBestPossibleScoreList <= extraSearchDepth + min(maxK, max(   // Never look for worse than our worst interesting score
             min(scoresForAllAlignments.bestPairScore, scoresForNonAltAlignments.bestPairScore - maxScoreGapToPreferNonAltAlignment),   // Worst we care about for ALT
             min(scoresForAllAlignments.bestPairScore + maxScoreGapToPreferNonAltAlignment, scoresForNonAltAlignments.bestPairScore)))) // And for non-ALT
     {
@@ -1961,7 +1961,7 @@ IntersectingPairedEndAligner::alignHamming(
                     //
 
                     //
-                    // If we haven't yet scored this mate, or we've scored it and not gotten an answer, but had a higher score limit than we'd
+                    // If we haven't yet scored this mate, or we've scored it and not gotten an answer, but had a lower score limit than we'd
                     // use now, score it.
                     //
                     
@@ -2110,7 +2110,9 @@ IntersectingPairedEndAligner::alignHamming(
 
                             } // If we're saving the old best score as a secondary result
 
-                            if (!mergeReplacement && (pairProbability > scoresForAllAlignments.probabilityOfBestPair) && (maxLVCandidatesForAffineGapBufferSize > 0) && (pairScore <= scoresForAllAlignments.bestPairScore) && (extraSearchDepth >= scoresForAllAlignments.bestPairScore - pairScore)) {
+                            if (!mergeReplacement && (pairProbability > scoresForAllAlignments.probabilityOfBestPair) && (maxLVCandidatesForAffineGapBufferSize > 0) && 
+                                (pairScore <= scoresForAllAlignments.bestPairScore) && (extraSearchDepth >= scoresForAllAlignments.bestPairScore - pairScore))
+                            {
                                 //
                                 // This is close enough that scoring it with affine gap scoring might make it be the best result.  Save it for possible consideration in phase 4.
                                 //
@@ -2491,12 +2493,12 @@ IntersectingPairedEndAligner::alignAffineGap(
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
         _int64                *nSecondaryResults,
-        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        PairedAlignmentResult *secondaryResults,                            // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
         _int64                 singleSecondaryBufferSize,
         _int64                 maxSecondaryResultsToReturn,
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        SingleAlignmentResult *singleEndSecondaryResults,                   // Single-end secondary alignments for when the paired-end alignment didn't work properly
         _int64                 maxLVCandidatesForAffineGapBufferSize,
         _int64                *nLVCandidatesForAffineGap,
         PairedAlignmentResult *lvCandidatesForAffineGap
@@ -2589,7 +2591,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     double oldPairProbabilityBestResultALT = (firstALTResult->status[0] != NotFound) ? firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1] : 0.0;
 
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-        if (result->usedGaplessClipping[r] || result->score[r] > maxKForSameAlignment || disabledOptimizations.noEditDistance) {
+        if (result->usedGaplessClipping[r] || result->score[r] > maxKForSameAlignment) {
             //
             // Use affine gap scoring to determine if bases need to be clipped
             //
@@ -2695,6 +2697,7 @@ IntersectingPairedEndAligner::alignAffineGap(
         altBestAlignment = scoresForAllAlignments.updateBestHitIfNeeded(firstALTResult->score[0] + firstALTResult->score[1],
             firstALTResult->agScore[0] + firstALTResult->agScore[1], firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1], firstALTResult);
     }
+
     if (nonALTAlignment) {
         scoresForNonAltAlignments.init(result);
     }
@@ -2704,6 +2707,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     //
     if (!skipAffineGap[0] || !skipAffineGap[1]) {
         double newPairProbability = result->matchProbability[0] * result->matchProbability[1];
+
         if (altBestAlignment) { // best result is an ALT result
             double newPairProbabilityALT = firstALTResult->matchProbability[0] * firstALTResult->matchProbability[1];
             scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResultALT);
@@ -2712,6 +2716,7 @@ IntersectingPairedEndAligner::alignAffineGap(
             scoresForAllAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResult);
             scoresForAllAlignments.updateProbabilityOfBestPair(newPairProbability);
         }
+
         if (nonALTAlignment) {
             scoresForNonAltAlignments.updateProbabilityOfAllPairs(oldPairProbabilityBestResult);
             scoresForNonAltAlignments.updateProbabilityOfBestPair(newPairProbability);
@@ -2822,8 +2827,7 @@ IntersectingPairedEndAligner::alignAffineGap(
     ScoreSet* scoreSetToEmit;
     if ((!altAwareness) || scoresForNonAltAlignments.bestPairScore > scoresForAllAlignments.bestPairScore + maxScoreGapToPreferNonAltAlignment) {
         scoreSetToEmit = &scoresForAllAlignments;
-    }
-    else {
+    } else {
         scoreSetToEmit = &scoresForNonAltAlignments;
     }
 
@@ -2839,8 +2843,7 @@ IntersectingPairedEndAligner::alignAffineGap(
         {
             firstALTResult->supplementary[whichRead] = true;
         }
-    }
-    else {
+    } else {
         for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++)
         {
             firstALTResult->status[whichRead] = NotFound;
@@ -2868,10 +2871,12 @@ IntersectingPairedEndAligner::alignAffineGap(
         int altProjContigNum = -1, resContigNum = -1;
         bool isResultALT = false;
         const Genome* genome = index->getGenome();
+
         if (firstALTResult->status[0] != NotFound && firstALTResult->status[1] != NotFound) {
             bestAltScore = firstALTResult->score[0] + firstALTResult->score[1];
             altProjContigNum = genome->getProjContigNumAtLocation(firstALTResult->location[0]);
         }
+
         if (result->status[0] != NotFound && result->status[1] != NotFound) {
             bestResScore = result->score[0] + result->score[1];
             resContigNum = genome->getContigNumAtLocation(result->location[0]);
@@ -2894,10 +2899,10 @@ IntersectingPairedEndAligner::alignAffineGap(
                     newDirectionAfterProjection[r] = (result->direction[r] != projDirection) ? RC : FORWARD;
                     if (newDirectionAfterProjection[r] != result->direction[r]) {
                         newSeedOffsetAfterProjection[r] = readLen[r] - result->seedOffset[r] - 1; // flip read orientation
-                    }
-                    else {
+                    } else {
                         newSeedOffsetAfterProjection[r] = result->seedOffset[r];
                     }
+
                     newStartLocationAfterProjection[r] = genome->getProjLocation(result->location[r], result->refSpan[r]); // get projected location for ALT alignment
                     foundAltProjection[r] = newStartLocationAfterProjection[r] != InvalidGenomeLocation ? true : false;
                     newMapqAfterProjection[r] = result->mapq[r] <= 3 ? 70 : result->mapq[r]; // TODO: make mapq computation more accurate. We see MAPQ 3 sometimes when two ALT alignments liftover give the same primary alignment
@@ -2908,8 +2913,7 @@ IntersectingPairedEndAligner::alignAffineGap(
                     newDirectionAfterProjection[r] = (firstALTResult->direction[r] != projDirection) ? RC : FORWARD;
                     if (newDirectionAfterProjection[r] != firstALTResult->direction[r]) {
                         newSeedOffsetAfterProjection[r] = readLen[r] - firstALTResult->seedOffset[r] - 1; // flip read orientation
-                    }
-                    else {
+                    } else {
                         newSeedOffsetAfterProjection[r] = firstALTResult->seedOffset[r];
                     }
                     newStartLocationAfterProjection[r] = genome->getProjLocation(firstALTResult->location[r], firstALTResult->refSpan[r]); // get projected location for ALT alignment
@@ -2976,7 +2980,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGapLiftover(
 	int                 *basesClippedAfter,
 	int                 *agScore,
     int                 *genomeSpan,
-    bool                useAltLiftover
+    bool                 useAltLiftover
 	)
 {
     Read *readToScore = reads[whichRead][direction];
@@ -3124,7 +3128,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
 	int                 *basesClippedAfter,
 	int                 *agScore,
     int                 *genomeSpan,
-    bool                useAltLiftover
+    bool                 useAltLiftover
 	)
 {
     Read *readToScore = reads[whichRead][direction];
@@ -3154,7 +3158,7 @@ IntersectingPairedEndAligner::scoreLocationWithAffineGap(
     int agScore1 = seedLen, agScore2 = 0; // affine gap scores
 
     if (!useAltLiftover) {
-        _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));    // that the seed actually matches. Cannot be guaranteed for ALT alignments that have been lifted obver
+        _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));    // that the seed actually matches. Cannot be guaranteed for ALT alignments that have been lifted over
     }
 
     int tailStart = seedOffset + seedLen;
@@ -3367,6 +3371,16 @@ IntersectingPairedEndAligner::scoreLocation(
         *score = ScoreAboveLimit;
         *agScore = -1;
         *matchProbability = 0.0;
+    }
+
+    if (disabledOptimizations.noEditDistance) {
+        //
+        // Score it with affine gap and throw away the result.
+        //
+        int TempScore, TempAgScore, agGenomeLocationOffset, agBasesClippedBefore, agBasesClippedAfter, agGenomeSpan;
+        double agMatchProbability;
+        
+        scoreLocationWithAffineGap(whichRead, direction, genomeLocation, seedOffset, scoreLimit, &TempScore, &agMatchProbability, &agGenomeLocationOffset, &agBasesClippedBefore, &agBasesClippedAfter, &TempAgScore, &agGenomeSpan, FALSE);
     }
 }
 

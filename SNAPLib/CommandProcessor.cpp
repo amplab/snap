@@ -36,7 +36,7 @@ Revision History:
 #include "Compat.h"
 #include "HitDepth.h"
 
-const char *SNAP_VERSION = "2.0.2.dev.8";
+const char *SNAP_VERSION = "2.0.2.dev.9";
 
 static void usage()
 {
@@ -176,6 +176,7 @@ void RunDaemonMode(int argc, const char **argv)
 void ProcessTopLevelCommands(int argc, const char **argv)
 {
 	fprintf(stderr, "Welcome to SNAP version %s.\n\n", SNAP_VERSION);       // Can't use WriteStatusMessage, because we haven't parsed args yet to determine if -hdp is specified.  Just stick with stderr.
+
 #if TIME_HISTOGRAM
 	fprintf(stderr, "TIME_HISTOGRAM is compiled in.\n");
 #endif // TIME_HISTOGRAM
@@ -183,6 +184,14 @@ void ProcessTopLevelCommands(int argc, const char **argv)
 #if HIT_DEPTH_COUNTING
 	fprintf(stderr, "HIT_DEPTH_COUNTING is compiled in\n");
 #endif // HIT_DEPTH_COUNTING
+
+#if USE_DEVTEAM_OPTIONS
+	fprintf(stderr, "USE_DEVTEAM_OPTIONS is compiled in\n");
+#endif // USE_DEVTEAM_OPTIONS
+
+#if INSTRUMENTATION_FOR_PAPER
+	fprintf(stderr, "INSTRUMENTATION_FOR_PAPER is compiled in\n");
+#endif // INSTRUMENTATION_FOR_PAPER
 
 	InitializeSeedSequencers();
 

@@ -78,6 +78,7 @@ bool readIdsMatch(Read *read0, Read *read1)
     if (read0->getIdLength() != read1->getIdLength()) {
         return false;
     }
+
     for (unsigned i = 0; i < read0->getIdLength(); i++) {
         char c0 = read0->getId()[i];
         char c1 = read1->getId()[i];
@@ -87,6 +88,7 @@ bool readIdsMatch(Read *read0, Read *read1)
         // don't parse the read ID after the first space or slash, which can represent metadata (or which half of the mate pair the read is).
         if (c0 == ' ' || c0 == '/') return true;  
     }
+
     return true;
 }
 
@@ -1227,8 +1229,8 @@ SAMFormat::writeHeader(
 		}
 	}
 
-    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n%s%s@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
-		sorted ? "coordinate" : "unsorted",
+    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.6\t%s\n%s%s@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
+		sorted ? "SO:coordinate" : "GO:query",
         context.header == NULL ? (rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine) : "",
         context.header == NULL ? "\n" : "",
         commandLine,version);
@@ -4106,6 +4108,7 @@ SAMDupMarkFilter::dupMarkBatch(size_t runStartIndex) {
         } else {
             info = &f->value;
         }
+
         bool mateMapped = (i->flag & SAM_MULTI_SEGMENT) != 0 && (i->flag & SAM_NEXT_UNMAPPED) == 0;
         int totalQuality = i->qual;
         int tile, x, y;
@@ -4164,6 +4167,7 @@ SAMDupMarkFilter::dupMarkBatch(size_t runStartIndex) {
         if (m == mates.end()) {
             continue;
         }
+
         DuplicateMateInfo* minfo = &m->value;
         if (!readIdsMatch(minfo->getBestReadId(), i->qName, i->qNameLength)) {
             i->flag |= SAM_DUPLICATE;

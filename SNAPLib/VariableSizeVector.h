@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Util.h"
+#include "options.h"
 
 //
 // A variable-size vector that does not perform any memory allocation except to grow.
@@ -12,11 +13,11 @@ private:
 
     inline static void* allocate(size_t bytes)
     {
-#ifdef USE_DEVTEAM_OPTIONS
+#if    USE_DEVTEAM_OPTIONS
         if (bytes > (1L << 23) && ! big) {
             WriteErrorMessage("%s: allocate %lld - consider using BigAlloc\n", __FUNCTION__, bytes);
         }
-#endif
+#endif // USE_DEVTEAM_OPTIONS
         return big ? BigAlloc(bytes) : malloc(bytes);
     }
 

@@ -201,13 +201,13 @@ PairedReadMatcher::getNextReadPair(
         }
 
         if (! single->getNextRead(&localRead)) {
-#ifdef USE_DEVTEAM_OPTIONS
+#if    USE_DEVTEAM_OPTIONS
             WriteErrorMessage("overflow total %d, peak %d\n", overflowTotal, overflowPeak);
-#endif
+#endif // USE_DEVTEAM_OPTIONS
             int n = unmatched[0].size() + unmatched[1].size() + overflow.size();
             if (n > 0) {
                 WriteErrorMessage( " warning: PairedReadMatcher discarding %d unpaired reads at eof\n", n);
-#ifdef USE_DEVTEAM_OPTIONS
+#if    USE_DEVTEAM_OPTIONS
                 int printed = 0;
                 char buffer[200];
                 for (OverflowMap::iterator i = overflow.begin(); i != overflow.end() && printed < 10; i = overflow.next(i)) {
@@ -217,7 +217,7 @@ PairedReadMatcher::getNextReadPair(
                     WriteErrorMessage("%s\n", buffer);
                     printed++;
                 }
-#endif
+#endif // USE_DEVTEAM_OPTIONS
 #ifdef VALIDATE_MATCH
                 for (int i = 0; i < 2; i++) {
                     fprintf(stdout, "unmatched[%d]\n", i);

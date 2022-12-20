@@ -22,11 +22,12 @@ Revision History:
 
 --*/
 
-#define     TIME_HISTOGRAM  0
+
 
 #pragma once
 #include "stdafx.h"
 #include "Compat.h"
+#include "options.h"
 
 struct AbstractStats
 {

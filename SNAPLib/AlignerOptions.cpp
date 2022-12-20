@@ -33,6 +33,8 @@ Revision History:
 #include "BaseAligner.h"
 #include "CommandProcessor.h"
 
+bool g_suppressStatusMessages = false;
+bool g_suppressErrorMessages = false;
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
@@ -160,8 +162,8 @@ AlignerOptions::usage()
             "       as -F a, -E ux is the same as -F u, and so forth.\n"
             "       When filtering in paired-end mode (either with -F or -E) unless you specify the b flag a read will be emitted if it's mate pair passes the filter\n"
             "       Even if the read itself does not.  If you specify b mode, then a read will be emitted only if it and its partner both pass the filter.\n"
-#if     USE_DEVTEAM_OPTIONS
             "  -I   ignore IDs that don't match in the paired-end aligner\n"
+#if     USE_DEVTEAM_OPTIONS
 #ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
             "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
 #endif  // _MSC_VER
@@ -226,8 +228,8 @@ AlignerOptions::usage()
             "  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
             "       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
             "  -ne  Don't try edit distance scoring before doing affine gap.  This option is to evaluate the aligner and isn't\n"
-            "       intended to be used for ordinary alignments.  It may change alignment results somewhat, but we have not\n"
-            "       evaluated its effect on correctness.\n"
+            "       intended to be used for ordinary alignments.  It turns off normal affine gap scoring (like -G-) and so will\n"
+            "       have significant effects on the alignment results.\n"
             " -nb   Don't use the banded affine gap optimization.  This option is to evaluate the aligner and will just\n"
             "       result in slower alignments.\n"
             " -wbs  Write buffer size in megabytes.  Don't specify this unless you've gotten an error message saying to make it bigger.  Default 16.\n"
@@ -267,9 +269,12 @@ AlignerOptions::usage()
             "  -hc Enable SNAP mode optimized for use with GATK HaplotypeCaller. (this is the default)\n"
             " -hc- Turn off optimizations specific to GATK HaplotypeCaller (e.g., when using the DRAGEN variant caller on SNAP aligned output)\n"
             "       In this mode, when a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.\n"
-            "  -at Attach AT:i: tags to each read showing the alignment time in microseconds.  For paired-end reads this is the time for the pair\n"
+            "  -at Attach AT:i: tags to each read showing the alignment time in microseconds.  For paired-end reads this is the time for the pair.\n"
             " -pfc Preserve FASTQ comments.  Anything after the first white space on the FASTQ ID line is appended to the SAM/BAM line.  If this is not\n"
             "      in valid SAM/BAM format it will produce incorrect output.\n"
+            " -q   Quiet mode: don't print status messages (other than the welcome message which is printed prior to parsing args).  Error messages\n"
+            "      are still printed.\n"            
+            " -qq  Super quiet mode: don't print status or error messages.\n"
 		,
 			extraSearchDepth,
 			expansionFactor,
@@ -458,6 +463,13 @@ AlignerOptions::usage()
         } else if (strcmp(argv[n], "-pre-") == 0) {
             prefetchIndex = false;
             return true;
+        } else if (strcmp(argv[n], "-q") == 0) {
+            g_suppressStatusMessages = true;
+            return true;
+        } else if (strcmp(argv[n], "-qq") == 0) {
+            g_suppressStatusMessages = true;
+            g_suppressErrorMessages = true;
+            return true;
         } else if (strcmp(argv[n], "-ae") == 0) {
             ignoreAlignmentAdjustmentsForOm = false;
             return true;
@@ -559,10 +571,10 @@ AlignerOptions::usage()
         } else if (strcmp(argv[n], "-f") == 0) {
             stopOnFirstHit = true;
             return true;
-#if     USE_DEVTEAM_OPTIONS
         } else if (strcmp(argv[n], "-I") == 0) {
             ignoreMismatchedIDs = true;
             return true;
+#if     USE_DEVTEAM_OPTIONS
 #ifdef  _MSC_VER
         } else if (strcmp(argv[n], "-B") == 0) {
             useTimingBarrier = true;
@@ -900,8 +912,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
 
-            }
-            else {
+            } else {
                 WriteErrorMessage("-R requires a value");
                 return false;
             }
@@ -910,8 +921,7 @@ AlignerOptions::usage()
                 perfFileName = argv[n + 1];
                 n++;
                 return true;
-            }
-            else {
+            } else {
                 WriteErrorMessage("Must specify the name of the perf file after -pf\n");
             }
         } else if (strcmp(argv[n], "-rg") == 0) {
@@ -925,8 +935,7 @@ AlignerOptions::usage()
                 sprintf(s, format, defaultReadGroup);
                 rgLineContents = s;
                 return true;
-            }
-            else {
+            } else {
                 WriteErrorMessage("Must specify the default read group after -rg\n");
             }
         } else if (strcmp(argv[n], "--hp") == 0) {
@@ -952,6 +961,7 @@ AlignerOptions::usage()
             return true;
         } else if (strcmp(argv[n], "-ne") == 0) {
             disabledOptimizations.noEditDistance = true;
+            useAffineGap = false;
             return true;
         } else if (strcmp(argv[n], "-nb") == 0) {
             disabledOptimizations.noBandedAffineGap = true;

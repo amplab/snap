@@ -276,6 +276,7 @@ ReadFASTAGenome(
                 if (NULL != terminator) {
                     *terminator = '\0';
                 }
+
                 terminator = strchr(lineBuffer, '\t');
                 if (NULL != terminator) {
                     *terminator = '\0';
@@ -310,6 +311,14 @@ ReadFASTAGenome(
             //
 
             char *newline = strchr(lineBuffer, '\n');
+            if (NULL != newline) {
+                *newline = 0;
+            }
+
+            //
+            // Also smash CR for Windows-style CRLF text.
+            //
+            newline = strchr(lineBuffer, '\r');
             if (NULL != newline) {
                 *newline = 0;
             }

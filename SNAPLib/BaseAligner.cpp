@@ -1197,7 +1197,7 @@ Return Value:
 
                     if (!useHamming && (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit)) {
                         // Check if affine gap must be called
-                        if (useAffineGap && ((score1 + score2 > maxKForSameAlignment && elementToScore->lowestPossibleScore <= scoresForAllAlignments.bestScore) || disabledOptimizations.noEditDistance)) {
+                        if (disabledOptimizations.noEditDistance || useAffineGap && (score1 + score2 > maxKForSameAlignment && elementToScore->lowestPossibleScore <= scoresForAllAlignments.bestScore)) {
                             score1 = 0;  score2 = 0;  agScore1 = seedLen; agScore2 = 0;
                             usedAffineGapScoring = true;
                             nLocationsScoredWithAffineGap++;

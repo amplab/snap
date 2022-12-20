@@ -270,10 +270,12 @@ AlignerContext::initialize()
             }
             g_index = index;
 
+            const int basesBufferSize = 30;
+            char basesBuffer[basesBufferSize];
 
             _int64 loadTime = timeInMillis() - loadStart;
-             WriteStatusMessage("%llds.  %u bases, seed size %d\n",
-                    loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+             WriteStatusMessage("%llds.  %s bases, seed size %d.\n",
+                    loadTime / 1000, FormatUIntWithCommas(index->getGenome()->getCountOfBases(), basesBuffer, basesBufferSize), index->getSeedLength());
 
 			 if (index->getMajorVersion() < 5 || (index->getMajorVersion() == 5 && index->getMinorVersion() == 0)) {
 				 WriteErrorMessage("WARNING: The version of the index you're using was built with an earlier version of SNAP and will result in Ns in the reference NOT matching Ns in reads.\n         If you do not want this behavior, rebuild the index.\n");
@@ -455,7 +457,7 @@ char *numPctAndPad(char *buffer, _uint64 num, double pct, size_t desiredWidth, s
 	return buffer;
 }
 
-char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen, bool useDecimal)
+char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen, bool useDecimal, bool printPercentSign = true)
 {
     _ASSERT(desiredWidth + 1 < bufferLen);
 
@@ -463,9 +465,10 @@ char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen
     char percentageBuffer[percentageBufferSize];
 
     if (useDecimal) {
-        sprintf(percentageBuffer, "%.02f%%", pct);
+        sprintf(percentageBuffer, "%.02f%s", pct, (printPercentSign ? "%" : ""));
     } else {
-        sprintf(percentageBuffer, "%d%%",  (unsigned)((100.0 * pct) + .5));
+        sprintf(percentageBuffer, "%d%s",  (unsigned)((100.0 * pct) + .5), (printPercentSign ? "%" : ""));
+        sprintf(percentageBuffer, "%d%s",  (unsigned)((100.0 * pct) + .5), (printPercentSign ? "%" : ""));
     }
 
     if (strlen(percentageBuffer) + 1 > bufferLen) {
@@ -490,7 +493,7 @@ AlignerContext::printStats()
         (stats->extraAlignments) ? "Extra Alignments  " : "",
         isPaired() ? "%Pairs    " : "   ",
         options->profile ? (!options->sortOutput ? " Read Align Write(& compress)" : " Read Align Write") : "",
-        (isPaired() && options->profileAffineGap) ? " %AgSingle %AgUsedSingle" : ""
+        (isPaired() && options->profileAffineGap) ? " %AgSingle %AgUsedSingle AG/Edit" : ""
         );
 
 	const size_t strBufLen = 50;	// Way more than enough for 64 bit numbers with commas
@@ -508,7 +511,9 @@ AlignerContext::printStats()
     char pctRead[strBufLen];
     char pctAlign[strBufLen];
     char pctWrite[strBufLen];
-    char pctAg[strBufLen];
+    char pctAg[strBufLen];    
+    char pctAg2[strBufLen];    
+    char agRatio[strBufLen];
     _int64 totalTime = stats->millisReading + stats->millisAligning + stats->millisWriting;
 
     /*
@@ -521,10 +526,11 @@ AlignerContext::printStats()
                          |  |  |  |  |  | extra    |  | | %Align    
                          |  |  |  |  |  | | pairs  |  | | | %Write 
                          |  |  |  |  |  | | |      |  | | | | Ag 
-                         v  v  v  v  v  v v v      v  v v v v v v AgUsed
+                         |  |  |  |  |  | | |      |  | | | | | AgUsed
+                         v  v  v  v  v  v v v      v  v v v v v v v AG/Edit
     */
 
-    WriteStatusMessage("%s %s %s %s %s %s%s%s   %-9s %s%s%s%s%s%s\n",
+    WriteStatusMessage("%s %s %s %s %s %s%s%s   %-9s %s%s%s%s%s%s%s\n",
         FormatUIntWithCommas(stats->totalReads, numReads, strBufLen, 14),
         numPctAndPad(single, stats->singleHits, 100.0 * stats->singleHits / stats->totalReads, 22, strBufLen),
         numPctAndPad(multi, stats->multiHits, 100.0 * stats->multiHits / stats->totalReads, 22, strBufLen),
@@ -539,7 +545,8 @@ AlignerContext::printStats()
         options->profile ? pctAndPad(pctAlign, (double)stats->millisAligning / (double)totalTime, 6, strBufLen, false) : "",
         options->profile ? pctAndPad(pctWrite, (double)stats->millisWriting / (double)totalTime, 6, strBufLen, false) : "",
         (isPaired() && options->profileAffineGap) ? pctAndPad(pctAg, (double)stats->agForcedSingleEndAlignment / (double)stats->totalReads, 10, strBufLen, true) : "",
-        (isPaired() && options->profileAffineGap) ? pctAndPad(pctAg, (double)stats->agUsedSingleEndAlignment / (double)stats->totalReads, 14, strBufLen, true) : ""
+        (isPaired() && options->profileAffineGap) ? pctAndPad(pctAg2, (double)stats->agUsedSingleEndAlignment / (double)stats->totalReads, 14, strBufLen, true) : "",
+        options->profileAffineGap ? pctAndPad(agRatio, (double)stats->affineGapCalls / (double)stats->lvCalls * 100, 8, strBufLen, true, true) : ""
     );
 
     if (NULL != perfFile) {
@@ -567,9 +574,14 @@ AlignerContext::printStats()
 
 
 #if TIME_HISTOGRAM
-    WriteStatusMessage("\n%lld time stamps were negative, for a total of %lld ns.  They are otherwise ignored.\n", stats->backwardsTimeStamps, stats->totalBackwardsTimeStamps);
+    if (stats->backwardsTimeStamps != 0) {
+        //
+        // I'm pretty sure this is fixed, so don't print unless we actually see it it.
+        //
+        WriteStatusMessage("\n%lld time stamps were negative, for a total of %lld ns.  They are otherwise ignored.\n", stats->backwardsTimeStamps, stats->totalBackwardsTimeStamps);
+    }
 
-    WriteStatusMessage("\nPer-read alignment time histogram:\nlog2(ns)\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    WriteStatusMessage("\nPer-read alignment time histogram:\nlog2(ns)\tcount\ttotalTime(ns)\ttimePerRead\tReads\tTime\n");
     _int64 totalReads = 0;
     _int64 totalTimeX = 0;  // totalTime is already used
     for (int i = 0; i < 31; i++) {
@@ -592,7 +604,7 @@ AlignerContext::printStats()
         WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar/(double)totalTimeX);
     }
 
-    WriteStatusMessage("\nPer-read alignment count and time by MAPQ\nMAPQ\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    WriteStatusMessage("\nPer-read alignment count and time by MAPQ\nMAPQ\tcount\ttotalTime(ns)\ttimePerRead\tReads\tTime\tTime Per Read (right scale)\n");
     totalReads = stats->countOfUnaligned;
     totalTimeX = stats->timeOfUnaligned;
     for (int i = 0; i <= 70; i++) {
@@ -603,7 +615,8 @@ AlignerContext::printStats()
     timeSoFar = stats->timeOfUnaligned;
 
 
-    WriteStatusMessage("unaligned\t%lld\t%lld\t%lld\t%f\t%f\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+    WriteStatusMessage("*\t%lld\t%lld\t%lld\t%f\t%f\t%lld\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, 
+        (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX, stats->timeOfUnaligned / stats->countOfUnaligned / 1000000);
     for (int i = 0; i <= 70; i++) {
         readsSoFar += stats->countByMAPQ[i];
         timeSoFar += stats->timeByMAPQ[i];
@@ -613,10 +626,10 @@ AlignerContext::printStats()
         } else {
             timePerRead = stats->timeByMAPQ[i] / stats->countByMAPQ[i];
         }
-        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByMAPQ[i], stats->timeByMAPQ[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\t%lld\n", i, stats->countByMAPQ[i], stats->timeByMAPQ[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX, timePerRead / 1000000);
     }
 
-    WriteStatusMessage("\nPer-read alignment count and time by final edit distance\nEditDistance\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    WriteStatusMessage("\nPer-read alignment count and time by final edit distance\nEditDistance\tcount\ttotalTime(ns)\ttimePerRead\tReads\tTime\tTime per read (right scale)\n");
     totalReads = stats->countOfUnaligned;
     totalTimeX = stats->timeOfUnaligned;
     for (int i = 0; i < 31; i++) {
@@ -634,11 +647,12 @@ AlignerContext::printStats()
         } else {
             timePerRead = stats->timeByNM[i] / stats->countByNM[i];
         }
-        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByNM[i], stats->timeByNM[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\t%lld\n", i, stats->countByNM[i], stats->timeByNM[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX, timePerRead / 1000000);
     }
     readsSoFar += stats->countOfUnaligned;
     timeSoFar += stats->timeOfUnaligned;
-    WriteStatusMessage("unaligned\t%lld\t%lld\t%lld\t%f\t%f\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+    WriteStatusMessage("*\t%lld\t%lld\t%lld\t%f\t%f\t%lld\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, 
+        (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX, stats->timeOfUnaligned / stats->countOfUnaligned / 1000000);
 
 #endif // TIME_HISTOGRAM
 
@@ -669,6 +683,9 @@ AlignerContext::parseOptions(
     argc = i_argc;
     argv = i_argv;
     version = i_version;
+
+    g_suppressStatusMessages = false;   // This is a global, so it would carry over between runs (either in daemon mode or comma syntax).  Reset it here to get the expected behavior.
+    g_suppressErrorMessages = false;    // ditto
 
     AlignerOptions *options;
 

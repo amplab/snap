@@ -29,7 +29,6 @@ Environment:
 #include "Bam.h"
 #include "Error.h"
 
-#define USE_DEVTEAM_OPTIONS 1
 //#define VALIDATE_SORT 1
 
 using std::max;
@@ -1235,14 +1234,13 @@ SortedDataFilterSupplier::mergeSort()
 {
     mergeSortStartTime = timeInMillis();
     // merge sort from temp file into sorted file
-#if USE_DEVTEAM_OPTIONS
+
     WriteStatusMessage("sorting...");
     _int64 start = timeInMillis();
     _int64 startReadWaitTime = DataReader::ReadWaitTime;
     _int64 startReleaseWaitTime = DataReader::ReleaseWaitTime;
     _int64 startWriteWaitTime = DataWriter::WaitTime;
     _int64 startWriteFilterTime = DataWriter::FilterTime;
-#endif
 
     // set up buffered output
     DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, bufferSize, emitInternalScore, internalScoreTag ,sortedFilterSupplier,
@@ -1409,7 +1407,6 @@ SortedDataFilterSupplier::mergeSort()
         WriteErrorMessage( "warning: failure deleting temp file %s\n", tempFileName);
     }
 
-#if USE_DEVTEAM_OPTIONS
     WriteStatusMessage("sorted %lld reads in %u blocks, %lld s\n"
         /*"read wait align %.3f s + merge %.3f s, read release align %.3f s + merge %.3f s\n"
         "write wait %.3f s align + %.3f s merge, write filter %.3f s align + %.3f s merge\n"*/,
@@ -1418,7 +1415,6 @@ SortedDataFilterSupplier::mergeSort()
         startReleaseWaitTime * 1e-9, (DataReader::ReleaseWaitTime - startReleaseWaitTime) * 1e-9,
         startWriteWaitTime * 1e-9, (DataWriter::WaitTime - startWriteWaitTime) * 1e-9,
         startWriteFilterTime * 1e-9, (DataWriter::FilterTime - startWriteFilterTime) * 1e-9*/);
-#endif
     return true;
 }
 

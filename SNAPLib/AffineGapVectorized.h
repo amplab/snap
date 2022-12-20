@@ -381,12 +381,10 @@ public:
         if (!isRC) {
             if (TEXT_DIRECTION == -1) {
                 endBonus = fivePrimeEndBonus;
-            }
-            else {
+            } else {
                 endBonus = threePrimeEndBonus;
             }
-        }
-        else {
+        } else {
             if (TEXT_DIRECTION == -1) {
                 endBonus = threePrimeEndBonus;
             }

@@ -39,6 +39,7 @@ Revision History:
 #include "Error.h"
 #include "directions.h"
 #include "DataReader.h"
+#include "AlignerOptions.h"
 
 using namespace std;
 
@@ -93,6 +94,9 @@ static void usage()
 		" -nonAltContigName Specify the name of a contig that's not an alt, regardless of its size\n"
 		" -nonAltContigFile Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
         " -altLiftoverFile  Specify the file containing ALT-to-REF mappings (SAM format). e.g., hs38DH.fa.alt from bwa-kit\n"
+        " -q                Quiet mode: don't print status messages (other than the welcome message which is printed prior to parsing args).  Error messages\n"
+        "                   are still printed.\n"
+        " -qq               Super quiet mode: don't print status or error messages\n"
 		,
         BINARY_NAME,
         DEFAULT_SEED_SIZE,
@@ -178,6 +182,11 @@ GenomeIndex::runIndexer(
             }
         } else if (strcmp(argv[n], "-exact") == 0) {
             forceExact = true;
+        } else if (strcmp(argv[n], "-q") == 0) {
+            g_suppressStatusMessages = true;
+        } else if (strcmp(argv[n], "-qq") == 0) {
+            g_suppressStatusMessages = true;
+            g_suppressErrorMessages = true;
         } else if (strcmp(argv[n], "-hg19") == 0) {
 			WriteErrorMessage("The -hg19 flag is deprecated, ignoring it.\n");
         } else if (_stricmp(argv[n], "-locationSize") == 0) {
@@ -211,8 +220,7 @@ GenomeIndex::runIndexer(
 			}
 		} else if (argv[n][0] == '-' && argv[n][1] == 's' && argv[n][2] == 'm') {
 			smallMemory = true;
-		}
-		else if (_stricmp(argv[n], "-keysize") == 0) {
+		} else if (_stricmp(argv[n], "-keysize") == 0) {
             if (n + 1 < argc) {
                 keySizeInBytes = atoi(argv[n+1]);
                 if (keySizeInBytes < 2 || keySizeInBytes > 8) {
@@ -300,8 +308,7 @@ GenomeIndex::runIndexer(
 
 				delete inputFile;
 				delete[] contigNameBuffer;
-			}
-			else {
+			} else {
 				usage();
 			}
 			n++;
@@ -320,12 +327,15 @@ GenomeIndex::runIndexer(
                     if (altLiftoverBuffer[0] == '@') {
                         continue;
                     }
+
                     if (NULL != strchr(altLiftoverBuffer, '\n')) {
                         *strchr(altLiftoverBuffer, '\n') = '\0';
                     }
+
                     if (NULL != strchr(altLiftoverBuffer, '\r')) {
                         *strchr(altLiftoverBuffer, '\r') = '\0';
                     }
+
                     addToCountedListOfStrings(altLiftoverBuffer, &nAltLiftover, &altLiftoverLines);
                 } // while we have an input string.
 
@@ -343,12 +353,14 @@ GenomeIndex::runIndexer(
                         WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
                         soft_exit(1);
                     }
+
                     // get contig flags
                     char* contigFlagsEnd = strchr(contigNameEnd + 1, '\t');
                     if (1 != sscanf(contigNameEnd + 1, "%u", &altLiftoverContigFlags[i]) || NULL == contigFlagsEnd) {
                         WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
                         soft_exit(1);
                     }
+
                     // get projected contig name
                     char* projContigNameStart = contigFlagsEnd + 1;
                     char* projContigNameEnd = strchr(projContigNameStart, '\t');
@@ -356,18 +368,21 @@ GenomeIndex::runIndexer(
                         WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
                         soft_exit(1);
                     }
+
                     // get projected contig offsets
                     char* projContigOffsetEnd = strchr(projContigNameEnd + 1, '\t');
                     if (1 != sscanf(projContigNameEnd + 1, "%u", &altLiftoverProjContigOffsets[i]) || NULL == projContigOffsetEnd) {
                         WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
                         soft_exit(1);
                     }
+
                     // skip next field (mapping quality)
                     char* tmp = strchr(projContigOffsetEnd + 1, '\t');
                     if (NULL == tmp) {
                         WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
                         soft_exit(1);
                     }
+
                     // get projected cigar
                     char* projCigarStart = tmp + 1;
                     char* projCigarEnd = strchr(projCigarStart, '\t');
@@ -375,6 +390,7 @@ GenomeIndex::runIndexer(
                         WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
                         soft_exit(1);
                     }
+
                     // skip contigs that do not have a mapping to the primary reference
                     if (*projContigNameStart == '*') {
                         altLiftoverContigNames[i] = NULL;
@@ -401,8 +417,7 @@ GenomeIndex::runIndexer(
 
                 delete inputFile;
                 delete[] altLiftoverBuffer;
-            }
-            else {
+            } else {
                 usage();
             }
             n++;
@@ -417,6 +432,8 @@ GenomeIndex::runIndexer(
         WriteErrorMessage("Seed length must be between 8 and 32, inclusive\n");
         soft_exit(1);
     }
+    
+    WriteStatusMessage("Building index with seed size %d\n", seedLen);
 
     if (keySizeInBytes == 0) {
         //
@@ -533,7 +550,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     int filenameBufferSize = (int)(strlen(directoryName) + 1 + __max(strlen(GenomeIndexFileName), __max(strlen(OverflowTableFileName), __max(strlen(GenomeIndexHashFileName), strlen(GenomeFileName)))) + 1);
     char *filenameBuffer = new char[filenameBufferSize];
     
-	fprintf(stderr,"Saving genome...");
+	WriteStatusMessage("Saving genome...");
 	_int64 start = timeInMillis();
     snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
     if (!genome->saveToFile(filenameBuffer)) {
@@ -541,7 +558,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         delete[] filenameBuffer;
         return false;
     }
-	fprintf(stderr,"%llds\n", (timeInMillis() + 500 - start) / 1000);
+	WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
 
 	GenomeIndex *index = new GenomeIndex();
     index->genome = NULL;   // We always delete the index when we're done, but we delete the genome first to save space during the overflow table build.

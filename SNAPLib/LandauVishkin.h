@@ -98,16 +98,16 @@ public:
 	//
 
     int computeEditDistance(
-                const char* text,
-                int textLen, 
-                const char* pattern,
-                const char *qualityString,
-                int patternLen,
-                int k,
-                double *matchProbability,
-                int *o_netIndel = NULL,  // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
-                int *o_totalIndels = NULL,
-                int *o_textSpan = NULL)  // also keep track of total (absolute) indels seen
+                const char*     text,
+                int             textLen, 
+                const char*     pattern,
+                const char *    qualityString,
+                int             patternLen,
+                int             k,
+                double *        matchProbability,
+                int *           o_netIndel = NULL,  // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
+                int *           o_totalIndels = NULL,
+                int *           o_textSpan = NULL)  // also keep track of total (absolute) indels seen
 {
     int localNetIndel;
     int localTotalIndels;
@@ -118,20 +118,19 @@ public:
         return ScoreAboveLimit;
     }
 
+    //
+    // If the optional output parameters are NULL, set the pointers to stack locals so we can
+    // write into them without having to check for NULL in the loop.
+    //
+
     if (NULL == o_netIndel) {
-        //
-        // If the user doesn't want netIndel, just use a stack local to avoid
-        // having to check it all the time.
-        //
         o_netIndel = &localNetIndel;
     }
+
     if (NULL == o_totalIndels) {
-        //
-        // If the user doesn't want netIndel, just use a stack local to avoid
-        // having to check it all the time.
-        //
         o_totalIndels = &localTotalIndels;
     }
+
     if (NULL == o_textSpan) {
         o_textSpan = &localTextSpan;
     }
@@ -146,6 +145,7 @@ public:
         if (NULL != matchProbability) {
             *matchProbability = 0.0;
         }
+
         return ScoreAboveLimit;
     }
  
@@ -172,12 +172,14 @@ public:
         if (NULL != matchProbability) {
             *matchProbability = lv_perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
         }
+
         if (result > k) {
             //
             // The deletions at the end pushed us oevr the score limit.
             //
             return ScoreAboveLimit;
         }
+
         *o_textSpan += patternLen;
         return result;
     }
@@ -312,20 +314,19 @@ got_answer:
 				actionCount++;
 				curE++;
 			}
+
 			if (action == 'I') {
 				*matchProbability *= lv_indelProbabilities[actionCount];
 				offset += actionCount;
 				*o_netIndel += actionCount;
                 *o_totalIndels += actionCount;
-			}
-			else if (action == 'D') {
+			} else if (action == 'D') {
 				*matchProbability *= lv_indelProbabilities[actionCount];
 				offset -= actionCount;
 				*o_netIndel -= actionCount;
                 *o_totalIndels += actionCount;
                 *o_textSpan += actionCount;
-			}
-			else {
+			} else {
 				_ASSERT(action == 'X');
 				for (int i = 0; i < actionCount; i++) {
 					*matchProbability *= lv_phredToProbability[qualityString[/*BUGBUG - think about what to do here*/__min(patternLen - 1, __max(offset, 0))]];
@@ -352,11 +353,11 @@ got_answer:
 
     // Version that does not requre match probability and quality string
     inline int computeEditDistance(
-            const char* text,
-            int textLen,
-            const char* pattern,
-            int patternLen,
-            int k)
+            const char*     text,
+            int             textLen,
+            const char*     pattern,
+            int             patternLen,
+            int             k)
     {
         return computeEditDistance(text, textLen, pattern, NULL, patternLen, k, NULL);
     }

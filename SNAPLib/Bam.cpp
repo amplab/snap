@@ -433,6 +433,7 @@ BAMAlignment::encodeSeq(
     for (int i = 0; i + 1 < length; i += 2) {
         *p++ = (BAMAlignment::SeqToCode[ascii[i]] << 4) | BAMAlignment::SeqToCode[ascii[i+1]];
     }
+
     if (length % 2) {
         *p = BAMAlignment::SeqToCode[ascii[length - 1]] << 4;
     }
@@ -502,7 +503,7 @@ BAMAlignment::getUnclippedEnd(GenomeLocation loc)
 // static initializer
 BAMAlignment::_init::_init()
 {
-    memset(SeqToCode, 0, 256);
+    memset(SeqToCode, 0xf, 256);    // Initialize to 255 so that random bases in input get turned into N (1111) rather than = (0), which is invalid
     for (int i = 1; i < 16; i++) {
         SeqToCode[CodeToSeq[i]] = i;
     }
@@ -2540,39 +2541,37 @@ struct DuplicateMateInfo
     void setBestTileXY(int tile_, int x_, int y_) { tile = tile_; x = x_; y = y_; }
     void getBestTileXY(int* tile_, int* x_, int* y_) { *tile_ = tile; *x_ = x; *y_ = y; }
 
-    void checkBestRecord(BAMAlignment* bam, int totalQuality_, int tile_, int x_, int y_) {
-
+    void checkBestRecord(BAMAlignment* bam, int totalQuality_, int tile_, int x_, int y_) 
+    {
         if ((bam->FLAG & SAM_DUPLICATE) != 0) {
             return;
         }
+
         if (totalQuality_ > bestReadQuality) {
             bestReadQuality = totalQuality_;
             setBestReadId(bam->read_name());
             setBestTileXY(tile_, x_, y_);
-        }
-        else if (totalQuality_ == bestReadQuality) {
+        } else if (totalQuality_ == bestReadQuality) {
             if (tile_ < tile) {
                 bestReadQuality = totalQuality_;
                 setBestReadId(bam->read_name());
                 setBestTileXY(tile_, x_, y_);
-            }
-            else if (tile_ == tile) {
+            } else if (tile_ == tile) {
                 if (x_ < x) {
                     bestReadQuality = totalQuality_;
                     setBestReadId(bam->read_name());
                     setBestTileXY(tile_, x_, y_);
-                }
-                else if (x_ == x) {
+                } else if (x_ == x) {
                     if (y_ < y) {
                         bestReadQuality = totalQuality_;
                         setBestReadId(bam->read_name());
                         setBestTileXY(tile_, x_, y_);
                     }
                 }
-            }
-        }
+            } // tile
+        } // read quality
     }
-};
+}; // DuplicateMateInfo
 
 struct BamDupMarkEntry
 {
@@ -2714,8 +2713,7 @@ BAMDupMarkFilter::onNextBatch(
             unfinishedRunStart = i;
             next_i = i + 1;
             firstBam = (BAMAlignment*)(currentBuffer + offsets[i]);
-        }
-        else {
+        } else {
             // 
             // Track the read from which we need to start the next run. Next run starts at nextBatchStart
             // 
@@ -2730,8 +2728,7 @@ BAMDupMarkFilter::onNextBatch(
             if (logicalLocation <= runLocation + (2 * (MAX_READ_LENGTH + MAX_K))) {
                 runCount++;
                 next_i = i + 1;
-            }
-            else {
+            } else {
                 // 
                 // We are done with the run. Begin marking duplicates
                 // 
@@ -2791,8 +2788,7 @@ BAMDupMarkFilter::onNextBatch(
             }
             nextBatchOffsets.clear();
         }
-    } // runcount > 1
-    else {
+    } /* runcount > 1 */ else {
         offsets.clear();
     }
 
@@ -2815,8 +2811,8 @@ BAMDupMarkFilter::onNextBatch(
 }
 
     void
-BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
-
+BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) 
+{
     // partition by duplicate key, find best read in each partition
     size_t offset = runOffset;
     int numRecords = 0;
@@ -2847,6 +2843,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             if (aux->tag[0] == 'Q' && aux->tag[1] == 'S' && aux->val_type == 'i') {
                 entry.mateQual = entryFragment.mateQual = *(_int32*)aux->value();
             }
+
             if (!foundLibraryTag && aux->tag[0] == 'L' && aux->tag[1] == 'B' && aux->val_type == 'Z') {
                 foundLibraryTag = true;
                 // fixme: conflicts from hashing library names to the same value
@@ -2913,10 +2910,12 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         } else {
             info = &f->value;
         }
+
         int totalQuality = getTotalQuality(record);
         if ((record->FLAG & SAM_MULTI_SEGMENT) != 0) {
             totalQuality += i->mateQual;
         }
+
         int tile, x, y;
         getTileXY(record->read_name(), &tile, &x, &y); // parse read name and extract metadata for optical duplicate marking
         info->checkBestRecord(record, totalQuality, tile, x, y); // update best record if needed
@@ -2950,10 +2949,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
             info = &fragments[key];
             //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
             info->isMateMapped = (record->FLAG & SAM_MULTI_SEGMENT) != 0 && (record->FLAG & SAM_NEXT_UNMAPPED) == 0;
-        }
-        else {
+        } else {
             info = &f->value;
         }
+
         bool mateMapped = (record->FLAG & SAM_MULTI_SEGMENT) != 0 && (record->FLAG & SAM_NEXT_UNMAPPED) == 0;
         int totalQuality = getTotalQuality(record);
         int tile, x, y;
@@ -2968,12 +2967,10 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
                 info->setBestReadId(record->read_name());
                 info->isMateMapped = true;
                 info->setBestTileXY(tile, x, y);
-            }
-            else {
+            } else {
                 info->checkBestRecord(record, totalQuality, tile, x, y);
             }
-        }
-        else {
+        } else {
             //
             // No best read pair found so far.
             //
@@ -3014,6 +3011,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         if (m == mates.end()) {
             continue;
         }
+
         DuplicateMateInfo* minfo = &m->value;
         if (!readIdsMatch(minfo->getBestReadId(), record->read_name(), record->l_read_name - 1)) {
             record->FLAG |= SAM_DUPLICATE;
@@ -3095,6 +3093,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
         if (f == fragments.end()) {
             continue;
         }
+
         DuplicateMateInfo* info = &f->value;
         if (!readIdsMatch(info->getBestReadId(), record->read_name(), record->l_read_name - 1)) {
             record->FLAG |= SAM_DUPLICATE;
@@ -3106,7 +3105,7 @@ BAMDupMarkFilter::dupMarkBatch(BAMAlignment* lastBam, size_t lastOffset) {
 
     run.clear();
     runFragment.clear();
-}
+} // BAMDupMarkFilter::dupMarkBatch
 
 
     void
@@ -3128,6 +3127,7 @@ BAMDupMarkFilter::getTotalQuality(
         // Picard MarkDup uses a score threshold of 15 (default)
         result += (q >= 15) ? (q != 255) * q : 0; // avoid branch?
     }
+
     return result;
 }
 
@@ -3151,22 +3151,23 @@ BAMDupMarkFilter::getTileXY(
             numColonsSeen++;
             if (numColonsSeen == 2) {
                 fiveElementFormatStartIndex = i;
-            }
-            else if (numColonsSeen == 4) {
+            } else if (numColonsSeen == 4) {
                 sevenElementFormatStartIndex = i;
             }
         }
+
         if (c == 0 || c == ' ' || c == '/') {
             break;
         }
     }
+
     int fieldScanned;
     if (numColonsSeen == 4) {
         fieldScanned = sscanf(&readId[fiveElementFormatStartIndex], ":%d:%d:%d", &tile, &x, &y);
-    }
-    else if (numColonsSeen == 6) {
+    } else if (numColonsSeen == 6) {
         fieldScanned = sscanf(&readId[sevenElementFormatStartIndex], ":%d:%d:%d", &tile, &x, &y);
     }
+
     // fprintf(stderr, "tile:%d, x:%d, y:%d\n", tile, x, y);
     *o_tile = tile;
     *o_x = x;

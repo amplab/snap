@@ -29,8 +29,7 @@ Revision History:
 #include "Genome.h"
 #include "Read.h"
 
-#define INSTRUMENTATION_FOR_PAPER 0     // Turn this on to generate raw data about hit sets and their intersections for the paper
-#define HIT_DEPTH_COUNTING 0            // This is a special piece of code that generates information about seeding for an entire genome.
+
 
 #if INSTRUMENTATION_FOR_PAPER
 
@@ -87,6 +86,9 @@ struct DisabledOptimizations {
     bool                noBandedAffineGap;
     bool                noMaxKForIndel;
 }; // DisabledOptimizations
+
+extern bool g_suppressStatusMessages; // Setting this causes WriteStatusMessage not to do anything.
+extern bool g_suppressErrorMessages; // Setting this causes WriteErrorMessage not to do anything.
 
 struct AlignerOptions : public AbstractOptions
 {

@@ -50,6 +50,10 @@ const int messageBufferSize = 102400;   // The command options message is ridicu
     void
 WriteErrorMessage(const char *message, ...)
 {
+    if (g_suppressErrorMessages) {
+        return;
+    }
+
     va_list args;
     va_start(args, message);
     char buffer[messageBufferSize];
@@ -64,6 +68,10 @@ WriteErrorMessage(const char *message, ...)
     void
 WriteStatusMessage(const char *message, ...)
 {
+    if (g_suppressStatusMessages) {
+        return;
+    }
+
     va_list args;
     va_start(args, message);
     char buffer[messageBufferSize];
