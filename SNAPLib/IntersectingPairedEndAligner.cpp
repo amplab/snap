@@ -306,7 +306,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
 
 #ifdef  _DEBUG
     if (_DumpAlignments) {
-        printf("\nIntersectingAligner aligning reads '%*.s' and '%.*s' with data '%.*s' and '%.*s'\n", read0->getIdLength(), read0->getId(), read1->getIdLength(), read1->getId(), read0->getDataLength(), read0->getData(), read1->getDataLength(), read1->getData());
+        printf("\nIntersectingAligner aligning reads '%.*s' and '%.*s' with data '%.*s' and '%.*s'\n", read0->getIdLength(), read0->getId(), read1->getIdLength(), read1->getId(), read0->getDataLength(), read0->getData(), read1->getDataLength(), read1->getData());
     }
 #endif  // _DEBUG
 
@@ -876,7 +876,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
             for (;;) {
 
                 ScoringMateCandidate *mate = &scoringMateCandidates[candidate->whichSetPair][mateIndex];
-                scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments, mate->largestBigIndelDetected);
+                scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments, __max(mate->largestBigIndelDetected, __min(candidate->largestBigIndelDetected, fewerEndScore)));
 
                 _ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
                 //

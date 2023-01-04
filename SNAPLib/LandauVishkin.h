@@ -8,7 +8,7 @@
 #ifdef LONG_READS
 const int MAX_K = 1000;
 #else // LONG_READS
-const int MAX_K = 63;
+const int MAX_K = 127; // One less than powers of two have better cache behavior, though overall perf difference is likely to be small (~2% when I measured it)
 #endif // LONG_READS
 
 const int ScoreAboveLimit = -1; // A score value that means "we didn't compute the score because it was above the score limit."
