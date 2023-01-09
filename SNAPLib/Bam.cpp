@@ -871,7 +871,7 @@ private:
 
     static bool buildAUX(const ReaderContext& context, BAMAlignment *bam, Read* read, char*& aux, unsigned &auxLen, char *& buffer, size_t bufferSpace, bool translateReadGroupFromSAM, 
         int editDistance, int internalScore, bool emitInternalScore, char *internalScoreTag, int flags, bool attachAlignmentTime, _int64 alignmentTimeInNanoseconds,
-        const char *FASTQComment, unsigned FASTQCommentLength);
+        const char *FASTQComment, unsigned FASTQCommentLength, bool includeQS = false, const char *mateQuality = NULL, unsigned mateFullLength = 0);
 
     const bool useM;
 };
@@ -1284,22 +1284,10 @@ BAMFormat::writePairs(
 
         memcpy(bam->qual(), quality[whichRead], fullLength[whichRead]);
 
-        // QS (this is only for paired-end reads, so it's not in buildAUX).  MUST do this before buildAUX(), because otherwise buildAUX() can use up the whole buffer leaving us nothing for QS
-        int QSresult = 0;
-        _uint8* p = (_uint8*)quality[1 - whichRead];
-        for (unsigned i = 0; i < fullLength[1 - whichRead]; i++) {
-            int q = *p++;
-            // Picard MarkDup uses a score threshold of 15 (default)
-            QSresult += (q >= 15) ? (q != 255) * q : 0; // avoid branch?
-        }
-        BAMAlignAux* mq = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
-        mq->tag[0] = 'Q'; mq->tag[1] = 'S'; mq->val_type = 'i';
-        *(_int32*)mq->value() = QSresult;
-        _ASSERT(mq->size() == 7);   // Known above in the bamSize += line
-        auxLen += (unsigned)mq->size();
 
         if (!buildAUX(context, bam, reads[whichRead], aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance[whichRead], result->scorePriorToClipping[whichRead],
-            emitInternalScore, internalScoreTag, flags[whichRead], attachAlignmentTime, result->alignmentTimeInNanoseconds, FASTQComment[whichRead], FASTQCommentLength[whichRead])) {
+                      emitInternalScore, internalScoreTag, flags[whichRead], attachAlignmentTime, result->alignmentTimeInNanoseconds, FASTQComment[whichRead], FASTQCommentLength[whichRead], 
+                      true, quality[1- whichRead], fullLength[1-whichRead])) {
             *outOfSpace = true;
             return false;
         }
@@ -1535,7 +1523,10 @@ BAMFormat::buildAUX(
             bool attachAlignmentTime, 
             _int64 alignmentTimeInNanoseconds,
             const char* FASTQComment,
-            unsigned FASTQCommentLength)
+            unsigned FASTQCommentLength,
+            bool includeQS,
+            const char *mateQuality,
+            unsigned mateFullLength)
 {
     if (aux != NULL && auxLen > 0) {
         if (((char*)bam->firstAux()) + auxLen > buffer + bufferSpace) {
@@ -1635,6 +1626,27 @@ BAMFormat::buildAUX(
         _ASSERT(lb->size() == 4 + read->getLibraryLength());
         auxLen += (unsigned)lb->size();
     }
+
+    // QS (this is only for paired-end reads, so it's optional)
+    if (includeQS) { 
+        if ((char*)bam->firstAux() + auxLen + 7 > buffer + bufferSpace) {
+            return false;
+        }
+        
+        int QSresult = 0;
+        _uint8* p = (_uint8*)mateQuality;
+        for (unsigned i = 0; i < mateFullLength; i++) {
+            int q = *p++;
+            // Picard MarkDup uses a score threshold of 15 (default)
+            QSresult += (q >= 15) ? (q != 255) * q : 0; // avoid branch?
+        }
+
+        BAMAlignAux* mq = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
+        mq->tag[0] = 'Q'; mq->tag[1] = 'S'; mq->val_type = 'i';
+        *(_int32*)mq->value() = QSresult;
+        _ASSERT(mq->size() == 7);   // Known above in the bamSize += line
+        auxLen += (unsigned)mq->size();
+    } // includeQS
 
     //
     // FASTQ Comments.  They're required to be in proper SAM comment format.  If they're not, then just print an error message
