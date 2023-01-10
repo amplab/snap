@@ -3380,7 +3380,7 @@ IntersectingPairedEndAligner::scoreLocation(
         int TempScore, TempAgScore, agGenomeLocationOffset, agBasesClippedBefore, agBasesClippedAfter, agGenomeSpan;
         double agMatchProbability;
         
-        scoreLocationWithAffineGap(whichRead, direction, genomeLocation, seedOffset, scoreLimit, &TempScore, &agMatchProbability, &agGenomeLocationOffset, &agBasesClippedBefore, &agBasesClippedAfter, &TempAgScore, &agGenomeSpan, FALSE);
+        scoreLocationWithAffineGap(whichRead, direction, genomeLocation, seedOffset, scoreLimit, &TempScore, &agMatchProbability, &agGenomeLocationOffset, &agBasesClippedBefore, &agBasesClippedAfter, &TempAgScore, &agGenomeSpan, false);
     }
 }
 
