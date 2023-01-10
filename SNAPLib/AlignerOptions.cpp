@@ -77,8 +77,8 @@ AlignerOptions::AlignerOptions(
     subPenalty(4),
     gapOpenPenalty(6),
     gapExtendPenalty(1),
-    fivePrimeEndBonus(5),
-    threePrimeEndBonus(5),
+    fivePrimeEndBonus(10),
+    threePrimeEndBonus(7),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(true),
@@ -98,7 +98,7 @@ AlignerOptions::AlignerOptions(
 	altAwareness(true),
     emitALTAlignments(false),
     maxScoreGapToPreferNonALTAlignment(64),
-    useSoftClipping(false),
+    useSoftClipping(true),
     flattenMAPQAtOrBelow(3),
     attachAlignmentTimes(false),
     preserveFASTQComments(false)
@@ -266,9 +266,9 @@ AlignerOptions::usage()
             " -fmb  Force MAPQ below this value to zero.  By the strict definition of MAPQ a read with two equally good alignments should have MAPQ 3\n"
             "       Other aligners, however, will score these alignments at MAPQ 0 and some variant callers depend on that behavior.  Setting this will\n"
             "       force any MAPQ value at or below the parameter value to zero.  (default:%d)\n"
-            " -hc   Enable SNAP mode optimized for use with GATK HaplotypeCaller. (this is the default)\n"
+            " -hc   Enable SNAP mode optimized for use with GATK HaplotypeCaller.\n"
             " -hc-  Turn off optimizations specific to GATK HaplotypeCaller (e.g., when using the DRAGEN variant caller on SNAP aligned output)\n"
-            "       In this mode, when a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.\n"
+            "       In this mode, when a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.  This is the default.\n"
             " -at   Attach AT:i: tags to each read showing the alignment time in microseconds.  For paired-end reads this is the time for the pair.\n"
             " -pfc  Preserve FASTQ comments.  Anything after the first white space on the FASTQ ID line is appended to the SAM/BAM line.  If this is not\n"
             "       in valid SAM/BAM format it will produce incorrect output.\n"
@@ -401,6 +401,8 @@ AlignerOptions::usage()
             }
         } else if (strcmp(argv[n], "-hc") == 0) {
             useSoftClipping = false;
+            fivePrimeEndBonus = 5;
+            threePrimeEndBonus = 5;
             return true;
         } else if (strcmp(argv[n], "-hc-") == 0) {
             useSoftClipping = true;

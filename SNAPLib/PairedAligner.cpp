@@ -238,7 +238,7 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     minScoreRealignment(3),
     minScoreGapRealignmentALT(3),
     minAGScoreImprovement(24),
-    enableHammingScoringBaseAligner(false)
+    enableHammingScoringBaseAligner(true)
 {
 }
 
@@ -271,7 +271,9 @@ void PairedAlignerOptions::usageMessage()
         "  -eg  min affine gap score improvement needed for single-end alignments to be considered over\n"
         "       paired-end alignments. Default: %d\n"
         "  -eh  perform Hamming distance scoring to try and map reads that cannot be mapped by both the paired-end\n"
-        "       and the single-end aligner. Default: false\n"
+        "       and the single-end aligner.  This is the default.\n"
+        " -eh-  Do not perform Hamming distance scoring to try and map reads that cannot be mapped by both the paired-end\n"
+        "       and the single-end aligner.\n" 
         ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
@@ -352,6 +354,9 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         }
     } else if (strcmp(argv[n], "-eh") == 0) {
         enableHammingScoringBaseAligner = true;
+        return true;
+    } else if (strcmp(argv[n], "-eh-") == 0) {
+        enableHammingScoringBaseAligner = false;
         return true;
     }
 
