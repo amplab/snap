@@ -26,7 +26,7 @@ The SNAPCommand tool
 
 ## Documentation
 
-SNAP has a one page [Quick Start Guide](https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSwRyDwk1Ru0Q?e=uAMJXV) and a more extensive [Manual](https://1drv.ms/b/s!AhuEg_0yZD86hcpblUt-muHKYsG8fA?e=R8ogug).
+SNAP has a one page [Quick Start Guide](https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSwRyDwk1Ru0Q?e=4BvzLn) and a more extensive [Manual](https://1drv.ms/b/s!AhuEg_0yZD86hcpblUt-muHKYsG8fA?e=mbyUP5).
 
 ## Building
 
