@@ -139,9 +139,10 @@ namespace MakeOptimizationGraph
 
         class Sample
         {
-            public Sample(string name_, List<Optimization> optimizations_, List<OptimizationSet> allOptimizationSets)
+            public Sample(string name_, string shortName_, List<Optimization> optimizations_, List<OptimizationSet> allOptimizationSets)
             {
                 name = name_;
+                shortName = shortName_;
                 optimizations = optimizations_;
                 foreach (var optimizationsDisabled in allOptimizationSets.Select(_ => _.getSortKey()))
                 {
@@ -231,6 +232,7 @@ namespace MakeOptimizationGraph
 
             readonly List<Optimization> optimizations;
             public readonly string name;
+            public readonly string shortName;
             Dictionary<long, List<int>> runs = new Dictionary<long, List<int>>();   // Maps optimizations disabled->set of runs.  Key -1 is for -G-
 
 
@@ -243,8 +245,8 @@ namespace MakeOptimizationGraph
             optimizations.Add(new Optimization("U", "Ukkonen", "-nu"));
             optimizations.Add(new Optimization("O", "Ordering", "-no"));
             optimizations.Add(new Optimization("T", "Truncation", "-nt"));
-            optimizations.Add(new Optimization("E", "Edit distance", "-ne"));
             optimizations.Add(new Optimization("B", "Banded Affine", "-nb"));
+            optimizations.Add(new Optimization("E", "Edit distance", "-ne"));
             optimizations.Add(new Optimization("I", "Indel MaxK", "-ni"));
 
             var allOptimizationSets = new List<OptimizationSet>();
@@ -281,15 +283,18 @@ namespace MakeOptimizationGraph
             bool justSawStatusHeader = false;
 
             var allSamples = new List<Sample>();
-            allSamples.Add(new Sample("hg001", optimizations, allOptimizationSets));
-            allSamples.Add(new Sample("hg002", optimizations, allOptimizationSets));
-            allSamples.Add(new Sample("hg003", optimizations, allOptimizationSets));
-            allSamples.Add(new Sample("hg004", optimizations, allOptimizationSets));
-            allSamples.Add(new Sample("hg005", optimizations, allOptimizationSets));
-            allSamples.Add(new Sample("hg006", optimizations, allOptimizationSets));
-            allSamples.Add(new Sample("hg007", optimizations, allOptimizationSets));
-            allSamples.Add(new Sample("ERR194146", optimizations, allOptimizationSets));
-            allSamples.Add(new Sample("ERR194147", optimizations, allOptimizationSets));
+            //
+            // This is in descending order of read length.
+            //
+            allSamples.Add(new Sample("hg002", "hg2", optimizations, allOptimizationSets));
+            allSamples.Add(new Sample("hg003", "hg3", optimizations, allOptimizationSets));
+            allSamples.Add(new Sample("hg004", "hg4", optimizations, allOptimizationSets));
+            allSamples.Add(new Sample("hg005", "hg5", optimizations, allOptimizationSets));
+            allSamples.Add(new Sample("hg001", "hg1", optimizations, allOptimizationSets));
+            allSamples.Add(new Sample("hg006", "hg6", optimizations, allOptimizationSets));
+            allSamples.Add(new Sample("hg007", "hg7", optimizations, allOptimizationSets));
+            allSamples.Add(new Sample("ERR194146", "146", optimizations, allOptimizationSets));
+            allSamples.Add(new Sample("ERR194147", "147", optimizations, allOptimizationSets));
 
             string line;
             while (null != (line = inputFile.ReadLine()))
@@ -357,22 +362,22 @@ namespace MakeOptimizationGraph
             outputFile.Write("Optimization Disabled");
             foreach (var sample in allSamples)
             {
-                outputFile.Write("\t" + sample.name);   // this is normalized, but leave it without to be the legend key in the graph in excel
+                outputFile.Write("\t" + sample.shortName);   // this is normalized, but leave it without to be the legend key in the graph in excel
             }
 
             foreach (var sample in allSamples)
             {
-                outputFile.Write("\t" + sample.name + " runtime");
+                outputFile.Write("\t" + sample.shortName + " runtime");
             }
 
             foreach (var sample in allSamples)
             {
-                outputFile.Write("\t" + sample.name + " n runs");
+                outputFile.Write("\t" + sample.shortName + " n runs");
             }
 
             foreach (var sample in allSamples)
             {
-                outputFile.Write("\t" + sample.name + " normalized error bar");
+                outputFile.Write("\t" + sample.shortName + " normalized error bar");
             }
 
             outputFile.WriteLine();
@@ -408,9 +413,6 @@ namespace MakeOptimizationGraph
 
             outputFile.WriteLine("**done**");
             outputFile.Close();
-
-
-            Console.WriteLine("Here!");
 
         } // Main
     } // Program
