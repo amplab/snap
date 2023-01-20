@@ -813,7 +813,7 @@ BAMReader::getExtra(
 class BAMFormat : public FileFormat
 {
 public:
-    BAMFormat(bool i_useM) : useM(i_useM) {}
+    BAMFormat(bool i_useM, bool i_uBAM) : useM(i_useM), uBAM(i_uBAM) {}
 
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, OriginalContigNum* originalContigNum, int* o_pos) const;
 
@@ -874,9 +874,11 @@ private:
         const char *FASTQComment, unsigned FASTQCommentLength, bool includeQS = false, const char *mateQuality = NULL, unsigned mateFullLength = 0);
 
     const bool useM;
+    const bool uBAM;    // Unaligned BAM
 };
 
-const FileFormat* FileFormat::BAM[] = { new BAMFormat(false), new BAMFormat(true) };
+const FileFormat* FileFormat::BAM[] = { new BAMFormat(false, false), new BAMFormat(true, false) };
+const FileFormat* FileFormat::uBAM[] = { new BAMFormat(false, true), new BAMFormat(true, true) };
 
 void
 BAMFormat::getSortInfo(
@@ -933,7 +935,7 @@ BAMFormat::getWriterSupplier(
         char *tempFileName = DataWriterSupplier::generateSortIntermediateFilePathName(options); // leaked
 
         DataWriter::FilterSupplier* filters = gzipSupplier;
-        if (!options->noIndex) {
+        if (!options->noIndex && !uBAM) {
             size_t len = strlen(options->outputFile.fileName);
             char* indexFileName = (char*)malloc(5 + len); // leaked
             if (NULL == indexFileName) {
@@ -947,7 +949,9 @@ BAMFormat::getWriterSupplier(
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
         } // ! noIndex
 
-        if (!options->noDuplicateMarking) {
+        if (uBAM) {
+            filters = DataWriterSupplier::bamMakeUnaligned()->compose(filters);
+        } else if (!options->noDuplicateMarking) {
             filters = DataWriterSupplier::bamMarkDuplicates(genome)->compose(filters);
         }
 
@@ -999,7 +1003,7 @@ BAMFormat::writeHeader(
     // Write a RefSeq record for each chromosome / contig in the genome
     // todo: handle null genome index case - reparse header & translate into BAM
     bamHeader->n_ref() = 0; // in case of overflow or no genome
-	if (context.genome != NULL) {
+	if (context.genome != NULL /*BJB && !uBAM*/) {
 		int numContigs = context.genome->getNumContigs();
 		bamHeader->n_ref() = numContigs;
 		BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
@@ -1009,20 +1013,20 @@ BAMFormat::writeHeader(
         //
         // Write out the contigs in the original order.
         //
-		for (int i = 0; i < numContigs; i++) {
+        for (int i = 0; i < numContigs; i++) {
             const Genome::Contig* contig = context.genome->getContigByOriginalContigNumber(i);
-			int len = (int)strlen(contig->name) + 1;
-			cursor += BAMHeaderRefSeq::size(len);
-			if (cursor > headerBufferSize) {
-				return false;
-			}
-			refseq->l_name = len;
-			memcpy(refseq->name(), contig->name, len);
+            int len = (int)strlen(contig->name) + 1;
+            cursor += BAMHeaderRefSeq::size(len);
+            if (cursor > headerBufferSize) {
+                return false;
+            }
+            refseq->l_name = len;
+            memcpy(refseq->name(), contig->name, len);
             refseq->l_ref() = (int)(contig->length - context.genome->getChromosomePadding());
-			refseq = refseq->next();
-			_ASSERT((char*) refseq - header == cursor);
-		}
-    }
+            refseq = refseq->next();
+            _ASSERT((char*)refseq - header == cursor);
+        }
+    } 
 
     *headerActualSize = cursor;
     return true;
@@ -1102,7 +1106,7 @@ BAMFormat::writePairs(
                 return false;
             }
 
-            if (locations[whichRead] != InvalidGenomeLocation) {
+            if (locations[whichRead] != InvalidGenomeLocation && !uBAM) {
                 // Call affine gap either when we used affine gap scoring, or when read as NM > 0, to left align indels
                 if (useAffineGap && (result->usedAffineGapScoring[whichRead] || result->score[whichRead] > 0)) {
                     cigarOps[whichRead] = computeCigarOps(context.genome, ag, (char*)cigarBuf[whichRead], cigarBufSize * sizeof(_uint32),
@@ -1194,7 +1198,11 @@ BAMFormat::writePairs(
         char* aux = read->getAuxiliaryData(&auxLen, &auxSAM);
         static bool warningPrinted = false;
         bool translateReadGroupFromSAM = false;
-        if (aux != NULL && auxSAM) {
+
+        if (uBAM) {
+            aux = NULL;
+            auxLen = 0;
+        } else if (aux != NULL && auxSAM) {
             if (!warningPrinted) {
                 warningPrinted = true;
                 WriteErrorMessage("warning: translating optional data from SAM->BAM is not yet implemented, optional data will not appear in BAM\n");
@@ -1220,29 +1228,31 @@ BAMFormat::writePairs(
         }
 
         size_t bamSize = BAMAlignment::size((unsigned)qnameLen[whichRead] + 1, cigarOps[whichRead], fullLength[whichRead], !translateReadGroupFromSAM ? auxLen : auxLen - 1);
-        if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
-            if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
-                bamSize += 4 + strlen(read->getReadGroup());
-            } else {
-                bamSize += context.defaultReadGroupAuxLen;
+        if (!uBAM) {
+            if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
+                if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
+                    bamSize += 4 + strlen(read->getReadGroup());
+                } else {
+                    bamSize += context.defaultReadGroupAuxLen;
+                }
             }
-        }
 
-        if (read->getLibrary() != NULL) {
-            bamSize += 4 + read->getLibraryLength();
-        }
+            if (read->getLibrary() != NULL) {
+                bamSize += 4 + read->getLibraryLength();
+            }
 
-        //
-        // Add in the size for the tags now.  We have to do this in this ugly way, because the tags are written directly into the
-        // buffer, so we can only write them if there's space.  However, BamAuxAlign::size() depends on the contents of the aux field
-        // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
-        // this plus some asserts below.
-        //
-        bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
-        bamSize += 7; // extra space to store mate quality score for duplicate marking
-        if (bamSize > bufferSpace) {
-            *outOfSpace = true;
-            return false;
+            //
+            // Add in the size for the tags now.  We have to do this in this ugly way, because the tags are written directly into the
+            // buffer, so we can only write them if there's space.  However, BamAuxAlign::size() depends on the contents of the aux field
+            // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
+            // this plus some asserts below.
+            //
+            bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
+            bamSize += 7; // extra space to store mate quality score for duplicate marking
+            if (bamSize > bufferSpace) {
+                *outOfSpace = true;
+                return false;
+            }
         }
 
         BAMAlignment* bam = (BAMAlignment*)buffer;
@@ -1259,6 +1269,7 @@ BAMFormat::writePairs(
             WriteErrorMessage("BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen[whichRead]);
             soft_exit(1);
         }
+
         bam->l_read_name = (_uint8)qnameLen[whichRead] + 1;
         bam->MAPQ = result->mapq[whichRead];
         int refLength = cigarOps[whichRead] > 0 ? 0 : fullLength[whichRead];
@@ -1276,7 +1287,13 @@ BAMFormat::writePairs(
         bam->l_seq = fullLength[whichRead];
         bam->next_refID = OriginalContigNumToInt(mateContigIndex[whichRead]);
         bam->next_pos = (int)matePositionInContig[whichRead] - 1;
-        bam->tlen = templateLength[whichRead] >= 0 ? (templateLength[whichRead] & INT_MAX) : -((-templateLength[whichRead]) & INT_MAX);
+
+        if (uBAM) {
+            bam->tlen = 0;
+        } else {
+            bam->tlen = templateLength[whichRead] >= 0 ? (templateLength[whichRead] & INT_MAX) : -((-templateLength[whichRead]) & INT_MAX);
+        }
+
         memcpy(bam->read_name(), read->getId(), qnameLen[whichRead]);
         bam->read_name()[qnameLen[whichRead]] = 0;
         memcpy(bam->cigar(), cigarBuf[whichRead], cigarOps[whichRead] * 4);
@@ -1284,12 +1301,13 @@ BAMFormat::writePairs(
 
         memcpy(bam->qual(), quality[whichRead], fullLength[whichRead]);
 
-
-        if (!buildAUX(context, bam, reads[whichRead], aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance[whichRead], result->scorePriorToClipping[whichRead],
-                      emitInternalScore, internalScoreTag, flags[whichRead], attachAlignmentTime, result->alignmentTimeInNanoseconds, FASTQComment[whichRead], FASTQCommentLength[whichRead], 
-                      true, quality[1- whichRead], fullLength[1-whichRead])) {
-            *outOfSpace = true;
-            return false;
+        if (!uBAM) {
+            if (!buildAUX(context, bam, reads[whichRead], aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance[whichRead], result->scorePriorToClipping[whichRead],
+                emitInternalScore, internalScoreTag, flags[whichRead], attachAlignmentTime, result->alignmentTimeInNanoseconds, FASTQComment[whichRead], FASTQCommentLength[whichRead],
+                true, quality[1 - whichRead], fullLength[1 - whichRead])) {
+                *outOfSpace = true;
+                return false;
+            }
         }
 
         if (NULL != spaceUsed) {
@@ -2391,6 +2409,66 @@ BAMFilter::tryFindRead(
     return NULL;
 }
 
+class BAMMakeUnalignedFilter : public BAMFilter
+{
+public:
+    BAMMakeUnalignedFilter() : BAMFilter(DataWriter::ModifyFilter) {}
+
+    ~BAMMakeUnalignedFilter() {}
+
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL);
+
+protected:
+    virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) {}
+}; // BAMMakeUnalignedFilter
+
+size_t
+    BAMMakeUnalignedFilter::onNextBatch(
+        DataWriter* writer,
+        size_t offset,
+        size_t bytes,
+        bool lastBatch,
+        bool* needMoreBuffer,
+        size_t* fromBufferUsed)
+{
+    // 
+    // Nothing to write
+    //
+    if (bytes == 0 || *needMoreBuffer) {
+        return 0;
+    }
+
+    bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
+    if (!ok) {
+        WriteErrorMessage("Error writing to output file\n");
+        soft_exit(1);
+    }
+    currentWriter = writer;
+
+    for (_int64 i = 0; i < offsets.size(); i++) {
+        BAMAlignment* bam = (BAMAlignment*)(currentBuffer + offsets[i]);
+
+        bam->refID = -1;
+        bam->pos = -1;
+        bam->MAPQ = 0;
+
+        bam->FLAG |= SAM_UNMAPPED;
+        if (bam->FLAG & SAM_MULTI_SEGMENT) {
+            bam->FLAG |= SAM_NEXT_UNMAPPED;
+        }
+        bam->FLAG &= ~SAM_ALL_ALIGNED;
+
+        bam->tlen = 0;
+
+        bam->next_refID = -1;
+        bam->next_pos = -1;
+    }
+
+
+    return bytes; // return bytes consumed in current batch.  Since we don't change lengths, it's always the input size
+} // BAMMakeUnalignedFilter::onNextBatch
+
+
 //
 // One of these per possible duplicate read (matches on location, next location, RC, next RC).
 //
@@ -2614,6 +2692,8 @@ struct BamDupMarkEntry
     _uint64 mateInfo; // mate information has: matelocation and matedirection
     _uint64 info; // read information has: location and direction
 };
+
+
 
 class BAMDupMarkFilter : public BAMFilter
 {
@@ -3202,12 +3282,36 @@ public:
 
 private:
     const Genome* genome;
-};
+}; // BAMDupMarkSupplier
+
+class BAMMakeUnalignedSupplier : public DataWriter::FilterSupplier 
+{
+public:
+    BAMMakeUnalignedSupplier() :
+        FilterSupplier(DataWriter::ReadFilter) {}
+
+    virtual ~BAMMakeUnalignedSupplier() {}
+
+    virtual DataWriter::Filter* getFilter()
+    {
+        return new BAMMakeUnalignedFilter();
+    }
+
+    virtual void onClosing(DataWriterSupplier* supplier) {}
+    virtual void onClosed(DataWriterSupplier* supplier) {}
+}; // BAMMakeUnalignedSupplier
+
 
     DataWriter::FilterSupplier*
 DataWriterSupplier::bamMarkDuplicates(const Genome* genome)
 {
     return new BAMDupMarkSupplier(genome);
+}
+
+    DataWriter::FilterSupplier*
+DataWriterSupplier::bamMakeUnaligned()
+{
+    return new BAMMakeUnalignedSupplier();
 }
 
 class BAMIndexSupplier;

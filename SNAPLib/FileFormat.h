@@ -124,6 +124,7 @@ public:
 
     static const FileFormat* SAM[2]; // 0 for =, 1 for M (useM flag)
     static const FileFormat* BAM[2];
+    static const FileFormat* uBAM[2];
     static const FileFormat* FASTQ;
     static const FileFormat* FASTQZ;
 };

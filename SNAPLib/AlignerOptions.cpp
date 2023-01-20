@@ -316,6 +316,7 @@ AlignerOptions::usage()
                       "    -pairedFastq\n"
                       "    -pairedInterleavedFastq\n"
                       "    -pairedCompressedInterleavedFastq\n"
+                      "    -ubam\n"
                       "\n"
                       "So, for example, you could specify -bam input.file to make SNAP treat input.file as a BAM file,\n"
                       "even though it would ordinarily assume a FASTQ file for input or a SAM file for output when it\n"
@@ -1077,41 +1078,42 @@ AlignerOptions::passFilter(
     }
 
     switch (result) {
-    case NotFound:
-    case UnknownAlignment:
-        return (filterFlags & FilterUnaligned) != 0;
-    case SingleHit:
-        return (filterFlags & FilterSingleHit) != 0;
-    case MultipleHits:
-        return (filterFlags & FilterMultipleHits) != 0;
-    default:
-        return false; // shouldn't happen!
+        case NotFound:
+        case UnknownAlignment:
+            return (filterFlags & FilterUnaligned) != 0;
+        case SingleHit:
+            return (filterFlags & FilterSingleHit) != 0;
+        case MultipleHits:
+            return (filterFlags & FilterMultipleHits) != 0;
+        default:
+            return false; // shouldn't happen!
     }
 }
 
     PairedReadSupplierGenerator *
 SNAPFile::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context)
 {
-    _ASSERT(fileType == SAMFile || fileType == BAMFile || fileType == InterleavedFASTQFile || secondFileName != NULL); // Caller's responsibility to check this
+    _ASSERT(fileType == SAMFile || fileType == BAMFile || fileType == InterleavedFASTQFile || fileType == UnalignedBAMFile || secondFileName != NULL); // Caller's responsibility to check this
 
     switch (fileType) {
-    case SAMFile:
-        return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, quicklyDropUnpairedReads, context);
+        case SAMFile:
+            return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, quicklyDropUnpairedReads, context);
         
-    case BAMFile:
-        return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads, quicklyDropUnpairedReads, context);
+        case BAMFile:
+        case UnalignedBAMFile:  // UBAM is just a BAM file on input
+            return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads, quicklyDropUnpairedReads, context);
 
-    case FASTQFile:
-        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context, isCompressed);
+        case FASTQFile:
+            return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context, isCompressed);
 
-    case InterleavedFASTQFile:
-        return PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(fileName, numThreads, context, isCompressed);
+        case InterleavedFASTQFile:
+            return PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(fileName, numThreads, context, isCompressed);
         
-    default:
-        _ASSERT(false);
-        WriteErrorMessage("SNAPFile::createPairedReadSupplierGenerator: invalid file type (%d)\n", fileType);
-        soft_exit(1);
-        return NULL;
+        default:
+            _ASSERT(false);
+            WriteErrorMessage("SNAPFile::createPairedReadSupplierGenerator: invalid file type (%d)\n", fileType);
+            soft_exit(1);
+            return NULL;
     }
 }
 
@@ -1124,6 +1126,7 @@ SNAPFile::createReadSupplierGenerator(int numThreads, const ReaderContext& conte
         return SAMReader::createReadSupplierGenerator(fileName, numThreads, context);
         
     case BAMFile:
+    case UnalignedBAMFile:
         return BAMReader::createReadSupplierGenerator(fileName,numThreads, context);
 
     case FASTQFile:
@@ -1201,8 +1204,12 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
 			snapFile->fileType = SAMFile;
 			snapFile->omitSQLines = true;
 			*argsConsumed = 2;
-		} else if (!strcmp(args[0], "-bam")) {
+        } else if (!strcmp(args[0], "-bam")) {
             snapFile->fileType = BAMFile;
+            snapFile->isCompressed = true;
+            *argsConsumed = 2;
+        } else if (!strcmp(args[0], "-ubam")) {
+            snapFile->fileType = UnalignedBAMFile;
             snapFile->isCompressed = true;
             *argsConsumed = 2;
         } else if (!strcmp(args[0], "-pairedInterleavedFastq") || !strcmp(args[0], "-pairedCompressedInterleavedFastq")) {
@@ -1238,11 +1245,14 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
     } else if (util::stringEndsWith(args[0], ".bam")) {
         snapFile->fileType = BAMFile;
         snapFile->isCompressed = true;
+    } else if (util::stringEndsWith(args[0], ".ubam")) {
+        snapFile->fileType = UnalignedBAMFile;
+        snapFile->isCompressed = true;
     } else if (!isInput) {
         //
         // No default output file type.
         //
-        WriteErrorMessage("You specified an output file with name '%s', which doesn't end in .sam or .bam, and doesn't have an explicit type\n"
+        WriteErrorMessage("You specified an output file with name '%s', which doesn't end in .sam, .bam, or .ubam and doesn't have an explicit type\n"
                           "specifier.  There is no default output file type.  Consider doing something like '-o -bam %s'\n", args[0], args[0]);
 		return false;
     } else if (util::stringEndsWith(args[0], ".fq") || util::stringEndsWith(args[0], ".fastq") ||

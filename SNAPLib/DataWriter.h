@@ -169,6 +169,8 @@ public:
 
     static DataWriter::FilterSupplier* bamMarkDuplicates(const Genome* genome);
 
+    static DataWriter::FilterSupplier* bamMakeUnaligned();
+
     static DataWriter::FilterSupplier* bamIndex(const char* indexFileName, const Genome* genome, GzipWriterFilterSupplier* gzipSupplier);
 };
 

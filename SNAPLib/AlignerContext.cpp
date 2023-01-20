@@ -371,6 +371,8 @@ AlignerContext::beginIteration()
             format = FileFormat::SAM[options->useM];
         } else if (BAMFile == options->outputFile.fileType) {
             format = FileFormat::BAM[options->useM];
+        } else if (UnalignedBAMFile == options->outputFile.fileType) {
+            format = FileFormat::uBAM[options->useM];
         } else {
             //
             // This shouldn't happen, because the command line parser should catch it.  Perhaps you've added a new output file format and just
