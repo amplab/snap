@@ -1249,10 +1249,11 @@ BAMFormat::writePairs(
             //
             bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
             bamSize += 7; // extra space to store mate quality score for duplicate marking
-            if (bamSize > bufferSpace) {
-                *outOfSpace = true;
-                return false;
-            }
+        }
+
+        if (bamSize > bufferSpace) {
+            *outOfSpace = true;
+            return false;
         }
 
         BAMAlignment* bam = (BAMAlignment*)buffer;
