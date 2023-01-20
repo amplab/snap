@@ -993,7 +993,7 @@ BAMFormat::writeHeader(
     bamHeader->magic = BAMHeader::BAM_MAGIC;
     size_t samHeaderSize;
     bool ok = FileFormat::SAM[0]->writeHeader(context, bamHeader->text(), headerBufferSize - BAMHeader::size(0), &samHeaderSize,
-        sorted, argc, argv, version, rgLine, omitSQLines);
+        sorted, argc, argv, version, rgLine, omitSQLines || uBAM);
     if (! ok) {
         return false;
     }
@@ -1003,7 +1003,7 @@ BAMFormat::writeHeader(
     // Write a RefSeq record for each chromosome / contig in the genome
     // todo: handle null genome index case - reparse header & translate into BAM
     bamHeader->n_ref() = 0; // in case of overflow or no genome
-	if (context.genome != NULL /*BJB && !uBAM*/) {
+	if (context.genome != NULL && !uBAM) {
 		int numContigs = context.genome->getNumContigs();
 		bamHeader->n_ref() = numContigs;
 		BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
