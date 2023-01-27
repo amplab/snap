@@ -161,6 +161,7 @@ struct AlignerOptions : public AbstractOptions
     bool                emitALTAlignments;
     bool                attachAlignmentTimes;
     bool                preserveFASTQComments;
+    int                 compressionLevel;   // The gzip compression level for BAM output.
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

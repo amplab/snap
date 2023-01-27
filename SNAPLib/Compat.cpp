@@ -374,6 +374,7 @@ OpenLargeFile(
     const char* filename,
     const char* mode)
 {
+ 
     _ASSERT(strlen(mode) == 1 && (*mode == 'r' || *mode == 'w' || *mode == 'a'));
     LargeFileHandle* result = new LargeFileHandle();
     result->handle = CreateFile(filename,

@@ -34,6 +34,7 @@ Environment:
 #include "PairedAligner.h"
 #include "GzipDataWriter.h"
 #include "Error.h"
+#include "zlib.h"
 
 #if _DEBUG
 extern volatile bool _DumpAlignments;
@@ -926,8 +927,9 @@ BAMFormat::getWriterSupplier(
     //
 
     DataWriterSupplier* dataSupplier;
+
     GzipWriterFilterSupplier* gzipSupplier =
-        DataWriterSupplier::gzip(true, BAM_BLOCK, max(1, options->numThreads - 1), false, options->sortOutput); // leaked
+        DataWriterSupplier::gzip(true, BAM_BLOCK, max(1, options->numThreads - 1), false, options->sortOutput, options->compressionLevel); // leaked
         // (leave a thread free for main, and let OS map threads to cores to allow system IO etc.)
 
     FileEncoder* gzipEncoder = NULL;
@@ -1402,7 +1404,8 @@ BAMFormat::writeRead(
     {
         return false;
     }
-    if (genomeLocation != InvalidGenomeLocation) {
+
+    if (genomeLocation != InvalidGenomeLocation && !uBAM) {
         cigarOps = computeCigarOps(context.genome, lv, (char*)cigarBuf, cigarBufSize * sizeof(_uint32),
                                    clippedData, clippedLength, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter,
                                    read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
@@ -1418,7 +1421,10 @@ BAMFormat::writeRead(
     char* aux = read->getAuxiliaryData(&auxLen, &auxSAM);
     static bool warningPrinted = false;
     bool translateReadGroupFromSAM = false;
-    if (aux != NULL && auxSAM) {
+    if (uBAM) {
+        aux = NULL;
+        auxLen = 0;
+    } else if (aux != NULL && auxSAM) {
         if (! warningPrinted) {
             warningPrinted = true;
             WriteErrorMessage("warning: translating optional data from SAM->BAM is not yet implemented, optional data will not appear in BAM\n");
@@ -1444,25 +1450,29 @@ BAMFormat::writeRead(
     }
 
     size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, !translateReadGroupFromSAM ? auxLen : auxLen - 1);
-    if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
-        if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
-            bamSize += 4 + strlen(read->getReadGroup());
-        } else {
-            bamSize += context.defaultReadGroupAuxLen;
+
+    if (!uBAM) {
+        if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
+            if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
+                bamSize += 4 + strlen(read->getReadGroup());
+            } else {
+                bamSize += context.defaultReadGroupAuxLen;
+            }
         }
-    }
 
-    if (read->getLibrary() != NULL) {
-        bamSize += 4 + read->getLibraryLength();
-    }
+        if (read->getLibrary() != NULL) {
+            bamSize += 4 + read->getLibraryLength();
+        }
 
-    //
-    // Add in the size for the tags now.  We have to do this in this ugly way, because the tags are written directly into the
-    // buffer, so we can only write them if there's space.  However, BamAuxAlign::size() depends on the contents of the aux field
-    // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
-    // this plus some asserts below.
-    //
-    bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
+        //
+        // Add in the size for the tags now.  We have to do this in this ugly way, because the tags are written directly into the
+        // buffer, so we can only write them if there's space.  However, BamAuxAlign::size() depends on the contents of the aux field
+        // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
+        // this plus some asserts below.
+        //
+        bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
+    }
+    
     if (bamSize > bufferSpace) {
         return false;
     }
@@ -1509,9 +1519,11 @@ BAMFormat::writeRead(
 
     memcpy(bam->qual(), quality, fullLength);
 
-    if (!buildAUX(context, bam, read, aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance, internalScore, emitInternalScore, internalScoreTag, flags, attachAlignmentTime, alignmentTimeInNanoseconds,
-        FASTQComment, FASTQCommentLength)) {
-        return false;
+    if (!uBAM) {
+        if (!buildAUX(context, bam, read, aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance, internalScore, emitInternalScore, internalScoreTag, flags, attachAlignmentTime, alignmentTimeInNanoseconds,
+            FASTQComment, FASTQCommentLength)) {
+            return false;
+        }
     }
 
     _ASSERT(bam->block_size + 4 <= bufferSpace);
@@ -1909,7 +1921,7 @@ BAMFormat::writeRead(
         return false;
     }
 
-    if (genomeLocation != InvalidGenomeLocation) {
+    if (genomeLocation != InvalidGenomeLocation && !uBAM) {
         cigarOps = computeCigarOps(context.genome, ag, (char*)cigarBuf, cigarBufSize * sizeof(_uint32),
             clippedData, clippedQuality, clippedLength, score, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter,
             read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
@@ -1939,7 +1951,11 @@ BAMFormat::writeRead(
     char* aux = read->getAuxiliaryData(&auxLen, &auxSAM);
     static bool warningPrinted = false;
     bool translateReadGroupFromSAM = false;
-    if (aux != NULL && auxSAM) {
+
+    if (uBAM) {
+        aux = NULL;
+        auxLen = 0;
+    } else if (aux != NULL && auxSAM) {
         if (!warningPrinted) {
             warningPrinted = true;
             WriteErrorMessage("warning: translating optional data from SAM->BAM is not yet implemented, optional data will not appear in BAM\n");
@@ -1964,28 +1980,33 @@ BAMFormat::writeRead(
     }
 
     size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, !translateReadGroupFromSAM ? auxLen : auxLen - 1);
-    if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
-        if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
-            bamSize += 4 + strlen(read->getReadGroup());
-        } else {
-            bamSize += context.defaultReadGroupAuxLen;
+
+    if (!uBAM) {
+        if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
+            if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
+                bamSize += 4 + strlen(read->getReadGroup());
+            } else {
+                bamSize += context.defaultReadGroupAuxLen;
+            }
         }
+
+        if (read->getLibrary() != NULL) {
+            bamSize += 4 + read->getLibraryLength();
+        }
+
+        //
+        // Add in the size for the tags now.  We have to do this in this ugly way, because the tags are written directly into the
+        // buffer, so we can only write them if there's space.  However, BamAuxAlign::size() depends on the contents of the aux field
+        // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
+        // this plus some asserts below.
+        //
+        bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
     }
 
-    if (read->getLibrary() != NULL) {
-        bamSize += 4 + read->getLibraryLength();
-    }
-
-    //
-    // Add in the size for the tags now.  We have to do this in this ugly way, because the tags are written directly into the
-    // buffer, so we can only write them if there's space.  However, BamAuxAlign::size() depends on the contents of the aux field
-    // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
-    // this plus some asserts below.
-    //
-    bamSize += 8 + 4 + (emitInternalScore ? 7 : 0) + (attachAlignmentTime ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score and alignment time fields (which are 32 bits rather than the 8 used in NM)
     if (bamSize > bufferSpace) {
         return false;
     }
+
     BAMAlignment* bam = (BAMAlignment*)buffer;
     bam->block_size = (int)bamSize - 4;
     bam->refID = OriginalContigNumToInt(contigIndex);
@@ -2028,9 +2049,12 @@ BAMFormat::writeRead(
     }
 
     memcpy(bam->qual(), quality, fullLength);
-    if (!buildAUX(context, bam, read, aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance, internalScore, emitInternalScore, internalScoreTag, flags, attachAlignmentTime, alignmentTimeInNanoseconds,
-        FASTQComment, FASTQCommentLength)) {
-        return false;
+
+    if (!uBAM) {
+        if (!buildAUX(context, bam, read, aux, auxLen, buffer, bufferSpace, translateReadGroupFromSAM, editDistance, internalScore, emitInternalScore, internalScoreTag, flags, attachAlignmentTime, alignmentTimeInNanoseconds,
+            FASTQComment, FASTQCommentLength)) {
+            return false;
+        }
     }
 
     _ASSERT(bam->block_size + 4 <= bufferSpace);
@@ -2309,8 +2333,7 @@ BAMFilter::onNextBatch(
             offsets.push_back(*j);
         }
         nextBatchOffsets.clear();
-    }
-    else {
+    } else {
         offsets.clear();
     }
     currentWriter = NULL;
@@ -2465,8 +2488,14 @@ size_t
         bam->next_pos = -1;
     }
 
+    if (NULL != fromBufferUsed) {
+        *fromBufferUsed = bytes;
+    }
+
+    offsets.clear();
 
     return bytes; // return bytes consumed in current batch.  Since we don't change lengths, it's always the input size
+
 } // BAMMakeUnalignedFilter::onNextBatch
 
 
@@ -3300,6 +3329,7 @@ public:
 
     virtual void onClosing(DataWriterSupplier* supplier) {}
     virtual void onClosed(DataWriterSupplier* supplier) {}
+
 }; // BAMMakeUnalignedSupplier
 
 
@@ -3568,7 +3598,7 @@ BgzfHeader::validate(
     size_t uncompressed)
 {
     return ID1 == 0x1f && ID2 == 0x8b && CM == 8 && FLG == 4 &&
-        MTIME == 0 && XFL == 0 && OS == 0 &&
+        MTIME == 0 && (XFL == 0 || XFL == 2 || XFL == 4) && OS == 0 &&
         ISIZE() == uncompressed&&
         BSIZE() + 1 == compressed;
 }

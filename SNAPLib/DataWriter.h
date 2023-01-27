@@ -165,7 +165,7 @@ public:
     static DataWriter::FilterSupplier* samMarkDuplicates(const Genome* genome);
 
     // defaults follow BAM output spec
-    static GzipWriterFilterSupplier* gzip(bool bamFormat, size_t chunkSize, int numThreads, bool bindToProcessors, bool multiThreaded);
+    static GzipWriterFilterSupplier* gzip(bool bamFormat, size_t chunkSize, int numThreads, bool bindToProcessors, bool multiThreaded, int compressionLevel);
 
     static DataWriter::FilterSupplier* bamMarkDuplicates(const Genome* genome);
 

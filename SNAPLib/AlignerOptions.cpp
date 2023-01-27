@@ -32,6 +32,7 @@ Revision History:
 #include "Error.h"
 #include "BaseAligner.h"
 #include "CommandProcessor.h"
+#include "zlib.h"
 
 bool g_suppressStatusMessages = false;
 bool g_suppressErrorMessages = false;
@@ -101,7 +102,8 @@ AlignerOptions::AlignerOptions(
     useSoftClipping(true),
     flattenMAPQAtOrBelow(3),
     attachAlignmentTimes(false),
-    preserveFASTQComments(false)
+    preserveFASTQComments(false),
+    compressionLevel(Z_DEFAULT_COMPRESSION)
 {
     if (forPairedEnd) {
         maxDist                 = 27;
@@ -275,6 +277,8 @@ AlignerOptions::usage()
             " -q    Quiet mode: don't print status messages (other than the welcome message which is printed prior to parsing args).  Error messages\n"
             "       are still printed.\n"            
             " -qq   Super quiet mode: don't print status or error messages.\n"
+            " -cl   Compression level for compressed output.  Must be between 1 and 9 inclusive.  Larger is slower/more compression.  See the zlib\n"
+            "       documentation for additional details about its meaning.\n"
 		,
 			extraSearchDepth,
 			expansionFactor,
@@ -426,6 +430,18 @@ AlignerOptions::usage()
                     return false;
                 }
  
+                return true;
+            }
+        } else if (strcmp(argv[n], "-cl") == 0) {
+            if (n + 1 < argc) {
+                compressionLevel = atoi(argv[n + 1]);
+                n++;
+
+                if (compressionLevel < 1 || compressionLevel > 9) {
+                    WriteErrorMessage("Compression level must be between 0 and 9 inclusive\n");
+                    return false;
+                }
+
                 return true;
             }
         } else if (strcmp(argv[n], "-o") == 0) {

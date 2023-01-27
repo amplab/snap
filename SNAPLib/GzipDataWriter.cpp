@@ -38,7 +38,8 @@ class GzipCompressWorkerManager : public ParallelWorkerManager
 public:
     GzipCompressWorkerManager(GzipWriterFilterSupplier* i_filterSupplier)
         : filterSupplier(i_filterSupplier), buffer(NULL),
-        chunkSize(i_filterSupplier->chunkSize), bam(i_filterSupplier->bamFormat)
+        chunkSize(i_filterSupplier->chunkSize), bam(i_filterSupplier->bamFormat),
+        compressionLevel(i_filterSupplier->getCompressionLevel())
     {}
 
     virtual ~GzipCompressWorkerManager();
@@ -65,6 +66,7 @@ private:
     size_t inputUsed;
     char* buffer;
     VariableSizeVector< pair<_uint64,_uint64> > translation;
+    int compressionLevel;  
 
     friend class GzipCompressWorker;
 };
@@ -72,17 +74,18 @@ private:
 class GzipCompressWorker : public ParallelWorker
 {
 public:
-    GzipCompressWorker() : heap(NULL) {}
+    GzipCompressWorker(int i_compressionLevel) : heap(NULL), compressionLevel(i_compressionLevel) {}
 
     virtual ~GzipCompressWorker() { delete heap; }
 
     virtual void step();
 
-    static size_t compressChunk(z_stream& zstream, bool bamFormat, char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
+    static size_t compressChunk(z_stream& zstream, bool bamFormat, char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed, int compressionLevel);
 
 private:
     z_stream zstream;
     ThreadHeap* heap;
+    int compressionLevel;
 };
 
 // used for case where each thread compresses by itself
@@ -125,7 +128,7 @@ GzipCompressWorkerManager::initialize(
     ParallelWorker*
 GzipCompressWorkerManager::createWorker()
 {
-    return new GzipCompressWorker();
+    return new GzipCompressWorker(compressionLevel);
 }
 
     void
@@ -232,7 +235,7 @@ GzipCompressWorker::step()
         size_t bytes = min(supplier->chunkSize, supplier->inputUsed - i * supplier->chunkSize);
         supplier->sizes[i] = compressChunk(zstream, supplier->bam,
             supplier->buffer + i * supplier->chunkSize, supplier->chunkSize,
-            supplier->input + i * supplier->chunkSize, bytes);
+            supplier->input + i * supplier->chunkSize, bytes, compressionLevel);
         _ASSERT(supplier->sizes[i] <= supplier->chunkSize); // can't grow!
     }
 }
@@ -245,7 +248,8 @@ GzipCompressWorker::compressChunk(
     char* toBuffer,
     size_t toSize,
     char* fromBuffer,
-    size_t fromUsed)
+    size_t fromUsed,
+    int compressionLevel)
 {
     if (bamFormat && fromUsed > BAM_BLOCK) {
         WriteErrorMessage("exceeded BAM chunk size\n");
@@ -294,7 +298,7 @@ GzipCompressWorker::compressChunk(
     uInt oldAvail;
     int status;
 
-    status = deflateInit2(&zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, windowBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
+    status = deflateInit2(&zstream, /*Z_DEFAULT_COMPRESSION*/ compressionLevel, Z_DEFLATED, windowBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
     if (status < 0) {
         WriteErrorMessage("GzipWriterFilter: deflateInit2 failed with %d\n", status);
         soft_exit(1);
@@ -415,6 +419,7 @@ GzipWriterFilter::onNextBatch(
         *fromBufferUsed = fromUsed;
     }
 
+
     return fromUsed;
 }
 
@@ -424,9 +429,10 @@ DataWriterSupplier::gzip(
     size_t chunkSize,
     int numThreads,
     bool bindToProcessors,
-    bool multiThreaded)
+    bool multiThreaded,
+    int compressionLevel)
 {
-    return new GzipWriterFilterSupplier(bamFormat, chunkSize, numThreads, bindToProcessors, multiThreaded);
+    return new GzipWriterFilterSupplier(bamFormat, chunkSize, numThreads, bindToProcessors, multiThreaded, compressionLevel);
 }
 
     DataWriter::Filter*
