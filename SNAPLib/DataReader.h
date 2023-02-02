@@ -145,6 +145,11 @@ public:
     // timing for performance tuning (in nanos)
     static volatile _int64 ReadWaitTime;
     static volatile _int64 ReleaseWaitTime;
+
+    //
+    // debugging
+    //
+    virtual void dumpState() {} // Override in a subclass if needed
 };
 
 class DataSupplier

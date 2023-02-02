@@ -1260,7 +1260,10 @@ SortedDataFilterSupplier::mergeSort()
         {
             i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0,
                 __min(1UL << 23, __max(1UL << 17, bufferSpace / blocks.size()))); // 128kB to 8MB buffer space per block
-            i->reader->init(tempFileName);
+            if (!i->reader->init(tempFileName)) {
+                WriteErrorMessage("SortedDataFilterSupplier::mergeSort: reader->init(%s) failed\n", tempFileName);
+                soft_exit(1);
+            }
             i->reader->reinit(i->start, i->bytes);
         }
     }
@@ -1275,7 +1278,10 @@ SortedDataFilterSupplier::mergeSort()
         if (blocks[0].dataReaderIsBuffer) 
         {
             headerReader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0, headerSize + 4096);
-            headerReader->init(tempFileName);
+            if (!headerReader->init(tempFileName)) {
+                WriteErrorMessage("SortedDataFilterSupplier::mergeSort: reader->init(%s) failed for headerReader\n", tempFileName);
+                soft_exit(1);
+            }
         } else {
             headerReader = blocks[0].reader;
         }
@@ -1289,7 +1295,8 @@ SortedDataFilterSupplier::mergeSort()
 			if ((!headerReader->getData(&rbuffer, &rbytes)) || rbytes == 0) {
                 headerReader->nextBatch();
 				if (!headerReader->getData(&rbuffer, &rbytes)) {
-					WriteErrorMessage( "read header failed\n");
+					WriteErrorMessage( "read header failed, left %lld, headerSize %lld\n", left, headerSize);
+                    headerReader->dumpState();
 					soft_exit(1);
 				}
 			}

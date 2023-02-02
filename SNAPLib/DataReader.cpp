@@ -60,6 +60,8 @@ public:
 
     virtual bool getData(char** o_buffer, _int64* o_validBytes, _int64* o_startBytes = NULL);
 
+    virtual void dumpState();
+
     virtual void advance(_int64 bytes);
 
     virtual void nextBatch();
@@ -164,6 +166,16 @@ private:
 protected:
     const size_t         bufferSize;
 };
+
+void
+ReadBasedDataReader::dumpState()
+{
+    fprintf(stderr, "ReadBasedDataReader at 0x%llx state:\n", this);
+    fprintf(stderr, "\theaderBufferSize %lld, headerExtraSize %lld, amountAdvancedThroughUnderlyingStoreByUs %lld, nHeaderBuffersAllocated %d, hitEOFReadingHeader %d, bufferSize %lld\n",
+        headerBufferSize, headerExtraSize, amountAdvancedThroughUnderlyingStoreByUs, nHeaderBuffersAllocated, hitEOFReadingHeader, bufferSize);
+    fprintf(stderr, "\tnBuffers %d, headerBuffersOutstanding, %d, startedReadingHeader %d, extraBytes %lld, overflowBytes %lld, nextBatchID %d, nextBufferForReader %d, nextBufferForConsumer %d, lastBufferForConsumer %d\n",
+        nBuffers, headerBuffersOutstanding, startedReadingHeader, extraBytes, overflowBytes, nextBatchID, nextBufferForReader, nextBufferForConsumer, lastBufferForConsumer);
+}
 
 ReadBasedDataReader::ReadBasedDataReader(
     unsigned i_nBuffers,
@@ -1331,6 +1343,8 @@ public:
         return fileName;
     }
 
+    virtual void dumpState();
+
 protected:
 
     // must hold the lock to call
@@ -1353,6 +1367,16 @@ protected:
     _int64              endingOffset;
 
 };
+
+void
+AsyncFileDataReader::dumpState()
+{
+    fprintf(stderr, "AsyncFileDataReader (0x%llx) state:\n", this);
+    fprintf(stderr, "\tfileName %s, fileSize %lld, readOffset %lld, endingOffset %lld\n",
+        fileName, fileSize, readOffset, endingOffset);
+    
+    ReadBasedDataReader::dumpState();
+}
 
 AsyncFileDataReader::AsyncFileDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, size_t bufferSpace) :
     ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor, bufferSpace), fileName(NULL), asyncFile(NULL), endingOffset(0)
@@ -2930,7 +2954,7 @@ BatchTracker::releaseBatch(
 DataSupplier* DataSupplier::MemMap = new MemMapDataSupplier();
 
 #ifdef _MSC_VER
-DataSupplier* DataSupplier::Default = DataSupplier::WindowsOverlapped;
+DataSupplier* DataSupplier::Default = /*DataSupplier::WindowsOverlapped BJB*/DataSupplier::AsyncFile;
 #else
 DataSupplier* DataSupplier::Default = /*DataSupplier::MemMap*/ DataSupplier::AsyncFile;
 #endif
