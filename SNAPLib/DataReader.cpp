@@ -198,12 +198,14 @@ ReadBasedDataReader::ReadBasedDataReader(
     _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
     bufferInfo = new BufferInfo[maxBuffers];
     extraBytes = max((_int64) 0, (_int64) ((bufferSize + overflowBytes) * extraFactor));
+
     char* allocated = (char*) BigReserve(maxBuffers * (bufferSize + extraBytes + overflowBytes));
     BigCommit(allocated, nBuffers * (bufferSize + extraBytes + overflowBytes));
     if (NULL == allocated) {
         WriteErrorMessage("ReadBasedDataReader: unable to allocate IO buffer\n");
         soft_exit(1);
     }
+
     for (unsigned i = 0 ; i < nBuffers; i++) {
         bufferInfo[i].buffer = allocated;
         allocated += bufferSize + overflowBytes;
@@ -218,6 +220,7 @@ ReadBasedDataReader::ReadBasedDataReader(
         bufferInfo[i].holds = 0;
 		bufferInfo[i].headerBuffer = false;
     }
+
     nextBatchID = 1;
  
     nextBufferForConsumer = -1;
@@ -1383,6 +1386,13 @@ AsyncFileDataReader::AsyncFileDataReader(unsigned i_nBuffers, _int64 i_overflowB
 {
     readOffset = 0;
     bufferReaders = (AsyncFile::Reader**)malloc(sizeof(AsyncFile::Reader*) * maxBuffers);
+
+    if (NULL == bufferReaders) {
+        WriteErrorMessage("AsyncFileDataReader::AsyncFileDataReader(): malloc(%d) failed\n", sizeof(AsyncFile::Reader*) * maxBuffers);
+        soft_exit(1);
+        return; // Just to avoid the compiler warning
+    }
+
     for (unsigned i = 0; i < i_nBuffers; i++) {
         bufferReaders[i] = NULL;
     }
