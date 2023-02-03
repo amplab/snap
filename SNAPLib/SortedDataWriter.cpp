@@ -1278,8 +1278,8 @@ SortedDataFilterSupplier::mergeSort()
         if (blocks[0].dataReaderIsBuffer) 
         {
             headerReader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0, headerSize + 4096);
-            if (!headerReader->init(tempFileName)) {
 /*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): allocating new header reader\n");
+            if (!headerReader->init(tempFileName)) {
                 WriteErrorMessage("SortedDataFilterSupplier::mergeSort: reader->init(%s) failed for headerReader\n", tempFileName);
                 soft_exit(1);
             }
