@@ -1279,10 +1279,12 @@ SortedDataFilterSupplier::mergeSort()
         {
             headerReader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0, headerSize + 4096);
             if (!headerReader->init(tempFileName)) {
+/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): allocating new header reader\n");
                 WriteErrorMessage("SortedDataFilterSupplier::mergeSort: reader->init(%s) failed for headerReader\n", tempFileName);
                 soft_exit(1);
             }
         } else {
+/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): using existing header reader\n");
             headerReader = blocks[0].reader;
         }
         headerReader->reinit(0, headerSize);
