@@ -1295,6 +1295,7 @@ SortedDataFilterSupplier::mergeSort()
         size_t wbytes;
 		for (size_t left = headerSize; left > 0; ) {
 			if ((!headerReader->getData(&rbuffer, &rbytes)) || rbytes == 0) {
+/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): calling nextBatch()\n");
                 headerReader->nextBatch();
 				if (!headerReader->getData(&rbuffer, &rbytes)) {
 					WriteErrorMessage( "read header failed, left %lld, headerSize %lld\n", left, headerSize);
@@ -1302,6 +1303,7 @@ SortedDataFilterSupplier::mergeSort()
 					soft_exit(1);
 				}
 			}
+/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): got %lld bytes\n", rbytes);
 			if ((! writer->getBuffer(&wbuffer, &wbytes)) || wbytes == 0) {
 				writer->nextBatch();
 				if (! writer->getBuffer(&wbuffer, &wbytes)) {
@@ -1312,6 +1314,7 @@ SortedDataFilterSupplier::mergeSort()
 			size_t xfer = min(left, min((size_t) rbytes, wbytes));
 			_ASSERT(xfer > 0 && xfer <= UINT32_MAX);
 			memcpy(wbuffer, rbuffer, xfer);
+/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): advancing %lld bytes\n", xfer);
             headerReader->advance(xfer);
 			writer->advance((unsigned) xfer);
 			left -= xfer;
