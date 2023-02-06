@@ -170,10 +170,10 @@ protected:
 void
 ReadBasedDataReader::dumpState()
 {
-    fprintf(stderr, "ReadBasedDataReader at 0x%llx state:\n", this);
-    fprintf(stderr, "\theaderBufferSize %lld, headerExtraSize %lld, amountAdvancedThroughUnderlyingStoreByUs %lld, nHeaderBuffersAllocated %d, hitEOFReadingHeader %d, bufferSize %lld\n",
+    WriteErrorMessage("ReadBasedDataReader at 0x%llx state:\n", this);
+    WriteErrorMessage("\theaderBufferSize %lld, headerExtraSize %lld, amountAdvancedThroughUnderlyingStoreByUs %lld, nHeaderBuffersAllocated %d, hitEOFReadingHeader %d, bufferSize %lld\n",
         headerBufferSize, headerExtraSize, amountAdvancedThroughUnderlyingStoreByUs, nHeaderBuffersAllocated, hitEOFReadingHeader, bufferSize);
-    fprintf(stderr, "\tnBuffers %d, headerBuffersOutstanding, %d, startedReadingHeader %d, extraBytes %lld, overflowBytes %lld, nextBatchID %d, nextBufferForReader %d, nextBufferForConsumer %d, lastBufferForConsumer %d\n",
+    WriteErrorMessage("\tnBuffers %d, headerBuffersOutstanding, %d, startedReadingHeader %d, extraBytes %lld, overflowBytes %lld, nextBatchID %d, nextBufferForReader %d, nextBufferForConsumer %d, lastBufferForConsumer %d\n",
         nBuffers, headerBuffersOutstanding, startedReadingHeader, extraBytes, overflowBytes, nextBatchID, nextBufferForReader, nextBufferForConsumer, lastBufferForConsumer);
 }
 
@@ -198,6 +198,12 @@ ReadBasedDataReader::ReadBasedDataReader(
     _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
     bufferInfo = new BufferInfo[maxBuffers];
     extraBytes = max((_int64) 0, (_int64) ((bufferSize + overflowBytes) * extraFactor));
+
+    if (bufferSize <= 2 * (size_t)overflowBytes) {
+        WriteErrorMessage("ReadBasedDataReader::ReadBasedDataReader: the buffer size %lld isn't more than twice the overflow size %lld, so we will fail to make progres.  This is a code bug, please create a github issue.\n",
+            bufferSize, overflowBytes);
+        soft_exit(1);
+    }
 
     char* allocated = (char*) BigReserve(maxBuffers * (bufferSize + extraBytes + overflowBytes));
     BigCommit(allocated, nBuffers * (bufferSize + extraBytes + overflowBytes));
@@ -1374,8 +1380,8 @@ protected:
 void
 AsyncFileDataReader::dumpState()
 {
-    fprintf(stderr, "AsyncFileDataReader (0x%llx) state:\n", this);
-    fprintf(stderr, "\tfileName %s, fileSize %lld, readOffset %lld, endingOffset %lld\n",
+    WriteErrorMessage("AsyncFileDataReader (0x%llx) state:\n", this);
+    WriteErrorMessage("\tfileName %s, fileSize %lld, readOffset %lld, endingOffset %lld\n",
         fileName, fileSize, readOffset, endingOffset);
     
     ReadBasedDataReader::dumpState();
@@ -2964,7 +2970,7 @@ BatchTracker::releaseBatch(
 DataSupplier* DataSupplier::MemMap = new MemMapDataSupplier();
 
 #ifdef _MSC_VER
-DataSupplier* DataSupplier::Default = /*DataSupplier::WindowsOverlapped BJB*/DataSupplier::AsyncFile;
+DataSupplier* DataSupplier::Default = DataSupplier::WindowsOverlapped;
 #else
 DataSupplier* DataSupplier::Default = /*DataSupplier::MemMap*/ DataSupplier::AsyncFile;
 #endif

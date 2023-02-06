@@ -1026,7 +1026,6 @@ BAMFormat::writeHeader(
 
     *headerActualSize = cursor;
 
-    fprintf(stderr, "BAMFormat::writeHeader: headerActualSize %lld\n", *headerActualSize);
     return true;
 }
 

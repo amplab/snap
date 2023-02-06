@@ -1277,14 +1277,12 @@ SortedDataFilterSupplier::mergeSort()
         DataReader* headerReader;
         if (blocks[0].dataReaderIsBuffer) 
         {
-            headerReader = readerSupplier->getDataReader(1, 0, 0.0, headerSize + 4096);
-/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): allocating new header reader\n");
+            headerReader = readerSupplier->getDataReader(1, 0, 0.0, 0);
             if (!headerReader->init(tempFileName)) {
                 WriteErrorMessage("SortedDataFilterSupplier::mergeSort: reader->init(%s) failed for headerReader\n", tempFileName);
                 soft_exit(1);
             }
         } else {
-/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): using existing header reader\n");
             headerReader = blocks[0].reader;
         }
         headerReader->reinit(0, headerSize);
@@ -1295,7 +1293,6 @@ SortedDataFilterSupplier::mergeSort()
         size_t wbytes;
 		for (size_t left = headerSize; left > 0; ) {
 			if ((!headerReader->getData(&rbuffer, &rbytes)) || rbytes == 0) {
-/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): calling nextBatch()\n");
                 headerReader->nextBatch();
 				if (!headerReader->getData(&rbuffer, &rbytes)) {
 					WriteErrorMessage( "read header failed, left %lld, headerSize %lld\n", left, headerSize);
@@ -1303,7 +1300,7 @@ SortedDataFilterSupplier::mergeSort()
 					soft_exit(1);
 				}
 			}
-/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): got %lld bytes\n", rbytes);
+
 			if ((! writer->getBuffer(&wbuffer, &wbytes)) || wbytes == 0) {
 				writer->nextBatch();
 				if (! writer->getBuffer(&wbuffer, &wbytes)) {
@@ -1314,7 +1311,7 @@ SortedDataFilterSupplier::mergeSort()
 			size_t xfer = min(left, min((size_t) rbytes, wbytes));
 			_ASSERT(xfer > 0 && xfer <= UINT32_MAX);
 			memcpy(wbuffer, rbuffer, xfer);
-/*BJB*/ fprintf(stderr, "SortedDataFilterSupplier::mergeSort(): advancing %lld bytes\n", xfer);
+
             headerReader->advance(xfer);
 			writer->advance((unsigned) xfer);
 			left -= xfer;

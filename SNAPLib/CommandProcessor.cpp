@@ -36,7 +36,7 @@ Revision History:
 #include "Compat.h"
 #include "HitDepth.h"
 
-const char *SNAP_VERSION = "2.0.2.issue164.7";
+const char *SNAP_VERSION = "2.0.2.issue164.8";
 
 static void usage()
 {
