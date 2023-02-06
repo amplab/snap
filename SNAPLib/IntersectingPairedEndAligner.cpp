@@ -879,10 +879,11 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                 scoreLimit = computeScoreLimit(nonALTAlignment, &scoresForAllAlignments, &scoresForNonAltAlignments, __max(mate->largestBigIndelDetected, __min(candidate->largestBigIndelDetected, fewerEndScore)));
 
                 _ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
+
                 //
-                // Exclude it if it's strictly smaller than minSpacing; hence, minSpacing -1.
+                // Exclude it if it's strictly smaller than minSpacing; hence, minSpacing - 1.
                 //
-                if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing -1) && ((mate->bestPossibleScore <= scoreLimit - fewerEndScore))) {
+                if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing - 1) && ((mate->bestPossibleScore <= scoreLimit - fewerEndScore))) {
                     //
                     // It's within the range and not necessarily too poor of a match.  Consider it.
                     //
@@ -1063,7 +1064,7 @@ IntersectingPairedEndAligner::alignLandauVishkin(
                                 }
 
                                 (*nLVCandidatesForAffineGap)++;
-                            }
+                            } // if not eliminatedByMerge
 
                             if (nonALTAlignment) {
                                 scoresForNonAltAlignments.updateBestHitIfNeeded(pairScore, pairAGScore, pairProbability, fewerEndScore, readWithMoreHits, fewerEndGenomeLocationOffset, candidate, mate);
@@ -3369,7 +3370,7 @@ IntersectingPairedEndAligner::scoreLocation(
         *totalIndelsLV = totalIndels1 + totalIndels2;
     } else {
         *score = ScoreAboveLimit;
-        *agScore = -1;
+        *agScore = ScoreAboveLimit;
         *matchProbability = 0.0;
     }
 
