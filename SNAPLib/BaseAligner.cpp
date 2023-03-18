@@ -693,7 +693,7 @@ Return Value:
             //
             // And finally, try scoring.
             //
-            if (score(
+            bool success = score(
                 false,
                 read,
                 primaryResult,
@@ -706,18 +706,21 @@ Return Value:
                 maxCandidatesForAffineGapBufferSize,
                 nCandidatesForAffineGap,
                 candidatesForAffineGap,
-                useHamming)) {
+                useHamming);
 
+            if (overflowedSecondaryResultsBuffer) {
+                return false;
+            }
+
+            if (success) {
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("Final result score %d MAPQ %d at %s:%llu\n", primaryResult->score, primaryResult->mapq,
                     genome->getContigAtLocation(primaryResult->location)->name, primaryResult->location - genome->getContigAtLocation(primaryResult->location)->beginningLocation);
 #endif  // _DEBUG
-                if (overflowedSecondaryResultsBuffer) {
-                    return false;
-                }
+
                 finalizeSecondaryResults(read[FORWARD], primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, primaryResult->score);
                 return true;
-            } // If score says we have a difinitive answer
+            } // If score says we have a definitive answer
         } // If we applied a seed, and so something's changed.
     } // While we're still applying seeds
 
