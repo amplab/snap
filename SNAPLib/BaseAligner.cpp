@@ -1292,6 +1292,21 @@ Return Value:
 
                     bool foundAlignment = useHamming ? (score1Gapless != ScoreAboveLimit && score2Gapless != ScoreAboveLimit) : (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit);
 
+                    if (foundAlignment && genomeLocationOffset != 0 && 
+                        NULL == genome->getSubstring(genomeLocation + genomeLocationOffset, genomeDataLength)) {
+                        //
+                        // We had an indel that pushed the alignment to cross a contig boundary.  Just dump it
+                        // (though maybe hard clipping is more approproiate).
+                        //
+                        foundAlignment = false;
+#ifdef  _DEBUG
+                        if (_DumpAlignments) {
+                            printf("\t\t Rejected candidate alignment at %s because an indel caused it to cross a contig boundary\n",
+                                genome->genomeLocationInStringForm(genomeLocation.location, genomeLocationBuffer, genomeLocationBufferSize));
+                        }
+#endif  // _DEBUG
+                    }
+
                     if (foundAlignment) {
                         score = score1 + score2;
                         scoreGapless = score1Gapless + score2Gapless;
@@ -1302,7 +1317,6 @@ Return Value:
                         // Adjust the genome location based on any indels that we found.
                         //
                         genomeLocation += genomeLocationOffset;
-
 
                         agScore = agScore1 + agScore2;
 
