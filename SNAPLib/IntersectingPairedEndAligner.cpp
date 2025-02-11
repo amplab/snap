@@ -3359,6 +3359,19 @@ IntersectingPairedEndAligner::scoreLocation(
         agScore2 = (seedOffset - score2) * matchReward - score2 * subPenalty;
     }
 
+    if (0 != *genomeLocationOffset && NULL == genome->getSubstring(genomeLocation + *genomeLocationOffset, genomeDataLength)) {
+        // 
+        // We adjusted the alignment offset due to an indel in such a way that it now crosses a contig boundary.
+        // Dump the alignment.
+        //
+#ifdef _DEBUG
+        if (_DumpAlignments) {
+            printf("Rejecting alignment candidate because an indel caused a contig boundary cross\n");
+        }
+#endif  // _DEBUG
+        score2 = ScoreAboveLimit;
+    }
+
     if (score1 != ScoreAboveLimit && score2 != ScoreAboveLimit) {
         *score = score1 + score2;
         _ASSERT(*score <= scoreLimit);
