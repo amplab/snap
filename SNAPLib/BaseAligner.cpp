@@ -1492,8 +1492,15 @@ Return Value:
                     // care about the best alignment. Stop now but mark the result as MultipleHits because we're not
                     // confident that it's the best one.  We don't support mapq in this secnario, because we haven't
                     // explored enough to compute it.
+
+
+                    (altAwareness ? scoresForNonAltAlignments : scoresForAllAlignments).fillInSingleAlignmentResult(primaryResult, popularSeedsSkipped);
+                    //
+                    // Force MAPQ 0 in this case, since we didn't explore the whole space and can't say.
+                    //
                     primaryResult->status = MultipleHits;
                     primaryResult->mapq = 0;
+                    firstALTResult->status = NotFound;
                     return true;
                 }
 
