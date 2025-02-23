@@ -154,7 +154,7 @@ AlignerOptions::usage()
             "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
             "  -S   suppress additional processing (sorted BAM output only)\n"
             "       i=index, d=duplicate marking\n"
-            "  -f   stop on first match within edit distance limit (filtering mode)\n"
+            "  -f   stop on first match within edit distance limit (filtering mode, single-end only)\n"
             "  -F   filter output (a=aligned only, s=single hit only (MAPQ >= %d), u=unaligned only, l=long enough to align (see -mrl))\n"
             "  -E   an alternate (and fully general) way to specify filter options.  Emit only these types s = single hit (MAPQ >= %d), m = multiple hit (MAPQ < %d),\n"
             "       x = not long enough to align, u = unaligned, b = filter must apply to both ends of a paired-end read.  Combine the letters after\n"
