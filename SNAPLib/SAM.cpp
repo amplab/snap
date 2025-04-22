@@ -2833,7 +2833,8 @@ SAMFormat::validateCigarString(
 	const char *reference = genome->getSubstring(genomeLocation, dataLength);
 
 	if (NULL == reference) {
-		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", GenomeLocationAsInt64(genomeLocation));
+		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld, data length %lld, read ID %.*s cigar string %.*s\n", GenomeLocationAsInt64(genomeLocation), dataLength,
+                            read->getIdLength(), read->getId(), cigarBufLen, cigarBuf);
         printRead(genome, read, genomeLocation);
 		soft_exit(1);
 	}
