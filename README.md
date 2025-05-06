@@ -13,15 +13,7 @@ need for several pipeline stages used by other aligners.
 
 ## Binaries
 
-The SNAP executable
-- [v2.0.2 For Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpYCkpLlDktZnVaow?e=QRDhs4)
-- [v2.0.2 for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpZQUgOEMrmA5qaLA?e=eUNeHZ)
-- [v2.0.0 for OSX](https://1drv.ms/u/s!AhuEg_0yZD86hcphrIjwoeTjdSvgoA?e=coSU85)
-
-The SNAPCommand tool
-- [SNAPCommand for Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpdvv0ZBdB1BqF57g?e=IHVbq2>)
-- [SNAPCommand for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=vXH8y6)
-- [SNAPCommand for OSX](https://1drv.ms/u/s!AhuEg_0yZD86hcpgy-ONBaw0DjFpTQ?e=cMc6eE)
+Current binaries are available on this GitHub page under "releases"
 
 
 ## Documentation
@@ -39,6 +31,6 @@ When you build it, you will have to set it to build for x64, not "Any CPU" or 32
 
 For Linux, simply type `make`. Requirements:
 - g++ version 4.8.5 or later
-- zlib 1.2.11 or later from http://zlib.net/
+- zlib 1.2.11 or later from http://zlib.net/.  On Ubuntu, do sudo apt install libz1g-dev
 
 
