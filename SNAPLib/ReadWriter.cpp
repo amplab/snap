@@ -436,8 +436,10 @@ SimpleReadWriter::writePairs(
         // Write all of the pair alignments into the buffer.
         //
         for (int whichAlignmentPair = 0; whichAlignmentPair < nResults; whichAlignmentPair++) {
-            reads[0]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[0]);
-            reads[1]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[1]);
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+                reads[whichRead]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[0]);
+                reads[whichRead]->setAdditionalBackClipping(0);
+            }
 
             GenomeLocation locations[2];
             locations[0] = result[whichAlignmentPair].status[0] != NotFound ? result[whichAlignmentPair].location[0] : InvalidGenomeLocation;
@@ -515,6 +517,7 @@ SimpleReadWriter::writePairs(
             for (int whichAlignment = 0; whichAlignment < nSingleResults[whichRead]; whichAlignment++) {
                 int addFrontClipping;
                 reads[whichRead]->setAdditionalFrontClipping(singleResults[whichRead]->clippingForReadAdjustment);
+                reads[whichRead]->setAdditionalBackClipping(0);
 
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
@@ -545,12 +548,10 @@ SimpleReadWriter::writePairs(
                                 cumulativePositiveAddFrontClipping += addFrontClipping;
                                 if (singleResults[whichRead][whichAlignment].direction == FORWARD) {
                                     reads[whichRead]->setAdditionalFrontClipping(-cumulativePositiveAddFrontClipping);
-                                }
-                                else {
+                                } else {
                                     reads[whichRead]->setAdditionalBackClipping(-cumulativePositiveAddFrontClipping);
                                 }
-                            }
-                            else { // Deletion
+                            } else { // Deletion
                                 location += addFrontClipping;
                             }
                         }
@@ -575,8 +576,7 @@ SimpleReadWriter::writePairs(
                             location = InvalidGenomeLocation;
                             singleResults[whichRead][whichAlignment].score = -1;
                             singleResults[whichRead][whichAlignment].direction = FORWARD;
-                        }
-                        else {
+                        } else {
                             if (addFrontClipping > 0) {
                                 cumulativePositiveAddFrontClipping += addFrontClipping;
                                 reads[whichRead]->setAdditionalFrontClipping(cumulativePositiveAddFrontClipping);
