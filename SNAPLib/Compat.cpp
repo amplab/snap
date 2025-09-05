@@ -31,6 +31,8 @@ Revision History:
 #include <err.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #endif
 #include "exit.h"
 #ifdef PROFILE_WAIT
@@ -143,7 +145,27 @@ _int64 timeInNanos()
 
     LARGE_INTEGER perfCount;
     QueryPerformanceCounter(&perfCount);
-    return (perfCount.QuadPart * (_int64)1000000000) / performanceFrequency;
+    const _int64 billion = 1000000000;  // ns / s
+
+    //
+    // We have to be careful here to avoid _int64 overflow and resulting madness.
+    //
+    // If QPC returns t and QPF returns f, then we're trying to compute t * billion / f.
+    // However, f is typically, say, 10^7.  So if we just used that expression then we'd
+    // wrap every 2^64 / 10^(7+9) seconds, i.e., ~1844s or almost twice/hour.  That's not OK.
+    // 
+    // Conversely, if we used t * (billion/f) then if f doesn't go evenly into a billion
+    // we'd have a rate error, which is bad and subtle.
+    //
+    // Instead, if we define F as floor(billion/f) (the whole part of ticks/ns), and r as billion%f (the remainder) 
+    // then we have (in real math) timeInNanos() = t * floor(billion/f) + t * (r/f).
+    // The first term wraps every 2^64 ns, which is ~584 years and furthermore is an integer
+    // since both t and floor(billion/f) are integers, so we don't need to worry about it for either wrapping or loss of precision.
+    // The second term will wrap less often, since r/f < 1.  To do it in integer math, we just reverse the parens and so have as our final
+    // formula timeInNanos() = t * floor(billion/f) + (t*r)/f.
+    //
+
+    return perfCount.QuadPart * (billion / performanceFrequency) + (perfCount.QuadPart * billion % performanceFrequency) / performanceFrequency;
 }
 
 void AcquireUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock) {
@@ -222,6 +244,11 @@ void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread
     if (!SetThreadAffinityMask(GetCurrentThread(),((unsigned _int64)1) << processorNumber)) {
         WriteErrorMessage("Binding thread to processor %d failed, %d\n",processorNumber,GetLastError());
     }
+}
+
+bool DoesThreadHaveProcessorAffinitySet()
+{
+    return false;   // This is harder to do in Windows than you'd think, so we just no-op it.
 }
 
 int InterlockedIncrementAndReturnNewValue(volatile int *valueToIncrement)
@@ -309,11 +336,13 @@ _int64 QueryFileSize(const char *fileName) {
         WriteErrorMessage("Unable to open file '%s' for QueryFileSize, %d\n", fileName, GetLastError());
         soft_exit(1);
     }
+
     LARGE_INTEGER fileSize;
     if (!GetFileSizeEx(hFile,&fileSize)) {
         WriteErrorMessage("GetFileSize failed, %d\n",GetLastError());
         soft_exit(1);
     }
+
     CloseHandle(hFile);
 
     return fileSize.QuadPart;
@@ -487,6 +516,8 @@ public:
 
     virtual bool close();
 
+    virtual _int64 getSize();
+
     class Writer : public AsyncFile::Writer
     {
     public:
@@ -511,7 +542,9 @@ public:
         WindowsAsyncFile*   file;
         bool                writing;
         bool                queueHead;  // Is this the queue head element and not really a Writer?
-        OVERLAPPED          lap;
+        _int64              nLaps;
+        int                 nLapsActive;
+        OVERLAPPED          *laps;
 
         Writer* writeQueueNext;
         Writer* writeQueuePrev;
@@ -520,11 +553,15 @@ public:
         void*               writeBuffer;
         size_t              writeLength;
         size_t              writeOffset;
-        size_t*             writeBytesWritten;
+        DWORD*              bytesWritten;       // A place for WriteFile to record what it actually did
+        size_t*             writeBytesWritten;  // where we return the total written 
+        size_t              writeBytesWrittenBuffer;    // if the user passes in null, we just squirrel it away here
 
         int                 squirrel;   // A squirreled-away copy of the first bytes of the buffer at write time.  It's used to assert that the buffer hasn't been overwritten when the write completes.
 
         void launchWrite(); //Actually send the write down to Windows
+
+        const int maxWriteSize = 128 * 1024 * 1024; // 128MB seems like a big enough write even for very wide array storage
     }; // Writer
 
 
@@ -546,6 +583,7 @@ public:
         WindowsAsyncFile*   file;
         bool                reading;
         OVERLAPPED          lap;
+        size_t*             out_bytes_read;
     }; // Reader
 
     virtual AsyncFile::Reader* getReader();
@@ -583,6 +621,19 @@ WindowsAsyncFile::open(
     return new WindowsAsyncFile(hFile);
 }
 
+    _int64
+WindowsAsyncFile::getSize()
+{
+        LARGE_INTEGER liSize;
+
+        if (!GetFileSizeEx(hFile, &liSize)) {
+            WriteErrorMessage("WindowsAsyncFile: GetFileSizeEx() failed, %d\n", GetLastError());
+            soft_exit(1);
+        }
+
+        return liSize.QuadPart;
+}
+
 WindowsAsyncFile::WindowsAsyncFile(
     HANDLE i_hFile)
     : hFile(i_hFile)
@@ -597,11 +648,15 @@ WindowsAsyncFile::~WindowsAsyncFile()
 
 WindowsAsyncFile::Writer::~Writer()
 {
-    if (INVALID_HANDLE_VALUE != lap.hEvent) 
-    {
-        CloseHandle(lap.hEvent);
-        lap.hEvent = INVALID_HANDLE_VALUE;
-    }
+    if (laps != NULL) {
+        for (int i = 0; i < nLaps; i++) {
+            if (INVALID_HANDLE_VALUE != laps[i].hEvent) {
+                CloseHandle(laps[i].hEvent);
+            }
+        } // for each lap
+
+        delete[] laps;
+    } // if we have laps
 
     if (INVALID_HANDLE_VALUE != hWriteStartedEvent) 
     {
@@ -659,12 +714,16 @@ WindowsAsyncFile::Writer::Writer()
     writeQueueNext = writeQueuePrev = this;
     writing = false;
     file = NULL;
-    lap.hEvent = INVALID_HANDLE_VALUE;
+    nLaps = 0;
+    nLapsActive = 0;
+    laps = NULL;
     queueHead = TRUE;
     hWriteStartedEvent = INVALID_HANDLE_VALUE;
     writeBuffer = NULL;
     writeOffset = 0;
     writeLength = 0;
+    bytesWritten = NULL;
+    squirrel = 0;   // Just to make the compiler not complain about uninitialized stuff
     writeBytesWritten = NULL;
 }
 
@@ -676,10 +735,12 @@ WindowsAsyncFile::getWriter()
 
 // ctor for normal (non-queue head) Writers
 WindowsAsyncFile::Writer::Writer(WindowsAsyncFile* i_file)
-    : file(i_file), writing(false), queueHead(FALSE), writeBuffer(NULL), writeOffset(0), writeLength(0), writeBytesWritten(NULL)
+    : file(i_file), writing(false), queueHead(FALSE), writeBuffer(NULL), writeOffset(0), writeLength(0), bytesWritten(NULL), squirrel(0), writeBytesWritten(NULL)
 {
     writeQueueNext = writeQueuePrev = NULL;
-    lap.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
+    nLaps = 0;
+    nLapsActive = 0;
+    laps = NULL;
     hWriteStartedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 }
 
@@ -687,7 +748,13 @@ WindowsAsyncFile::Writer::Writer(WindowsAsyncFile* i_file)
 WindowsAsyncFile::Writer::close()
 {
     waitForCompletion();
-    return CloseHandle(lap.hEvent) ? true : false;
+    for (int i = 0; i < nLaps; i++) {
+        CloseHandle(laps[i].hEvent);
+    }
+
+    CloseHandle(hWriteStartedEvent);
+
+    return true;
 }
 
     bool
@@ -706,8 +773,18 @@ WindowsAsyncFile::Writer::beginWrite(
     writeBuffer = buffer;
     writeLength = length;
     writeOffset = offset;
-    writeBytesWritten = bytesWritten;
-    squirrel = *((int*)buffer);
+
+    if (bytesWritten == NULL) {
+        writeBytesWritten = &writeBytesWrittenBuffer;
+    } else {
+        writeBytesWritten = bytesWritten;
+    }
+
+    if (length < sizeof(int)) {
+        squirrel = 0;
+    } else {
+        squirrel = *((int*)buffer);
+    }
 
     ResetEvent(hWriteStartedEvent);
 
@@ -720,7 +797,7 @@ WindowsAsyncFile::Writer::beginWrite(
 
     if (!weAreWriter) {
         //
-        // Someone else owns the queue and will start out write.
+        // Someone else owns the queue and will start our write.
         //
         return true;
     }
@@ -749,17 +826,60 @@ WindowsAsyncFile::Writer::beginWrite(
     void
 WindowsAsyncFile::Writer::launchWrite()
 {
+    _int64 nNeededLaps = (writeLength + maxWriteSize - 1) / maxWriteSize;
+
+    if (nNeededLaps > nLaps) {
+        //
+        // Need more laps because we have to break this into more chunks than we ever have before.
+        //
+        OVERLAPPED* newLaps = new OVERLAPPED[nNeededLaps];
+        for (_int64 i = 0; i < nLaps; i++) {
+            newLaps[i] = laps[i];   // This mostly just copies the event handle
+        }
+
+        for (_int64 i = nLaps; i < nNeededLaps; i++) {
+            newLaps[i].hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+        }
+
+        delete[] laps;
+        laps = newLaps;
+        nLaps = nNeededLaps;
+
+        if (NULL != bytesWritten) {
+            delete[] bytesWritten;
+        }
+        bytesWritten = new DWORD[nLaps];
+    } // If we need more OVERLAPPEDs.
+
     LARGE_INTEGER liWriteOffset;
     liWriteOffset.QuadPart = writeOffset;
-    lap.OffsetHigh = liWriteOffset.HighPart;
-    lap.Offset = liWriteOffset.LowPart;
 
-    if (!WriteFile(file->hFile, writeBuffer, (DWORD)writeLength, (LPDWORD)writeBytesWritten, &lap)) {
-        if (ERROR_IO_PENDING != GetLastError()) {
-            WriteErrorMessage("WindowsAsyncFile: WriteFile failed, %d\n", GetLastError());
-            soft_exit(1);
+    size_t amountLeftToWrite = writeLength;
+    size_t amountWritten = 0;
+
+    _ASSERT(nLapsActive == 0);
+
+    while (amountLeftToWrite > 0) {
+        _ASSERT(nLapsActive < nLaps);
+
+        DWORD amountToWrite = (DWORD)__min(maxWriteSize, amountLeftToWrite);
+
+        laps[nLapsActive].OffsetHigh = liWriteOffset.HighPart;
+        laps[nLapsActive].Offset = liWriteOffset.LowPart;
+
+        if (!WriteFile(file->hFile, (char*)writeBuffer + amountWritten, amountToWrite, &bytesWritten[nLapsActive], &laps[nLapsActive])) {
+            if (ERROR_IO_PENDING != GetLastError()) {
+                WriteErrorMessage("WindowsAsyncFile: WriteFile of %d bytes failed, %d\n", amountToWrite, GetLastError());
+                soft_exit(1);
+            }
         }
-    }
+
+        liWriteOffset.QuadPart += amountToWrite;
+        amountWritten += amountToWrite;
+        amountLeftToWrite -= amountToWrite;
+        nLapsActive++;
+    } // while we have something to write
+
 } // WindowsAsyncFile::Writer::launchWrite
 
     bool
@@ -769,15 +889,23 @@ WindowsAsyncFile::Writer::waitForCompletion()
         if (WAIT_OBJECT_0 != WaitForSingleObject(hWriteStartedEvent, INFINITE)) {
             WriteErrorMessage("WaitForSingleObject failed in WindowsAsnycWriter, %d\n", GetLastError());
             soft_exit(1);
-        }       
+        }   
 
-        DWORD nBytesTransferred;
-        if (!GetOverlappedResult(file->hFile,&lap,&nBytesTransferred,TRUE)) {
-            return false;
+
+        *writeBytesWritten = 0;
+
+        for (_int64 i = 0; i < nLapsActive; i++) {
+            DWORD nBytesTransferred;
+            if (!GetOverlappedResult(file->hFile, &laps[i], &nBytesTransferred, TRUE)) {
+                return false;
+            }
+
+            *writeBytesWritten += nBytesTransferred;
         }
 
-        xassert(squirrel == *((int*)writeBuffer));
+        xassert(writeLength < sizeof(int) || squirrel == *((int*)writeBuffer));
         writing = false;
+        nLapsActive = 0;
 
         ResetEvent(hWriteStartedEvent);
     }
@@ -792,7 +920,7 @@ WindowsAsyncFile::getReader()
 
 WindowsAsyncFile::Reader::Reader(
     WindowsAsyncFile* i_file)
-    : file(i_file), reading(false)
+    : file(i_file), reading(false), out_bytes_read(NULL)
 {
     lap.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
 }
@@ -813,14 +941,17 @@ WindowsAsyncFile::Reader::beginRead(
     if (! waitForCompletion()) {
         return false;
     }
+    out_bytes_read = bytesRead;
     lap.OffsetHigh = (DWORD) (offset >> (8 * sizeof(DWORD)));
     lap.Offset = (DWORD) offset;
-    if (!ReadFile(file->hFile, buffer,(DWORD) length, (LPDWORD) bytesRead, &lap)) {
+    DWORD nBytesRead;
+    if (!ReadFile(file->hFile, buffer,(DWORD) length, &nBytesRead, &lap)) {
         if (ERROR_IO_PENDING != GetLastError()) {
             WriteErrorMessage("WindowsSAMWriter: WriteFile failed, %d\n",GetLastError());
             return false;
         }
     }
+    *out_bytes_read = nBytesRead;
     reading = true;
     return true;
 }
@@ -833,6 +964,8 @@ WindowsAsyncFile::Reader::waitForCompletion()
         if (!GetOverlappedResult(file->hFile,&lap,&nBytesTransferred,TRUE)) {
             return false;
         }
+        *out_bytes_read = nBytesTransferred;
+        out_bytes_read = NULL;
         reading = false;
     }
     return true;
@@ -1258,7 +1391,7 @@ public:
 
     bool waitWithTimeout(_int64 timeoutInMillis) {
         struct timespec wakeTime;
-#ifdef __LINUX__
+#if defined(__linux__)
         clock_gettime(CLOCK_REALTIME, &wakeTime);
         wakeTime.tv_nsec += timeoutInMillis * 1000000;
 #elif defined(__MACH__)
@@ -1455,6 +1588,24 @@ void BindThreadToProcessor(unsigned processorNumber)
 #endif
 }
 
+bool DoesThreadHaveProcessorAffinitySet()
+{
+#ifdef __linux__
+    cpu_set_t cpuset;
+    if (sched_getaffinity(0, sizeof(cpu_set_t), &cpuset) != 0) {
+        perror("sched_getaffinity");
+    } else {
+        for (int i = 0; i < GetNumberOfProcessors(); i++) {
+            if (!CPU_ISSET(i, &cpuset)) {
+                return true;
+            } // if this CPU is clear
+        } // for each CPU
+    } // if sched_getaffinity worked
+#endif
+
+    return false;   // We didn't find a CPU we can't use, or else we got an error or aren't on Linux, in which case the default is false.
+}
+
 unsigned GetNumberOfProcessors()
 {
     return (unsigned) sysconf(_SC_NPROCESSORS_ONLN);
@@ -1468,7 +1619,10 @@ void SleepForMillis(unsigned millis)
 _int64 QueryFileSize(const char *fileName)
 {
     int fd = open(fileName, O_RDONLY);
-    _ASSERT(fd != -1);
+    if (fd < 0) {
+        WriteErrorMessage("Unable to open file '%s' for query file size, errno %d (%s)\n", fileName, errno, strerror(errno));
+        soft_exit(1);
+    }
     struct stat sb;
     int r = fstat(fd, &sb);
     _ASSERT(r != -1);
@@ -1562,7 +1716,7 @@ OpenMemoryMappedFile(
 {
   int fd = open(filename, write ? O_CREAT | O_RDWR : O_RDONLY, S_IRUSR | S_IWUSR);
     if (fd < 0) {
-        warn("OpenMemoryMappedFile %s failed", filename);
+        WriteErrorMessage("OpenMemoryMappedFile %s failed\n", filename);
         return NULL;
     }
     // todo: large page support
@@ -1570,13 +1724,13 @@ OpenMemoryMappedFile(
     size_t extra = offset % page;
     void* map = mmap(NULL, length + extra, (write ? PROT_WRITE : 0) | PROT_READ, MAP_PRIVATE, fd, offset - extra);
     if (map == NULL || map == MAP_FAILED) {
-        warn("OpenMemoryMappedFile %s mmap failed", filename);
+        WriteErrorMessage("OpenMemoryMappedFile %s mmap failed\n", filename);
         close(fd);
         return NULL;
     }
     int e = madvise(map, length + extra, sequential ? MADV_SEQUENTIAL : MADV_RANDOM);
     if (e < 0) {
-        warn("OpenMemoryMappedFile %s madvise failed", filename);
+        WriteErrorMessage("OpenMemoryMappedFile %s madvise failed; this should only affect performance\n", filename);
     }
     MemoryMappedFile* result = new MemoryMappedFile();
     result->fd = fd;
@@ -1600,11 +1754,11 @@ CloseMemoryMappedFile(
 void AdviseMemoryMappedFilePrefetch(const MemoryMappedFile *mappedFile)
 {
   if (madvise(mappedFile->map, mappedFile->length, MADV_SEQUENTIAL)) {
-    WriteErrorMessage("madvise MADV_SEQUENTIAL failed (since it's only an optimization, this is OK).  Errno %d\n", errno);
+    WriteErrorMessage("madvise MADV_SEQUENTIAL failed (since it's only an optimization, this is OK).  Errno %d (%s)\n", errno, strerror(errno));
   }
 
   if (madvise(mappedFile->map, mappedFile->length, MADV_WILLNEED)) {
-    WriteErrorMessage("madvise MADV_WILLNEED failed (since it's only an optimization, this is OK).  Errno %d\n", errno);
+    WriteErrorMessage("madvise MADV_WILLNEED failed (since it's only an optimization, this is OK).  Errno %d (%s)\n", errno, strerror(errno));
   }
 }
 
@@ -1615,9 +1769,10 @@ class PosixAsyncFile : public AsyncFile
 public:
     static PosixAsyncFile* open(const char* filename, bool write);
 
-    PosixAsyncFile(int i_fd);
 
     virtual bool close();
+
+    _int64 getSize();
 
     class Writer : public AsyncFile::Writer
     {
@@ -1636,6 +1791,26 @@ public:
         SingleWaiterObject  ready;
         struct aiocb        aiocb;
         size_t*             result;
+
+        //
+        // The parameters of a write, which are used by launchWrite().  We need to keep
+        // them around because writes may not necessarily write all of the data in a single
+        // call, so we might have to start successive ones for very large IOs.
+        //
+        char*               writeBuffer;
+        size_t              bytesToWrite;
+        size_t              writeOffset;
+
+        size_t              bytesAlreadyWritten;
+
+        int                 writeErrno; // used to communicate any error from the completion routine to waitForCompletion()
+
+
+        bool                launchWrite();
+
+        friend              void sigev_ready_write(union sigval val);
+        void                sigev_ready_called();
+
     };
 
     virtual AsyncFile::Writer* getWriter();
@@ -1657,37 +1832,164 @@ public:
         SingleWaiterObject  ready;
         struct aiocb        aiocb;
         size_t*             result;
+        size_t              bytesToRead;
     };
 
     virtual AsyncFile::Reader* getReader();
 
 private:
-    int         fd;
+
+    //
+    // We can open lots of handles to the same file, so in order to avoid exhausting the 
+    // file descriptor space we keep a cache of them with reference counts.
+    //
+    static ExclusiveLock* cacheLock;    // This starts out as null and then gets initialized using the interlocked swap trick
+
+
+    struct CacheEntry {
+        char*           filename;   // NULL indicates that this is an unused entry.
+        int             referenceCount;
+        int             fd;
+        bool            write;
+        CacheEntry*     next;
+        CacheEntry*     prev;
+
+        void enqueue() {
+            prev = cache;
+            next = cache->next;
+            prev->next = this;
+            next->prev = this;
+        }
+
+        void dequeue()
+        {
+            prev->next = next;
+            next->prev = prev;
+        }
+
+        CacheEntry() : filename(NULL), referenceCount(0), fd(-1), write(false) {}
+
+    };
+
+
+    //
+    // We don't expect there to be too many open files, so we use an unordered list here.
+    //
+    static CacheEntry *cache; // This is the header of the linked list
+
+    struct CacheEntry* cacheEntry;  // This is where our fd is
+
+    PosixAsyncFile(CacheEntry *i_cacheEntry);
+
 };
+
+PosixAsyncFile::CacheEntry *PosixAsyncFile::cache = NULL;
+ExclusiveLock* PosixAsyncFile::cacheLock = NULL;
+
+    _int64
+PosixAsyncFile::getSize()
+{
+    struct stat statBuffer;
+    if (-1 == fstat(cacheEntry->fd, &statBuffer)) {
+        WriteErrorMessage("PosixAsyncFile: fstat failed, %d (%s)\n", errno, strerror(errno));
+        return -1;
+    }
+
+    return statBuffer.st_size;
+}
 
     PosixAsyncFile*
 PosixAsyncFile::open(
     const char* filename,
     bool write)
 {
+    if (cacheLock == NULL) {
+        ExclusiveLock* newLock = new ExclusiveLock();
+        InitializeExclusiveLock(newLock);
+        AcquireExclusiveLock(newLock);
+
+        if (NULL != InterlockedCompareExchangePointerAndReturnOldValue((void * volatile*)&cacheLock, newLock, NULL)) {
+            //
+            // Someone else beat us to it.
+            //
+            ReleaseExclusiveLock(newLock);
+            DestroyExclusiveLock(newLock);
+            delete newLock;
+
+            AcquireExclusiveLock(cacheLock);
+        } else {
+            cache = new CacheEntry;
+            cache->next = cache->prev = cache;
+        }
+    } else {
+        AcquireExclusiveLock(cacheLock);
+    }
+
+    //
+    // Scan the cache to see if we already have this.  The cache is unsorted linear because we expect 
+    // it to be small.
+    //
+    CacheEntry* cacheEntry = cache->next;
+    while (cacheEntry != cache && (cacheEntry->write != write || strcmp(cacheEntry->filename, filename))) {
+        cacheEntry = cacheEntry->next;
+    }
+
+    if (cacheEntry != cache) {
+        //
+        // Cache hit.
+        //
+        cacheEntry->referenceCount++;
+        ReleaseExclusiveLock(cacheLock);
+        return new PosixAsyncFile(cacheEntry);
+    }
+
+    //
+    // It's not in the cache, so make a new entry.
+    //
+
     int fd = ::open(filename, write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
     if (fd < 0) {
-        WriteErrorMessage("Unable to create SAM file '%s', %d\n",filename,errno);
+        ReleaseExclusiveLock(cacheLock);
+        WriteErrorMessage("Unable to open file '%s', %d (%s)\n", filename, errno, strerror(errno));
         return NULL;
     }
-    return new PosixAsyncFile(fd);
+
+    cacheEntry = new CacheEntry;
+
+    cacheEntry->fd = fd;
+    cacheEntry->filename = new char[strlen(filename) + 1];
+    strcpy(cacheEntry->filename, filename);
+    cacheEntry->write = write;
+    cacheEntry->referenceCount = 1;
+    cacheEntry->enqueue();
+
+    ReleaseExclusiveLock(cacheLock);
+
+    return new PosixAsyncFile(cacheEntry);
 }
 
 PosixAsyncFile::PosixAsyncFile(
-    int i_fd)
-    : fd(i_fd)
+    CacheEntry *i_cacheEntry)
+    : cacheEntry(i_cacheEntry)
 {
 }
 
     bool
 PosixAsyncFile::close()
 {
-    return ::close(fd) == 0;
+    bool closeWorked = true;
+
+    AcquireExclusiveLock(cacheLock);
+    cacheEntry->referenceCount--;
+    if (cacheEntry->referenceCount == 0) {
+        cacheEntry->dequeue();
+        delete[] cacheEntry->filename;
+        closeWorked = ::close(cacheEntry->fd) == 0;
+        delete cacheEntry;
+    }
+    ReleaseExclusiveLock(cacheLock);
+
+    return closeWorked;
 }
 
     AsyncFile::Writer*
@@ -1700,6 +2002,7 @@ PosixAsyncFile::Writer::Writer(PosixAsyncFile* i_file)
     : file(i_file), writing(false)
 {
     memset(&aiocb, 0, sizeof(aiocb));
+
     if (! CreateSingleWaiterObject(&ready)) {
         WriteErrorMessage("PosixAsyncFile: cannot create waiter\n");
         soft_exit(1);
@@ -1715,28 +2018,64 @@ PosixAsyncFile::Writer::close()
 }
 
     void
-sigev_ready(
+sigev_ready_read(union sigval val) 
+{
+    SignalSingleWaiterObject((SingleWaiterObject*)val.sival_ptr);
+}
+
+    void
+sigev_ready_write(
     union sigval val)
 {
-    SignalSingleWaiterObject((SingleWaiterObject*) val.sival_ptr);
+    PosixAsyncFile::Writer* writer = (PosixAsyncFile::Writer*)(val.sival_ptr);
+    writer->sigev_ready_called();
 }
+
+    void
+PosixAsyncFile::Writer::sigev_ready_called()
+{
+    _ASSERT(writing);
+
+    ssize_t ret = aio_return(&aiocb);
+    if (ret < 0 && errno != 0) {
+        WriteErrorMessage("PosixAsyncFile Writer aio_return failed, errno %d (%s)\n", errno, strerror(errno));
+        writeErrno = errno;
+    }
+
+    bytesAlreadyWritten += ret;
+    if (bytesAlreadyWritten < bytesToWrite && ret >0) {
+        //
+        // We're not done, launch the next chunk of the write.
+        //
+        if (!launchWrite()) {
+            WriteErrorMessage("PosixAsyncFile::Writer::sigev_ready_called: launch of later portion of buffer failed.  errno %d (%s)\n", errno, strerror(errno));
+            soft_exit(1);
+        }
+    } else {
+        SignalSingleWaiterObject(&ready);
+    }
+} // PosixAsyncFile::Writer::sigev_ready_called
+
 
     void
 aio_setup(
     struct aiocb* control,
-    SingleWaiterObject* ready,
+    void *sigval_ptr,
+    void (*callback)(union sigval),
     int fd,
     void* buffer,
     size_t length,
     size_t offset)
 {
+    memset(control, 0, sizeof(control));
+
     control->aio_fildes = fd;
     control->aio_buf = buffer;
     control->aio_nbytes = length;
     control->aio_offset = offset;
     control->aio_sigevent.sigev_notify = SIGEV_THREAD;
-    control->aio_sigevent.sigev_value.sival_ptr = ready;
-    control->aio_sigevent.sigev_notify_function = sigev_ready;
+    control->aio_sigevent.sigev_value.sival_ptr = sigval_ptr;
+    control->aio_sigevent.sigev_notify_function = callback;
 }
 
 
@@ -1750,13 +2089,33 @@ PosixAsyncFile::Writer::beginWrite(
     if (! waitForCompletion()) {
         return false;
     }
-    aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
+
     result = bytesWritten;
+
+    writeBuffer = (char *)buffer; // We keep writeBuffer as a char * so that we can do math over it in case we get a partially completed write
+    bytesToWrite = length;
+    writeOffset = offset;
+
+    bytesAlreadyWritten = 0;
+    writeErrno = 0;
+
+    writing = true;
+
+    return launchWrite();
+}
+
+    bool
+PosixAsyncFile::Writer::launchWrite()
+{
+    _ASSERT(writing);
+
+    aio_setup(&aiocb, this, sigev_ready_write, file->cacheEntry->fd, writeBuffer + bytesAlreadyWritten, bytesToWrite - bytesAlreadyWritten, writeOffset + bytesAlreadyWritten);
+
     if (aio_write(&aiocb) < 0) {
         warn("PosixAsyncFile aio_write failed");
         return false;
     }
-    writing = true;
+
     return true;
 }
 
@@ -1765,15 +2124,16 @@ PosixAsyncFile::Writer::waitForCompletion()
 {
     if (writing) {
         WaitForSingleWaiterObject(&ready);
-	ResetSingleWaiterObject(&ready);
+	    ResetSingleWaiterObject(&ready);
+
         writing = false;
-        ssize_t ret = aio_return(&aiocb);
-        if (ret < 0 && errno != 0) {
-            warn("PosixAsyncFile Writer aio_return failed");
-            return false;
-        }
+
         if (result != NULL) {
-            *result = max((ssize_t)0, ret);
+            *result = bytesAlreadyWritten;
+        }
+
+        if (writeErrno != 0) {
+            return false;
         }
     }
     return true;
@@ -1813,8 +2173,10 @@ PosixAsyncFile::Reader::beginRead(
     if (! waitForCompletion()) {
         return false;
     }
-    aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
+    aio_setup(&aiocb, &ready, sigev_ready_read, file->cacheEntry->fd, buffer, length, offset);
     result = bytesRead;
+    bytesToRead = length;
+
     if (aio_read(&aiocb) < 0) {
         warn("PosixAsyncFile Reader aio_read failed");
         return false;
@@ -1828,15 +2190,23 @@ PosixAsyncFile::Reader::waitForCompletion()
 {
     if (reading) {
         WaitForSingleWaiterObject(&ready);
-	ResetSingleWaiterObject(&ready);
+	    ResetSingleWaiterObject(&ready);
+
         reading = false;
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0 && errno != 0) {
-            warn("PosixAsyncFile Reader aio_return");
+            WriteErrorMessage("PosixAsyncFile::Reader(0x%llx) aio_return returned %lld errno %d (%s) on fd %d, buffer 0x%llx\n", this, ret, errno, strerror(errno), aiocb.aio_fildes, aiocb.aio_buf);
             return false;
         }
         if (result != NULL) {
             *result = max((ssize_t)0, ret);
+        }
+
+        if (ret != bytesToRead) {
+            WriteErrorMessage(
+                "PosixAsyncFile::beginRead() launched a read that didn't get all of its bytes (it's probably too big).  Please create a git issue to get the dev team to write this code.  Requested size %lld, completed size %lld\n",
+                bytesToRead, ret);
+            soft_exit(1);
         }
     }
     return true;
@@ -1852,6 +2222,8 @@ public:
     static OsxAsyncFile* open(const char* filename, bool write);
 
     OsxAsyncFile(int i_fd);
+
+    _int64 getSize();
 
     virtual bool close();
 
@@ -1897,7 +2269,20 @@ public:
 
 private:
     int         fd;
+    ExclusiveLock lock;
 };
+
+    _int64
+OsxAsyncFile::getSize()
+{
+    struct stat statBuffer;
+    if (-1 == ::fstat(fd, &statBuffer)) {
+        WriteErrorMessage("OsxAsyncFile: fstat failed, %d\n", errno);
+        return -1;
+    }
+
+    return statBuffer.st_size;
+}
 
     OsxAsyncFile*
 OsxAsyncFile::open(
@@ -1916,11 +2301,13 @@ OsxAsyncFile::OsxAsyncFile(
     int i_fd)
     : fd(i_fd)
 {
+    InitializeExclusiveLock(&lock);
 }
 
     bool
 OsxAsyncFile::close()
 {
+    DestroyExclusiveLock(&lock);
     return ::close(fd) == 0;
 }
 
@@ -1948,6 +2335,7 @@ OsxAsyncFile::Writer::beginWrite(
     size_t offset,
     size_t *bytesWritten)
 {
+    AcquireExclusiveLock(&file->lock);
     size_t m = ::lseek(file->fd, offset, SEEK_SET);
     if (m == -1) {
         return false;
@@ -1956,6 +2344,7 @@ OsxAsyncFile::Writer::beginWrite(
     if (bytesWritten) {
       *bytesWritten = n;
     }
+    ReleaseExclusiveLock(&file->lock);
     return n != -1;
 }
 
@@ -1990,6 +2379,7 @@ OsxAsyncFile::Reader::beginRead(
     size_t offset,
     size_t* bytesRead)
 {
+    AcquireExclusiveLock(&file->lock);
     size_t m = ::lseek(file->fd, offset, SEEK_SET);
     if (m == -1) {
         return false;
@@ -1998,6 +2388,7 @@ OsxAsyncFile::Reader::beginRead(
     if (bytesRead) {
         *bytesRead = n;
     }
+    ReleaseExclusiveLock(&file->lock);
     return n != -1;
 }
 
@@ -2164,7 +2555,7 @@ bool createPipe(const char *fullyQualifiedPipeName)
 				return false;
 			}
 
-			WriteErrorMessage("OpenNamedPipe: unexpectedly failed to create named pipe '%s', errno %d\n", fullyQualifiedPipeName, errno);
+			WriteErrorMessage("OpenNamedPipe: unexpectedly failed to create named pipe '%s', errno %d (%s)\n", fullyQualifiedPipeName, errno, strerror(errno));
 			return false;
 		}
 	}
@@ -2175,7 +2566,7 @@ FILE *connectPipe(char *fullyQualifiedPipeName, bool forInput)
 {
 	FILE *pipeFile = fopen(fullyQualifiedPipeName, forInput ? "r" : "w");
 	if (NULL == pipeFile) {
-		WriteErrorMessage("OpenNamedPipe: unable to open pipe file '%s', errno %d\n", fullyQualifiedPipeName, errno);
+		WriteErrorMessage("OpenNamedPipe: unable to open pipe file '%s', errno %d (%s)\n", fullyQualifiedPipeName, errno, strerror(errno));
 	}
 	return pipeFile;
 }
@@ -2235,7 +2626,7 @@ bool connectNamedPipes(NamedPipe *pipe)
 	    lock.l_pid = 0;
 
 	    if (fcntl(fileno(pipe->output), F_SETLKW, &lock) < 0) {
-	        fprintf(stderr,"Unable to clear named pipe lock, errno %d\n", errno);
+	        fprintf(stderr,"Unable to clear named pipe lock, errno %d (%s)\n", errno, strerror(errno));
 	        delete pipe;
 	        return NULL;
 	    }
@@ -2294,7 +2685,7 @@ NamedPipe *OpenNamedPipe(const char *pipeName, bool serverSide)
 	    lock.l_pid = 0;
 
 	    if (fcntl(fileno(pipe->output), F_SETLKW, &lock) < 0) {
-	        fprintf(stderr,"OpenNamedPipe: F_SETLKW failed, errno %d\n", errno);
+	        fprintf(stderr,"OpenNamedPipe: F_SETLKW failed, errno %d (%s)\n", errno, strerror(errno));
 	        delete pipe;
 	        return NULL;
 	    }

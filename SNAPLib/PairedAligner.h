@@ -77,15 +77,22 @@ protected:
     bool                ignoreMismatchedIDs;
     bool                quicklyDropUnpairedReads;
     bool                inferSpacing;
+    bool                useSoftClipping;
     int                 maxSeedsSingleEnd;
     int                 minScoreRealignment;
     int                 minScoreGapRealignmentALT;
     int                 minAGScoreImprovement;
+    int                 flattenMAPQAtOrBelow;
+    bool                enableHammingScoringBaseAligner;
 
     GenomeDistance pairedEndSpacing[DEFAULT_BATCH_SIZE_IS_ESTIMATION];      // Spacing between reads aligned as FR pairs
     static int compareBySpacing(const void *first_, const void *second_);
 
 	friend class AlignerContext2;
+
+private:
+    
+    void runIterationThreadImpl(Read **reads);   // An array of NUM_READS_PER_PAIR into which to write the reads
 };
 
 struct PairedAlignerOptions : public AlignerOptions
@@ -109,4 +116,5 @@ struct PairedAlignerOptions : public AlignerOptions
     int         minScoreRealignment;
     int         minScoreGapRealignmentALT;
     int         minAGScoreImprovement;
+    bool        enableHammingScoringBaseAligner;
 };

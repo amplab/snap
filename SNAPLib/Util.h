@@ -6,6 +6,7 @@
 #include "Tables.h"
 #include "exit.h"
 #include "GenericFile.h"
+
 using std::max;
 using std::min;
 
@@ -541,7 +542,12 @@ private:
 // Version of fgets that dynamically (re-)allocates the buffer to be big enough to fit the whole line
 //
 char *reallocatingFgets(char **buffer, int *io_bufferSize, FILE *stream);
+class DataReader;   // Need this to avoid an include file loop
+char* reallocatingFgets(char** buffer, int* io_bufferSize, DataReader *stream);
 char *reallocatingFgetsGenericFile(char **buffer, int *io_bufferSize, GenericFile *file);
 
 #define xassert(cond) {if (!(cond)) {WriteErrorMessage("xassert failed at %s:%d\n", __FILE__, __LINE__); *((volatile int*) NULL) = 42; }} // An assert that gets checked even when not in the debug build.
+
+bool isFilenameGzip(const char* filename);
+DataReader* getDefaultOrGzipDataReader(const char* filename);
 

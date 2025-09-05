@@ -39,6 +39,7 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     alignedAsPairs(0),
     extra(i_extra),
     lvCalls(0),
+    affineGapCalls(0),
     millisReading(0),
     millisAligning(0),
     millisWriting(0),
@@ -104,6 +105,7 @@ AlignerStats::add(
     notFound += other->notFound;
     alignedAsPairs += other->alignedAsPairs;
     lvCalls += other->lvCalls;
+    affineGapCalls += other->affineGapCalls;
     millisReading += other->millisReading;
     millisAligning += other->millisAligning;
     millisWriting += other->millisWriting;

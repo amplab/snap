@@ -26,6 +26,7 @@ Revision History:
 #include "Util.h"
 #include "Error.h"
 #include "GenericFile.h"
+#include "DataReader.h"
 
 
 _int64 FirstPowerOf2GreaterThanOrEqualTo(_int64 value)
@@ -274,3 +275,100 @@ char *reallocatingFgetsGenericFile(char **buffer, int *io_bufferSize, GenericFil
     GenericFileFGetsObject fgetsObject(file);
     return genericReallocatingFgets(buffer, io_bufferSize, &fgetsObject);
 }
+
+class DataReaderFGetsObject : public FgetsObject
+{
+public:
+    DataReaderFGetsObject(DataReader* _dataReader) : dataReader(_dataReader) {}
+
+    virtual char* fgets(char* s, int size) {
+        char* buffer = NULL;
+        _int64 validBytes = 0;
+        _int64 offsetInBuffer = 0;
+        int bytesCopied = 0;
+        int amountAlreadyAdvanced = 0;
+
+        while (bytesCopied < size - 1) {
+            if (offsetInBuffer >= validBytes) {
+                dataReader->advance(offsetInBuffer);
+
+                if (!dataReader->getData(&buffer, &validBytes)) {
+                    if (dataReader->isEOF()) {
+                        if (bytesCopied != 0) {
+                            s[bytesCopied] = '\0';
+                            return s;
+                        }
+                        return NULL;
+                    }
+                    dataReader->nextBatch();
+
+                    if (!dataReader->getData(&buffer, &validBytes)) {
+                        if (dataReader->isEOF()) {
+                            if (bytesCopied != 0) {
+                                s[bytesCopied] = '\0';
+                                return s;
+                            }
+                            return NULL;
+                        }
+                        WriteErrorMessage("DataReaderFGetsObject: getData failed not at EOF\n");
+                        soft_exit(1);
+                    } // getData failed (twice)
+
+                    offsetInBuffer = 0; 
+                } // getData failed (once)
+            } // If we're past the end of the buffer
+
+            s[bytesCopied] = buffer[offsetInBuffer];
+            offsetInBuffer++;
+            bytesCopied++;
+
+            if (s[bytesCopied-1] == '\n') {
+                break;
+            }
+
+
+        } // while we haven't run out of space to copy into (or hit a newline, which exits in the middle of the loop)
+
+        s[bytesCopied] = '\0';
+        dataReader->advance(offsetInBuffer);
+
+        return s;
+    } // fgets
+
+
+private:
+    DataReader* dataReader;
+};
+
+char* reallocatingFgets(char** buffer, int* io_bufferSize, DataReader* stream)
+{
+    DataReaderFGetsObject fgetsObject(stream);
+    return genericReallocatingFgets(buffer, io_bufferSize, &fgetsObject);
+}
+
+bool isFilenameGzip(const char* filename)
+{
+    return util::stringEndsWith(filename, ".gz") || util::stringEndsWith(filename, ".gzip");
+}
+
+DataReader* getDefaultOrGzipDataReader(const char* filename)
+{
+    DataSupplier* dataSupplier;
+    size_t filenameLen = strlen(filename);
+    if (isFilenameGzip(filename)) {
+        dataSupplier = DataSupplier::GzipDefault;
+    } else {
+        dataSupplier = DataSupplier::Default;
+    }
+
+    DataReader* dataReader = dataSupplier->getDataReader(3, 1024, 10.0, 1024 * 1024);
+
+    if (!dataReader->init(filename)) {
+        delete dataReader;
+        return NULL;
+    }
+
+    dataReader->reinit(0, 0);
+
+    return dataReader;
+} // getDefaultOrGzipDataReader

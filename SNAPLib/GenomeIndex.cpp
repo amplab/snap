@@ -38,12 +38,14 @@ Revision History:
 #include "exit.h"
 #include "Error.h"
 #include "directions.h"
+#include "DataReader.h"
+#include "AlignerOptions.h"
 
 using namespace std;
 
-static const int DEFAULT_SEED_SIZE = 27;
+static const int DEFAULT_SEED_SIZE = 24;
 static const double DEFAULT_SLACK = 0.3;
-static const unsigned DEFAULT_PADDING = 500;
+static const unsigned DEFAULT_PADDING = 2000;
 
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
@@ -63,16 +65,17 @@ static void usage()
         "                   the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
         "                   indicating that a space is a terminator.\n"
         " -bSpace           Indicates that the space and tab characters are terminators for chromosome names (see -B above).  This may be used in addition\n"
-        "                   to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
+        "                   to other terminators specified by -B.  -B and -bSpace are case sensitive.  This is the default.\n"
+        " -bSpace-          Indicates that space and tab characters should be included in chromosome names.\n"
         " -p                Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
         "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
-        "                   read you'll process.  Default is %d.  Specify the amount of padding directly after -p without a space.\n"
+        "                   read you'll process or gap between paired-end reads.  Default is %d.  Specify the amount of padding directly after -p without a space.\n"
         " -H                Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
         "                   Specify the histogram file name directly after -H without leaving a space.\n"
         " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
         " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.\n"
         "                   By default it's autoselected based on the seed size.\n"
-        " -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
+        " -large            Build a larger index that's a little faster, particularly for runs with quick/inaccurate parameters.  Increases index size by\n"
         "                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
         " -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
         "                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
@@ -83,13 +86,17 @@ static void usage()
         "                   In particular, this will generally use less memory than the index will use once it's built, so if this doesn't work you\n"
         "                   won't be able to use the index anyway. However, if you've got sufficient memory to begin with, this option will just\n"
         "                   slow down the index build by doing extra, useless IO.\n"
-        " -AutoAlt-         Don't automatically mark ALT contigs.  Otherwise, any contig thats name ends in '_alt' (regardless of captialization) or starts\n"
+        " -AutoAlt-         Don't automatically mark ALT contigs.  Otherwise, any contig whose name ends in '_alt' (regardless of captialization) or starts\n"
         "                   with HLA- will be marked ALT.  Others will not.\n"
-		" -maxAltContigSize Specify a size at or below which all contigs are automatically marked ALT, unless overriden by name using the args below\n"
+		" -maxAltContigSize Specify a size at or below which all contigs are automatically marked ALT, unless overridden by name using the args below\n"
 		" -altContigName    Specify the (case independent) name of an alt to mark a contig.  You can supply this parameter as often as you'd like\n"
 		" -altContigFile    Specify the name of a file with a list of alt contig names, one per line.  You may specify this as often as you'd like\n"
 		" -nonAltContigName Specify the name of a contig that's not an alt, regardless of its size\n"
 		" -nonAltContigFile Specify the name of a file that contains a list of contigs (one per line) that will not be marked ALT regardless of size\n"
+        " -altLiftoverFile  Specify the file containing ALT-to-REF mappings (SAM format). e.g., hs38DH.fa.alt from bwa-kit\n"
+        " -q                Quiet mode: don't print status messages (other than the welcome message which is printed prior to parsing args).  Error messages\n"
+        "                   are still printed.\n"
+        " -qq               Super quiet mode: don't print status or error messages\n"
 		,
         BINARY_NAME,
         DEFAULT_SEED_SIZE,
@@ -134,7 +141,7 @@ GenomeIndex::runIndexer(
     int seedLen = DEFAULT_SEED_SIZE;
     double slack = DEFAULT_SLACK;
     const char *pieceNameTerminatorCharacters = NULL;
-    bool spaceIsAPieceNameTerminator = false;
+    bool spaceIsAPieceNameTerminator = true;
     const char *histogramFileName = NULL;
     unsigned chromosomePadding = DEFAULT_PADDING;
     bool forceExact = false;
@@ -148,6 +155,15 @@ GenomeIndex::runIndexer(
 	int nAltOptOut = 0;
 	char **altOptOutList = NULL;
     bool autoALT = true;
+    int nAltLiftover = 0;
+    char **altLiftoverLines = NULL;
+    char **altLiftoverContigNames = NULL;
+    unsigned *altLiftoverContigFlags = NULL;
+    char **altLiftoverProjContigNames = NULL;
+    unsigned *altLiftoverProjContigOffsets = NULL;
+    char **altLiftoverProjCigar = NULL;
+
+    DataSupplier::ExpansionFactor = 50; // This is for the decompression of a gzipped FASTA/ALT file.  FASTAs compress really well so we need a lot.
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -166,6 +182,11 @@ GenomeIndex::runIndexer(
             }
         } else if (strcmp(argv[n], "-exact") == 0) {
             forceExact = true;
+        } else if (strcmp(argv[n], "-q") == 0) {
+            g_suppressStatusMessages = true;
+        } else if (strcmp(argv[n], "-qq") == 0) {
+            g_suppressStatusMessages = true;
+            g_suppressErrorMessages = true;
         } else if (strcmp(argv[n], "-hg19") == 0) {
 			WriteErrorMessage("The -hg19 flag is deprecated, ignoring it.\n");
         } else if (_stricmp(argv[n], "-locationSize") == 0) {
@@ -199,8 +220,7 @@ GenomeIndex::runIndexer(
 			}
 		} else if (argv[n][0] == '-' && argv[n][1] == 's' && argv[n][2] == 'm') {
 			smallMemory = true;
-		}
-		else if (_stricmp(argv[n], "-keysize") == 0) {
+		} else if (_stricmp(argv[n], "-keysize") == 0) {
             if (n + 1 < argc) {
                 keySizeInBytes = atoi(argv[n+1]);
                 if (keySizeInBytes < 2 || keySizeInBytes > 8) {
@@ -213,9 +233,10 @@ GenomeIndex::runIndexer(
             }
         } else if (argv[n][0] == '-' && argv[n][1] == 'B') {
             pieceNameTerminatorCharacters = argv[n] + 2;
-		}
-		else if (!strcmp(argv[n], "-bSpace")) {
-			spaceIsAPieceNameTerminator = true;
+		} else if (!strcmp(argv[n], "-bSpace")) {
+            spaceIsAPieceNameTerminator = true;
+        } else if (!strcmp(argv[n], "-bSpace-")) {
+            spaceIsAPieceNameTerminator = false;
 		} else if (!_stricmp(argv[n], "-AutoAlt-")) {
             autoALT = false;
 		} else if (!strcmp(argv[n], "-maxAltContigSize")) {
@@ -241,7 +262,7 @@ GenomeIndex::runIndexer(
 			n++;
 		} else if (!strcmp(argv[n], "-altContigFile")) {
 			if (n + 1 < argc) {
-				FILE *inputFile = fopen(argv[n + 1], "r");
+                DataReader* inputFile = getDefaultOrGzipDataReader(argv[n + 1]);
 				if (NULL == inputFile) {
 					WriteErrorMessage("Unable to open alt contig list file %s\n", argv[n + 1]);
 					soft_exit(1);
@@ -259,7 +280,7 @@ GenomeIndex::runIndexer(
 					addToCountedListOfStrings(contigNameBuffer, &nAltOptIn, &altOptInList);
 				} // while we have an input string.
 
-				fclose(inputFile);
+				delete inputFile;
 				delete[] contigNameBuffer;
 			} else {
 				usage();
@@ -267,7 +288,7 @@ GenomeIndex::runIndexer(
 			n++;
 		} else if (!strcmp(argv[n], "-nonAltContigFile")) {
 			if (n + 1 < argc) {
-				FILE *inputFile = fopen(argv[n + 1], "r");
+				DataReader *inputFile = getDefaultOrGzipDataReader(argv[n + 1]);
 				if (NULL == inputFile) {
 					WriteErrorMessage("Unable to open non-alt contig list file %s\n", argv[n + 1]);
 					soft_exit(1);
@@ -285,14 +306,122 @@ GenomeIndex::runIndexer(
 					addToCountedListOfStrings(contigNameBuffer, &nAltOptOut, &altOptOutList);
 				} // while we have an input string.
 
-				fclose(inputFile);
+				delete inputFile;
 				delete[] contigNameBuffer;
-			}
-			else {
+			} else {
 				usage();
 			}
 			n++;
-		} else {
+		} else if (!strcmp(argv[n], "-altLiftoverFile")) {
+            if (n + 1 < argc) {
+                DataReader* inputFile = getDefaultOrGzipDataReader(argv[n + 1]);
+                
+                if (NULL == inputFile) {
+                    WriteErrorMessage("Unable to open ALT liftover file %s\n", argv[n + 1]);
+                    soft_exit(1);
+                }
+                char* altLiftoverBuffer = NULL;
+                int altLiftoverBufferSize = 0;
+
+                while (NULL != reallocatingFgets(&altLiftoverBuffer, &altLiftoverBufferSize, inputFile)) {
+                    if (altLiftoverBuffer[0] == '@') {
+                        continue;
+                    }
+
+                    if (NULL != strchr(altLiftoverBuffer, '\n')) {
+                        *strchr(altLiftoverBuffer, '\n') = '\0';
+                    }
+
+                    if (NULL != strchr(altLiftoverBuffer, '\r')) {
+                        *strchr(altLiftoverBuffer, '\r') = '\0';
+                    }
+
+                    addToCountedListOfStrings(altLiftoverBuffer, &nAltLiftover, &altLiftoverLines);
+                } // while we have an input string.
+
+                altLiftoverContigNames = new char*[nAltLiftover];
+                altLiftoverContigFlags = new unsigned [nAltLiftover];
+                altLiftoverProjContigNames = new char*[nAltLiftover];
+                altLiftoverProjContigOffsets = new unsigned [nAltLiftover];
+                altLiftoverProjCigar = new char*[nAltLiftover];
+
+                for (int i = 0; i < nAltLiftover; i++) {
+                    // get contig name
+                    char* contigNameStart = altLiftoverLines[i];
+                    char* contigNameEnd = strchr(contigNameStart, '\t');
+                    if (NULL == contigNameEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+
+                    // get contig flags
+                    char* contigFlagsEnd = strchr(contigNameEnd + 1, '\t');
+                    if (1 != sscanf(contigNameEnd + 1, "%u", &altLiftoverContigFlags[i]) || NULL == contigFlagsEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+
+                    // get projected contig name
+                    char* projContigNameStart = contigFlagsEnd + 1;
+                    char* projContigNameEnd = strchr(projContigNameStart, '\t');
+                    if (NULL == projContigNameEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+
+                    // get projected contig offsets
+                    char* projContigOffsetEnd = strchr(projContigNameEnd + 1, '\t');
+                    if (1 != sscanf(projContigNameEnd + 1, "%u", &altLiftoverProjContigOffsets[i]) || NULL == projContigOffsetEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+
+                    // skip next field (mapping quality)
+                    char* tmp = strchr(projContigOffsetEnd + 1, '\t');
+                    if (NULL == tmp) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+
+                    // get projected cigar
+                    char* projCigarStart = tmp + 1;
+                    char* projCigarEnd = strchr(projCigarStart, '\t');
+                    if (NULL == projCigarEnd) {
+                        WriteErrorMessage("Invalid format for ALT liftover file %s. Not tab separated\n", argv[n + 1]);
+                        soft_exit(1);
+                    }
+
+                    // skip contigs that do not have a mapping to the primary reference
+                    if (*projContigNameStart == '*') {
+                        altLiftoverContigNames[i] = NULL;
+                        altLiftoverProjContigNames[i] = NULL;
+                        altLiftoverProjCigar[i] = NULL;
+                        continue;
+                    }
+
+                    size_t contigNameLength = contigNameEnd - contigNameStart;
+                    altLiftoverContigNames[i] = new char[contigNameLength + 1];
+                    strncpy(altLiftoverContigNames[i], contigNameStart, contigNameLength);
+                    altLiftoverContigNames[i][contigNameLength] = '\0';
+
+                    size_t projContigNameLength = projContigNameEnd - projContigNameStart;
+                    altLiftoverProjContigNames[i] = new char[projContigNameLength + 1];
+                    strncpy(altLiftoverProjContigNames[i], projContigNameStart, projContigNameLength);
+                    altLiftoverProjContigNames[i][projContigNameLength] = '\0';
+
+                    size_t projCigarLength = projCigarEnd - projCigarStart;
+                    altLiftoverProjCigar[i] = new char[projCigarLength + 1];
+                    strncpy(altLiftoverProjCigar[i], projCigarStart, projCigarLength);
+                    altLiftoverProjCigar[i][projCigarLength] = '\0';
+                }
+
+                delete inputFile;
+                delete[] altLiftoverBuffer;
+            } else {
+                usage();
+            }
+            n++;
+        } else {
             WriteErrorMessage("Invalid argument: %s\n\n", argv[n]);
             usage();
         }
@@ -303,6 +432,8 @@ GenomeIndex::runIndexer(
         WriteErrorMessage("Seed length must be between 8 and 32, inclusive\n");
         soft_exit(1);
     }
+    
+    WriteStatusMessage("Building index with seed size %d\n", seedLen);
 
     if (keySizeInBytes == 0) {
         //
@@ -338,14 +469,22 @@ GenomeIndex::runIndexer(
     BigAllocUseHugePages = false;
 
     _int64 start = timeInMillis();
-    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altOptInList, nAltOptIn, altOptOutList, nAltOptOut, maxSizeForAutomaticALT, autoALT);
+    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altOptInList, nAltOptIn, altOptOutList, nAltOptOut, maxSizeForAutomaticALT, autoALT,
+        altLiftoverContigNames, altLiftoverContigFlags, altLiftoverProjContigNames, altLiftoverProjContigOffsets, altLiftoverProjCigar, nAltLiftover);
+
     if (NULL == genome) {
         WriteErrorMessage("Unable to read FASTA file\n");
         soft_exit(1);
     }
+
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
 
-	WriteStatusMessage("Genome has %d contigs, of which %d are ALTs\n", genome->getNumContigs(), genome->getNumALTContigs());
+    const int commafiedBufferSize = 40;
+    char contigCountBuffer[commafiedBufferSize];
+    char altContigCountBuffer[commafiedBufferSize];
+
+	WriteStatusMessage("Genome has %s contigs, of which %s are ALTs\n", FormatUIntWithCommas(genome->getNumContigs(), contigCountBuffer, commafiedBufferSize), 
+                        FormatUIntWithCommas(genome->getNumALTContigs(), altContigCountBuffer, commafiedBufferSize));
 
     GenomeDistance nBases = genome->getCountOfBases();
 
@@ -357,8 +496,11 @@ GenomeIndex::runIndexer(
     genome = NULL;  // It's deleted by BuildIndexToDirectory.
 
     _int64 end = timeInMillis();
-    WriteStatusMessage("Index build and save took %llds (%lld bases/s)\n",
-           (end - start) / 1000, nBases / max((end - start) / 1000, (_int64) 1)); 
+
+    char rateBuffer[commafiedBufferSize];
+    WriteStatusMessage("Index build and save took %llds (%s bases/s)\n",
+        (end - start) / 1000,
+        FormatUIntWithCommas(nBases / max((end - start) / 1000, (_int64)1), rateBuffer, commafiedBufferSize));
 }
 
 //
@@ -408,7 +550,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     int filenameBufferSize = (int)(strlen(directoryName) + 1 + __max(strlen(GenomeIndexFileName), __max(strlen(OverflowTableFileName), __max(strlen(GenomeIndexHashFileName), strlen(GenomeFileName)))) + 1);
     char *filenameBuffer = new char[filenameBufferSize];
     
-	fprintf(stderr,"Saving genome...");
+	WriteStatusMessage("Saving genome...");
 	_int64 start = timeInMillis();
     snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
     if (!genome->saveToFile(filenameBuffer)) {
@@ -416,7 +558,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         delete[] filenameBuffer;
         return false;
     }
-	fprintf(stderr,"%llds\n", (timeInMillis() + 500 - start) / 1000);
+	WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
 
 	GenomeIndex *index = new GenomeIndex();
     index->genome = NULL;   // We always delete the index when we're done, but we delete the genome first to save space during the overflow table build.
@@ -551,15 +693,23 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 //                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
     }
 
-    WriteStatusMessage("%lld(%lld%%) seeds occur more than once, total of %lld(%lld%%) genome locations are not unique, %lld(%lld%%) bad seeds, %lld both complements used %lld no string\n",
-        seedsWithMultipleOccurrences,
+    const int commafiedBufferSize = 40;
+    char seedsWithMultipleOccurrencesBuffer[commafiedBufferSize];
+    char genomeLocationsInOverflowTableBuffer[commafiedBufferSize];
+    char badSeedBuffer[commafiedBufferSize];
+    char bothComplementsBuffer[commafiedBufferSize];
+    char noStringBuffer[commafiedBufferSize];
+
+    WriteStatusMessage("%s(%lld%%) seeds occur more than once, total of %s(%lld%%) genome locations are not unique, %s(%lld%%) bad seeds, %s both complements used %s no string\n",
+        FormatUIntWithCommas(seedsWithMultipleOccurrences, seedsWithMultipleOccurrencesBuffer, commafiedBufferSize),
         (seedsWithMultipleOccurrences * 100) / countOfBases,
-        genomeLocationsInOverflowTable,
+        FormatUIntWithCommas(genomeLocationsInOverflowTable, genomeLocationsInOverflowTableBuffer, commafiedBufferSize),
         genomeLocationsInOverflowTable * 100 / countOfBases,
-        nonSeeds,
+        FormatUIntWithCommas(nonSeeds, badSeedBuffer, commafiedBufferSize),
         (nonSeeds * 100) / countOfBases,
-        bothComplementsUsed,
-        noBaseAvailable);
+        FormatUIntWithCommas(bothComplementsUsed, bothComplementsBuffer, commafiedBufferSize),
+        FormatUIntWithCommas(noBaseAvailable, noStringBuffer, commafiedBufferSize)
+        );
 
     WriteStatusMessage("Hash table build took %llds\n",(timeInMillis() + 500 - start) / 1000);
 
@@ -739,8 +889,16 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                     }
 
 					if (timeInMillis() - lastPrintTime > 60 * 1000) {
-						WriteStatusMessage("%lld/%lld duplicate seeds, %lld/%lld backpointers, %d/%d hash tables processed\n", 
-							duplicateSeedsProcessed, seedsWithMultipleOccurrences, nBackpointersProcessed, genomeLocationsInOverflowTable,
+                        char doneDuplicateSeedsBuffer[commafiedBufferSize];
+                        char totalDuplicateSeedsBuffer[commafiedBufferSize];
+                        char doneBackpointersBuffer[commafiedBufferSize];
+                        char totalBackpointersBuffer[commafiedBufferSize];
+
+						WriteStatusMessage("%s/%s duplicate seeds, %s/%s backpointers, %d/%d hash tables processed\n", 
+                            FormatUIntWithCommas(duplicateSeedsProcessed, doneDuplicateSeedsBuffer, commafiedBufferSize),
+                            FormatUIntWithCommas(seedsWithMultipleOccurrences, totalDuplicateSeedsBuffer, commafiedBufferSize),
+                            FormatUIntWithCommas(nBackpointersProcessed, doneBackpointersBuffer, commafiedBufferSize),
+                            FormatUIntWithCommas(genomeLocationsInOverflowTable, totalBackpointersBuffer, commafiedBufferSize),
 							whichHashTable, nHashTables);
 						lastPrintTime = timeInMillis();
 					}
@@ -1235,7 +1393,12 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 				_int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
 
 				if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds)/printBatchSize) {
-					WriteStatusMessage("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
+                    const int commafiedBufferSize = 40;
+                    char basesProcessedBuffer[commafiedBufferSize];
+                    char countOfBasesBuffer[commafiedBufferSize];
+
+					WriteStatusMessage("Bias computation: %s / %s\n", FormatUIntWithCommas((basesProcessed/printBatchSize)*printBatchSize, basesProcessedBuffer, commafiedBufferSize), 
+                                       FormatUIntWithCommas((_int64)countOfBases, countOfBasesBuffer, commafiedBufferSize));
 				}
 				unrecordedSkippedSeeds= 0;  // We've now recorded them.
 			}
@@ -1245,7 +1408,12 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
         _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[i].nUsed + unrecordedSkippedSeeds);
 
         if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - batches[i].nUsed - unrecordedSkippedSeeds)/printBatchSize) {
-            WriteStatusMessage("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
+            const int commafiedBufferSize = 40;
+            char basesProcessedBuffer[commafiedBufferSize];
+            char countOfBasesBuffer[commafiedBufferSize];
+
+            WriteStatusMessage("Bias computation: %s / %s\n", FormatUIntWithCommas((basesProcessed / printBatchSize) * printBatchSize, basesProcessedBuffer, commafiedBufferSize),
+                FormatUIntWithCommas((_int64)countOfBases, countOfBasesBuffer, commafiedBufferSize));
         }
 
         unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.
@@ -1364,7 +1532,11 @@ GenomeIndex::indexSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBat
 		_int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + stats->unrecordedSkippedSeeds);
 
 		if ((unsigned)(newNBasesProcessed / printPeriod) > (unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - stats->unrecordedSkippedSeeds) / printPeriod)) {
-			WriteStatusMessage("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, context->genome->getCountOfBases());
+            const int commafiedBufferSize = 40;
+            char progressBuffer[commafiedBufferSize];
+            char totalBuffer[commafiedBufferSize];
+			WriteStatusMessage("Indexing %s / %s\n", FormatUIntWithCommas((newNBasesProcessed / printPeriod) * printPeriod, progressBuffer,commafiedBufferSize), 
+                                FormatUIntWithCommas(context->genome->getCountOfBases(), totalBuffer, commafiedBufferSize));
 		}
 		stats->unrecordedSkippedSeeds = 0;
 		batches[whichHashTable].clear();
@@ -1418,7 +1590,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
         // it in the overflow table.
         //
         int entryIndex = usingComplement ? 1 : 0;
-        void *entryPointer = entry64 + locationSize * entryIndex;
+        void *entryPointer = entry64 + (_int64)locationSize * entryIndex;
         if (locationSize > 4) {
             entry32 = NULL; // Using this would be bad
             _int64 entryValue = 0;
@@ -1707,7 +1879,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     if (10 != (nRead = sscanf(indexFileBuf,"%d %d %d %lld %d %d %d %lld %d %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
 											&hashTableKeySize, &hashTablesFileSize, &smallHashTable, &locationSize))) {
         if (3 == nRead || 6 == nRead || 7 == nRead || 9 == nRead) {
-            WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
+            WriteErrorMessage("Indices built by versions before 1.0.4 are no longer supported.  Please rebuild your index.\n");
         } else {
             WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }

@@ -5,7 +5,12 @@
 #include "exit.h"
 #include "Genome.h"
 
-const int MAX_K = 63;
+#ifdef LONG_READS
+const int MAX_K = 1000;
+#else // LONG_READS
+const int MAX_K = 127; // One less than powers of two have better cache behavior, though overall perf difference is likely to be small (~2% when I measured it)
+#endif // LONG_READS
+
 const int ScoreAboveLimit = -1; // A score value that means "we didn't compute the score because it was above the score limit."
 const int TooBigScoreValue = 65536; // This is much bigger than any score we'll ever see
 
@@ -93,42 +98,46 @@ public:
 	//
 
     int computeEditDistance(
-                const char* text,
-                int textLen, 
-                const char* pattern,
-                const char *qualityString,
-                int patternLen,
-                int k,
-                double *matchProbability,
-                int *o_netIndel = NULL,  // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
-                int *o_totalIndels = NULL)  // also keep track of total (absolute) indels seen
+                const char*     text,
+                int             textLen, 
+                const char*     pattern,
+                const char *    qualityString,
+                int             patternLen,
+                int             k,
+                double *        matchProbability,
+                int *           o_netIndel = NULL,  // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
+                int *           o_totalIndels = NULL,
+                int *           o_textSpan = NULL)  // also keep track of total (absolute) indels seen
 {
     int localNetIndel;
     int localTotalIndels;
+    int localTextSpan;
 	int d;
 
     if (k < 0) {
         return ScoreAboveLimit;
     }
 
+    //
+    // If the optional output parameters are NULL, set the pointers to stack locals so we can
+    // write into them without having to check for NULL in the loop.
+    //
+
     if (NULL == o_netIndel) {
-        //
-        // If the user doesn't want netIndel, just use a stack local to avoid
-        // having to check it all the time.
-        //
         o_netIndel = &localNetIndel;
     }
+
     if (NULL == o_totalIndels) {
-        //
-        // If the user doesn't want netIndel, just use a stack local to avoid
-        // having to check it all the time.
-        //
         o_totalIndels = &localTotalIndels;
+    }
+
+    if (NULL == o_textSpan) {
+        o_textSpan = &localTextSpan;
     }
 
     _ASSERT(k < MAX_K);
 
-    *o_netIndel = 0; *o_totalIndels = 0;
+    *o_netIndel = 0; *o_totalIndels = 0; *o_textSpan = 0;
 
     k = __min(MAX_K - 1, k); // enforce limit even in non-debug builds
     if (NULL == text) {
@@ -136,6 +145,7 @@ public:
         if (NULL != matchProbability) {
             *matchProbability = 0.0;
         }
+
         return ScoreAboveLimit;
     }
  
@@ -162,12 +172,15 @@ public:
         if (NULL != matchProbability) {
             *matchProbability = lv_perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
         }
+
         if (result > k) {
             //
             // The deletions at the end pushed us oevr the score limit.
             //
             return ScoreAboveLimit;
         }
+
+        *o_textSpan += patternLen;
         return result;
     }
 
@@ -301,19 +314,19 @@ got_answer:
 				actionCount++;
 				curE++;
 			}
+
 			if (action == 'I') {
 				*matchProbability *= lv_indelProbabilities[actionCount];
 				offset += actionCount;
 				*o_netIndel += actionCount;
                 *o_totalIndels += actionCount;
-			}
-			else if (action == 'D') {
+			} else if (action == 'D') {
 				*matchProbability *= lv_indelProbabilities[actionCount];
 				offset -= actionCount;
 				*o_netIndel -= actionCount;
                 *o_totalIndels += actionCount;
-			}
-			else {
+                *o_textSpan += actionCount;
+			} else {
 				_ASSERT(action == 'X');
 				for (int i = 0; i < actionCount; i++) {
 					*matchProbability *= lv_phredToProbability[qualityString[/*BUGBUG - think about what to do here*/__min(patternLen - 1, __max(offset, 0))]];
@@ -326,6 +339,7 @@ got_answer:
 		}
 
 		*matchProbability *= lv_perfectMatchProbability[patternLen - e]; // Accounting for the < 1.0 chance of no changes for matching bases
+        *o_textSpan += patternLen;
 	} else {
 		//
 		// Not tracking match probability.
@@ -339,11 +353,11 @@ got_answer:
 
     // Version that does not requre match probability and quality string
     inline int computeEditDistance(
-            const char* text,
-            int textLen,
-            const char* pattern,
-            int patternLen,
-            int k)
+            const char*     text,
+            int             textLen,
+            const char*     pattern,
+            int             patternLen,
+            int             k)
     {
         return computeEditDistance(text, textLen, pattern, NULL, patternLen, k, NULL);
     }

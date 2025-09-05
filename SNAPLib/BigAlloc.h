@@ -28,7 +28,11 @@ inline unsigned RoundUpToPageSize(unsigned size)
     return ((size + pageSize - 1) / pageSize) * pageSize;
 }
 
-//#define PROFILE_BIGALLOC
+//#define PROFILE_BIGALLOC    1
+
+//#define _BIGALLOC_CHECK_MEMORY_CORRUPTION defined(_DEBUG)
+#define _BIGALLOC_CHECK_MEMORY_CORRUPTION 1
+
 
 #ifdef PROFILE_BIGALLOC
 
@@ -36,6 +40,7 @@ inline unsigned RoundUpToPageSize(unsigned size)
 #define BigAlloc2(s,p) BigAllocProfile((s), (p), __FUNCTION__)
 #define BigReserve(s) BigReserveProfile((s), NULL, NULL, __FUNCTION__)
 #define BigCommit(p, s) BigCommitProfile((p), (s), __FUNCTION__)
+#define BigDealloc(p) BigDeallocProfile((p), __FUNCTION__)
 
 void *BigAllocProfile(
         size_t      sizeToAllocate,
@@ -53,6 +58,8 @@ bool BigCommitProfile(
     size_t      sizeToCommit,
     const char* caller = NULL);
 
+void BigDeallocProfile(void* memory, const char* caller);
+
 #else
 
 void *BigAlloc(
@@ -69,11 +76,11 @@ bool BigCommit(
     void        *memoryToCommit,
     size_t      sizeToCommit);
 
+void BigDealloc(void* memory); 
+
 #endif
 
 void PrintBigAllocProfile();
-
-void BigDealloc(void *memory);
 
 //
 // This class is used to allocate a group of objects all onto a single set of big pages.  It requires knowing
@@ -89,11 +96,11 @@ public:
 
     size_t amountAllocated();
 
-#ifdef _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
     void checkCanaries();
-#else  // DEBUG
+#else  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
     void checkCanaries() {}
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
 private:
 
     char    *basePointer;
@@ -101,14 +108,14 @@ private:
     size_t  maxMemory;
     size_t  allocationGranularity;
 
-#ifdef _DEBUG
+#if     _BIGALLOC_CHECK_MEMORY_CORRUPTION
     //
-    // Stick a canary between each allocation and 
+    // Stick a canary after each allocation 
     unsigned    nCanaries;
     static const unsigned maxCanaries = 100;
     static const unsigned canaryValue = 0xca4a71e5;
     unsigned    *canaries[maxCanaries];
-#endif  // DEBUG
+#endif  // _BIGALLOC_CHECK_MEMORY_CORRUPTION
 };
 
 //

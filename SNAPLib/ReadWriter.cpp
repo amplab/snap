@@ -34,8 +34,12 @@ Environment:
 class SimpleReadWriter : public ReadWriter
 {
 public:
-    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm)
-        : format(i_format), writer(i_writer), genome(i_genome), killIfTooSlow(i_killIfTooSlow), lastTooSlowCheck(0), emitInternalScore(i_emitInternalScore), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
+    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, 
+                     char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm, int i_matchReward, int i_subPenalty, int i_gapOpenPenalty, 
+                     int i_gapExtendPenalty, bool i_attachAlignmentTime)
+        : format(i_format), writer(i_writer), genome(i_genome), killIfTooSlow(i_killIfTooSlow), lastTooSlowCheck(0), 
+          emitInternalScore(i_emitInternalScore), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm),
+          attachAlignmentTime(i_attachAlignmentTime)
     {
         if (emitInternalScore) {
             if (strlen(i_internalScoreTag) != 2) {
@@ -46,6 +50,8 @@ public:
         } else  {
             internalScoreTag[0] = '\0';
         }
+
+        agc.init(i_matchReward, i_subPenalty, i_gapOpenPenalty, i_gapExtendPenalty);
     }
 
     virtual ~SimpleReadWriter()
@@ -77,6 +83,7 @@ private:
     bool emitInternalScore;
     char internalScoreTag[3];
     bool ignoreAlignmentAdjustmentsForOm;
+    bool attachAlignmentTime;
 };
 
     bool
@@ -213,7 +220,7 @@ SimpleReadWriter::writeReads(
         used = 0;
 
         for (_int64 whichResult = 0; whichResult < nResults; whichResult++) {
-            int addFrontClipping = 0;
+             int addFrontClipping = 0;
             read->setAdditionalFrontClipping(results[whichResult].clippingForReadAdjustment);
             
             int cumulativeAddFrontClipping = 0, cumulativeAddBackClipping = 0;
@@ -224,7 +231,8 @@ SimpleReadWriter::writeReads(
             if (useAffineGap && (results[whichResult].usedAffineGapScoring || results[whichResult].score > 0)) {
                 while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
                     results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, results[whichResult].supplementary, &addFrontClipping,
-                    results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag, results[whichResult].basesClippedBefore,
+                    results[whichResult].score, results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag, attachAlignmentTime, results[whichResult].alignmentTimeInNanoseconds,
+                    results[whichResult].basesClippedBefore,
                     results[whichResult].basesClippedAfter)) {
 
                     _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster.
@@ -241,25 +249,25 @@ SimpleReadWriter::writeReads(
                         : genome->getContigAtLocation(results[whichResult].location);
                     const Genome::Contig *newContig = results[whichResult].status == NotFound ? NULL
                         : genome->getContigAtLocation(results[whichResult].location + addFrontClipping);
-                    if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding() ||
+                    if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > newContig->beginningLocation + newContig->length - genome->getChromosomePadding() ||
                         nAdjustments > read->getDataLength()) {
                         //
                         // Altering this would push us over a contig boundary, or we're stuck in a loop.  Just give up on the read.
                         //
                         results[whichResult].status = NotFound;
                         results[whichResult].location = InvalidGenomeLocation;
+                        results[whichResult].score = -1;
+                        results[whichResult].direction = FORWARD;
                         finalLocations[whichResult] = InvalidGenomeLocation;
                     } else {
                         if (addFrontClipping < 0) { // Insertion (soft-clip)
                             cumulativeAddFrontClipping += addFrontClipping;
                             if (results[whichResult].direction == FORWARD) {
                                 read->setAdditionalFrontClipping(-cumulativeAddFrontClipping);
-                            }
-                            else {
+                            } else {
                                 read->setAdditionalBackClipping(-cumulativeAddFrontClipping);
                             }
-                        }
-                        else { // Deletion
+                        } else { // Deletion
                             finalLocations[whichResult] = results[whichResult].location + addFrontClipping;
                         }
                     }
@@ -267,7 +275,7 @@ SimpleReadWriter::writeReads(
             } else {
                 while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
                     results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, results[whichResult].supplementary, &addFrontClipping,
-                    results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+                    results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag, attachAlignmentTime, results[whichResult].alignmentTimeInNanoseconds)) {
 
                     _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster.
 
@@ -290,9 +298,10 @@ SimpleReadWriter::writeReads(
                         //
                         results[whichResult].status = NotFound;
                         results[whichResult].location = InvalidGenomeLocation;
+                        results[whichResult].score = -1;
+                        results[whichResult].direction = FORWARD;
                         finalLocations[whichResult] = InvalidGenomeLocation;
-                    }
-                    else {
+                    } else {
                         if (addFrontClipping > 0) {
                             cumulativeAddFrontClipping += addFrontClipping;
                             read->setAdditionalFrontClipping(cumulativeAddFrontClipping);
@@ -458,7 +467,8 @@ SimpleReadWriter::writePairs(
                 bool outOfSpace = false;
                 if (!format->writePairs(context, &lvc, &agc, useAffineGap, buffer + used + tentativeUsed, size - used - tentativeUsed, 
                     spaceUsed, idLengths, reads, locations, &result[whichAlignmentPair], whichAlignmentPair != 0 || !firstIsPrimary,
-                    emitInternalScore, internalScoreTag, writeOrder, cumulativePositiveAddFrontClipping, &secondReadLocationChanged, &outOfSpace)) {
+                    emitInternalScore, internalScoreTag, attachAlignmentTime, writeOrder, cumulativePositiveAddFrontClipping, 
+                    &secondReadLocationChanged, &outOfSpace)) {
                     
                     if (outOfSpace) {
                         //
@@ -512,7 +522,8 @@ SimpleReadWriter::writePairs(
                 if (useAffineGap && (singleResults[whichRead][whichAlignment].usedAffineGapScoring || singleResults[whichRead][whichAlignment].score > 0)) {
                     while (!format->writeRead(context, &agc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
                         reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
-                        true, singleResults[whichRead][whichAlignment].supplementary, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag,
+                        true, singleResults[whichRead][whichAlignment].supplementary, &addFrontClipping, singleResults[whichRead][whichAlignment].score,
+                        singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag, attachAlignmentTime, singleResults[whichRead][whichAlignment].alignmentTimeInNanoseconds,
                         singleResults[whichRead][whichAlignment].basesClippedBefore, singleResults[whichRead][whichAlignment].basesClippedAfter)) {
 
                         if (0 == addFrontClipping) {
@@ -527,8 +538,9 @@ SimpleReadWriter::writePairs(
                             //
                             singleResults[whichRead][whichAlignment].status = NotFound;
                             location = InvalidGenomeLocation;
-                        }
-                        else {
+                            singleResults[whichRead][whichAlignment].score = -1;
+                            singleResults[whichRead][whichAlignment].direction = FORWARD;
+                        } else {
                             if (addFrontClipping < 0) { // Insertion (soft-clip)
                                 cumulativePositiveAddFrontClipping += addFrontClipping;
                                 if (singleResults[whichRead][whichAlignment].direction == FORWARD) {
@@ -546,7 +558,8 @@ SimpleReadWriter::writePairs(
                 } else {
                     while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
                         reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
-                        true, singleResults[whichRead][whichAlignment].supplementary, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+                        true, singleResults[whichRead][whichAlignment].supplementary, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag,
+                        attachAlignmentTime, singleResults[whichRead][whichAlignment].alignmentTimeInNanoseconds)) {
 
                         if (0 == addFrontClipping) {
                             goto blownBuffer;
@@ -560,6 +573,8 @@ SimpleReadWriter::writePairs(
                             //
                             singleResults[whichRead][whichAlignment].status = NotFound;
                             location = InvalidGenomeLocation;
+                            singleResults[whichRead][whichAlignment].score = -1;
+                            singleResults[whichRead][whichAlignment].direction = FORWARD;
                         }
                         else {
                             if (addFrontClipping > 0) {
@@ -643,14 +658,21 @@ SimpleReadWriter::close()
 class SimpleReadWriterSupplier : public ReadWriterSupplier
 {
 public:
-    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm)
+    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome, bool i_killIfTooSlow, 
+                             bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm, int i_matchReward, 
+                             int i_subPenalty, int i_gapOpenPenalty, int i_gapExtendPenalty, bool i_attachAlignmentTimes)
         :
         format(i_format),
         dataSupplier(i_dataSupplier),
         genome(i_genome),
         killIfTooSlow(i_killIfTooSlow),
         emitInternalScore(i_emitInternalScore),
-        ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
+        ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm),
+        matchReward(i_matchReward),
+        subPenalty(i_subPenalty),
+        gapOpenPenalty(i_gapOpenPenalty),
+        gapExtendPenalty(i_gapExtendPenalty),
+        attachAlignmentTimes(i_attachAlignmentTimes)
     {
         if (emitInternalScore) {
             if (strlen(i_internalScoreTag) != 2) {
@@ -670,7 +692,8 @@ public:
 
     virtual ReadWriter* getWriter()
     {
-        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome, killIfTooSlow, emitInternalScore, internalScoreTag, ignoreAlignmentAdjustmentsForOm);
+        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome, killIfTooSlow, emitInternalScore, internalScoreTag, 
+                                    ignoreAlignmentAdjustmentsForOm, matchReward, subPenalty, gapOpenPenalty, gapExtendPenalty, attachAlignmentTimes);
     }
 
     virtual void close()
@@ -686,6 +709,11 @@ private:
     bool emitInternalScore;
     char internalScoreTag[3];
     bool ignoreAlignmentAdjustmentsForOm;
+    int matchReward;
+    int subPenalty;
+    int gapOpenPenalty;
+    int gapExtendPenalty;
+    bool attachAlignmentTimes;
 };
 
     ReadWriterSupplier*
@@ -696,8 +724,15 @@ ReadWriterSupplier::create(
     bool killIfTooSlow,
     bool emitInternalScore, 
     char *internalScoreTag,
-    bool ignoreAlignmentAdjustmentsForOm)
+    bool ignoreAlignmentAdjustmentsForOm,
+    int matchReward,
+    int subPenalty,
+    int gapOpenPenalty,
+    int gapExtendPenalty,
+    bool attachAlignmentTimes)
 {
-    return new SimpleReadWriterSupplier(format, dataSupplier, genome, killIfTooSlow, emitInternalScore, internalScoreTag, ignoreAlignmentAdjustmentsForOm);
+    return new SimpleReadWriterSupplier(format, dataSupplier, genome, killIfTooSlow, emitInternalScore, internalScoreTag, 
+                                        ignoreAlignmentAdjustmentsForOm, matchReward, subPenalty, gapOpenPenalty, 
+                                        gapExtendPenalty, attachAlignmentTimes);
 }
 

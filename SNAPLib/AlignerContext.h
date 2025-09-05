@@ -100,6 +100,7 @@ public:
     AlignerStats                        *stats;
     AlignerExtension                    *extension;
     unsigned                             maxDist;
+    unsigned                             maxDistForIndels;
     unsigned                             numSeedsFromCommandLine;
     double                               seedCoverage;
     unsigned                             minWeightToCheck;
@@ -111,9 +112,7 @@ public:
     const char                         **argv;
     const char                          *version;
     FILE                                *perfFile;
-    bool                                 noUkkonen;
-    bool                                 noOrderedEvaluation;
-	bool								 noTruncation;
+    DisabledOptimizations                disabledOptimizations;
     bool                                 useAffineGap;
     bool                                 ignoreAlignmentAdjustmentForOm;
 	bool								 altAwareness;
@@ -127,12 +126,15 @@ public:
     unsigned                             subPenalty;
     unsigned                             gapOpenPenalty;
     unsigned                             gapExtendPenalty;
-    unsigned                             minAGScore;
+    unsigned                             fivePrimeEndBonus;
+    unsigned                             threePrimeEndBonus;
+    bool                                 useSoftClipping;
 
 
     // iteration variables
     int                 maxHits_;
     int                 maxDist_;
+    int                 maxDistForIndels_;
 
     // Per-thread context state used during alignment process
     ReadWriter         *readWriter;

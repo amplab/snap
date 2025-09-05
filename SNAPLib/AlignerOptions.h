@@ -29,12 +29,21 @@ Revision History:
 #include "Genome.h"
 #include "Read.h"
 
-#define INSTRUMENTATION_FOR_PAPER 0 // Turn this on to generate raw data about hit sets and their intersections for the paper
+
 
 #if INSTRUMENTATION_FOR_PAPER
+
 #define MAX_HIT_SIZE_LOG_2  15  // This is for the instrumentation
 extern _int64 g_alignmentTimeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2+1][MAX_HIT_SIZE_LOG_2+1];  // In the paired-end aligner, if you have seeds A and B with hit set sizes |A| and |B| then the total time in ns gets added into g_alignmentTimeByHitCountsOfEachSeed[log2(|A|)][log2(|B|)]
 extern _int64 g_alignmentCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // Same as above, but just add one per time.
+extern _int64 g_scoreCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+extern _int64 g_setIntersectionSizeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+extern _int64 g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+extern _int64 g_totalSizeOfSmallerHitSet;
+extern _int64 g_totalSizeOfSetIntersection;
+extern _int64 g_alignmentsWithMoreThanOneCandidateWhereTheBestCandidateIsScoredFirst;
+extern _int64 g_alignmentsWithMoreThanOneCandidate;
+
 #endif // INSTRUMENTATION_FOR_PAPER
 
 #define MAPQ_LIMIT_FOR_SINGLE_HIT 10
@@ -62,6 +71,25 @@ struct SNAPFile {
     static bool generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, bool paired, bool isInput);
 };
 
+//
+// A place to stick all of the various optimization diable flags that are here to test aligner
+// performance.
+//
+struct DisabledOptimizations {
+    DisabledOptimizations() : noUkkonen(false), noOrderedEvaluation(false), noTruncation(false), noEditDistance(false), noBandedAffineGap(false), noMaxKForIndel(false)
+    {}
+
+    bool                noUkkonen;
+    bool                noOrderedEvaluation;
+    bool				noTruncation;
+    bool                noEditDistance;
+    bool                noBandedAffineGap;
+    bool                noMaxKForIndel;
+}; // DisabledOptimizations
+
+extern bool g_suppressStatusMessages; // Setting this causes WriteStatusMessage not to do anything.
+extern bool g_suppressErrorMessages; // Setting this causes WriteErrorMessage not to do anything.
+
 struct AlignerOptions : public AbstractOptions
 {
     AlignerOptions(const char* i_commandLine, bool forPairedEnd = false);
@@ -72,6 +100,7 @@ struct AlignerOptions : public AbstractOptions
     int                 numThreads;
     unsigned            maxDist;
     float               maxDistFraction;
+    unsigned            maxDistForIndels;
     unsigned            numSeedsFromCommandLine;
     double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
     bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
@@ -103,16 +132,18 @@ struct AlignerOptions : public AbstractOptions
     int                 maxSecondaryAlignmentAdditionalEditDistance;
 	int					maxSecondaryAlignments;
     int                 maxSecondaryAlignmentsPerContig;
+    int                 flattenMAPQAtOrBelow;
     bool                preserveClipping;
     float               expansionFactor;
-    bool                noUkkonen;
-    bool                noOrderedEvaluation;
-	bool				noTruncation;
+    DisabledOptimizations disabledOptimizations;
     bool                useAffineGap;
+    bool                useSoftClipping;
     unsigned            matchReward;
     unsigned            subPenalty;
     unsigned            gapOpenPenalty;
     unsigned            gapExtendPenalty;
+    unsigned            fivePrimeEndBonus;
+    unsigned            threePrimeEndBonus;
 	unsigned			minReadLength;
 	bool				mapIndex;
 	bool				prefetchIndex;
@@ -128,6 +159,8 @@ struct AlignerOptions : public AbstractOptions
 	bool				altAwareness;
     int                 maxScoreGapToPreferNonALTAlignment;
     bool                emitALTAlignments;
+    bool                attachAlignmentTimes;
+    bool                preserveFASTQComments;
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

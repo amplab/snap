@@ -34,8 +34,9 @@ Revision History:
 #include "CommandProcessor.h"
 #include "Error.h"
 #include "Compat.h"
+#include "HitDepth.h"
 
-const char *SNAP_VERSION = "1.0.0";
+const char *SNAP_VERSION = "2.0.5";
 
 static void usage()
 {
@@ -46,6 +47,12 @@ static void usage()
 		"   single   align single-end reads\n"
 		"   paired   align paired-end reads\n"
 		"   daemon   run in daemon mode--accept commands remotely\n"
+#if HIT_DEPTH_COUNTING
+		"   depth    compute the minimum hit count for any seed\n"
+		"            that uniquely identifies a correct alignment\n"
+		"            for every locus in a set of contigs\n"
+#endif // HIT_DEPTH_COUNTING
+
 		"Type a command without arguments to see its help.\n");
 }
 
@@ -76,6 +83,12 @@ void ProcessNonDaemonCommands(int argc, const char **argv) {
 			_ASSERT(nArgsConsumed > 0);
 			i += nArgsConsumed;
 		}
+
+#if HIT_DEPTH_COUNTING
+	} else if (strcmp(argv[1], "depth")) {
+		CountHitDepth(argc - 1, argv + 1);
+#endif // HIT_DEPTH_COUNTING
+
 	} else {
 		WriteErrorMessage("Invalid command: %s\n\n", argv[1]);
 		usage();
@@ -163,6 +176,22 @@ void RunDaemonMode(int argc, const char **argv)
 void ProcessTopLevelCommands(int argc, const char **argv)
 {
 	fprintf(stderr, "Welcome to SNAP version %s.\n\n", SNAP_VERSION);       // Can't use WriteStatusMessage, because we haven't parsed args yet to determine if -hdp is specified.  Just stick with stderr.
+
+#if TIME_HISTOGRAM
+	fprintf(stderr, "TIME_HISTOGRAM is compiled in.\n");
+#endif // TIME_HISTOGRAM
+
+#if HIT_DEPTH_COUNTING
+	fprintf(stderr, "HIT_DEPTH_COUNTING is compiled in\n");
+#endif // HIT_DEPTH_COUNTING
+
+#if USE_DEVTEAM_OPTIONS
+	fprintf(stderr, "USE_DEVTEAM_OPTIONS is compiled in\n");
+#endif // USE_DEVTEAM_OPTIONS
+
+#if INSTRUMENTATION_FOR_PAPER
+	fprintf(stderr, "INSTRUMENTATION_FOR_PAPER is compiled in\n");
+#endif // INSTRUMENTATION_FOR_PAPER
 
 	InitializeSeedSequencers();
 

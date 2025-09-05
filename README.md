@@ -13,32 +13,24 @@ need for several pipeline stages used by other aligners.
 
 ## Binaries
 
-The SNAP executable
-- [v1.0.0 For Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpYCkpLlDktZnVaow?e=YX60aF)
-- [v1.0.0 for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpZQUgOEMrmA5qaLA?e=6FYxAv)
-- [v1.0.0 for OSX](https://1drv.ms/u/s!AhuEg_0yZD86hcphrIjwoeTjdSvgoA?e=coSU85)
-
-The SNAPCommand tool
-- [SNAPCommand for Linux](https://1drv.ms/u/s!AhuEg_0yZD86hcpdvv0ZBdB1BqF57g?e=IHVbq2>)
-- [SNAPCommand for Windows 10](https://1drv.ms/u/s!AhuEg_0yZD86hcpaSLKPRGJ6dcvVgA?e=vXH8y6)
-- [SNAPCommand for OSX](https://1drv.ms/u/s!AhuEg_0yZD86hcpgy-ONBaw0DjFpTQ?e=cMc6eE)
+Current binaries are available on this GitHub page under "releases"
 
 
 ## Documentation
 
-SNAP has a one page [Quick Start Guide](https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSwRyDwk1Ru0Q?e=uAMJXV) and a more extensive [Manual](https://1drv.ms/b/s!AhuEg_0yZD86hcpblUt-muHKYsG8fA?e=R8ogug).
+SNAP has a one page [Quick Start Guide](https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSwRyDwk1Ru0Q?e=4BvzLn) and a more extensive [Manual](https://1drv.ms/b/s!AhuEg_0yZD86hcpblUt-muHKYsG8fA?e=mbyUP5).
 
 ## Building
 
 SNAP runs on Windows, Linux and OSX.
 
-For Windows, we provide a Visual C++ project, `snap.sln`. Requirements:
-- Visual Studio 2019
+For Windows, we provide a Visual C++ solution, `snap.sln`. Requirements:
+- Visual Studio 2022
 
 When you build it, you will have to set it to build for x64, not "Any CPU" or 32 bit.
 
 For Linux, simply type `make`. Requirements:
 - g++ version 4.8.5 or later
-- zlib 1.2.11 or later from http://zlib.net/
+- zlib 1.2.11 or later from http://zlib.net/.  On Ubuntu, do sudo apt install libz1g-dev
 
 

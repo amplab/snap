@@ -195,6 +195,9 @@
     <ClInclude Include="AffineGapVectorized.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="HitDepth.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -351,6 +354,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="AffineGapVectorized.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HitDepth.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

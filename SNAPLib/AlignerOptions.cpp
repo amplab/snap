@@ -7,7 +7,6 @@ Module Name:
 Abstract:
 
     Common parameters for running single & paired alignment.
-    Common parameters for running single & paired alignment.
 
 Authors:
 
@@ -33,6 +32,9 @@ Revision History:
 #include "Error.h"
 #include "BaseAligner.h"
 #include "CommandProcessor.h"
+
+bool g_suppressStatusMessages = false;
+bool g_suppressErrorMessages = false;
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
@@ -70,14 +72,13 @@ AlignerOptions::AlignerOptions(
     maxSecondaryAlignmentsPerContig(-1),    // -1 means don't limit
     preserveClipping(false),
     expansionFactor(1.0),
-    noUkkonen(false),
-    noOrderedEvaluation(false),
-	noTruncation(false),
     useAffineGap(true),
     matchReward(1),
     subPenalty(4),
     gapOpenPenalty(6),
     gapExtendPenalty(1),
+    fivePrimeEndBonus(10),
+    threePrimeEndBonus(7),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(true),
@@ -96,15 +97,21 @@ AlignerOptions::AlignerOptions(
     emitInternalScore(false),
 	altAwareness(true),
     emitALTAlignments(false),
-    maxScoreGapToPreferNonALTAlignment(16)
+    maxScoreGapToPreferNonALTAlignment(64),
+    useSoftClipping(true),
+    flattenMAPQAtOrBelow(3),
+    attachAlignmentTimes(false),
+    preserveFASTQComments(false)
 {
     if (forPairedEnd) {
         maxDist                 = 27;
+        maxDistForIndels        = 40;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
         maxHits                 = 300;
      } else {
         maxDist                 = 27;
+        maxDistForIndels        = 40;
         numSeedsFromCommandLine = 25;
         maxHits                 = 300;
 		seedCoverage			= 0;
@@ -128,13 +135,14 @@ AlignerOptions::usage()
             "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
             "       explicit type specifier (see below).  Use a dash with an explicit type specifier to write to\n"
             "       stdout, so for example -o -sam - would write SAM output to stdout\n"
-            "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
+            "  -d   maximum edit distance allowed per read or pair absent indels (default: %d)\n"
+            "  -i   maximum distance allowed per read for indels (default: %d)\n"
             "  -n   number of seeds to use per read\n"
             "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default uses -n)\n"
             "  -h   maximum hits to consider per seed (default: %d)\n"
             "  -ms  minimum seed matches per location (default: %d)\n"
             "  -t   number of threads (default is one per core)\n"
-            "  -b-  Don't bind each thread to its processor (note the double dash)\n"
+            "  -b-  Don't bind each thread to its processor (--b (with two dashes) does the smae thing)\n"
             "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
             "       with small caches or lots of cores/cache\n"
             "  -so  sort output file by alignment location\n"
@@ -142,11 +150,11 @@ AlignerOptions::usage()
             " -sid  Specifies the sort intermediate directory.  When SNAP is sorting, it aligns the reads in the order in which they come in, and writes\n"
             "       the aligned reads in batches to a temporary file.  When the aligning is done, it does a merge sort from the temporary file into the\n"
             "       final output file.  By default, the intermediate file is in the same directory as the output file, but for performance or space\n"
-            "       reasons, you might want to put it elsewhere.  If so, use this option.\n"            
+            "       reasons, you might want to put it elsewhere.  If so, use this option.\n"
             "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
             "  -S   suppress additional processing (sorted BAM output only)\n"
             "       i=index, d=duplicate marking\n"
-            "  -f   stop on first match within edit distance limit (filtering mode)\n"
+            "  -f   stop on first match within edit distance limit (filtering mode, single-end only)\n"
             "  -F   filter output (a=aligned only, s=single hit only (MAPQ >= %d), u=unaligned only, l=long enough to align (see -mrl))\n"
             "  -E   an alternate (and fully general) way to specify filter options.  Emit only these types s = single hit (MAPQ >= %d), m = multiple hit (MAPQ < %d),\n"
             "       x = not long enough to align, u = unaligned, b = filter must apply to both ends of a paired-end read.  Combine the letters after\n"
@@ -154,94 +162,120 @@ AlignerOptions::usage()
             "       as -F a, -E ux is the same as -F u, and so forth.\n"
             "       When filtering in paired-end mode (either with -F or -E) unless you specify the b flag a read will be emitted if it's mate pair passes the filter\n"
             "       Even if the read itself does not.  If you specify b mode, then a read will be emitted only if it and its partner both pass the filter.\n"
-#if     USE_DEVTEAM_OPTIONS
             "  -I   ignore IDs that don't match in the paired-end aligner\n"
+#if     USE_DEVTEAM_OPTIONS
 #ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
             "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
 #endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
-            "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
+            ,
+            commandLine,
+            maxDist,
+            maxDistForIndels,
+            maxHits,
+            minWeightToCheck,
+            MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT
+        );
+
+        WriteErrorMessage(
+            " -Cxx  must be followed by two + or - symbols saying whether to clip low-quality\n"
             "       bases from front and back of read respectively; default: back only (-C-+)\n"
-            "  -=   use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
-            "  -pf  specify the name of a file to contain the run speed\n"
-            "  -hp  Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
-            "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default %d\n"
-            "  -rg  Specify the default read group if it is not specified in the input file\n"
-            "  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
+            " -cc   Specifies the min and max quality score to clip in Phred 33 format.  Must be followed by\n"
+            "       two characters.  The default is ##.\n"
+            " -=    use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
+            " -pf   specify the name of a file to contain the run speed\n"
+            " -hp   Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
+            " -D    Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default %d\n"
+            " -rg   Specify the default read group if it is not specified in the input file\n"
+            " -R    Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
             "       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
             "       backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
-            "       with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
-            "  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
-            "  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
+            "       with default tag foo, and an @RG line that also included the DS:my data field.\n"
+            " -sa   Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
+            " -om   Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
             "       to allow for secondary alignments\n"
             " -omax Limit the number of alignments per read generated by -om.  This means that if -om would generate more\n"
             "       than -omax secondary alignments, SNAP will write out only the best -omax of them, where 'best' means\n"
             "       'with the lowest edit distance'.  Ties are broken arbitrarily.\n"
-            "  -mpc Limit the number of alignments generated by -om to this many per contig (chromosome/FASTA entry);\n"
+            " -mpc  Limit the number of alignments generated by -om to this many per contig (chromosome/FASTA entry);\n"
             "       'mpc' means 'max per contig; default unlimited.  This filter is applied prior to -omax.  The primary alignment\n"
             "       is counted.\n"
-            "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
-            "  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
-            "  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
-            "  -mrl Specify the minimum read length to align, reads shorter than this (after clipping) stay unaligned.  This should be\n"
+            " -pc   Preserve the soft clipping for reads coming from SAM or BAM files\n"
+            " -xf   Increase expansion factor for BAM and GZ files (default %.1f)\n"
+            " -hdp  Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
+            " -mrl  Specify the minimum read length to align, reads shorter than this (after clipping) stay unaligned.  This should be\n"
             "       a good bit bigger than the seed length or you might get some questionable alignments.  Default %d\n"
-            "  -map Use file mapping to load the index rather than reading it.  This might speed up index loading in cases\n"
+            " -map  Use file mapping to load the index rather than reading it.  This might speed up index loading in cases\n"
             "       where SNAP is run repatedly on the same index, and the index is larger than half of the memory size\n"
             "       of the machine.  On some operating systems, loading an index with -map is much slower than without if the\n"
             "       index is not in memory.  You might consider adding -pre to prefetch the index into system cache when loading\n"
             "       with -map when you don't expect the index to be in cache.  This is the default\n"
             " -map- Do not map the index, read it using standard read/write calls.\n"
-            "  -pre Prefetch the index into system cache.  This is only meaningful with -map, and only helps if the index is not\n"
+            " -pre  Prefetch the index into system cache.  This is only meaningful with -map, and only helps if the index is not\n"
             "       already in memory and your operating system is slow at reading mapped files (i.e., some versions of Linux,\n"
             "       but not Windows).  This is the default on Linux.\n"
             " -pre- Do not prefetch the index into system cache.  This is the default on Windows.\n"
-            "  -lp  Run SNAP at low scheduling priority (Only implemented on Windows)\n"
+            " -lp   Run SNAP at low scheduling priority (Only implemented on Windows)\n"
 #ifdef LONG_READS
             "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
 #endif
-            "  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
+            " -nu   No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
             "       evaluating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
             "       it will slow down execution without improving the alignments.\n"
-            "  -no  No Ordering: don't order the evalutation of potential alignments so as to select more likely candidates first.  This option\n"
+            " -no   No Ordering: don't order the evalutation of potential alignments so as to select more likely candidates first.  This option\n"
             "       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
             "       down execution without improving alignments.\n"
-            "  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
+            " -nt   Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
             "       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
+            " -ne   Don't try edit distance scoring before doing affine gap.  This option is to evaluate the aligner and isn't\n"
+            "       intended to be used for ordinary alignments.  It turns off normal affine gap scoring (like -G-) and so will\n"
+            "       have significant effects on the alignment results.\n"
+            " -nb   Don't use the banded affine gap optimization.  This option is to evaluate the aligner and will just\n"
+            "       result in slower alignments.\n"
             " -wbs  Write buffer size in megabytes.  Don't specify this unless you've gotten an error message saying to make it bigger.  Default 16.\n"
             "  -di  Drop the index after aligning and before sorting.  This frees up memory for the sort at the expense of not having the index loaded for your next run.\n"
             " -kts  Kill if too slow.  Monitor our progress and kill ourself if we're not moving fast enough.  This is intended for use on machines\n"
             "       with limited memory, where some alignment tasks will push SNAP into paging, and take disproportinaltely long.  This allows the script\n"
             "       to move on to the next alignment.  Only works when generating output, and not during the sort phase.  If you're running out of memory\n"
             "       sorting, try using -di.\n"
-
             " -pro  Profile alignment to give you an idea of how much time is spent aligning and how much waiting for IO\n"
             " -proAg Profile affine-gap scoring to show how often it forces single-end alignment\n"
-            "  -ae  Apply the end-of-contig soft clipping before the -om processing rather than after it.  A read that's soft clipped because of hanging off one end or the other\n"
+            " -ae   Apply the end-of-contig soft clipping before the -om processing rather than after it.  A read that's soft clipped because of hanging off one end or the other\n"
             "       of a contig does not have a penalty in its NM tag, but it does in SNAP's internal scoring.  This flag says to use the NM value for -om processing\n"
             "       rather than SNAP's internal score.\n"
-            "  -is  Write SNAP's internal score for an alignment into the output.  The value following -is specifies the tag to use, and must be a two letter\n"
+            " -is   Write SNAP's internal score for an alignment into the output.  The value following -is specifies the tag to use, and must be a two letter\n"
             "       value starting with X, Y or Z.  So, -is ZQ will cause SNAP to write ZQ:i:3 on a read with internal score 3.  Generally, the internal scores\n"
             "       are the same as the NM values, except that they contain penalties for soft clipping reads that hang over the end of contigs (but not for\n"
             "       soft clipping that's due to # quality scores or that was present in the input SAM/BAM file and retained due to -pc)\n"
-            "  -G-  disable affine gap scoring (default: true)\n"
-            "       Scoring parameters (works only when -G- is not used)\n"
-            "           cost for match -gm (default: %u)\n"
-            "           cost for substitution -gs (default: %u)\n"
-            "           cost for opening a gap -go (default: %u)\n"
-            "           cost for extending a gap -ge (default: %u)\n"
-            "  -A-  Disable ALT awareness.  The default is to try to map reads to the primary assembly and only to choose ALT alignments when they're much better,\n"
+            " -G-   disable affine gap scoring\n"
+            "       Affine gap scoring parameters (works only when -G- is not used):\n"
+            " -gm   cost for match (default: %u)\n"
+            " -gs   cost for substitution (default: %u)\n"
+            " -go   cost for opening a gap (default: %u)\n"
+            " -ge   cost for extending a gap (default: %u)\n"
+            " -g5   bonus for alignment reaching 5' end of read (default: %u)\n"
+            " -g3   bonus for alignment reaching 3' end of read (default: %u)\n"
+            "\n"
+            " -A-   Disable ALT awareness.  The default is to try to map reads to the primary assembly and only to choose ALT alignments when they're much better,\n"
             "       and to compute MAPQ for non-ALT alignments using only non-ALT hits. This flag disables that behavior and results in ALT-oblivious behavior.\n"
-            "  -ea  Emit ALT alignments.  When the aligner is ALT aware (i.e., -A- isn't specified) if it finds an ALT alignment that would have been\n"
+            " -ea   Emit ALT alignments.  When the aligner is ALT aware (i.e., -A- isn't specified) if it finds an ALT alignment that would have been\n"
             "       the primary alignment if -A- had been specified but isn't without -A-, SNAP will emit the read with the supplementary alignment\n"
             "       flag set and MAPQ computed across all potential mappings, both primary and ALT\n"
-            "  -asg Maximum score gap to prefer a non-ALT alignment.  If the best non-ALT alignment is more than this much worse than the best ALT alignment\n"
+            " -asg  Maximum score gap to prefer a non-ALT alignment.  If the best non-ALT alignment is more than this much worse than the best ALT alignment\n"
             "       emit the ALT alignment as the primary result rather than as a supplementary result. (default: %u)\n"
+            " -fmb  Force MAPQ below this value to zero.  By the strict definition of MAPQ a read with two equally good alignments should have MAPQ 3\n"
+            "       Other aligners, however, will score these alignments at MAPQ 0 and some variant callers depend on that behavior.  Setting this will\n"
+            "       force any MAPQ value at or below the parameter value to zero.  (default:%d)\n"
+            " -hc   Enable SNAP mode optimized for use with GATK HaplotypeCaller.\n"
+            " -hc-  Turn off optimizations specific to GATK HaplotypeCaller (e.g., when using the DRAGEN variant caller on SNAP aligned output)\n"
+            "       In this mode, when a read (or pair) doesn't align, try soft clipping the read (or pair) to find an alignment.  This is the default.\n"
+            " -at   Attach AT:i: tags to each read showing the alignment time in microseconds.  For paired-end reads this is the time for the pair.\n"
+            " -pfc  Preserve FASTQ comments.  Anything after the first white space on the FASTQ ID line is appended to the SAM/BAM line.  If this is not\n"
+            "       in valid SAM/BAM format it will produce incorrect output.\n"
+            " -q    Quiet mode: don't print status messages (other than the welcome message which is printed prior to parsing args).  Error messages\n"
+            "       are still printed.\n"            
+            " -qq   Super quiet mode: don't print status or error messages.\n"
 		,
-            commandLine,
-            maxDist,
-            maxHits,
-			minWeightToCheck,
-            MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
 			extraSearchDepth,
 			expansionFactor,
 			DEFAULT_MIN_READ_LENGTH,
@@ -249,7 +283,10 @@ AlignerOptions::usage()
             subPenalty,
             gapOpenPenalty,
             gapExtendPenalty,
-            maxScoreGapToPreferNonALTAlignment
+            fivePrimeEndBonus,
+            threePrimeEndBonus,
+            maxScoreGapToPreferNonALTAlignment,
+            flattenMAPQAtOrBelow
         );
 
     if (extra != NULL) {
@@ -263,7 +300,7 @@ AlignerOptions::usage()
                 "parameters for the next alignment (including single or paired).  You may have as many of these\n"
                 "as you please.  If two consecutive alignments use the same index, it will not be reloaded.\n"
                 "So, for example, you could do 'snap-aligner single hg19-20 foo.fq -o foo.sam , paired hg19-20 end1.fq end2.fq -o paired.sam'\n"
-                "and it would not reload the index between the single and paired alignments.\n",
+                "and it would not reload the index between the single and paired alignments.\n"
                 "SNAP doesn't parse the options for later runs until the earlier ones have completed, so if you make\n"
                 "an error in one, it may take a while for you to notice.  So, be careful (or check back shortly after\n"
                 "you think each run will have completed).\n\n");
@@ -307,8 +344,13 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-n") == 0) {
+        } else if (strcmp(argv[n], "-i") == 0) {
+            if (n + 1 < argc) {
+                maxDistForIndels = atoi(argv[n + 1]);
+                n++;
+                return true;
+            }
+        } else if (strcmp(argv[n], "-n") == 0) {
             if (n + 1 < argc) {
                 if (seedCountSpecified) {
                     WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
@@ -319,8 +361,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-sc") == 0) {
+        } else if (strcmp(argv[n], "-sc") == 0) {
             if (n + 1 < argc) {
                 if (seedCountSpecified) {
                     WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
@@ -332,8 +373,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-ms") == 0) {
+        } else if (strcmp(argv[n], "-ms") == 0) {
             if (n + 1 < argc) {
                 minWeightToCheck = (unsigned)atoi(argv[n + 1]);
                 if (minWeightToCheck > 1000) {
@@ -343,23 +383,36 @@ AlignerOptions::usage()
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-h") == 0) {
+        } else if (strcmp(argv[n], "-h") == 0) {
             if (n + 1 < argc) {
                 maxHits = atoi(argv[n + 1]);
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-c") == 0) { // conf diff is deprecated, but we just ignore it rather than throwing an error.
+        } else if (strcmp(argv[n], "-c") == 0) { // conf diff is deprecated, but we just ignore it rather than throwing an error.
             if (n + 1 < argc) {
                 n++;
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-a") == 0) { // adaptive conf diff is deprecated, but we just ignore it rather than throwing an error.
+        } else if (strcmp(argv[n], "-a") == 0) { // adaptive conf diff is deprecated, but we just ignore it rather than throwing an error.
             if (n + 1 < argc) {
                 n++;
+                return true;
+            }
+        } else if (strcmp(argv[n], "-hc") == 0) {
+            useSoftClipping = false;
+            fivePrimeEndBonus = 5;
+            threePrimeEndBonus = 5;
+            return true;
+        } else if (strcmp(argv[n], "-hc-") == 0) {
+            useSoftClipping = true;
+            fivePrimeEndBonus = 10;
+            threePrimeEndBonus = 7;
+            return true;
+        } else if (strcmp(argv[n], "-fmb") == 0) {
+            if (n + 1 < argc) {
+                n++;
+                flattenMAPQAtOrBelow = atoi(argv[n + 1]);
                 return true;
             }
         } else if (strcmp(argv[n], "-t") == 0) {
@@ -374,8 +427,7 @@ AlignerOptions::usage()
  
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-o") == 0) {
+        } else if (strcmp(argv[n], "-o") == 0) {
             int argsConsumed;
             if (!SNAPFile::generateFromCommandLine(argv + n + 1, argc - n - 1, &argsConsumed, &outputFile, false, false)) {
                 WriteErrorMessage("Must have a file specifier after -o\n");
@@ -412,6 +464,13 @@ AlignerOptions::usage()
             return true;
         } else if (strcmp(argv[n], "-pre-") == 0) {
             prefetchIndex = false;
+            return true;
+        } else if (strcmp(argv[n], "-q") == 0) {
+            g_suppressStatusMessages = true;
+            return true;
+        } else if (strcmp(argv[n], "-qq") == 0) {
+            g_suppressStatusMessages = true;
+            g_suppressErrorMessages = true;
             return true;
         } else if (strcmp(argv[n], "-ae") == 0) {
             ignoreAlignmentAdjustmentsForOm = false;
@@ -454,8 +513,7 @@ AlignerOptions::usage()
             strcpy(internalScoreTag, argv[n + 1]);
             n++;
             return true;
-        }
-        else if (strcmp(argv[n], "-F") == 0) {
+        } else if (strcmp(argv[n], "-F") == 0) {
             if (n + 1 < argc) {
                 n++;
                 if (strcmp(argv[n], "a") == 0) {
@@ -464,39 +522,33 @@ AlignerOptions::usage()
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterMultipleHits | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "s") == 0) {
+                } else if (strcmp(argv[n], "s") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "u") == 0) {
+                } else if (strcmp(argv[n], "u") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E  option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterUnaligned | FilterTooShort;
-                }
-                else if (strcmp(argv[n], "l") == 0) {
+                } else if (strcmp(argv[n], "l") == 0) {
                     if (0 != filterFlags) {
                         WriteErrorMessage("Specified -F %s after a previous -F or -E  option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
                         return false;
                     }
                     filterFlags = FilterSingleHit | FilterMultipleHits | FilterUnaligned;
-                }
-                else if (strcmp(argv[n], "b") == 0) {
+                } else if (strcmp(argv[n], "b") == 0) {
                     // ignore paired-end option(s)
-                }
-                else {
+                } else {
                     WriteErrorMessage("Unknown option type after -F: %s\n", argv[n]);
                     return false;
                 }
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-E") == 0) {
+        } else if (strcmp(argv[n], "-E") == 0) {
             if (n + 1 < argc) {
                 if (0 != filterFlags) {
                     WriteErrorMessage("You can have only one -F and/or -E switch (excepting -F b)\n");
@@ -515,40 +567,32 @@ AlignerOptions::usage()
                 }
                 return true;
             }
-        }
-        else if (strcmp(argv[n], "-x") == 0) {
+        } else if (strcmp(argv[n], "-x") == 0) {
             explorePopularSeeds = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-f") == 0) {
+        } else if (strcmp(argv[n], "-f") == 0) {
             stopOnFirstHit = true;
             return true;
-#if     USE_DEVTEAM_OPTIONS
-        }
-        else if (strcmp(argv[n], "-I") == 0) {
+        } else if (strcmp(argv[n], "-I") == 0) {
             ignoreMismatchedIDs = true;
             return true;
+#if     USE_DEVTEAM_OPTIONS
 #ifdef  _MSC_VER
-        }
-        else if (strcmp(argv[n], "-B") == 0) {
+        } else if (strcmp(argv[n], "-B") == 0) {
             useTimingBarrier = true;
             return true;
 #endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
-        }
-        else if (strcmp(argv[n], "-M") == 0) {
+        } else if (strcmp(argv[n], "-M") == 0) {
             useM = true;
             return true;
-        }
-        else if (strcmp(argv[n], "-=") == 0) {
+        } else if (strcmp(argv[n], "-=") == 0) {
             useM = false;
             return true;
-        }
-        else if (strcmp(argv[n], "-sa") == 0) {
+        } else if (strcmp(argv[n], "-sa") == 0) {
             ignoreSecondaryAlignments = false;
             return true;
-        }
-        else if (strcmp(argv[n], "-om") == 0) {
+        } else if (strcmp(argv[n], "-om") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-om requires an additional value\n");
                 return false;
@@ -566,8 +610,7 @@ AlignerOptions::usage()
             n++;
 
             return true;
-        }
-        else if (strcmp(argv[n], "-omax") == 0) {
+        } else if (strcmp(argv[n], "-omax") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-omax requires an additional value\n");
                 return false;
@@ -582,8 +625,7 @@ AlignerOptions::usage()
             n++;
 
             return true;
-        }
-        else if (strcmp(argv[n], "-sid") == 0) {
+        } else if (strcmp(argv[n], "-sid") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-sid requires an additional value\n");
                 return false;
@@ -597,8 +639,7 @@ AlignerOptions::usage()
             sortIntermediateDirectory = argv[n + 1];
             n++;
             return true;
-        }
-        else if (strcmp(argv[n], "-mpc") == 0) {
+        } else if (strcmp(argv[n], "-mpc") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-mpc requires an additional value\n");
                 return false;
@@ -614,8 +655,7 @@ AlignerOptions::usage()
             n++;
 
             return true;
-        }
-        else if (strcmp(argv[n], "-wbs") == 0) {
+        } else if (strcmp(argv[n], "-wbs") == 0) {
             if (n + 1 >= argc) {
                 WriteErrorMessage("-wbs requires an additional value\n");
                 return false;
@@ -704,6 +744,30 @@ AlignerOptions::usage()
             gapExtendPenalty = atoi(argv[n]);
             if (gapExtendPenalty <= 0) {
                 WriteErrorMessage("-ge must be greater than zero");
+                return false;
+            }
+            return true;
+        } else if (strcmp(argv[n], "-g5") == 0) {
+            if (n + 1 >= argc) {
+                WriteErrorMessage("-g5 requires an additional value\n");
+                return false;
+            }
+            n++;
+            fivePrimeEndBonus = atoi(argv[n]);
+            if (fivePrimeEndBonus <= 0) {
+                WriteErrorMessage("-g5 must be greater than zero");
+                return false;
+            }
+            return true;
+        } else if (strcmp(argv[n], "-g3") == 0) {
+            if (n + 1 >= argc) {
+                WriteErrorMessage("-g3 requires an additional value\n");
+                return false;
+            }
+            n++;
+            threePrimeEndBonus = atoi(argv[n]);
+            if (threePrimeEndBonus <= 0) {
+                WriteErrorMessage("-g3 must be greater than zero");
                 return false;
             }
             return true;
@@ -850,8 +914,7 @@ AlignerOptions::usage()
                 n++;
                 return true;
 
-            }
-            else {
+            } else {
                 WriteErrorMessage("-R requires a value");
                 return false;
             }
@@ -860,8 +923,7 @@ AlignerOptions::usage()
                 perfFileName = argv[n + 1];
                 n++;
                 return true;
-            }
-            else {
+            } else {
                 WriteErrorMessage("Must specify the name of the perf file after -pf\n");
             }
         } else if (strcmp(argv[n], "-rg") == 0) {
@@ -875,8 +937,7 @@ AlignerOptions::usage()
                 sprintf(s, format, defaultReadGroup);
                 rgLineContents = s;
                 return true;
-            }
-            else {
+            } else {
                 WriteErrorMessage("Must specify the default read group after -rg\n");
             }
         } else if (strcmp(argv[n], "--hp") == 0) {
@@ -892,13 +953,26 @@ AlignerOptions::usage()
             SetToLowSchedulingPriority();
             return true;
         } else if (strcmp(argv[n], "-nu") == 0) {
-            noUkkonen = true;
+            disabledOptimizations.noUkkonen = true;
             return true;
         } else if (strcmp(argv[n], "-no") == 0) {
-            noOrderedEvaluation = true;
+            disabledOptimizations.noOrderedEvaluation = true;
             return true;
         } else if (strcmp(argv[n], "-nt") == 0) {
-            noTruncation = true;
+            disabledOptimizations.noTruncation = true;
+            return true;
+        } else if (strcmp(argv[n], "-ne") == 0) {
+            disabledOptimizations.noEditDistance = true;
+            useAffineGap = false;
+            return true;
+        } else if (strcmp(argv[n], "-nb") == 0) {
+            disabledOptimizations.noBandedAffineGap = true;
+            return true;
+        } else if (strcmp(argv[n], "-ni") == 0) {
+            disabledOptimizations.noMaxKForIndel = true;
+            return true;
+        } else if (strcmp(argv[n], "-at") == 0) {
+            attachAlignmentTimes = true;
             return true;
         } else if (strcmp(argv[n], "-di") == 0) {
             dropIndexBeforeSort = true;
@@ -921,24 +995,46 @@ AlignerOptions::usage()
 
             if ('-' == argv[n][2]) {
                 if ('-' == argv[n][3]) {
-                    clipping = NoClipping;
+                    clipping.clippingType = NoClipping;
                 } else {
-                    clipping = ClipBack;
+                    clipping.clippingType = ClipBack;
                 }
             } else {
                 if ('-' == argv[n][3]) {
-                    clipping = ClipFront;
+                    clipping.clippingType = ClipFront;
                 } else {
-                    clipping = ClipFrontAndBack;
+                    clipping.clippingType = ClipFrontAndBack;
                 }
             }
             return true;
-        }
-        else if (strcmp(argv[n], "-A-") == 0) {
+        } else if (strcmp(argv[n], "-A-") == 0) {
             altAwareness = false;
             return true;
+        } else if (strcmp(argv[n], "-cc") == 0) {
+            if (n + 1 < argc) {
+                if (strlen(argv[n + 1]) != 2 || argv[n + 1][0] < '!' || argv[n + 1][0] > '~' || argv[n + 1][1] < '!' || argv[n + 1][1] > '~') {
+                    WriteErrorMessage("Must specify the min and max quality scores to clip after -cc as exactly two characters between ! and ~ inclusive in ASCII.\n");
+                    return false;
+                }
+                if (argv[n + 1][0] > argv[n + 1][1]) {
+                    WriteErrorMessage("The min quality score after -cc must be less than or equal to the max.\n");
+                    return false;
+                }
+
+                clipping.minPhredToClip = argv[n + 1][0];
+                clipping.maxPhredToClip = argv[n + 1][1];
+
+                n++;
+                return true;
+            } else {
+                WriteErrorMessage("Must specify the min and max quality scores to clip after -cc\n");
+                return false;
+            }
         } else if (strcmp(argv[n], "-ea") == 0) {
             emitALTAlignments = true;
+            return true;
+        } else if (strcmp(argv[n], "-pfc") == 0) {
+            preserveFASTQComments = true;
             return true;
         } else if (strcmp(argv[n], "-asg") == 0) {
             if (n + 1 < argc) {

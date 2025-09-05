@@ -92,6 +92,8 @@ class GzipWriterFilter : public DataWriter::Filter
 public:
     GzipWriterFilter(GzipWriterFilterSupplier* i_supplier);
 
+    ~GzipWriterFilter();
+
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes, bool lastBatch = false, bool* needMoreBuffer = NULL, size_t* fromBufferUsed = NULL);
@@ -335,6 +337,7 @@ GzipCompressWorker::compressChunk(
         }
         * (_uint16*) (toBuffer + 16) = (_uint16) (toUsed - 1);
     }
+
     return toUsed;
 }
 
@@ -342,6 +345,18 @@ GzipWriterFilter::GzipWriterFilter(GzipWriterFilterSupplier* i_supplier)
     : DataWriter::Filter(DataWriter::ResizeFilter), supplier(i_supplier), manager(NULL), worker(NULL)
 {}
 
+GzipWriterFilter::~GzipWriterFilter()
+{
+    if (manager != NULL) {
+        delete manager;
+        manager = NULL;
+    }
+
+    if (worker != NULL) {
+        delete worker;
+        worker = NULL;
+    }
+} // ~GzipWriterFilter
 
     void
 GzipWriterFilter::onAdvance(
@@ -380,6 +395,7 @@ GzipWriterFilter::onNextBatch(
         }
         return min<long long>(fromUsed, bytes);
     }
+
     // do compress buffer synchronously in-place
     if (manager == NULL) {
         manager = new GzipCompressWorkerManager(supplier);
@@ -389,15 +405,17 @@ GzipWriterFilter::onNextBatch(
         manager->initialize(encoder);
         manager->configure(worker, 0, 1);
     }
+
     encoder->setupEncode(-1);
     manager->beginStep();
     worker->step();
     manager->finishStep();
     writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
     if (fromBufferUsed != NULL) {
-        *fromBufferUsed = min<long long>(fromUsed, bytes);
+        *fromBufferUsed = fromUsed;
     }
-    return min<long long>(fromUsed, bytes);
+
+    return fromUsed;
 }
 
     GzipWriterFilterSupplier*

@@ -45,16 +45,20 @@ WriteMessageToFile(FILE *file, const char *message)
     }
 }
 
+const int messageBufferSize = 102400;   // The command options message is ridiculously big.
 
     void
 WriteErrorMessage(const char *message, ...)
 {
+    if (g_suppressErrorMessages) {
+        return;
+    }
+
     va_list args;
     va_start(args, message);
-    const size_t bufferSize = 10240;
-    char buffer[bufferSize];
-    vsnprintf(buffer, bufferSize - 1, message, args);
-    buffer[bufferSize - 1] = '\0';  // vsnprintf spec is vague on whether it null terminates a full buffer, so better safe than sorry
+    char buffer[messageBufferSize];
+    vsnprintf(buffer, messageBufferSize - 1, message, args);
+    buffer[messageBufferSize - 1] = '\0';  // vsnprintf spec is vague on whether it null terminates a full buffer, so better safe than sorry
     WriteMessageToFile(stderr, buffer);
 	if (NULL != CommandPipe) {
 	  WriteToNamedPipe(CommandPipe, buffer);
@@ -64,12 +68,15 @@ WriteErrorMessage(const char *message, ...)
     void
 WriteStatusMessage(const char *message, ...)
 {
+    if (g_suppressStatusMessages) {
+        return;
+    }
+
     va_list args;
     va_start(args, message);
-    const size_t bufferSize = 10240;
-    char buffer[bufferSize];
-    vsnprintf(buffer, bufferSize - 1, message, args);
-    buffer[bufferSize - 1] = '\0';  // vsnprintf spec is vague on whether it null terminates a full buffer, so better safe than sorry
+    char buffer[messageBufferSize];
+    vsnprintf(buffer, messageBufferSize - 1, message, args);
+    buffer[messageBufferSize - 1] = '\0';  // vsnprintf spec is vague on whether it null terminates a full buffer, so better safe than sorry
     WriteMessageToFile(stdout, buffer);
 	if (NULL != CommandPipe) {
 	  WriteToNamedPipe(CommandPipe, buffer);

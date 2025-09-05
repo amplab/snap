@@ -185,7 +185,7 @@ ParallelTask<TContext>::threadWorker(
     void* threadArg)
 {
     TContext* context = (TContext*) threadArg;
-    if (context->bindToProcessors) {
+    if (context->bindToProcessors && !DoesThreadHaveProcessorAffinitySet()) {
         BindThreadToProcessor(context->threadNum);
     }
 
@@ -254,6 +254,8 @@ public:
     virtual void initialize(void* context) {}
 
     virtual ParallelWorker* createWorker() = 0;
+
+    virtual ~ParallelWorkerManager() {}
 
     virtual void beginStep() {}
 

@@ -60,6 +60,8 @@ public:
 
     virtual bool getData(char** o_buffer, _int64* o_validBytes, _int64* o_startBytes = NULL);
 
+    virtual void dumpState();
+
     virtual void advance(_int64 bytes);
 
     virtual void nextBatch();
@@ -97,10 +99,10 @@ protected:
     {
         char            *buffer;
         BufferState     state;
-        unsigned        validBytes;
+        size_t          validBytes;
         unsigned        nBytesThatMayBeginARead;
         bool            isEOF;
-        unsigned        offset;     // How far has the consumer gotten in current buffer
+        size_t          offset;     // How far has the consumer gotten in current buffer
         _int64          fileOffset;
         _uint32         batchID;
         int             holds;
@@ -165,6 +167,16 @@ protected:
     const size_t         bufferSize;
 };
 
+void
+ReadBasedDataReader::dumpState()
+{
+    WriteErrorMessage("ReadBasedDataReader at 0x%llx state:\n", this);
+    WriteErrorMessage("\theaderBufferSize %lld, headerExtraSize %lld, amountAdvancedThroughUnderlyingStoreByUs %lld, nHeaderBuffersAllocated %d, hitEOFReadingHeader %d, bufferSize %lld\n",
+        headerBufferSize, headerExtraSize, amountAdvancedThroughUnderlyingStoreByUs, nHeaderBuffersAllocated, hitEOFReadingHeader, bufferSize);
+    WriteErrorMessage("\tnBuffers %d, headerBuffersOutstanding, %d, startedReadingHeader %d, extraBytes %lld, overflowBytes %lld, nextBatchID %d, nextBufferForReader %d, nextBufferForConsumer %d, lastBufferForConsumer %d\n",
+        nBuffers, headerBuffersOutstanding, startedReadingHeader, extraBytes, overflowBytes, nextBatchID, nextBufferForReader, nextBufferForConsumer, lastBufferForConsumer);
+}
+
 ReadBasedDataReader::ReadBasedDataReader(
     unsigned i_nBuffers,
     _int64 i_overflowBytes,
@@ -172,7 +184,7 @@ ReadBasedDataReader::ReadBasedDataReader(
     size_t i_bufferSpace)
     : DataReader(), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes),
     maxBuffers(i_nBuffers * (i_nBuffers == 1 ? 2 : 4)),
-    bufferSize(i_bufferSpace > 0 ? i_bufferSpace / (i_nBuffers * 2) : BUFFER_SIZE),
+    bufferSize(i_bufferSpace > 0 ? i_bufferSpace / ((_int64)i_nBuffers * 2) : BUFFER_SIZE),
 	headerBuffer(NULL), headerBufferSize(0), amountAdvancedThroughUnderlyingStoreByUs(0), 
 	headerExtra(NULL), headerExtraSize(0), startedReadingHeader(false), headerBuffersOutstanding(0), nHeaderBuffersAllocated(0),
 	hitEOFReadingHeader(false)
@@ -186,12 +198,20 @@ ReadBasedDataReader::ReadBasedDataReader(
     _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
     bufferInfo = new BufferInfo[maxBuffers];
     extraBytes = max((_int64) 0, (_int64) ((bufferSize + overflowBytes) * extraFactor));
+
+    if (bufferSize <= 2 * (size_t)overflowBytes) {
+        WriteErrorMessage("ReadBasedDataReader::ReadBasedDataReader: the buffer size %lld isn't more than twice the overflow size %lld, so we will fail to make progres.  This is a code bug, please create a github issue.\n",
+            bufferSize, overflowBytes);
+        soft_exit(1);
+    }
+
     char* allocated = (char*) BigReserve(maxBuffers * (bufferSize + extraBytes + overflowBytes));
     BigCommit(allocated, nBuffers * (bufferSize + extraBytes + overflowBytes));
     if (NULL == allocated) {
         WriteErrorMessage("ReadBasedDataReader: unable to allocate IO buffer\n");
         soft_exit(1);
     }
+
     for (unsigned i = 0 ; i < nBuffers; i++) {
         bufferInfo[i].buffer = allocated;
         allocated += bufferSize + overflowBytes;
@@ -206,6 +226,7 @@ ReadBasedDataReader::ReadBasedDataReader(
         bufferInfo[i].holds = 0;
 		bufferInfo[i].headerBuffer = false;
     }
+
     nextBatchID = 1;
  
     nextBufferForConsumer = -1;
@@ -521,8 +542,8 @@ ReadBasedDataReader::advance(
     _int64 bytes)
 {
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
-    _ASSERT(info->validBytes >= info->offset && bytes >= 0 && bytes <= info->validBytes - info->offset);
-    info->offset += min(info->validBytes - info->offset, (unsigned)max((_int64)0, bytes));
+    _ASSERT(info->validBytes >= info->offset && bytes >= 0 && bytes <= (_int64)info->validBytes - (_int64)info->offset);
+    info->offset += __min(info->validBytes - info->offset, (unsigned)__max((_int64)0, bytes));
 }
 
     void
@@ -1065,6 +1086,11 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(unsigned i_nBuffers, _i
 {
     readOffset.QuadPart = 0;
     bufferLaps = (OVERLAPPED *)malloc(sizeof(OVERLAPPED) * maxBuffers);
+    if (NULL == bufferLaps) {
+        WriteErrorMessage("WindowsOverlappedDataReader: unable to allocate memory for bufferLaps (%lld bytes)\n", sizeof(OVERLAPPED) * maxBuffers);
+        soft_exit(1);
+    }
+
     for (unsigned i = 0; i < i_nBuffers; i++) {
         bufferLaps[i].hEvent = CreateEvent(NULL,TRUE,FALSE,NULL);
         if (NULL == bufferLaps[i].hEvent) {
@@ -1261,10 +1287,13 @@ WindowsOverlappedDataReader::waitForBuffer(
     }
 
     _int64 start = timeInNanos();
-    if (!GetOverlappedResult(hFile, bufferLap, (DWORD *)&info->validBytes,TRUE)) {
+    DWORD dwValidBytes; // The Windows API takes a 32 bit unsigned (DWORD), but BufferInfo->validBytes is 64 bits.  So we use this and then copy.
+
+    if (!GetOverlappedResult(hFile, bufferLap, &dwValidBytes,TRUE)) {
         WriteErrorMessage("Error reading FASTQ file, %d\n",GetLastError());
         soft_exit(1);
     }
+    info->validBytes = dwValidBytes;
     InterlockedAdd64AndReturnNewValue(&ReadWaitTime, timeInNanos() - start);
 
     info->state = Full;
@@ -1302,8 +1331,314 @@ public:
 };
 
 DataSupplier* DataSupplier::WindowsOverlapped = new WindowsOverlappedDataSupplier();
-
 #endif // _MSC_VER
+
+class AsyncFileDataReader : public ReadBasedDataReader
+{
+public:
+
+    AsyncFileDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, size_t bufferSpace);
+
+    virtual ~AsyncFileDataReader();
+
+    virtual bool init(const char* i_fileName);
+
+    virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+
+    //    virtual char* readHeader(_int64* io_headerSize);
+
+    virtual const char* getFilename()
+    {
+        return fileName;
+    }
+
+    virtual void dumpState();
+
+protected:
+
+    // must hold the lock to call
+    virtual void startIo();
+
+    // must hold the lock to call
+    virtual void waitForBuffer(unsigned bufferNumber);
+
+    // must hold the lock to call
+    virtual void addBuffer();
+
+    AsyncFile::Reader** bufferReaders;
+
+    const char*         fileName;
+    _int64              fileSize;
+    AsyncFile*          asyncFile;
+
+
+    _int64              readOffset;
+    _int64              endingOffset;
+
+};
+
+void
+AsyncFileDataReader::dumpState()
+{
+    WriteErrorMessage("AsyncFileDataReader (0x%llx) state:\n", this);
+    WriteErrorMessage("\tfileName %s, fileSize %lld, readOffset %lld, endingOffset %lld\n",
+        fileName, fileSize, readOffset, endingOffset);
+    
+    ReadBasedDataReader::dumpState();
+}
+
+AsyncFileDataReader::AsyncFileDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, size_t bufferSpace) :
+    ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor, bufferSpace), fileName(NULL), asyncFile(NULL), endingOffset(0)
+{
+    readOffset = 0;
+    bufferReaders = (AsyncFile::Reader**)malloc(sizeof(AsyncFile::Reader*) * maxBuffers);
+
+    if (NULL == bufferReaders) {
+        WriteErrorMessage("AsyncFileDataReader::AsyncFileDataReader(): malloc(%d) failed\n", sizeof(AsyncFile::Reader*) * maxBuffers);
+        soft_exit(1);
+        return; // Just to avoid the compiler warning
+    }
+
+    for (unsigned i = 0; i < i_nBuffers; i++) {
+        bufferReaders[i] = NULL;
+    }
+}
+
+AsyncFileDataReader::~AsyncFileDataReader()
+{
+    for (unsigned i = 0; i < nBuffers; i++) {
+        if (bufferReaders[i] != NULL) {
+            bufferReaders[i]->close();
+            delete bufferReaders[i];
+        }
+    }
+    free(bufferReaders);
+    bufferReaders = NULL;
+
+    if (NULL != asyncFile) {
+        asyncFile->close();
+        delete asyncFile;
+        asyncFile = NULL;
+    }
+} // ~AsyncFileDataReader
+
+    bool
+AsyncFileDataReader::init(const char* i_fileName)
+{
+    fileName = i_fileName;
+    asyncFile = AsyncFile::open(fileName, false);
+    if (NULL == asyncFile) {
+        WriteErrorMessage("AsyncFileDataReader::unable to open async file %s\n", fileName);
+        return false;
+    }
+
+    fileSize = asyncFile->getSize();
+    if (fileSize < 0) {
+        return false;   // There's aleady an error message printed
+    }
+
+    return true;
+} // AsyncFileDataReader::init
+
+    void
+AsyncFileDataReader::reinit(
+    _int64 i_startingOffset,
+    _int64 amountOfFileToProcess)
+{
+    _ASSERT(asyncFile != NULL);  // Must call init() before reinit()
+
+    AcquireExclusiveLock(&lock);
+
+    //
+    // First let any pending IO complete.
+    //
+    for (unsigned i = 0; i < nBuffers; i++) {
+        if (bufferInfo[i].state == Reading) {
+            waitForBuffer(i);
+        }
+        bufferInfo[i].state = Empty;
+        bufferInfo[i].isEOF = false;
+        bufferInfo[i].offset = 0;
+        bufferInfo[i].next = i < nBuffers - 1 ? i + 1 : -1;
+        bufferInfo[i].previous = i > 0 ? i - 1 : -1;
+    }
+
+    nextBufferForConsumer = -1;
+    lastBufferForConsumer = -1;
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, 0);
+    nextBufferForReader = 0;
+
+    readOffset = i_startingOffset;
+    if (amountOfFileToProcess == 0) {
+        //
+        // This means just read the whole file.
+        //
+        endingOffset = fileSize;
+    } else {
+        endingOffset = __min(fileSize, i_startingOffset + amountOfFileToProcess);
+    }
+
+    //
+    // Kick off IO, wait for the first buffer to be read
+    //
+    startIo();
+    waitForBuffer(nextBufferForConsumer);
+
+    ReleaseExclusiveLock(&lock);
+} // AsyncFileDataReader::reinit
+
+    void
+AsyncFileDataReader::startIo()
+{
+    //
+    // Launch reads on whatever buffers are ready.
+    //
+    AssertExclusiveLockHeld(&lock);
+
+    while (nextBufferForReader != -1) {
+        // remove from free list
+        BufferInfo* info = &bufferInfo[nextBufferForReader];
+        AsyncFile::Reader* reader = bufferReaders[nextBufferForReader];
+
+        if (reader == NULL) {
+            reader = bufferReaders[nextBufferForReader] = asyncFile->getReader();
+        }
+
+        _ASSERT(info->state == Empty);
+        int index = nextBufferForReader;
+        nextBufferForReader = info->next;
+        info->batchID = nextBatchID++;
+        // add to end of consumer list
+        if (lastBufferForConsumer != -1) {
+            _ASSERT(bufferInfo[lastBufferForConsumer].next == -1);
+            bufferInfo[lastBufferForConsumer].next = index;
+        }
+        info->next = -1;
+        info->previous = lastBufferForConsumer;
+        lastBufferForConsumer = index;
+
+        if (nextBufferForConsumer == -1) {
+            nextBufferForConsumer = index;
+        }
+
+        if (readOffset >= fileSize || readOffset >= endingOffset) {
+            info->validBytes = 0;
+            info->nBytesThatMayBeginARead = 0;
+            info->isEOF = true;
+            info->state = Full;
+            return;
+        }
+
+        unsigned amountToRead;
+        _int64 finalOffset = __min(fileSize, endingOffset + overflowBytes);
+        _int64 finalStartOffset = __min(fileSize, endingOffset);
+        amountToRead = (unsigned)__min(finalOffset - readOffset, (_int64)bufferSize);   // Cast OK because can't be longer than unsigned bufferSize
+        info->isEOF = readOffset + amountToRead == finalOffset;
+        info->nBytesThatMayBeginARead = info->isEOF && finalStartOffset == fileSize ? amountToRead
+            : (unsigned)__min((_int64)bufferSize - overflowBytes, finalStartOffset - readOffset);
+
+        _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || finalOffset == readOffset + amountToRead));
+        info->fileOffset = readOffset;
+
+        info->state = Reading;
+        info->offset = 0;
+
+        if (!reader->beginRead(info->buffer, amountToRead, readOffset, &info->validBytes)) {
+            WriteErrorMessage("AsyncFileDataReader::startIo(): reader->beginRead failed\n");
+            soft_exit(1);
+        }
+
+        readOffset += info->nBytesThatMayBeginARead;
+    } // while there's a buffer ready to go
+
+    if (nextBufferForConsumer == -1) {
+        //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
+
+        PreventEventWaitersFromProceeding(&releaseEvent);
+    }
+} // AsyncFileDataReader::startIo
+
+    void
+AsyncFileDataReader::waitForBuffer(
+    unsigned bufferNumber)
+{
+    _ASSERT(bufferNumber >= 0 && bufferNumber < nBuffers);
+    BufferInfo* info = &bufferInfo[bufferNumber];
+    AsyncFile::Reader* reader = bufferReaders[bufferNumber];
+
+    while (info->state == InUse) {
+        //fprintf(stderr, "WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
+        // must already have lock to call, release & wait & reacquire
+        ReleaseExclusiveLock(&lock);
+        _int64 start = timeInNanos();
+        _int64 waitTime;
+        if (releaseWaitInMillis > 0xffffffff) {
+#ifdef _MSC_VER
+            waitTime = INFINITE; 
+#else // _MSC_VER
+            waitTime = 0xffffffff;
+#endif // _MSC_VER
+        }  else {
+            waitTime = releaseWaitInMillis;
+        }
+
+        bool eventSet = WaitForEventWithTimeout(&releaseEvent, waitTime);
+        InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
+        AcquireExclusiveLock(&lock);
+        if (!eventSet) {
+            // this isn't going to directly make this buffer available, but will reduce pressure
+            addBuffer();
+        }
+    }
+
+    if (info->state == Full) {
+        return;
+    }
+
+    if (info->state != Reading) {
+        startIo();
+    }
+
+    if (!reader->waitForCompletion()) {
+        WriteErrorMessage("AsyncFileDataReader::waitForBuffer: reader->waitForCompletion() failed\n");
+        soft_exit(1);
+    }
+
+    info->state = Full;
+    info->buffer[info->validBytes] = 0;
+} // AsyncFileDataReader::waitForBuffer
+
+    void
+AsyncFileDataReader::addBuffer()
+{
+    if (nBuffers == maxBuffers) {
+        WriteErrorMessage("AsyncFileDataReader: addBuffer at limit\n");
+        return;
+    }
+    _ASSERT(nBuffers < maxBuffers);
+
+    bufferReaders[nBuffers] = asyncFile->getReader();
+
+    if (NULL == bufferReaders[nBuffers]) {
+        WriteErrorMessage("AsyncFileDataReader: Unable to create reader\n");
+        soft_exit(1);
+    }
+
+    ReadBasedDataReader::addBuffer();
+} // AsyncFileDataReader::addBuffer
+
+class AsyncFileDataSupplier : public DataSupplier
+{
+public:
+    AsyncFileDataSupplier() : DataSupplier() {}
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor, size_t bufferSpace)
+    {
+        // add some buffers for read-ahead
+        return new AsyncFileDataReader(bufferCount + (bufferCount > 1 ? 4 : 0), overflowBytes, extraFactor, bufferSpace);
+    }
+};
+
+DataSupplier* DataSupplier::AsyncFile = new AsyncFileDataSupplier();
 
 //
 // Decompress
@@ -1388,6 +1723,7 @@ private:
         _int64 decompressedStart;
         _int64 decompressedValid;
         _int64 decompressedSize;
+        _int64 fileOffset;  // This is just for debugging
         bool allocated; // if decompressed has been allocated specially, not from inner extra data
         void ensureSize(_int64 newSize, _int64 newTotal, _int64 copyOld);
     };
@@ -1509,10 +1845,15 @@ DecompressDataReader::readHeader(
     while (headerSize < *io_headerSize && compressedBytes > 0) {
         _int64 compressedBlockSize, decompressedBlockSize;
         //fprintf(stderr,"decompress chunkSize %d compressedBytes %d headerSize %d totalExtra %d\n", chunkSize, compressedBytes, headerSize, totalExtra);
-        decompress(&zstream, chunkSize != 0 ? &heap : NULL,
+        bool ok = decompress(&zstream, chunkSize != 0 ? &heap : NULL,
             compressed, compressedBytes, &compressedBlockSize,
             header + headerSize, totalExtra - headerSize, &decompressedBlockSize,
             StartMultiBlock);
+        if (!ok) {
+            WriteErrorMessage("DecompressDataReader::readHeader: decompress failed.  Maybe your input file is corrupt?\n");
+            soft_exit(1);
+        }
+
         // This just gets reinit()'ed later, and in the interim confuses the non-rewind stdio data reader.  inner->advance(compressedBlockSize);
         compressed += compressedBlockSize;
         compressedBytes -= compressedBlockSize;
@@ -1698,17 +2039,30 @@ DecompressDataReader::decompress(
             }
             oldAvailOut = zstream->avail_out;
             oldAvailIn = zstream->avail_in;
+
             status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
             // fprintf(stderr, "decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
             block++;
             if (status < 0 && status != Z_BUF_ERROR) {
                 WriteErrorMessage("GzipDataReader: inflate failed with %d\n", status);
-                soft_exit(1);
+                if (Z_DATA_ERROR == status) {
+                    fprintf(stderr, "%d is Z_DATA_ERROR, indicating a corrupt input.  Are you *sure* this is a gzipped file and it's not just plain text or from some other compressor like bzip?  zstream->availIn is 0x%x:", status, zstream->avail_in);
+                    for (_int64 offset = 0; offset < oldAvailIn; offset++) {
+                        if (offset % 32 == 0) {
+                            fprintf(stderr, "\n0x%llx\t", offset);
+                        }
+                        fprintf(stderr, " %02x", ((unsigned char*)zstream->next_in)[offset]);
+                    }
+
+                    fprintf(stderr, "\n");
+                }
+                return false;
             }
             if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
-                WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
-                soft_exit(1);
+                WriteErrorMessage("insufficient decompression buffer space - increase expansion factor, currently -xf %.1f (if you're indexing, please decompress the FASTA/ALT files externally and use the uncompressed version here)\n", DataSupplier::ExpansionFactor);
+                return false;
             }
+
         } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
 
         if (status == Z_STREAM_END) {
@@ -1792,7 +2146,7 @@ public:
     DecompressDataReader::Entry* entry;
 
     friend class DecompressWorker;
-};
+}; // DecompressManager
 
 DecompressWorker::DecompressWorker()
     : heap(BAM_BLOCK)
@@ -1808,7 +2162,7 @@ DecompressWorker::step()
     DecompressManager* manager = (DecompressManager*) getManager();
     for (int i = getThreadNum(); i < manager->inputs->size() - 1; i += getNumThreads()) {
         _int64 inputUsed, outputUsed;
-        DecompressDataReader::decompress(&zstream,
+        bool ok = DecompressDataReader::decompress(&zstream,
             &heap,
             manager->entry->compressed + (*manager->inputs)[i],
             (*manager->inputs)[i + 1] - (*manager->inputs)[i],
@@ -1817,6 +2171,12 @@ DecompressWorker::step()
             (*manager->outputs)[i + 1] - (*manager->outputs)[i],
             &outputUsed,
             DecompressDataReader::SingleBlock);
+
+        if (!ok) {
+            WriteErrorMessage("DecompressWorker::step(): DecompressDataReader::decompress() failed.  File offset 0x%llx\n", manager->entry->fileOffset);
+            soft_exit(1);
+        }
+
         _ASSERT(inputUsed == (*manager->inputs)[i + 1] - (*manager->inputs)[i] &&
             outputUsed == (*manager->outputs)[i + 1] - (*manager->outputs)[i]);
     }
@@ -1852,6 +2212,7 @@ DecompressDataReader::decompressThread(
     bool stop = false;
     while (! stop) {
         Entry* entry = reader->dequeueAvailable();
+        entry->fileOffset = reader->getFileOffset();
         if (reader->stopping) {
             break;
         }
@@ -1940,6 +2301,9 @@ DecompressDataReader::decompressThreadContinuous(
         if (reader->stopping) {
             break;
         }
+
+        entry->fileOffset = reader->getFileOffset();
+
         // always starts with a fresh batch - advances after reading it all
         bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
         int index = (int) (entry - reader->entries);
@@ -1971,7 +2335,7 @@ DecompressDataReader::decompressThreadContinuous(
                 entry->decompressed + reader->overflowBytes, entry->decompressedSize - reader->overflowBytes, &decompressedWritten,
                 first ? StartMultiBlock : ContinueMultiBlock);
             if (!ok) {
-                WriteErrorMessage("Failed to decompress BAM file at offset %lld\n", reader->inner->getFileOffset());
+                WriteErrorMessage("Failed to decompress gzip/BAM file at offset %lld\n", reader->inner->getFileOffset());
                 soft_exit(1);
             }
             _ASSERT(compressedRead == entry->compressedValid && decompressedWritten <= reader->extraBytes - reader->overflowBytes);
@@ -2608,7 +2972,7 @@ DataSupplier* DataSupplier::MemMap = new MemMapDataSupplier();
 #ifdef _MSC_VER
 DataSupplier* DataSupplier::Default = DataSupplier::WindowsOverlapped;
 #else
-DataSupplier* DataSupplier::Default = DataSupplier::MemMap;
+DataSupplier* DataSupplier::Default = /*DataSupplier::MemMap*/ DataSupplier::AsyncFile;
 #endif
 
 DataSupplier* DataSupplier::GzipDefault = DataSupplier::Gzip(DataSupplier::Default);

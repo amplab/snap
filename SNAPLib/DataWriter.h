@@ -182,8 +182,13 @@ public:
     ~FileEncoder()
     {
         if (coworker != NULL) {
-            _ASSERT(! encoderRunning); coworker->stop(); delete coworker;
+            _ASSERT(! encoderRunning); 
+            coworker->stop(); 
+            delete coworker;
+            coworker = NULL;
         }
+
+        delete manager;
     }
 
     static FileEncoder* gzip(GzipWriterFilterSupplier* filterSupplier, int numThreads, bool bindToProcessor, size_t chunkSize = 65536, bool bam = true);
@@ -221,6 +226,7 @@ private:
     ExclusiveLock* lock;
     bool encoderRunning;
     int encoderBatch;
+    ParallelWorkerManager* manager;
 
     friend class AsyncDataWriter;
 };
@@ -240,6 +246,7 @@ public:
 
     void beginWrite(void *buffer, size_t length, size_t offset, size_t *o_bytesWritten);
     void waitForCompletion(size_t offset);
+    _int64 getSize();
 
 private:
     ExclusiveLock   lock;

@@ -67,6 +67,11 @@ public:
     AsyncDataWriterSupplier(const char* i_filename, DataWriter::FilterSupplier* i_filterSupplier,
         FileEncoder* i_encoder, int i_bufferCount, size_t i_bufferSize);
 
+    ~AsyncDataWriterSupplier()
+    {
+        delete filterSupplier;
+    }
+
     virtual DataWriter* getWriter();
 
     virtual void close();
@@ -103,11 +108,12 @@ public:
             batches[i].buffer = NULL;
         }
         delete [] batches;
-        if (encoder != NULL) {
-            delete encoder;
-        }
         DestroyExclusiveLock(&lock);
-    }
+        if (NULL != filter) {
+            delete filter;
+            filter = NULL;
+        }
+    } // ~AsyncDataWriter
 
     virtual bool getBuffer(char** o_buffer, size_t* o_size);
 
@@ -156,7 +162,8 @@ FileEncoder::FileEncoder(
     :
     encoderRunning(false),
     coworker(numThreads == 0 ? NULL
-        : new ParallelCoworker(numThreads, bindToProcessors, i_manager, FileEncoder::outputReadyCallback, this))
+        : new ParallelCoworker(numThreads, bindToProcessors, i_manager, FileEncoder::outputReadyCallback, this)),
+    manager(i_manager)
 {}
 
     void
@@ -493,8 +500,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
 #endif
                     write->used = 0;
                     write->logicalUsed = 0;
-                }
-                else if (bytesRead < write->used) {
+                } else if (bytesRead < write->used) {
                     batches[current].used = write->used - bytesRead;
                     batches[current].logicalUsed = batches[current].used;
                     if (batches[current].used > batches[current].bufferSize) {
@@ -511,8 +517,7 @@ AsyncDataWriter::nextBatch(bool lastBatch)
 #ifdef VALIDATE_WRITE
                         fprintf(stderr, "2-Realloc MarkDup buffer. Used: %lld New: %lld\n", write->used, newBufferSize);
 #endif
-                    }
-                    else {
+                    } else {
                         memcpy(batches[current].buffer, write->buffer + bytesRead, batches[current].used);
                     }
                     write->used = n;
@@ -861,6 +866,12 @@ StdoutAsyncFile::getReader()
     WriteErrorMessage("StdoutAsyncFile::getReader() called.\n");
     soft_exit(1);
     return NULL;
+}
+
+    _int64
+StdoutAsyncFile::getSize()
+{
+    return -1;
 }
 
     void

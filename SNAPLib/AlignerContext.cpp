@@ -43,6 +43,13 @@ using std::min;
 #if INSTRUMENTATION_FOR_PAPER
 _int64 g_alignmentTimeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // In the paired-end aligner, if you have seeds A and B with hit set sizes |A| and |B| then the total time in ns gets added into g_alignmentTimeByHitCountsOfEachSeed[log2(|A|)][log2(|B|)]
 _int64 g_alignmentCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];  // Same as above, but just add one per time.
+_int64 g_scoreCountByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+_int64 g_setIntersectionSizeByHitCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+_int64 g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[MAX_HIT_SIZE_LOG_2 + 1][MAX_HIT_SIZE_LOG_2 + 1];
+_int64 g_totalSizeOfSmallerHitSet = 0;
+_int64 g_totalSizeOfSetIntersection = 0;
+_int64 g_alignmentsWithMoreThanOneCandidateWhereTheBestCandidateIsScoredFirst = 0;
+_int64 g_alignmentsWithMoreThanOneCandidate = 0;
 #endif // INSTRUMENTATION_FOR_PAPER
 
 //
@@ -72,6 +79,7 @@ AlignerContext::~AlignerContext()
     if (NULL != perfFile) {
         fclose(perfFile);
     }
+    delete stats;
 }
 
 
@@ -93,6 +101,9 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
         for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
             g_alignmentTimeByHitCountsOfEachSeed[i][j] = 0;
             g_alignmentCountByHitCountsOfEachSeed[i][j] = 0;
+            g_scoreCountByHitCountsOfEachSeed[i][j] = 0;
+            g_setIntersectionSizeByHitCountsOfEachSeed[i][j] = 0;
+            g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[i][j] = 0;
         } // j
     } // i
 #endif // INSTRUMENTATION_FOR_PAPER
@@ -126,8 +137,10 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
 
     if (outputFile == NULL) {
         fprintf(stderr, "Unable to open instrumentation output file\n");
-    }
-    else {
+    } else {
+        fprintf(outputFile, "%lld alignments have more than one candidate scored.  Of those, %lld had the best candidate scored first\n", g_alignmentsWithMoreThanOneCandidate, g_alignmentsWithMoreThanOneCandidateWhereTheBestCandidateIsScoredFirst);
+        fprintf(outputFile, "Total size of set intersection %lld.  Total size of smaller set %lld\n", g_totalSizeOfSetIntersection, g_totalSizeOfSmallerHitSet);
+
         fprintf(outputFile, "Alignment count by hit counts of each seed\nHits 1/2");
         for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
             fprintf(outputFile, "\t%d", 1 << i);
@@ -152,6 +165,48 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
             fprintf(outputFile, "%d", 1 << i);
             for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
                 fprintf(outputFile, "\t%lld", g_alignmentTimeByHitCountsOfEachSeed[i][j]);
+            } // j
+            fprintf(outputFile, "\n");
+        } // i
+
+        fprintf(outputFile, "\nLocations scored by hit counts of each seed\nHits 1/2");
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "\t%d", 1 << i);
+        }
+        fprintf(outputFile, "\n");
+
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "%d", 1 << i);
+            for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+                fprintf(outputFile, "\t%lld", g_scoreCountByHitCountsOfEachSeed[i][j]);
+            } // j
+            fprintf(outputFile, "\n");
+        } // i
+
+        fprintf(outputFile, "\nSet intersection size by hit counts of each seed\nHits 1/2");
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "\t%d", 1 << i);
+        }
+        fprintf(outputFile, "\n");
+
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "%d", 1 << i);
+            for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+                fprintf(outputFile, "\t%lld", g_setIntersectionSizeByHitCountsOfEachSeed[i][j]);
+            } // j
+            fprintf(outputFile, "\n");
+        } // i
+
+        fprintf(outputFile, "\n100x Total of Ratio of Set Intersection size to size of smaller seed hit count\nHits 1/2");
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "\t%d", 1 << i);
+        }
+        fprintf(outputFile, "\n");
+
+        for (int i = 0; i < MAX_HIT_SIZE_LOG_2 + 1; i++) {
+            fprintf(outputFile, "%d", 1 << i);
+            for (int j = 0; j < MAX_HIT_SIZE_LOG_2 + 1; j++) {
+                fprintf(outputFile, "\t%lld", g_100xtotalRatioOfSetIntersectionSizeToSmallerSeedHitCountByCountsOfEachSeed[i][j]);
             } // j
             fprintf(outputFile, "\n");
         } // i
@@ -215,10 +270,12 @@ AlignerContext::initialize()
             }
             g_index = index;
 
+            const int basesBufferSize = 30;
+            char basesBuffer[basesBufferSize];
 
             _int64 loadTime = timeInMillis() - loadStart;
-             WriteStatusMessage("%llds.  %u bases, seed size %d\n",
-                    loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+             WriteStatusMessage("%llds.  %s bases, seed size %d.\n",
+                    loadTime / 1000, FormatUIntWithCommas(index->getGenome()->getCountOfBases(), basesBuffer, basesBufferSize), index->getSeedLength());
 
 			 if (index->getMajorVersion() < 5 || (index->getMajorVersion() == 5 && index->getMinorVersion() == 0)) {
 				 WriteErrorMessage("WARNING: The version of the index you're using was built with an earlier version of SNAP and will result in Ns in the reference NOT matching Ns in reads.\n         If you do not want this behavior, rebuild the index.\n");
@@ -232,10 +289,9 @@ AlignerContext::initialize()
 
     maxHits_ = options->maxHits;
     maxDist_ = options->maxDist;
+    maxDistForIndels_ = options->maxDistForIndels;
     extraSearchDepth = options->extraSearchDepth;
-    noUkkonen = options->noUkkonen;
-    noOrderedEvaluation = options->noOrderedEvaluation;
-	noTruncation = options->noTruncation;
+    disabledOptimizations = options->disabledOptimizations;
     ignoreAlignmentAdjustmentForOm = options->ignoreAlignmentAdjustmentsForOm;
 	altAwareness = options->altAwareness;
     emitALTAlignments = options->emitALTAlignments;
@@ -248,6 +304,9 @@ AlignerContext::initialize()
     subPenalty = options->subPenalty;
     gapOpenPenalty = options->gapOpenPenalty;
     gapExtendPenalty = options->gapExtendPenalty;
+    fivePrimeEndBonus = options->fivePrimeEndBonus;
+    threePrimeEndBonus = options->threePrimeEndBonus;
+    useSoftClipping = options->useSoftClipping;
 
     if (maxSecondaryAlignmentAdditionalEditDistance < 0 && (maxSecondaryAlignments < 1000000 || maxSecondaryAlignmentsPerContig > 0)) {
         WriteErrorMessage("You set -omax and/or -mpc without setting -om.  They're meaningful only in the context of -om, so you probably didn't really mean to do that.\n");
@@ -283,6 +342,7 @@ AlignerContext::beginIteration()
     totalThreads = options->numThreads;
     bindToProcessors = options->bindToProcessors;
     maxDist = maxDist_;
+    maxDistForIndels = maxDistForIndels_;
     maxHits = maxHits_;
     numSeedsFromCommandLine = options->numSeedsFromCommandLine;
     seedCoverage = options->seedCoverage;
@@ -300,6 +360,7 @@ AlignerContext::beginIteration()
     readerContext.genome = index != NULL ? index->getGenome() : NULL;
     readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
     readerContext.ignoreSupplementaryAlignments = options->ignoreSecondaryAlignments;   // Maybe we should split them out
+    readerContext.preserveFASTQComments = options->preserveFASTQComments;
     DataSupplier::ExpansionFactor = options->expansionFactor;
 
     typeSpecificBeginIteration();
@@ -338,13 +399,15 @@ AlignerContext::finishIteration()
             g_index->dropIndex();
 
         }
-        writerSupplier->close();
+
+        writerSupplier->close();  // This is where the sort happens
         delete writerSupplier;
         writerSupplier = NULL;
 
         if (options->dropIndexBeforeSort) {
             //
-            // Since we dropped the index part of the index, now we need to delete it completely.
+            // Since we dropped the index part of the index, now we need to delete it completely.  We can't do it earlier because
+            // sort needs the contigs from the genome.
             //
             delete g_index;
             g_index = NULL;
@@ -394,7 +457,7 @@ char *numPctAndPad(char *buffer, _uint64 num, double pct, size_t desiredWidth, s
 	return buffer;
 }
 
-char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen, bool useDecimal)
+char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen, bool useDecimal, bool printPercentSign = true)
 {
     _ASSERT(desiredWidth + 1 < bufferLen);
 
@@ -402,9 +465,10 @@ char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen
     char percentageBuffer[percentageBufferSize];
 
     if (useDecimal) {
-        sprintf(percentageBuffer, "%.02f%%", pct);
+        sprintf(percentageBuffer, "%.02f%s", pct, (printPercentSign ? "%" : ""));
     } else {
-        sprintf(percentageBuffer, "%d%%",  (unsigned)((100.0 * pct) + .5));
+        sprintf(percentageBuffer, "%d%s",  (unsigned)((100.0 * pct) + .5), (printPercentSign ? "%" : ""));
+        sprintf(percentageBuffer, "%d%s",  (unsigned)((100.0 * pct) + .5), (printPercentSign ? "%" : ""));
     }
 
     if (strlen(percentageBuffer) + 1 > bufferLen) {
@@ -424,13 +488,12 @@ char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen
     void
 AlignerContext::printStats()
 {
-
     WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)%s%s\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
         (stats->filtered > 0) ? "Filtered               " : "",
         (stats->extraAlignments) ? "Extra Alignments  " : "",
         isPaired() ? "%Pairs    " : "   ",
         options->profile ? (!options->sortOutput ? " Read Align Write(& compress)" : " Read Align Write") : "",
-        (isPaired() && options->profileAffineGap) ? " %AgSingle %AgUsedSingle" : ""
+        (isPaired() && options->profileAffineGap) ? " %AgSingle %AgUsedSingle AG/Edit" : ""
         );
 
 	const size_t strBufLen = 50;	// Way more than enough for 64 bit numbers with commas
@@ -448,7 +511,9 @@ AlignerContext::printStats()
     char pctRead[strBufLen];
     char pctAlign[strBufLen];
     char pctWrite[strBufLen];
-    char pctAg[strBufLen];
+    char pctAg[strBufLen];    
+    char pctAg2[strBufLen];    
+    char agRatio[strBufLen];
     _int64 totalTime = stats->millisReading + stats->millisAligning + stats->millisWriting;
 
     /*
@@ -461,10 +526,11 @@ AlignerContext::printStats()
                          |  |  |  |  |  | extra    |  | | %Align    
                          |  |  |  |  |  | | pairs  |  | | | %Write 
                          |  |  |  |  |  | | |      |  | | | | Ag 
-                         v  v  v  v  v  v v v      v  v v v v v v AgUsed
+                         |  |  |  |  |  | | |      |  | | | | | AgUsed
+                         v  v  v  v  v  v v v      v  v v v v v v v AG/Edit
     */
 
-    WriteStatusMessage("%s %s %s %s %s %s%s%s   %-9s %s%s%s%s%s%s\n",
+    WriteStatusMessage("%s %s %s %s %s %s%s%s   %-9s %s%s%s%s%s%s%s\n",
         FormatUIntWithCommas(stats->totalReads, numReads, strBufLen, 14),
         numPctAndPad(single, stats->singleHits, 100.0 * stats->singleHits / stats->totalReads, 22, strBufLen),
         numPctAndPad(multi, stats->multiHits, 100.0 * stats->multiHits / stats->totalReads, 22, strBufLen),
@@ -479,29 +545,43 @@ AlignerContext::printStats()
         options->profile ? pctAndPad(pctAlign, (double)stats->millisAligning / (double)totalTime, 6, strBufLen, false) : "",
         options->profile ? pctAndPad(pctWrite, (double)stats->millisWriting / (double)totalTime, 6, strBufLen, false) : "",
         (isPaired() && options->profileAffineGap) ? pctAndPad(pctAg, (double)stats->agForcedSingleEndAlignment / (double)stats->totalReads, 10, strBufLen, true) : "",
-        (isPaired() && options->profileAffineGap) ? pctAndPad(pctAg, (double)stats->agUsedSingleEndAlignment / (double)stats->totalReads, 14, strBufLen, true) : ""
+        (isPaired() && options->profileAffineGap) ? pctAndPad(pctAg2, (double)stats->agUsedSingleEndAlignment / (double)stats->totalReads, 14, strBufLen, true) : "",
+        options->profileAffineGap ? pctAndPad(agRatio, (double)stats->affineGapCalls / (double)stats->lvCalls * 100, 8, strBufLen, true, true) : ""
     );
 
     if (NULL != perfFile) {
-        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%0.2f%%\t%lld\tt%.0f\n",
+        fprintf(perfFile, "maxHits\tmaxDist\t%% reads not useless\t%% reads single hit\t%% reads multi hit\t%% reads not found\tLV calls\taffine gap calls\t%% aligned as pairs\ttotal reads\treads/s\n");
+
+        char lvBuf[strBufLen];
+        char agBuf[strBufLen];
+        char totalReadsBuf[strBufLen];
+        char timePerReadBuf[strBufLen];
+
+        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%s\t%0.2f%%\t%s\t%s\n",
                 maxHits_, maxDist_, 
                 100.0 * (stats->totalReads - stats->uselessReads) / max(stats->totalReads, (_int64) 1),
 				100.0 * stats->singleHits / stats->totalReads,
 				100.0 * stats->multiHits / stats->totalReads,
 				100.0 * stats->notFound / stats->totalReads,
-                stats->lvCalls,
-				100.0 * stats->alignedAsPairs / stats->totalReads,
-                stats->totalReads,
-                (1000.0 * (stats->totalReads - stats->uselessReads)) / max(alignTime, (_int64)1));
+                FormatUIntWithCommas(stats->lvCalls, lvBuf, strBufLen),
+                FormatUIntWithCommas(stats->affineGapCalls, agBuf, strBufLen),
+                100.0 * stats->alignedAsPairs / stats->totalReads,
+                FormatUIntWithCommas(stats->totalReads, totalReadsBuf, strBufLen),
+                FormatUIntWithCommas((1000 * (stats->totalReads - stats->uselessReads)) / max(alignTime, (_int64)1), timePerReadBuf, strBufLen));
 
         fprintf(perfFile,"\n");
     }
 
 
 #if TIME_HISTOGRAM
-    WriteStatusMessage("\n%lld time stamps were negative, for a total of %lld ns.  They are otherwise ignored.\n", stats->backwardsTimeStamps, stats->totalBackwardsTimeStamps);
+    if (stats->backwardsTimeStamps != 0) {
+        //
+        // I'm pretty sure this is fixed, so don't print unless we actually see it it.
+        //
+        WriteStatusMessage("\n%lld time stamps were negative, for a total of %lld ns.  They are otherwise ignored.\n", stats->backwardsTimeStamps, stats->totalBackwardsTimeStamps);
+    }
 
-    WriteStatusMessage("\nPer-read alignment time histogram:\nlog2(ns)\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    WriteStatusMessage("\nPer-read alignment time histogram:\nlog2(ns)\tcount\ttotalTime(ns)\ttimePerRead\tReads\tTime\n");
     _int64 totalReads = 0;
     _int64 totalTimeX = 0;  // totalTime is already used
     for (int i = 0; i < 31; i++) {
@@ -524,7 +604,7 @@ AlignerContext::printStats()
         WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar/(double)totalTimeX);
     }
 
-    WriteStatusMessage("\nPer-read alignment count and time by MAPQ\nMAPQ\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    WriteStatusMessage("\nPer-read alignment count and time by MAPQ\nMAPQ\tcount\ttotalTime(ns)\ttimePerRead\tReads\tTime\tTime Per Read (right scale)\n");
     totalReads = stats->countOfUnaligned;
     totalTimeX = stats->timeOfUnaligned;
     for (int i = 0; i <= 70; i++) {
@@ -535,7 +615,8 @@ AlignerContext::printStats()
     timeSoFar = stats->timeOfUnaligned;
 
 
-    WriteStatusMessage("unaligned\t%lld\t%lld\t%lld\t%f\t%f\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+    WriteStatusMessage("*\t%lld\t%lld\t%lld\t%f\t%f\t%lld\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, 
+        (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX, stats->timeOfUnaligned / stats->countOfUnaligned / 1000000);
     for (int i = 0; i <= 70; i++) {
         readsSoFar += stats->countByMAPQ[i];
         timeSoFar += stats->timeByMAPQ[i];
@@ -545,10 +626,10 @@ AlignerContext::printStats()
         } else {
             timePerRead = stats->timeByMAPQ[i] / stats->countByMAPQ[i];
         }
-        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByMAPQ[i], stats->timeByMAPQ[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\t%lld\n", i, stats->countByMAPQ[i], stats->timeByMAPQ[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX, timePerRead / 1000000);
     }
 
-    WriteStatusMessage("\nPer-read alignment count and time by final edit distance\nEditDistance\tcount\ttotalTime(ns)\ttimePerRead\tcdfReads\tcdfTime\n");
+    WriteStatusMessage("\nPer-read alignment count and time by final edit distance\nEditDistance\tcount\ttotalTime(ns)\ttimePerRead\tReads\tTime\tTime per read (right scale)\n");
     totalReads = stats->countOfUnaligned;
     totalTimeX = stats->timeOfUnaligned;
     for (int i = 0; i < 31; i++) {
@@ -566,11 +647,12 @@ AlignerContext::printStats()
         } else {
             timePerRead = stats->timeByNM[i] / stats->countByNM[i];
         }
-        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\n", i, stats->countByNM[i], stats->timeByNM[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+        WriteStatusMessage("%d\t%lld\t%lld\t%lld\t%f\t%f\t%lld\n", i, stats->countByNM[i], stats->timeByNM[i], timePerRead, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX, timePerRead / 1000000);
     }
     readsSoFar += stats->countOfUnaligned;
     timeSoFar += stats->timeOfUnaligned;
-    WriteStatusMessage("unaligned\t%lld\t%lld\t%lld\t%f\t%f\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX);
+    WriteStatusMessage("*\t%lld\t%lld\t%lld\t%f\t%f\t%lld\n", stats->countOfUnaligned, stats->timeOfUnaligned, stats->timeOfUnaligned / stats->countOfUnaligned, 
+        (double)readsSoFar / (double)totalReads, (double)timeSoFar / (double)totalTimeX, stats->timeOfUnaligned / stats->countOfUnaligned / 1000000);
 
 #endif // TIME_HISTOGRAM
 
@@ -601,6 +683,9 @@ AlignerContext::parseOptions(
     argc = i_argc;
     argv = i_argv;
     version = i_version;
+
+    g_suppressStatusMessages = false;   // This is a global, so it would carry over between runs (either in daemon mode or comma syntax).  Reset it here to get the expected behavior.
+    g_suppressErrorMessages = false;    // ditto
 
     AlignerOptions *options;
 

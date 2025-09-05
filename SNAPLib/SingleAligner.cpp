@@ -58,9 +58,37 @@ SingleAlignerContext::runTask()
     ParallelTask<SingleAlignerContext> task(this);
     task.run();
 }
+
+void SingleAlignerContext::runIterationThread()
+{
+    Read * read = NULL; 
+
+#ifdef _MSC_VER
+    __try {
+#endif // _MSC_VER
+
+
+        runIterationThreadImpl(read);
+
+#ifdef _MSC_VER
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (read == NULL) {
+            fprintf(stderr, "SNAP crashed before processing a read\n");
+        } else {
+            fprintf(stderr, "SNAP crashed while processing single-end read with ID %.*s\n", read->getIdLength(), read->getId()); 
+            fprintf(stderr, "@%.*s\n%.*s\n+\n%.*s\n", read->getIdLength(), read->getId(), read->getDataLength(), read->getData(),
+                    read->getDataLength(), read->getQuality());
+        }
+        fflush(stderr);
+        soft_exit(1);
+    }
+#endif // _MSC_VER
+
+
+}
     
     void
-SingleAlignerContext::runIterationThread()
+SingleAlignerContext::runIterationThreadImpl(Read *& read)
 {
 	PreventMachineHibernationWhileThisThreadIsAlive();
 
@@ -77,7 +105,6 @@ SingleAlignerContext::runIterationThread()
 	}
     if (index == NULL) {
         // no alignment, just input/output
-        Read *read;
         while (NULL != (read = supplier->getNextRead())) {
             stats->totalReads++;
             SingleAlignmentResult result;
@@ -127,9 +154,7 @@ SingleAlignerContext::runIterationThread()
             seedCoverage,
 			minWeightToCheck,
             extraSearchDepth,
-            noUkkonen,
-            noOrderedEvaluation,
-			noTruncation,
+            disabledOptimizations,
             useAffineGap,
             ignoreAlignmentAdjustmentForOm,
 			altAwareness,
@@ -142,6 +167,8 @@ SingleAlignerContext::runIterationThread()
             subPenalty,
             gapOpenPenalty,
             gapExtendPenalty,
+            fivePrimeEndBonus,
+            threePrimeEndBonus,
             stats,
             allocator);
 
@@ -163,7 +190,6 @@ SingleAlignerContext::runIterationThread()
 #endif  // _MSC_VER
 
     // Align the reads.
-    Read *read;
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
 
@@ -206,9 +232,11 @@ SingleAlignerContext::runIterationThread()
             continue;
         }
 
-#if     TIME_HISTOGRAM
-        _int64 startTime = timeInNanos();
-#endif // TIME_HISTOGRAM
+        _int64 startTime;
+
+        if (TIME_HISTOGRAM || options->attachAlignmentTimes) {
+            startTime = timeInNanos();
+        }
 
         _int64 nSecondaryResults = 0;
 
@@ -219,7 +247,7 @@ SingleAlignerContext::runIterationThread()
         }
 #endif
         SingleAlignmentResult firstALTResult;
-        while (!aligner->AlignRead(read, alignmentResults, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1)) {
+        while (!aligner->AlignRead(read, alignmentResults, &firstALTResult, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1, 0, NULL, NULL)) {
             //
             // Out of secondary alignment buffer.  Reallocate.
             //
@@ -243,8 +271,16 @@ SingleAlignerContext::runIterationThread()
             stats->millisAligning += (alignFinishedTime - readFinishedTime);            
         }
 
+        _int64 runTime;
+
+        if (TIME_HISTOGRAM || options->attachAlignmentTimes) {
+            runTime = timeInNanos() - startTime;
+            if (runTime < 0) {
+                runTime = 0;
+            }
+        }
+
 #if     TIME_HISTOGRAM
-        _int64 runTime = timeInNanos() - startTime;
         int timeBucket = min(30, cheezyLogBase2(runTime));
         stats->countByTimeBucket[timeBucket]++;
         stats->nanosByTimeBucket[timeBucket] += runTime;
@@ -258,6 +294,9 @@ SingleAlignerContext::runIterationThread()
             // Remove any reads that don't pass the filter, then send the remainder down to the writer.
             //
             for (int i = 0; i <= nSecondaryResults; i++) {
+                if (options->attachAlignmentTimes) {
+                    alignmentResults[i].alignmentTimeInNanoseconds = runTime;
+                }
                 if (!options->passFilter(read, alignmentResults[i].status, false, i != 0 || !containsPrimary)) {
                     if (i == 0) {
                         containsPrimary = false;
@@ -293,7 +332,10 @@ SingleAlignerContext::runIterationThread()
         } else {
             stats->filtered++;
         }
-    }
+    } // while we have a read to align
+
+    stats->lvCalls = aligner->getLocationsScoredWithLandauVishkin();
+    stats->affineGapCalls = aligner->getLocationsScoredWithAffineGap();
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
  

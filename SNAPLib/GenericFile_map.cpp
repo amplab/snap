@@ -29,6 +29,9 @@ Revision History:
 GenericFile_map *GenericFile_map::open(const char *filename)
 {
 	size_t fileSize = QueryFileSize(filename);
+	if (0 == fileSize) {
+		return new GenericFile_map(NULL, NULL, 0);
+	}
 	void *contents;
 	MemoryMappedFile *mappedFile = OpenMemoryMappedFile(filename, 0, fileSize, &contents);
 
@@ -58,7 +61,11 @@ GenericFile_map::~GenericFile_map()
 	_int64
 GenericFile_map::prefetch()
 {
-    AdviseMemoryMappedFilePrefetch(mappedFile);
+	if (NULL == mappedFile) {
+		return 0;
+	}
+
+	AdviseMemoryMappedFilePrefetch(mappedFile);
 	int pageSize = getpagesize();
 
 	_int64 total = 0;

@@ -37,6 +37,7 @@ Revision History:
 #include "directions.h"
 #include "GenomeIndex.h"
 #include "AlignmentAdjuster.h"
+#include "AlignerOptions.h"
 
 extern bool doAlignerPrefetch;
 
@@ -44,31 +45,31 @@ class BaseAligner {
 public:
 
     BaseAligner(
-        GenomeIndex    *i_genomeIndex, 
-        unsigned        i_maxHitsToConsider, 
-        unsigned        i_maxK,
-        unsigned        i_maxReadSize,
-        unsigned        i_maxSeedsToUse,
-        double          i_maxSeedCoverage,
-		unsigned        i_minWeightToCheck,
-        unsigned        i_extraSearchDepth,
-        bool            i_noUkkonen,
-        bool            i_noOrderedEvaluation,
-		bool			i_noTruncation,
-        bool            i_useAffineGap,           
-        bool            i_ignoreAlignmentAdjustmentsForOm,
-		bool			i_altAwareness,
-        bool            i_emitALTAlignments,
-        int             i_maxScoreGapToPreferNonAltAlignment,
-		int             i_maxSecondaryAlignmentsPerContig,
-        LandauVishkin<1>*i_landauVishkin = NULL,
-        LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
-        unsigned        i_matchReward = 1,
-        unsigned        i_subPenalty = 4,
-        unsigned        i_gapOpenPenalty = 6,
-        unsigned        i_gapExtendPenalty = 1,
-        AlignerStats   *i_stats = NULL,
-        BigAllocator    *allocator = NULL);
+        GenomeIndex             *i_genomeIndex, 
+        unsigned                 i_maxHitsToConsider, 
+        unsigned                 i_maxK,
+        unsigned                 i_maxReadSize,
+        unsigned                 i_maxSeedsToUse,
+        double                   i_maxSeedCoverage,
+		unsigned                 i_minWeightToCheck,
+        unsigned                 i_extraSearchDepth,
+        DisabledOptimizations    i_disabledOptimizations,
+        bool                     i_useAffineGap,           
+        bool                     i_ignoreAlignmentAdjustmentsForOm,
+		bool			         i_altAwareness,
+        bool                     i_emitALTAlignments,
+        int                      i_maxScoreGapToPreferNonAltAlignment,
+		int                      i_maxSecondaryAlignmentsPerContig,
+        LandauVishkin<1>        *i_landauVishkin = NULL,
+        LandauVishkin<-1>       *i_reverseLandauVishkin = NULL,
+        unsigned                 i_matchReward = 1,
+        unsigned                 i_subPenalty = 4,
+        unsigned                 i_gapOpenPenalty = 6,
+        unsigned                 i_gapExtendPenalty = 1,
+        unsigned                 i_fivePrimeEndBonus = 10,
+        unsigned                 i_threePrimeEndBonus = 5,
+        AlignerStats            *i_stats = NULL,
+        BigAllocator            *allocator = NULL);
 
     virtual ~BaseAligner();
 
@@ -81,16 +82,30 @@ public:
         _int64                   secondaryResultBufferSize,
         _int64                  *nSecondaryResults,
         _int64                   maxSecondaryResults,         // The most secondary results to return; always return the best ones
-        SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+        SingleAlignmentResult   *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+        _int64                   maxCandidatesForAffineGapBufferSize,
+        _int64                  *nCandidatesForAffineGap,
+        SingleAlignmentResult   *candidatesForAffineGap, // Alignment candidates that need to be rescored using affine gap
+        bool                     useHamming  = false           // run Hamming distance based scoring instead of Landau-Vishkin
     );      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
 
+
+        bool
+    alignAffineGap(
+        Read* read,
+        SingleAlignmentResult* result,
+        SingleAlignmentResult* firstALTResult,
+        _int64 nCandidatesForAffineGap,
+        SingleAlignmentResult* candidatesForAffineGap // Alignment candidates that need to be rescored using affine gap
+    );
         
     //
     // Statistics gathering.
     //
 
     _int64 getNHashTableLookups() const {return nHashTableLookups;}
-    _int64 getLocationsScored() const {return nLocationsScored;}
+    _int64 getLocationsScoredWithLandauVishkin() const { return nLocationsScoredWithLandauVishkin; }
+    _int64 getLocationsScoredWithAffineGap() const { return nLocationsScoredWithAffineGap; }
     _int64 getNHitsIgnoredBecauseOfTooHighPopularity() const {return nHitsIgnoredBecauseOfTooHighPopularity;}
     _int64 getNReadsIgnoredBecauseOfTooManyNs() const {return nReadsIgnoredBecauseOfTooManyNs;}
     _int64 getNIndelsMerged() const {return nIndelsMerged;}
@@ -164,7 +179,8 @@ private:
     char rcTranslationTable[256];
 
     _int64 nHashTableLookups;
-    _int64 nLocationsScored;
+    _int64 nLocationsScoredWithLandauVishkin;
+    _int64 nLocationsScoredWithAffineGap;
     _int64 nHitsIgnoredBecauseOfTooHighPopularity;
     _int64 nReadsIgnoredBecauseOfTooManyNs;
     _int64 nIndelsMerged;
@@ -190,6 +206,8 @@ private:
 
         unsigned        score;
         int             seedOffset;
+        double          matchProbability;
+        GenomeLocation  origGenomeLocation;
     };
 
     static const unsigned hashTableElementSize = maxMergeDist;   // The code depends on this, don't change it
@@ -225,7 +243,8 @@ private:
         unsigned             lowestPossibleScore;
         unsigned             bestScore;
         int                  bestAGScore;
-        GenomeLocation       bestScoreGenomeLocation;
+        GenomeLocation       bestScoreGenomeLocation; // adjusted location after scoring
+        GenomeLocation       bestScoreOrigGenomeLocation; // location before scoring
         Direction            direction;
         bool                 allExtantCandidatesScored;
         double               matchProbabilityForBestScore;
@@ -233,6 +252,7 @@ private:
         int                  basesClippedBefore;
         int                  basesClippedAfter;
         int                  agScore;
+        int                  seedOffset;
 
         Candidate            candidates[hashTableElementSize];
     };
@@ -240,14 +260,18 @@ private:
     struct ScoreSet {
         ScoreSet();
         void init();
+        void init(SingleAlignmentResult* result);
 
         int bestScore;
         GenomeLocation bestScoreGenomeLocation;
+        GenomeLocation bestScoreOrigGenomeLocation; // location before scoring
         Direction bestScoreDirection;
         bool bestScoreUsedAffineGapScoring;
         int bestScoreBasesClippedBefore;
         int bestScoreBasesClippedAfter;
         int bestScoreAGScore;
+        int bestScoreSeedOffset;
+        double bestScoreMatchProbability;
 
 
         double probabilityOfAllCandidates;
@@ -255,8 +279,16 @@ private:
 
         void updateProbabilitiesForNearbyMatch(double probabilityOfMatchBeingReplaced);   // For the "nearby match" code
         void updateProbabilitiesForNewMatch(double newProbability, double matchProbabilityOfNearbyMatch);
+        inline void updateProbabilityOfAllMatches(double oldProbability) {
+            probabilityOfAllCandidates = __max(0, probabilityOfAllCandidates - oldProbability);
+        }
+        inline void updateProbabilityOfBestMatch(double newProbability) {
+            probabilityOfBestCandidate = newProbability;
+            probabilityOfAllCandidates += newProbability;
+        }
         void updateBestScore(
-            GenomeLocation genomeLocation, 
+            GenomeLocation genomeLocation,
+            GenomeLocation origGenomeLocation,
             unsigned score, 
             bool useAffineGap, 
             int agScore, 
@@ -265,10 +297,33 @@ private:
             BaseAligner::HashTableElement *elementToScore, 
             SingleAlignmentResult *secondaryResults, 
             _int64* nSecondaryResults, 
-            _int64 secondaryResultBufferSize, 
+            _int64 secondaryResultBufferSize,
             bool anyNearbyCandidatesAlreadyScored,
             int maxEditDistanceForSecondaryResults, 
-            bool *overflowedSecondaryBuffer);
+            bool *overflowedSecondaryBuffer,
+            _int64 maxCandidatesForAffineGapBufferSize,
+            _int64* nCandidatesForAffineGap,
+            SingleAlignmentResult* candidatesForAffineGap,
+            unsigned extraSearchDepth);
+
+        bool updateBestScore(SingleAlignmentResult* result) {
+            probabilityOfAllCandidates += result->matchProbability;
+            if (result->agScore > bestScoreAGScore || (result->agScore == bestScoreAGScore && result->matchProbability > bestScoreMatchProbability)) {
+                bestScore = result->score;
+                bestScoreAGScore = result->agScore;
+                bestScoreMatchProbability = result->matchProbability;
+                bestScoreGenomeLocation = result->location;
+                bestScoreOrigGenomeLocation = result->origLocation;
+                bestScoreDirection = result->direction;
+                bestScoreUsedAffineGapScoring = result->usedAffineGapScoring;
+                bestScoreBasesClippedBefore = result->basesClippedBefore;
+                bestScoreBasesClippedAfter = result->basesClippedAfter;
+                bestScoreSeedOffset = result->seedOffset;
+                return true;
+            } else {
+                return false;
+            }
+        }
 
         void fillInSingleAlignmentResult(SingleAlignmentResult* result, int popularSeedsSkipped);
     };
@@ -327,7 +382,6 @@ private:
     ScoreSet scoresForNonAltAlignments;
     //unsigned scoreLimit;
     unsigned minScoreThreshold; // used in affine gap to elide scoring of missed seed hits
-    unsigned lvScores;
     unsigned lvScoresAfterBestFound;
     unsigned affineGapScores;
     unsigned affineGapScoresAfterBestFound;
@@ -347,18 +401,25 @@ private:
         _int64                   secondaryResultBufferSize,
         _int64                  *nSecondaryResults,
         SingleAlignmentResult   *secondaryResults,
-        bool                    *overflowedSecondaryResultsBuffer);
+        bool                    *overflowedSecondaryResultsBuffer,
+        _int64                   maxCandidatesForAffineGapBufferSize,
+        _int64                  *nCandidatesForAffineGap,
+        SingleAlignmentResult   *candidatesForAffineGap,
+        bool                     useHamming = false);
 
-        bool
-    scoreAffineGap(
-        bool                     forceResult,
-        Read                    *read[NUM_DIRECTIONS],
-        SingleAlignmentResult   *primaryResult,
-        int                      maxEditDistanceForSecondaryResults,
-        _int64                   secondaryResultBufferSize,
-        _int64                  *nSecondaryResults,
-        SingleAlignmentResult   *secondaryResults,
-        bool                    *overflowedSecondaryResultsBuffer);
+    void scoreLocationWithAffineGap(
+        Read*                read[NUM_DIRECTIONS],
+        Direction            direction,
+        GenomeLocation       genomeLocation,
+        unsigned             seedOffset,
+        int                  scoreLimit,
+        int                 *score,
+        double              *matchProbability,
+        int                 *genomeLocationOffset,
+        int                 *basesClippedBefore,
+        int                 *basesClippedAfter,
+        int                 *agScore
+    );
 
     void clearCandidates();
 
@@ -368,24 +429,22 @@ private:
     void incrementWeight(HashTableElement *element);
     void prefetchHashTableBucket(GenomeLocation genomeLocation, Direction direction);
 
-    const Genome *genome;
-    GenomeIndex *genomeIndex;
-    unsigned seedLen;
-    unsigned maxHitsToConsider;
-    unsigned maxK;
-    unsigned maxReadSize;
-    unsigned maxSeedsToUseFromCommandLine; // Max number of seeds to look up in the hash table
-    double   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
-    unsigned minWeightToCheck;
-    unsigned extraSearchDepth;
-    unsigned numWeightLists;
-    bool     noUkkonen;
-    bool     noOrderedEvaluation;
-	bool     noTruncation;
-    bool     useAffineGap;
-    bool     ignoreAlignmentAdjustmentsForOm;
-    bool     doesGenomeIndexHave64BitLocations;
-    int      maxSecondaryAlignmentsPerContig;
+    const Genome            *genome;
+    GenomeIndex             *genomeIndex;
+    unsigned                 seedLen;
+    unsigned                 maxHitsToConsider;
+    unsigned                 maxK;
+    unsigned                 maxReadSize;
+    unsigned                 maxSeedsToUseFromCommandLine; // Max number of seeds to look up in the hash table
+    double                   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
+    unsigned                 minWeightToCheck;
+    unsigned                 extraSearchDepth;
+    unsigned                 numWeightLists;
+    DisabledOptimizations    disabledOptimizations;
+    bool                     useAffineGap;
+    bool                     ignoreAlignmentAdjustmentsForOm;
+    bool                     doesGenomeIndexHave64BitLocations;
+    int                      maxSecondaryAlignmentsPerContig;
 
     struct HitsPerContigCounts {
         _int64  epoch;          // Used hashTableEpoch, for the same reason

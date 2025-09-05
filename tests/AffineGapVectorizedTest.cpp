@@ -6,7 +6,7 @@
 // Test fixture for all the affine gap tests
 struct AffineGapVectorizedTest {
     AffineGapVectorized<> ag;
-    AffineGapVectorizedTest() : ag(1, 4, 6, 1) {
+    AffineGapVectorizedTest() : ag(1, 4, 6, 1, 10, 5) {
         initializeLVProbabilitiesToPhredPlus33();
     }
     int editDist;
@@ -26,7 +26,7 @@ struct AffineGapVectorizedTest {
         }
         quality[strlen(text)] = '\0';
 
-        int retVal = ag.computeScore(text, textLen, pattern, quality, patternLen, w, scoreInit);
+        int retVal = ag.computeScore(text, textLen, pattern, quality, patternLen, w, scoreInit, 0);
 
         delete[] quality;
         return retVal;

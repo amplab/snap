@@ -30,7 +30,7 @@ Environment:
 #include "DataReader.h"
 
 // for debugging file I/O, validate BAM records on input & output
-#define VALIDATE_BAM
+//#define VALIDATE_BAM
 
 // BAM format layout
 // SAM Format Specification v1.4-r985
@@ -93,7 +93,7 @@ class BAMReader;
 struct BAMAlignment
 {
     _int32      block_size;
-    _int32      refID;
+    _int32      refID;          // This is the original contig num (the order in the FASTA/BAM file, not in the index/GenomeLocation).  It's left here as _int32 rather than OriginalContigNum because this is an external structure
     _int32      pos;
     _uint8      l_read_name;
     _uint8      MAPQ;
@@ -101,7 +101,7 @@ struct BAMAlignment
     _uint16     n_cigar_op;
     _uint16     FLAG;
     _int32      l_seq;
-    _int32      next_refID;
+    _int32      next_refID;     // This is the original contig num (the order in the FASTA/BAM file, not in the index/GenomeLocation).  It's left here as _int32 rather than OriginalContigNum because this is an external structure
     _int32      next_pos;
     _int32      tlen;
     
@@ -141,7 +141,7 @@ struct BAMAlignment
     static _uint8 SeqToCode[256];
     static const char* CodeToCigar;
     static _uint8 CigarToCode[256];
-    static _uint8 CigarCodeToRefBase[9];
+    static _uint8 CigarCodeToRefBase[16]; // Only first 9 are used.  The remainder are here to avoid a compiler warning.
     static int GetCigarOpCode(_uint32 op) { return op & 0xf; }
     static int GetCigarOpCount(_uint32 op) { return op >> 4; }
     
@@ -178,11 +178,11 @@ struct BAMAlignment
     GenomeLocation getLocation(const Genome* genome) const
     {
         return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
-            ? InvalidGenomeLocation : (genome->getContigs()[refID].beginningLocation + pos);
+            ? InvalidGenomeLocation : (genome->getContigByOriginalContigNumber(refID)->beginningLocation + pos);
     }
 
     GenomeLocation getNextLocation(const Genome* genome) const
-    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? InvalidGenomeLocation : (genome->getContigs()[next_refID].beginningLocation + next_pos); }
+    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? InvalidGenomeLocation : (genome->getContigByOriginalContigNumber(next_refID)->beginningLocation + next_pos); }
 
     GenomeLocation getLocation(const BAMReader * bamReader) const;  // Use this version for input reads rather than for SNAP-aligned ones
 
@@ -275,7 +275,7 @@ struct BAMAlignAux
 
     size_t      size()
     {
-        return val_type == STRING_VAL_TYPE ? strlen((const char*) value()) + 4
+        return (val_type == STRING_VAL_TYPE || val_type == HEX_VAL_TYPE) ? strlen((const char*) value()) + 4
             : val_type == ARRAY_VAL_TYPE ? size(arrayValType(), count())
             : size(val_type);
     }

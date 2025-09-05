@@ -172,6 +172,8 @@ private:
 
     static void ReaderThreadMain(void *);
     void ReaderThread(ReaderThreadParams *params);
+
+    void deleteElementsOnQueue(ReadQueueElement *queueHead);
 };
 
 //

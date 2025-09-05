@@ -97,9 +97,23 @@ ReadSupplierQueue::~ReadSupplierQueue()
     delete singleReader[1];
     delete pairedReader;
 
+    deleteElementsOnQueue(emptyQueue);
+    deleteElementsOnQueue(&readyQueue[0]);
+    deleteElementsOnQueue(&readyQueue[1]);
+
     DestroyEventObject(&throttle[0]);
     DestroyEventObject(&throttle[1]);
     DestroyExclusiveLock(&lock);
+}
+
+    void
+ReadSupplierQueue::deleteElementsOnQueue(ReadQueueElement* queueHead) 
+{
+    while (queueHead->next != queueHead) {
+        ReadQueueElement* elementToDelete = queueHead->next;
+        elementToDelete->removeFromQueue();
+        delete elementToDelete;
+    }
 }
 
 
@@ -553,7 +567,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
                     }
                     //WriteErrorMessage("ReadSupplierQueue::ReaderThread element %x batches %d:%d, %d:%d\n", (int) element, b[0].fileID, b[0].batchID, b[1].fileID, b[1].batchID);
                 }
-           }
+            }
         }
 
         //WriteErrorMessage("ReadSupplierQueue element[%d] %x with %d reads %d batches\n", firstOrSecond, (int) element, element->totalReads, element->batches.size());
