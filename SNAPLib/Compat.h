@@ -25,10 +25,16 @@ Revision History:
 
 #pragma once
 
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include <simde/x86/sse2.h>
+#ifndef SIMDE_X86_SSE_NATIVE
+#  define _MM_HINT_T0 1
+#  define _MM_HINT_T1 2
+#  define _MM_HINT_T2 3
+#endif
+
 #ifdef  _MSC_VER
 #include <Windows.h>
-#include <emmintrin.h>
-#include <intrin.h> // FIXME: Not sure this is the right include file
 
 typedef unsigned _int64 _uint64;
 typedef unsigned _int32 _uint32;
@@ -75,13 +81,6 @@ int getpagesize();
 
 #ifdef __linux__
 #include <sched.h>  // For sched_setaffinity
-#endif
-
-#ifndef __APPLE__
-#include <xmmintrin.h>  // This is currently (in Dec 2013) broken on Mac OS X 10.9 (Apple clang-500.2.79)
-#else
-#define _mm_prefetch(...) {}
-#include <emmintrin.h> // For vector types like __m128i
 #endif
 
 typedef int64_t _int64;
