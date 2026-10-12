@@ -437,7 +437,7 @@ SimpleReadWriter::writePairs(
         //
         for (int whichAlignmentPair = 0; whichAlignmentPair < nResults; whichAlignmentPair++) {
             for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-                reads[whichRead]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[0]);
+                reads[whichRead]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[whichRead]);
                 reads[whichRead]->setAdditionalBackClipping(0);
             }
 
