@@ -59,7 +59,7 @@ static const int DEFAULT_MAX_HITS_FOR_UNDERLYING_SINGLE_END_ALIGNER = 25;
 struct PairedAlignerStats : public AlignerStats
 {
     // TODO: make these constants configurable
-    static const int MAX_DISTANCE = 1000;
+    static const GenomeDistance MAX_DISTANCE = 1000;
     static const int MAX_SCORE = 15;
 
 
@@ -82,8 +82,8 @@ struct PairedAlignerStats : public AlignerStats
 
     virtual ~PairedAlignerStats();
 
-    inline void incrementDistance(int distance) {
-        distanceCounts[max(0, min(MAX_DISTANCE, distance))]++;
+    inline void incrementDistance(GenomeDistance distance) {
+        distanceCounts[max((GenomeDistance)0, min(MAX_DISTANCE, distance))]++;
     }
 
     inline void incrementScore(int s0, int s1)
@@ -140,7 +140,7 @@ struct PairedAlignerStats : public AlignerStats
     virtual void printHistograms(FILE* output);
 };
 
-const int PairedAlignerStats::MAX_DISTANCE;
+const GenomeDistance PairedAlignerStats::MAX_DISTANCE;
 const int PairedAlignerStats::MAX_SCORE;
 
 PairedAlignerStats::PairedAlignerStats(AbstractStats* i_extra)
@@ -190,7 +190,7 @@ void PairedAlignerStats::add(const AbstractStats * i_other)
     PairedAlignerStats* other = (PairedAlignerStats*) i_other;
 
 
-    for (int i = 0; i < MAX_DISTANCE + 1; i++) {
+    for (GenomeDistance i = 0; i < MAX_DISTANCE + 1; i++) {
         distanceCounts[i] += other->distanceCounts[i];
     }
     for (int i = 0; i < (MAX_SCORE + 1) * (MAX_SCORE + 1); i++) {
@@ -991,7 +991,7 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     }
 
     if (isOneLocation(result->status[0]) && isOneLocation(result->status[1])) {
-        stats->incrementDistance(abs((int) (result->location[0] - result->location[1])));
+        stats->incrementDistance(llabs(result->location[0] - result->location[1]));
         stats->incrementScore(result->score[0], result->score[1]);
     }
 
